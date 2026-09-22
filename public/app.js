@@ -22,6 +22,29 @@ function formatPercent(x) {
   return (x * 100).toFixed(1) + '%';
 }
 
+// Mirrors localDateStr in lib/scan.js so the front end can tell which bucket is
+// today without parsing a locale-formatted string.
+function localDateStr(d) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// Average cost per COMPLETE day. Today is excluded because it is partial and
+// would drag the average down. The divisor is the calendar span between the
+// first and last complete bucket, not the bucket count: a day with no usage
+// produces no bucket at all, and ignoring those would overstate the rate.
+function costPerDay(daily) {
+  const today = localDateStr(new Date());
+  const complete = daily.filter((d) => d.date !== today);
+  if (!complete.length) return null;
+  const first = new Date(complete[0].date + 'T00:00:00');
+  const last = new Date(complete[complete.length - 1].date + 'T00:00:00');
+  const span = Math.round((last - first) / 86400000) + 1;
+  const total = complete.reduce((sum, d) => sum + d.cost, 0);
+  return total / span;
+}
+
 // Bucket keys are either '2026-09-21' (day) or '2026-09-21T14' (hour).
 function shortDate(key) {
   if (key.includes('T')) return key.slice(-2) + ':00';
@@ -180,6 +203,59 @@ function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
         'text-anchor': 'middle',
       });
       label.textContent = shortDate(d.date);
+      svg.appendChild(label);
+    }
+  });
+
+  container.appendChild(svg);
+}
+
+// A running total across the range's buckets. One path, plus a transparent
+// hover target per bucket so the tooltip works anywhere in a column rather than
+// only within a few pixels of the line.
+function drawCumulativeChart(container, data) {
+  hideTooltip();
+  container.innerHTML = '';
+  if (!data.length || data.every((d) => !d.cost)) {
+    container.appendChild(el('div', { class: 'bar-empty', text: 'No priced usage in this range.' }));
+    return;
+  }
+
+  let running = 0;
+  const points = data.map((d) => ({ date: d.date, total: (running += d.cost) }));
+
+  const width = chartWidth(container);
+  const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
+  const step = (width - CHART_PAD_LEFT) / Math.max(points.length - 1, 1);
+
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
+  const max = drawYAxis(svg, points[points.length - 1].total, width, axisCost);
+  svg.appendChild(
+    svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)', 'stroke-width': 1 })
+  );
+
+  const xAt = (i) => CHART_PAD_LEFT + i * step;
+  const yAt = (total) => plotHeight - (total / max) * plotHeight;
+
+  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i)},${yAt(p.total)}`).join(' ');
+  svg.appendChild(svgEl('path', { class: 'cumulative-line', d, fill: 'none' }));
+
+  points.forEach((p, i) => {
+    const hit = svgEl('rect', {
+      x: xAt(i) - step / 2, y: 0, width: Math.max(step, 1), height: plotHeight, fill: 'transparent',
+    });
+    hit.addEventListener('mousemove', (evt) =>
+      showTooltip(evt, `<b>${fullDate(p.date)}</b><br>Running total: ${formatCost(p.total)}`)
+    );
+    hit.addEventListener('mouseleave', hideTooltip);
+    svg.appendChild(hit);
+
+    const labelEvery = Math.ceil(points.length / 12);
+    if (i % labelEvery === 0) {
+      const label = svgEl('text', {
+        class: 'axis-label', x: xAt(i), y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
+      });
+      label.textContent = shortDate(p.date);
       svg.appendChild(label);
     }
   });
@@ -655,6 +731,17 @@ async function loadAndRender() {
     valueKey: 'cost',
     tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatCost(d.cost)}`,
   });
+
+  drawCumulativeChart(document.getElementById('cumulativeChart'), data.daily);
+
+  // Hourly buckets on the Today range, where a daily rate has no meaning.
+  const perDay = currentDays === 'today' ? null : costPerDay(data.daily);
+  document.getElementById('burnCard').hidden = perDay == null;
+  document.getElementById('projectionCard').hidden = perDay == null;
+  if (perDay != null) {
+    document.getElementById('cardBurn').textContent = formatCost(perDay);
+    document.getElementById('cardProjection').textContent = formatCost(perDay * 30);
+  }
 
   drawTokenLegend(document.getElementById('cacheReadLegend'), data.daily, CACHE_READ_SERIES);
   drawStackedChart(document.getElementById('cacheReadChart'), data.daily, CACHE_READ_SERIES);

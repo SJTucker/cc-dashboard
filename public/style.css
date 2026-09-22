@@ -236,6 +236,13 @@ html, body {
   opacity: 0.55;
 }
 
+.cumulative-line {
+  stroke: var(--accent-cost);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
 .axis-label {
   font-family: var(--font-data);
   font-size: 10px;
