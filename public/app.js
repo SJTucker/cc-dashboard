@@ -387,6 +387,7 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
   const source = mode === 'cost' ? 'costByModel' : 'byModel';
   const axisFmt = mode === 'cost' ? axisCost : axisTokens;
   const tipFmt = mode === 'cost' ? formatCost : (n) => formatTokens(n) + ' tokens';
+  const scope = 'model-' + mode;
   hideTooltip();
   container.innerHTML = '';
   // Families, not model names: byModel is family-keyed, and two models of one family
@@ -408,7 +409,7 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
   const barWidth = Math.max((width - CHART_PAD_LEFT) / data.length - barGap, 2);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
-  appendPatternDefs(svg, 'model', order.map((f) => ({ texture: modelTexture(f), color: modelColor(f) })));
+  appendPatternDefs(svg, scope, order.map((f) => ({ texture: modelTexture(f), color: modelColor(f) })));
   const max = drawYAxis(svg, rawMax, width, axisFmt);
   svg.appendChild(
     svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)', 'stroke-width': 1 })
@@ -426,7 +427,7 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
       const rect = svgEl('rect', {
         class: 'bar',
         x, y, width: barWidth, height: Math.max(segHeight, 0.5),
-        fill: fillFor('model', modelTexture(name), modelColor(name)),
+        fill: fillFor(scope, modelTexture(name), modelColor(name)),
       });
       rect.addEventListener('mousemove', (evt) =>
         showTooltip(
