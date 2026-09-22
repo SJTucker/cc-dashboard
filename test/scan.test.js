@@ -169,3 +169,42 @@ test('each models[] entry carries its family key', async () => {
 
   assert.strictEqual(data.models[0].family, 'sonnet');
 });
+
+// Like usageLine, but lets a test choose the model and the cache fields.
+function modelLine(isoTimestamp, { id, model, input = 0, output = 0, cacheRead = 0 }) {
+  return JSON.stringify({
+    timestamp: isoTimestamp,
+    requestId: 'req-' + id,
+    sessionId: 'session-' + id,
+    message: {
+      id: 'msg-' + id,
+      model,
+      usage: {
+        input_tokens: input,
+        output_tokens: output,
+        cache_read_input_tokens: cacheRead,
+        speed: 'standard',
+      },
+    },
+  });
+}
+
+test('each daily bucket carries cost split by model family', async () => {
+  const base = makeFixture();
+  const noon = atHourToday(12);
+
+  writeSession(base, 'mixed', [
+    modelLine(noon.toISOString(), { id: 'a', model: 'claude-opus-5', output: 1e6 }),
+    modelLine(noon.toISOString(), { id: 'b', model: 'claude-haiku-4-5', output: 1e6 }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+  const bucket = data.daily.find((d) => d.cost > 0);
+
+  assert.ok(Math.abs(bucket.costByModel.opus - 25) < 1e-9, 'Opus 5 output is $25/MTok');
+  assert.ok(Math.abs(bucket.costByModel.haiku - 5) < 1e-9, 'Haiku 4.5 output is $5/MTok');
+
+  const summed = Object.values(bucket.costByModel).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(summed - bucket.cost) < 1e-9, 'costByModel sums to the bucket cost');
+});
