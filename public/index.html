@@ -32,7 +32,7 @@
       <section class="cards" id="summaryCards">
         <div class="card">
           <span class="card-label">Total cost</span>
-          <span class="card-value" id="cardCost">&mdash;</span>
+          <span class="card-value cost" id="cardCost">&mdash;</span>
           <span class="card-note" id="cardCostNote"></span>
         </div>
         <div class="card">
@@ -46,12 +46,12 @@
         </div>
         <div class="card" id="burnCard">
           <span class="card-label">Cost per day</span>
-          <span class="card-value" id="cardBurn">&mdash;</span>
+          <span class="card-value cost" id="cardBurn">&mdash;</span>
           <span class="card-note">complete days only &mdash; today is partial</span>
         </div>
         <div class="card" id="projectionCard">
           <span class="card-label">30 days at this rate</span>
-          <span class="card-value" id="cardProjection">&mdash;</span>
+          <span class="card-value cost" id="cardProjection">&mdash;</span>
         </div>
         <div class="card">
           <span class="card-label">Session files on disk</span>
@@ -72,19 +72,21 @@
         </div>
       </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Daily cost</h2>
-        </div>
-        <div id="costChart" class="chart" aria-label="Bar chart of daily cost"></div>
-      </section>
+      <div class="panel-row">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Daily cost</h2>
+          </div>
+          <div id="costChart" class="chart" aria-label="Bar chart of daily cost"></div>
+        </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Cumulative cost</h2>
-        </div>
-        <div id="cumulativeChart" class="chart" aria-label="Line chart of cumulative cost across the range"></div>
-      </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Cumulative cost</h2>
+          </div>
+          <div id="cumulativeChart" class="chart" aria-label="Line chart of cumulative cost across the range"></div>
+        </section>
+      </div>
 
       <section class="panel">
         <div class="panel-head">
@@ -102,13 +104,6 @@
         <div id="workingTokenChart" class="chart" aria-label="Stacked bar chart of daily input, output and cache-write tokens"></div>
       </section>
 
-      <section class="panel" id="modelMixPanel">
-        <div class="panel-head">
-          <h2>Model mix</h2>
-          <div class="legend" id="modelLegend"></div>
-        </div>
-        <div id="modelMixBar" class="mix-bar" aria-label="Share of tokens by model"></div>
-      </section>
 
       <section class="panel" id="modelDailyPanel" hidden>
         <div class="panel-head">
@@ -132,12 +127,22 @@
         <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
       </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Cost by model</h2>
-        </div>
-        <div id="modelList" class="model-list"></div>
-      </section>
+      <div class="panel-row">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Cost by model</h2>
+          </div>
+          <div id="modelList" class="model-list"></div>
+        </section>
+
+        <section class="panel" id="modelMixPanel">
+          <div class="panel-head">
+            <h2>Model mix</h2>
+          </div>
+          <div class="legend" id="modelLegend"></div>
+          <div id="modelMixBar" class="mix-bar" aria-label="Share of tokens by model"></div>
+        </section>
+      </div>
     </main>
 
     <footer class="footer">

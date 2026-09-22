@@ -8,6 +8,9 @@
   --text-tertiary: #5c6779;
 
   --accent-cost: #eab54d;
+  --accent-dim: rgba(234, 181, 77, 0.2);
+
+  --surface-hover: #232b38;
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-data: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
@@ -20,13 +23,27 @@ html, body {
   padding: 0;
   background: var(--bg);
   color: var(--text-primary);
-  font-family: var(--font-ui);
+  font-family: var(--font-data);
+  font-size: 13px;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every small label on the page - card labels, panel titles, column headers -
+   uses one treatment so they read as one tier below the numbers they caption. */
+.card-label,
+.panel-head h2,
+.model-table th,
+.range-picker button {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .page {
-  max-width: 1040px;
+  max-width: 1400px;
   margin: 0 auto;
-  padding: 32px 24px 64px;
+  padding: 0 24px 64px;
 }
 
 /* ---------- Header ---------- */
@@ -36,22 +53,27 @@ html, body {
   flex-direction: column;
   align-items: flex-start;
   gap: 16px;
-  margin-bottom: 32px;
-  padding-bottom: 20px;
+  margin-bottom: 28px;
+  padding: 24px 0 16px;
   border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
 }
 
 .topbar-title h1 {
   margin: 0 0 4px;
-  font-size: 22px;
-  font-weight: 650;
-  letter-spacing: -0.01em;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
 }
 
 .subtitle {
   margin: 0;
   color: var(--text-secondary);
-  font-size: 13px;
+  font-family: var(--font-ui);
+  font-size: 12px;
 }
 
 .subtitle code {
@@ -77,9 +99,8 @@ html, body {
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  font-family: var(--font-ui);
-  font-size: 13px;
-  padding: 7px 14px;
+  font-family: var(--font-data);
+  padding: 7px 13px;
   cursor: pointer;
   border-right: 1px solid var(--border);
 }
@@ -100,9 +121,9 @@ html, body {
   color: var(--text-secondary);
   border-radius: 8px;
   padding: 7px 14px;
-  font-size: 13px;
+  font-size: 12px;
   cursor: pointer;
-  font-family: var(--font-ui);
+  font-family: var(--font-data);
 }
 
 .refresh-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
@@ -139,35 +160,40 @@ html, body {
 
 .cards {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 12px;
-  margin-bottom: 28px;
+  margin-bottom: 20px;
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 16px 18px;
+  border-radius: 6px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 5px;
+  transition: border-color 0.15s ease;
 }
 
+.card:hover { border-color: var(--accent-dim); }
+
 .card-label {
-  font-size: 12px;
-  color: var(--text-secondary);
+  color: var(--text-tertiary);
 }
 
 .card-value {
-  font-family: var(--font-data);
-  font-size: 24px;
-  font-weight: 600;
+  font-size: 22px;
+  font-weight: 500;
   letter-spacing: -0.02em;
 }
 
+/* Dollar figures carry the accent so money separates from counts without
+   reading the label. */
+.card-value.cost { color: var(--accent-cost); }
+
 .card-note {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--text-tertiary);
 }
 
@@ -176,10 +202,21 @@ html, body {
 .panel {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 20px 22px 16px;
-  margin-bottom: 20px;
+  border-radius: 6px;
+  padding: 16px 18px 14px;
+  margin-bottom: 16px;
 }
+
+/* A panel pair: the wider chart keeps the room it needs, the narrower summary
+   sits beside it instead of below an empty half-row. */
+.panel-row {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: 16px;
+  align-items: start;
+}
+
+.panel-row .panel { margin-bottom: 16px; }
 
 .panel-head {
   display: flex;
@@ -190,24 +227,23 @@ html, body {
 
 .panel-head h2 {
   margin: 0;
-  font-size: 14px;
   font-weight: 600;
-  color: var(--text-primary);
+  color: var(--text-tertiary);
 }
 
 .legend {
   display: flex;
   gap: 14px;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--text-secondary);
 }
 
 .legend-item { display: inline-flex; align-items: center; gap: 6px; }
 
 .legend-swatch {
-  width: 16px;
-  height: 16px;
-  border-radius: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 2px;
   display: inline-block;
   vertical-align: middle;
   border: 1px solid var(--border);
@@ -271,21 +307,28 @@ html, body {
 .model-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .model-table th {
   text-align: left;
   font-weight: 600;
-  color: var(--text-secondary);
-  padding: 6px 8px;
+  color: var(--text-tertiary);
+  padding: 8px;
   border-bottom: 1px solid var(--border);
+  white-space: nowrap;
 }
 
 .model-table td {
-  padding: 8px;
+  padding: 9px 8px;
   border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
 }
+
+.model-table tbody tr { transition: background 0.1s ease; }
+.model-table tbody tr:hover { background: var(--surface-hover); }
+
+.model-table .cost-cell { color: var(--accent-cost); }
 
 .model-table tr:last-child td { border-bottom: none; }
 
@@ -310,8 +353,9 @@ html, body {
 /* ---------- Footer ---------- */
 
 .footer {
-  margin-top: 32px;
+  margin-top: 28px;
   color: var(--text-tertiary);
+  font-family: var(--font-ui);
   font-size: 11.5px;
   line-height: 1.6;
 }
@@ -337,8 +381,11 @@ html, body {
 
 /* ---------- Responsive ---------- */
 
+@media (max-width: 880px) {
+  .panel-row { grid-template-columns: 1fr; }
+}
+
 @media (max-width: 720px) {
-  .cards { grid-template-columns: repeat(2, 1fr); }
   .topbar { align-items: flex-start; }
 }
 
@@ -374,7 +421,10 @@ html, body {
 }
 
 .heat-cell {
-  aspect-ratio: 1;
+  /* Wide cells rather than squares: 24 columns of squares across a 1400px page
+     makes the grid taller than the charts above it. */
+  aspect-ratio: 2.4;
+  min-height: 10px;
   border-radius: 2px;
   border: 1px solid var(--border);
   cursor: pointer;
@@ -398,4 +448,12 @@ html, body {
 .panel-note {
   font-size: 12px;
   color: var(--text-tertiary);
+}
+
+/* The mix panel sits in a narrow column, so its legend wraps under the title
+   instead of sharing the heading row. */
+#modelMixPanel .legend {
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  margin-bottom: 10px;
 }
