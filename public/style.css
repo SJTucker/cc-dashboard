@@ -1,0 +1,343 @@
+:root {
+  --bg: #10141b;
+  --surface: #171d27;
+  --surface-raised: #1d2531;
+  --border: #2a3444;
+  --text-primary: #e8edf4;
+  --text-secondary: #8b97aa;
+  --text-tertiary: #5c6779;
+
+  --accent-cost: #eab54d;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-data: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+
+.page {
+  max-width: 1040px;
+  margin: 0 auto;
+  padding: 32px 24px 64px;
+}
+
+/* ---------- Header ---------- */
+
+.topbar {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 32px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+}
+
+.topbar-title h1 {
+  margin: 0 0 4px;
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 13px;
+}
+
+.subtitle code {
+  font-family: var(--font-data);
+  color: var(--text-secondary);
+}
+
+.topbar-controls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.range-picker {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.range-picker button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  font-family: var(--font-ui);
+  font-size: 13px;
+  padding: 7px 14px;
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+}
+
+.range-picker button:last-child { border-right: none; }
+
+.range-picker button:hover { color: var(--text-primary); }
+
+.range-picker button.active {
+  background: var(--surface-raised);
+  color: var(--text-primary);
+  font-weight: 600;
+}
+
+.refresh-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+  font-family: var(--font-ui);
+}
+
+.refresh-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
+
+.live-dot {
+  font-size: 0.75rem;
+  color: var(--accent-cost);
+  white-space: nowrap;
+}
+
+/* Kept in the layout so the controls row does not change width when the live
+   indicator turns on and off. */
+.live-dot.is-off {
+  visibility: hidden;
+}
+
+/* ---------- Status banner ---------- */
+
+.status-banner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--accent-cost);
+  border-radius: 8px;
+  padding: 14px 16px;
+  margin-bottom: 24px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.status-banner code { font-family: var(--font-data); color: var(--text-primary); }
+
+/* ---------- Summary cards ---------- */
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 28px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.card-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.card-value {
+  font-family: var(--font-data);
+  font-size: 24px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.card-note {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ---------- Panels ---------- */
+
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 22px 16px;
+  margin-bottom: 20px;
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.legend {
+  display: flex;
+  gap: 14px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+
+.legend-swatch {
+  width: 16px;
+  height: 16px;
+  border-radius: 3px;
+  display: inline-block;
+  vertical-align: middle;
+  border: 1px solid var(--border);
+}
+
+/* ---------- Charts (hand-drawn SVG bars, no chart library) ---------- */
+
+.chart { width: 100%; }
+
+.chart svg { width: 100%; display: block; overflow: visible; }
+
+.bar-empty {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 32px 0;
+  text-align: center;
+}
+
+.bar { cursor: pointer; transition: opacity 0.12s ease; }
+.bar:hover { opacity: 0.8; }
+
+.gridline {
+  stroke: var(--border);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  opacity: 0.55;
+}
+
+.axis-label {
+  font-family: var(--font-data);
+  font-size: 10px;
+  fill: var(--text-tertiary);
+}
+
+/* ---------- Model list ---------- */
+
+.model-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.model-row {
+  display: grid;
+  grid-template-columns: 140px 1fr 90px;
+  align-items: center;
+  gap: 12px;
+}
+
+.model-name {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.model-bar-track {
+  height: 8px;
+  background: var(--surface-raised);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.model-bar-fill {
+  height: 100%;
+  background: var(--accent-cost);
+  border-radius: 4px;
+}
+
+.model-cost {
+  font-family: var(--font-data);
+  font-size: 13px;
+  text-align: right;
+  color: var(--text-primary);
+}
+
+.list-empty {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+/* ---------- Footer ---------- */
+
+.footer {
+  margin-top: 32px;
+  color: var(--text-tertiary);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.footer code { font-family: var(--font-data); }
+
+/* ---------- Tooltip ---------- */
+
+.tooltip {
+  position: fixed;
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--font-data);
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 20;
+  white-space: nowrap;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+
+/* ---------- Responsive ---------- */
+
+@media (max-width: 720px) {
+  .cards { grid-template-columns: repeat(2, 1fr); }
+  .topbar { align-items: flex-start; }
+  .model-row { grid-template-columns: 100px 1fr 70px; }
+}
+
+.mix-bar {
+  display: flex;
+  width: 100%;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  /* A 2px surface-coloured gap between segments keeps adjacent fills separable
+     for viewers who cannot distinguish the two hues. */
+  gap: 2px;
+  background: var(--surface);
+}
+
+.mix-seg {
+  height: 100%;
+  min-width: 2px;
+  cursor: default;
+}

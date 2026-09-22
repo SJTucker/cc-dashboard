@@ -1,0 +1,22 @@
+{
+  "name": "my-cc-dashboard",
+  "version": "1.0.0",
+  "description": "A local, offline Claude Code usage dashboard - reads ~/.claude/projects only, never phones home.",
+  "main": "server.js",
+  "bin": {
+    "my-cc-dashboard": "server.js"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js --open",
+    "test": "node --test"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "open": "^10.1.0"
+  },
+  "license": "MIT"
+}

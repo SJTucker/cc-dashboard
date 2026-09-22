@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>My Claude Code Dashboard</title>
+<link rel="stylesheet" href="/style.css" />
+</head>
+<body>
+  <div class="page">
+    <header class="topbar">
+      <div class="topbar-title">
+        <h1>My Claude Code Dashboard</h1>
+        <p class="subtitle">Local &amp; offline &mdash; reads <code id="projectsDirLabel">~/.claude/projects</code> only, nothing leaves this machine.</p>
+      </div>
+      <div class="topbar-controls">
+        <div class="range-picker" id="rangePicker" role="group" aria-label="Date range">
+          <button data-days="today" class="active">Today</button>
+          <button data-days="7">7d</button>
+          <button data-days="30">30d</button>
+          <button data-days="90">90d</button>
+          <button data-days="all">All</button>
+        </div>
+        <span id="liveDot" class="live-dot is-off">&#9679; live</span>
+        <button id="refreshBtn" class="refresh-btn" title="Re-scan logs">&#8635; Refresh</button>
+      </div>
+    </header>
+
+    <main id="app">
+      <div id="statusBanner" class="status-banner" hidden></div>
+
+      <section class="cards" id="summaryCards">
+        <div class="card">
+          <span class="card-label">Total cost</span>
+          <span class="card-value" id="cardCost">&mdash;</span>
+          <span class="card-note" id="cardCostNote"></span>
+        </div>
+        <div class="card">
+          <span class="card-label">Total tokens</span>
+          <span class="card-value" id="cardTokens">&mdash;</span>
+        </div>
+        <div class="card">
+          <span class="card-label">Cache efficiency</span>
+          <span class="card-value" id="cardCache">&mdash;</span>
+          <span class="card-note">share of eligible input served from cache</span>
+        </div>
+        <div class="card">
+          <span class="card-label">Session files scanned</span>
+          <span class="card-value" id="cardFiles">&mdash;</span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Daily cost</h2>
+        </div>
+        <div id="costChart" class="chart" aria-label="Bar chart of daily cost"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Daily cache reads</h2>
+          <div class="legend" id="cacheReadLegend"></div>
+        </div>
+        <div id="cacheReadChart" class="chart" aria-label="Bar chart of daily cache-read tokens"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Daily input, output &amp; cache writes</h2>
+          <div class="legend" id="workingTokenLegend"></div>
+        </div>
+        <div id="workingTokenChart" class="chart" aria-label="Stacked bar chart of daily input, output and cache-write tokens"></div>
+      </section>
+
+      <section class="panel" id="modelMixPanel">
+        <div class="panel-head">
+          <h2>Model mix</h2>
+          <div class="legend" id="modelLegend"></div>
+        </div>
+        <div id="modelMixBar" class="mix-bar" aria-label="Share of tokens by model"></div>
+      </section>
+
+      <section class="panel" id="modelDailyPanel" hidden>
+        <div class="panel-head">
+          <h2>Daily tokens by model</h2>
+        </div>
+        <div id="modelDailyChart" class="chart" aria-label="Stacked bar chart of daily tokens by model"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Cost by model</h2>
+        </div>
+        <div id="modelList" class="model-list"></div>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p>Costs are estimates from an offline price table in <code>lib/pricing.js</code> &mdash; edit it if Anthropic's pricing has changed. Reads local files only; makes no network requests of its own.</p>
+    </footer>
+  </div>
+
+  <div id="tooltip" class="tooltip" hidden></div>
+
+  <script src="/app.js"></script>
+</body>
+</html>
