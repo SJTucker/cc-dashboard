@@ -649,7 +649,7 @@ function drawModelList(container, models) {
       const perMillion = m.tokens > 0 ? m.cost / (m.tokens / 1e6) : 0;
       const share = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
       return `<tr>
-        <td class="model-name"><span class="swatch" style="${textureCss(modelTexture(m.family), modelColor(m.family))}"></span>${escapeHtml(m.model)}</td>
+        <td class="model-name"><span class="swatch" style="${segmentTexture(m.family)}"></span>${escapeHtml(m.model)}</td>
         <td class="num">${formatTokens(m.tokens)}</td>
         <td class="num">${formatCost(m.cost)}</td>
         <td class="num">${share.toFixed(1)}%</td>
