@@ -723,6 +723,8 @@ function setLive(on) {
   clearInterval(liveTimer);
   liveTimer = on ? setInterval(loadAndRender, LIVE_POLL_MS) : null;
   document.getElementById('liveDot').classList.toggle('is-off', !on);
+  // A live range re-scans every 5 seconds, so a manual refresh has nothing to do.
+  document.getElementById('refreshBtn').hidden = on;
 }
 
 async function loadAndRender() {
