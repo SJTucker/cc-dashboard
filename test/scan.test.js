@@ -336,3 +336,27 @@ test('usage is attributed to skills, subagents and the thread it ran on', async 
     'the thread split is a partition of total cost'
   );
 });
+
+test('cost is split by whether the call ran at over 150k of context', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(12).toISOString();
+
+  writeSession(base, 'one', [
+    // 200k of context: $0.10 of cache reads plus $25 of Opus 5 output.
+    modelLine(iso, { id: 'a', model: 'claude-opus-5', cacheRead: 2e5, output: 1e6 }),
+    // Exactly at the threshold, which is not over it. $0.075 of cache reads.
+    modelLine(iso, { id: 'b', model: 'claude-opus-5', cacheRead: 15e4 }),
+    // 1k of context. $0.005 of input.
+    modelLine(iso, { id: 'c', model: 'claude-opus-5', input: 1000 }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  assert.ok(Math.abs(data.context.over - 25.1) < 1e-9, 'only the 200k call is over');
+  assert.ok(Math.abs(data.context.under - 0.08) < 1e-9, 'the threshold call and the small one are under');
+  assert.ok(
+    Math.abs(data.context.over + data.context.under - data.summary.totalCost) < 1e-9,
+    'the context split is a partition of total cost'
+  );
+});

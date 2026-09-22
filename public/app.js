@@ -803,13 +803,18 @@ async function loadAndRender() {
     { name: 'Main thread', cost: data.threads.main },
     { name: 'Subagents', cost: data.threads.subagent },
   ];
-  const attributionScale = [...threadRows, ...data.skills, ...data.subagents].reduce(
+  const contextRows = [
+    { name: `Over ${axisTokens(data.contextThreshold)} context`, cost: data.context.over },
+    { name: `Under ${axisTokens(data.contextThreshold)} context`, cost: data.context.under },
+  ];
+  const attributionScale = [...threadRows, ...contextRows, ...data.skills, ...data.subagents].reduce(
     (max, r) => Math.max(max, r.cost),
     0
   );
   const totalCost = data.summary.totalCost;
   document.getElementById('attributionPanel').hidden = totalCost <= 0;
   drawUsageBars(document.getElementById('threadBars'), threadRows, totalCost, attributionScale);
+  drawUsageBars(document.getElementById('contextBars'), contextRows, totalCost, attributionScale);
   drawUsageBars(document.getElementById('skillBars'), data.skills.slice(0, 8), totalCost, attributionScale);
   drawUsageBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), totalCost, attributionScale);
 
