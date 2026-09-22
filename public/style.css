@@ -295,6 +295,46 @@ html, body {
   padding: 12px 0;
 }
 
+.model-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.model-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.model-table td {
+  padding: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.model-table tr:last-child td { border-bottom: none; }
+
+.model-table .num {
+  text-align: right;
+  font-family: var(--font-data);
+}
+
+.model-table .model-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-table .swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  flex: none;
+}
+
 /* ---------- Footer ---------- */
 
 .footer {

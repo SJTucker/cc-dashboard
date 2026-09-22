@@ -633,24 +633,37 @@ function drawModelMix(container, legendContainer, models) {
   }
 }
 
+// A table rather than a list, because $/MTok is the number that explains why a
+// model's token share and its cost share are different. escapeHtml is used on
+// the model name: it comes from a log file, not from this codebase.
 function drawModelList(container, models) {
   container.innerHTML = '';
   if (!models.length) {
-    container.appendChild(el('div', { class: 'list-empty', text: 'No priced usage in this range.' }));
+    container.appendChild(el('div', { class: 'bar-empty', text: 'No model usage in this range.' }));
     return;
   }
-  const max = Math.max(...models.map((m) => m.cost), 0.0001);
-  for (const m of models) {
-    const pct = Math.max((m.cost / max) * 100, 2);
-    const row = el('div', { class: 'model-row' }, [
-      el('span', { class: 'model-name', text: shortModel(m.model) }),
-      el('div', { class: 'model-bar-track' }, [
-        el('div', { class: 'model-bar-fill', style: `width:${pct}%` }),
-      ]),
-      el('span', { class: 'model-cost', text: formatCost(m.cost) }),
-    ]);
-    container.appendChild(row);
-  }
+
+  const totalCost = models.reduce((sum, m) => sum + m.cost, 0);
+  const rows = models
+    .map((m) => {
+      const perMillion = m.tokens > 0 ? m.cost / (m.tokens / 1e6) : 0;
+      const share = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
+      return `<tr>
+        <td class="model-name"><span class="swatch" style="${textureCss(modelTexture(m.family), modelColor(m.family))}"></span>${escapeHtml(m.model)}</td>
+        <td class="num">${formatTokens(m.tokens)}</td>
+        <td class="num">${formatCost(m.cost)}</td>
+        <td class="num">${share.toFixed(1)}%</td>
+        <td class="num">${formatCost(perMillion)}</td>
+      </tr>`;
+    })
+    .join('');
+
+  container.innerHTML = `<table class="model-table">
+    <thead><tr>
+      <th>Model</th><th class="num">Tokens</th><th class="num">Cost</th><th class="num">Share</th><th class="num">$/MTok</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 function shortModel(name) {
