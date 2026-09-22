@@ -208,3 +208,29 @@ test('each daily bucket carries cost split by model family', async () => {
   const summed = Object.values(bucket.costByModel).reduce((a, b) => a + b, 0);
   assert.ok(Math.abs(summed - bucket.cost) < 1e-9, 'costByModel sums to the bucket cost');
 });
+
+test('activity is a fully populated 7x24 matrix indexed weekday*24+hour', async () => {
+  const base = makeFixture();
+  const at9 = atHourToday(9, 30);
+
+  writeSession(base, 'one', [
+    modelLine(at9.toISOString(), { id: 'a', model: 'claude-opus-5', output: 1e6 }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  assert.strictEqual(data.activity.length, 168, 'every weekday/hour pair is present');
+  for (let i = 0; i < 168; i++) {
+    assert.strictEqual(data.activity[i].weekday, Math.floor(i / 24));
+    assert.strictEqual(data.activity[i].hour, i % 24);
+  }
+
+  const cell = data.activity[at9.getDay() * 24 + 9];
+  assert.strictEqual(cell.calls, 1);
+  assert.strictEqual(cell.tokens, 1e6);
+  assert.ok(Math.abs(cell.cost - 25) < 1e-9, 'one MTok of Opus 5 output is $25');
+
+  const totalCalls = data.activity.reduce((sum, c) => sum + c.calls, 0);
+  assert.strictEqual(totalCalls, 1, 'no other cell was touched');
+});
