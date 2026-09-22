@@ -257,35 +257,8 @@ html, body {
   gap: 10px;
 }
 
-.model-row {
-  display: grid;
-  grid-template-columns: 140px 1fr 90px;
-  align-items: center;
-  gap: 12px;
-}
-
 .model-name {
   font-size: 13px;
-  color: var(--text-primary);
-}
-
-.model-bar-track {
-  height: 8px;
-  background: var(--surface-raised);
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.model-bar-fill {
-  height: 100%;
-  background: var(--accent-cost);
-  border-radius: 4px;
-}
-
-.model-cost {
-  font-family: var(--font-data);
-  font-size: 13px;
-  text-align: right;
   color: var(--text-primary);
 }
 
@@ -322,9 +295,7 @@ html, body {
 }
 
 .model-table .model-name {
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  vertical-align: middle;
 }
 
 .model-table .swatch {
@@ -333,6 +304,7 @@ html, body {
   height: 12px;
   border-radius: 2px;
   flex: none;
+  margin-right: 8px;
 }
 
 /* ---------- Footer ---------- */
@@ -368,7 +340,6 @@ html, body {
 @media (max-width: 720px) {
   .cards { grid-template-columns: repeat(2, 1fr); }
   .topbar { align-items: flex-start; }
-  .model-row { grid-template-columns: 100px 1fr 70px; }
 }
 
 .mix-bar {

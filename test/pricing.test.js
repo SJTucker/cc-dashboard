@@ -126,6 +126,16 @@ test('an unrecognised model stays unpriced rather than silently costing zero', (
   assert.strictEqual(priced, false);
 });
 
+test('older naming scheme resolves to its own rates, not the bare-family fallback', () => {
+  const haiku = priceFor('claude-3-5-haiku-20241022');
+  assert.strictEqual(haiku.input, 0.8);
+  assert.strictEqual(haiku.output, 4);
+
+  const opus = priceFor('claude-3-opus-20240229');
+  assert.strictEqual(opus.input, 15);
+  assert.strictEqual(opus.output, 75);
+});
+
 test('familyFor reads the row family, not the row match key', () => {
   assert.strictEqual(familyFor('claude-opus-5-5'), 'opus');
   assert.strictEqual(familyFor('claude-sonnet-4-6'), 'sonnet');
