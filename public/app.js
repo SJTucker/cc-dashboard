@@ -780,6 +780,20 @@ async function loadAndRender() {
     tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatCost(d.cost)}`,
   });
 
+  // The payload carries the four token types per bucket but not their sum, so the
+  // total is derived here rather than widening the wire format for one chart.
+  const dailyTokens = data.daily.map((d) => ({
+    ...d,
+    tokens: d.input + d.output + d.cacheCreate + d.cacheRead,
+  }));
+  drawBarChart(document.getElementById('tokenChart'), dailyTokens, {
+    // Cache reads are ~97% of every total, so this borrows their colour rather
+    // than adding a sixth hue to a palette validated as a set.
+    color: '#9085e9',
+    valueKey: 'tokens',
+    tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatTokens(d.tokens)} tokens`,
+  });
+
   drawCumulativeChart(document.getElementById('cumulativeChart'), data.daily);
 
   // Hourly buckets on the Today range, where a daily rate has no meaning.

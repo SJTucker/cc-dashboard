@@ -218,6 +218,10 @@ html, body {
 
 .panel-row .panel { margin-bottom: 16px; }
 
+/* Two charts of the same shape get equal halves; a chart paired with a summary
+   keeps the 3fr/2fr default above. */
+.panel-row.even { grid-template-columns: 1fr 1fr; }
+
 .panel-head {
   display: flex;
   align-items: center;
@@ -382,7 +386,10 @@ html, body {
 /* ---------- Responsive ---------- */
 
 @media (max-width: 880px) {
-  .panel-row { grid-template-columns: 1fr; }
+  /* .even is listed too: it is more specific than .panel-row, so the bare
+     selector alone loses to it regardless of the media query. */
+  .panel-row,
+  .panel-row.even { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 720px) {
