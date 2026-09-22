@@ -44,9 +44,31 @@
           <span class="card-value" id="cardCache">&mdash;</span>
           <span class="card-note">share of eligible input served from cache</span>
         </div>
+        <div class="card" id="burnCard">
+          <span class="card-label">Cost per day</span>
+          <span class="card-value" id="cardBurn">&mdash;</span>
+          <span class="card-note">complete days only &mdash; today is partial</span>
+        </div>
+        <div class="card" id="projectionCard">
+          <span class="card-label">30 days at this rate</span>
+          <span class="card-value" id="cardProjection">&mdash;</span>
+        </div>
         <div class="card">
-          <span class="card-label">Session files scanned</span>
+          <span class="card-label">Session files on disk</span>
           <span class="card-value" id="cardFiles">&mdash;</span>
+          <span class="card-note">found by the directory walk, not all read</span>
+        </div>
+        <div class="card">
+          <span class="card-label">Sessions</span>
+          <span class="card-value" id="cardSessions">&mdash;</span>
+        </div>
+        <div class="card">
+          <span class="card-label">API calls</span>
+          <span class="card-value" id="cardCalls">&mdash;</span>
+        </div>
+        <div class="card">
+          <span class="card-label">Tool calls</span>
+          <span class="card-value" id="cardTools">&mdash;</span>
         </div>
       </section>
 
@@ -55,6 +77,13 @@
           <h2>Daily cost</h2>
         </div>
         <div id="costChart" class="chart" aria-label="Bar chart of daily cost"></div>
+      </section>
+
+      <section class="panel">
+        <div class="panel-head">
+          <h2>Cumulative cost</h2>
+        </div>
+        <div id="cumulativeChart" class="chart" aria-label="Line chart of cumulative cost across the range"></div>
       </section>
 
       <section class="panel">
@@ -86,6 +115,21 @@
           <h2>Daily tokens by model</h2>
         </div>
         <div id="modelDailyChart" class="chart" aria-label="Stacked bar chart of daily tokens by model"></div>
+      </section>
+
+      <section class="panel" id="modelCostDailyPanel" hidden>
+        <div class="panel-head">
+          <h2>Daily cost by model</h2>
+        </div>
+        <div id="modelCostDailyChart" class="chart" aria-label="Stacked bar chart of daily cost by model"></div>
+      </section>
+
+      <section class="panel" id="activityPanel" hidden>
+        <div class="panel-head">
+          <h2>When usage happens</h2>
+          <span class="panel-note">cost by weekday and hour, local time</span>
+        </div>
+        <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
       </section>
 
       <section class="panel">

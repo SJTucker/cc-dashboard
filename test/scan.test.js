@@ -169,3 +169,113 @@ test('each models[] entry carries its family key', async () => {
 
   assert.strictEqual(data.models[0].family, 'sonnet');
 });
+
+// Like usageLine, but lets a test choose the model and the cache fields.
+function modelLine(isoTimestamp, { id, model, input = 0, output = 0, cacheRead = 0 }) {
+  return JSON.stringify({
+    timestamp: isoTimestamp,
+    requestId: 'req-' + id,
+    sessionId: 'session-' + id,
+    message: {
+      id: 'msg-' + id,
+      model,
+      usage: {
+        input_tokens: input,
+        output_tokens: output,
+        cache_read_input_tokens: cacheRead,
+        speed: 'standard',
+      },
+    },
+  });
+}
+
+test('each daily bucket carries cost split by model family', async () => {
+  const base = makeFixture();
+  const noon = atHourToday(12);
+
+  writeSession(base, 'mixed', [
+    modelLine(noon.toISOString(), { id: 'a', model: 'claude-opus-5', output: 1e6 }),
+    modelLine(noon.toISOString(), { id: 'b', model: 'claude-haiku-4-5', output: 1e6 }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+  const bucket = data.daily.find((d) => d.cost > 0);
+
+  assert.ok(Math.abs(bucket.costByModel.opus - 25) < 1e-9, 'Opus 5 output is $25/MTok');
+  assert.ok(Math.abs(bucket.costByModel.haiku - 5) < 1e-9, 'Haiku 4.5 output is $5/MTok');
+
+  const summed = Object.values(bucket.costByModel).reduce((a, b) => a + b, 0);
+  assert.ok(Math.abs(summed - bucket.cost) < 1e-9, 'costByModel sums to the bucket cost');
+});
+
+test('activity is a fully populated 7x24 matrix indexed weekday*24+hour', async () => {
+  const base = makeFixture();
+  const at9 = atHourToday(9, 30);
+
+  writeSession(base, 'one', [
+    modelLine(at9.toISOString(), { id: 'a', model: 'claude-opus-5', output: 1e6 }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  assert.strictEqual(data.activity.length, 168, 'every weekday/hour pair is present');
+  for (let i = 0; i < 168; i++) {
+    assert.strictEqual(data.activity[i].weekday, Math.floor(i / 24));
+    assert.strictEqual(data.activity[i].hour, i % 24);
+  }
+
+  const cell = data.activity[at9.getDay() * 24 + 9];
+  assert.strictEqual(cell.calls, 1);
+  assert.strictEqual(cell.tokens, 1e6);
+  assert.ok(Math.abs(cell.cost - 25) < 1e-9, 'one MTok of Opus 5 output is $25');
+
+  const totalCalls = data.activity.reduce((sum, c) => sum + c.calls, 0);
+  assert.strictEqual(totalCalls, 1, 'no other cell was touched');
+});
+
+// An assistant entry whose content array carries tool_use blocks. toolIds lets
+// a test give each block its own id, the way real logs do (toolu_01ABC...).
+function toolLine(isoTimestamp, { id, sessionId, toolIds = [] }) {
+  const content = [{ type: 'text', text: 'working' }];
+  for (const toolId of toolIds) content.push({ type: 'tool_use', id: toolId, name: 'Bash', input: {} });
+  return JSON.stringify({
+    timestamp: isoTimestamp,
+    requestId: 'req-' + id,
+    sessionId,
+    message: {
+      id: 'msg-' + id,
+      model: 'claude-opus-5',
+      content,
+      usage: { input_tokens: 1, output_tokens: 1, speed: 'standard' },
+    },
+  });
+}
+
+test('summary counts distinct sessions, deduped API calls and tool_use blocks', async () => {
+  const base = makeFixture();
+  const noon = atHourToday(12);
+  const iso = noon.toISOString();
+
+  // Real logs split one API response across several JSONL lines that share
+  // message.id and requestId. The tool_use blocks frequently ride on a line
+  // AFTER the first, which carries none. Both lines must count toward
+  // toolCalls even though only the first is kept for sessions/apiCalls.
+  const firstLine = toolLine(iso, { id: 'a', sessionId: 's1', toolIds: [] });
+  const secondLine = toolLine(iso, { id: 'a', sessionId: 's1', toolIds: ['toolu_01', 'toolu_02'] });
+
+  writeSession(base, 'first', [
+    firstLine,
+    secondLine, // same message.id:requestId as firstLine - the API-call dedupe drops it, but its tool_use blocks still count
+    toolLine(iso, { id: 'b', sessionId: 's1', toolIds: [] }),
+  ]);
+  writeSession(base, 'second', [toolLine(iso, { id: 'c', sessionId: 's2', toolIds: ['toolu_03'] })]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  assert.strictEqual(data.summary.sessions, 2, 's1 and s2');
+  assert.strictEqual(data.summary.apiCalls, 3, 'the duplicate line is not counted twice');
+  assert.strictEqual(data.summary.toolCalls, 3, '2 from the second line of the deduped pair, 0, and 1');
+});

@@ -22,6 +22,29 @@ function formatPercent(x) {
   return (x * 100).toFixed(1) + '%';
 }
 
+// Mirrors localDateStr in lib/scan.js so the front end can tell which bucket is
+// today without parsing a locale-formatted string.
+function localDateStr(d) {
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${d.getFullYear()}-${m}-${day}`;
+}
+
+// Average cost per COMPLETE day. Today is excluded because it is partial and
+// would drag the average down. The divisor is the calendar span between the
+// first and last complete bucket, not the bucket count: a day with no usage
+// produces no bucket at all, and ignoring those would overstate the rate.
+function costPerDay(daily) {
+  const today = localDateStr(new Date());
+  const complete = daily.filter((d) => d.date !== today);
+  if (!complete.length) return null;
+  const first = new Date(complete[0].date + 'T00:00:00');
+  const last = new Date(complete[complete.length - 1].date + 'T00:00:00');
+  const span = Math.round((last - first) / 86400000) + 1;
+  const total = complete.reduce((sum, d) => sum + d.cost, 0);
+  return total / span;
+}
+
 // Bucket keys are either '2026-09-21' (day) or '2026-09-21T14' (hour).
 function shortDate(key) {
   if (key.includes('T')) return key.slice(-2) + ':00';
@@ -180,6 +203,59 @@ function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
         'text-anchor': 'middle',
       });
       label.textContent = shortDate(d.date);
+      svg.appendChild(label);
+    }
+  });
+
+  container.appendChild(svg);
+}
+
+// A running total across the range's buckets. One path, plus a transparent
+// hover target per bucket so the tooltip works anywhere in a column rather than
+// only within a few pixels of the line.
+function drawCumulativeChart(container, data) {
+  hideTooltip();
+  container.innerHTML = '';
+  if (!data.length || data.every((d) => !d.cost)) {
+    container.appendChild(el('div', { class: 'bar-empty', text: 'No priced usage in this range.' }));
+    return;
+  }
+
+  let running = 0;
+  const points = data.map((d) => ({ date: d.date, total: (running += d.cost) }));
+
+  const width = chartWidth(container);
+  const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
+  const step = (width - CHART_PAD_LEFT) / Math.max(points.length - 1, 1);
+
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
+  const max = drawYAxis(svg, points[points.length - 1].total, width, axisCost);
+  svg.appendChild(
+    svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)', 'stroke-width': 1 })
+  );
+
+  const xAt = (i) => CHART_PAD_LEFT + i * step;
+  const yAt = (total) => plotHeight - (total / max) * plotHeight;
+
+  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i)},${yAt(p.total)}`).join(' ');
+  svg.appendChild(svgEl('path', { class: 'cumulative-line', d, fill: 'none' }));
+
+  points.forEach((p, i) => {
+    const hit = svgEl('rect', {
+      x: xAt(i) - step / 2, y: 0, width: Math.max(step, 1), height: plotHeight, fill: 'transparent',
+    });
+    hit.addEventListener('mousemove', (evt) =>
+      showTooltip(evt, `<b>${fullDate(p.date)}</b><br>Running total: ${formatCost(p.total)}`)
+    );
+    hit.addEventListener('mouseleave', hideTooltip);
+    svg.appendChild(hit);
+
+    const labelEvery = Math.ceil(points.length / 12);
+    if (i % labelEvery === 0) {
+      const label = svgEl('text', {
+        class: 'axis-label', x: xAt(i), y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
+      });
+      label.textContent = shortDate(p.date);
       svg.appendChild(label);
     }
   });
@@ -381,17 +457,24 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
 
 // Same geometry as drawStackedChart, but the segments are models rather than token
 // types. Series order is fixed across buckets so a model keeps its vertical position
-// and its colour from day to day.
-function drawModelDailyChart(container, data, models) {
+// and its colour from day to day. mode picks whether the segments measure tokens or
+// dollars; the two differ sharply because an Opus token costs five Haiku tokens.
+function drawModelDailyChart(container, data, models, mode = 'tokens') {
+  const source = mode === 'cost' ? 'costByModel' : 'byModel';
+  const axisFmt = mode === 'cost' ? axisCost : axisTokens;
+  const tipFmt = mode === 'cost' ? formatCost : (n) => formatTokens(n) + ' tokens';
+  const scope = 'model-' + mode;
   hideTooltip();
   container.innerHTML = '';
   // Families, not model names: byModel is family-keyed, and two models of one family
   // share a colour anyway. Deduped so a family with two models yields one segment.
   const order = [...new Set([...models].sort((a, b) => b.tokens - a.tokens).map((m) => m.family))];
-  const totals = data.map((d) => order.reduce((s, name) => s + (d.byModel?.[name] || 0), 0));
+  const totals = data.map((d) => order.reduce((s, name) => s + (d[source]?.[name] || 0), 0));
 
   if (!data.length || totals.every((t) => !t)) {
-    container.appendChild(el('div', { class: 'bar-empty', text: 'No model usage in this range.' }));
+    container.appendChild(
+      el('div', { class: 'bar-empty', text: mode === 'cost' ? 'No priced model usage in this range.' : 'No model usage in this range.' })
+    );
     return;
   }
 
@@ -402,8 +485,8 @@ function drawModelDailyChart(container, data, models) {
   const barWidth = Math.max((width - CHART_PAD_LEFT) / data.length - barGap, 2);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
-  appendPatternDefs(svg, 'model', order.map((f) => ({ texture: modelTexture(f), color: modelColor(f) })));
-  const max = drawYAxis(svg, rawMax, width, axisTokens);
+  appendPatternDefs(svg, scope, order.map((f) => ({ texture: modelTexture(f), color: modelColor(f) })));
+  const max = drawYAxis(svg, rawMax, width, axisFmt);
   svg.appendChild(
     svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)', 'stroke-width': 1 })
   );
@@ -413,19 +496,19 @@ function drawModelDailyChart(container, data, models) {
     let cursorY = plotHeight;
 
     for (const name of order) {
-      const value = d.byModel?.[name] || 0;
+      const value = d[source]?.[name] || 0;
       if (!value) continue;
       const segHeight = (value / max) * plotHeight;
       const y = cursorY - segHeight;
       const rect = svgEl('rect', {
         class: 'bar',
         x, y, width: barWidth, height: Math.max(segHeight, 0.5),
-        fill: fillFor('model', modelTexture(name), modelColor(name)),
+        fill: fillFor(scope, modelTexture(name), modelColor(name)),
       });
       rect.addEventListener('mousemove', (evt) =>
         showTooltip(
           evt,
-          `<b>${fullDate(d.date)}</b><br>${name}: ${formatTokens(value)} tokens<br>Bucket total: ${formatTokens(totals[i])} tokens`
+          `<b>${fullDate(d.date)}</b><br>${name}: ${tipFmt(value)}<br>Bucket total: ${tipFmt(totals[i])}`
         )
       );
       rect.addEventListener('mouseleave', hideTooltip);
@@ -444,6 +527,56 @@ function drawModelDailyChart(container, data, models) {
   });
 
   container.appendChild(svg);
+}
+
+const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
+// --accent-cost as RGB, so cell intensity can be expressed as an alpha without
+// color-mix. Keep in sync with --accent-cost in public/style.css.
+const HEAT_RGB = '234, 181, 77';
+
+// One hue varying only in opacity. Magnitude is carried by lightness alone,
+// which is why this needs no texture channel the way the categorical charts do.
+function drawActivityHeatmap(container, activity) {
+  hideTooltip();
+  container.innerHTML = '';
+  const max = Math.max(...activity.map((c) => c.cost), 0);
+  if (!max) {
+    container.appendChild(el('div', { class: 'bar-empty', text: 'No priced usage in this range.' }));
+    return;
+  }
+
+  const grid = el('div', { class: 'heatmap' });
+
+  for (let weekday = 0; weekday < 7; weekday++) {
+    grid.appendChild(el('div', { class: 'heat-row-label', text: WEEKDAY_LABELS[weekday] }));
+    for (let hour = 0; hour < 24; hour++) {
+      const c = activity[weekday * 24 + hour];
+      const cell = el('div', { class: 'heat-cell' });
+      if (c.cost > 0) {
+        // Floor the alpha at 0.12 so the cheapest non-zero hour is still
+        // visible rather than indistinguishable from an idle one.
+        const alpha = 0.12 + 0.88 * (c.cost / max);
+        cell.style.background = `rgba(${HEAT_RGB}, ${alpha})`;
+      }
+      cell.addEventListener('mousemove', (evt) =>
+        showTooltip(
+          evt,
+          `<b>${WEEKDAY_LABELS[weekday]} ${String(hour).padStart(2, '0')}:00</b><br>${formatCost(c.cost)}<br>${c.calls} calls, ${formatTokens(c.tokens)} tokens`
+        )
+      );
+      cell.addEventListener('mouseleave', hideTooltip);
+      grid.appendChild(cell);
+    }
+  }
+
+  container.appendChild(grid);
+
+  const axis = el('div', { class: 'heat-hours' });
+  for (let hour = 0; hour < 24; hour += 3) {
+    axis.appendChild(el('span', { text: String(hour).padStart(2, '0') }));
+  }
+  container.appendChild(axis);
 }
 
 function drawTokenLegend(container, data, series = TOKEN_SERIES) {
@@ -500,24 +633,37 @@ function drawModelMix(container, legendContainer, models) {
   }
 }
 
+// A table rather than a list, because $/MTok is the number that explains why a
+// model's token share and its cost share are different. escapeHtml is used on
+// the model name: it comes from a log file, not from this codebase.
 function drawModelList(container, models) {
   container.innerHTML = '';
   if (!models.length) {
-    container.appendChild(el('div', { class: 'list-empty', text: 'No priced usage in this range.' }));
+    container.appendChild(el('div', { class: 'bar-empty', text: 'No model usage in this range.' }));
     return;
   }
-  const max = Math.max(...models.map((m) => m.cost), 0.0001);
-  for (const m of models) {
-    const pct = Math.max((m.cost / max) * 100, 2);
-    const row = el('div', { class: 'model-row' }, [
-      el('span', { class: 'model-name', text: shortModel(m.model) }),
-      el('div', { class: 'model-bar-track' }, [
-        el('div', { class: 'model-bar-fill', style: `width:${pct}%` }),
-      ]),
-      el('span', { class: 'model-cost', text: formatCost(m.cost) }),
-    ]);
-    container.appendChild(row);
-  }
+
+  const totalCost = models.reduce((sum, m) => sum + m.cost, 0);
+  const rows = models
+    .map((m) => {
+      const perMillion = m.tokens > 0 ? m.cost / (m.tokens / 1e6) : 0;
+      const share = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
+      return `<tr>
+        <td class="model-name"><span class="swatch" style="${segmentTexture(m.family)}"></span>${escapeHtml(m.model)}</td>
+        <td class="num">${formatTokens(m.tokens)}</td>
+        <td class="num">${formatCost(m.cost)}</td>
+        <td class="num">${share.toFixed(1)}%</td>
+        <td class="num">${formatCost(perMillion)}</td>
+      </tr>`;
+    })
+    .join('');
+
+  container.innerHTML = `<table class="model-table">
+    <thead><tr>
+      <th>Model</th><th class="num">Tokens</th><th class="num">Cost</th><th class="num">Share</th><th class="num">$/MTok</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>`;
 }
 
 function shortModel(name) {
@@ -592,12 +738,26 @@ async function loadAndRender() {
   document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
   document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
   document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
+  document.getElementById('cardSessions').textContent = s.sessions.toLocaleString('en-US');
+  document.getElementById('cardCalls').textContent = s.apiCalls.toLocaleString('en-US');
+  document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');
 
   drawBarChart(document.getElementById('costChart'), data.daily, {
     color: 'var(--accent-cost)',
     valueKey: 'cost',
     tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatCost(d.cost)}`,
   });
+
+  drawCumulativeChart(document.getElementById('cumulativeChart'), data.daily);
+
+  // Hourly buckets on the Today range, where a daily rate has no meaning.
+  const perDay = currentDays === 'today' ? null : costPerDay(data.daily);
+  document.getElementById('burnCard').hidden = perDay == null;
+  document.getElementById('projectionCard').hidden = perDay == null;
+  if (perDay != null) {
+    document.getElementById('cardBurn').textContent = formatCost(perDay);
+    document.getElementById('cardProjection').textContent = formatCost(perDay * 30);
+  }
 
   drawTokenLegend(document.getElementById('cacheReadLegend'), data.daily, CACHE_READ_SERIES);
   drawStackedChart(document.getElementById('cacheReadChart'), data.daily, CACHE_READ_SERIES);
@@ -617,8 +777,12 @@ async function loadAndRender() {
   // bar and the Cost by model panel stay on every range, Today included.
   const multiDay = currentDays !== 'today';
   document.getElementById('modelDailyPanel').hidden = !multiDay;
+  document.getElementById('modelCostDailyPanel').hidden = !multiDay;
+  document.getElementById('activityPanel').hidden = !multiDay;
   if (multiDay) {
     drawModelDailyChart(document.getElementById('modelDailyChart'), data.daily, data.models);
+    drawModelDailyChart(document.getElementById('modelCostDailyChart'), data.daily, data.models, 'cost');
+    drawActivityHeatmap(document.getElementById('activityHeatmap'), data.activity);
   }
 }
 
