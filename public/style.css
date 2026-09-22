@@ -457,3 +457,59 @@ html, body {
   gap: 8px 14px;
   margin-bottom: 10px;
 }
+
+/* ---------- Attribution bars ---------- */
+
+.usage-group + .usage-group { margin-top: 18px; }
+
+.usage-group-title {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  margin-bottom: 8px;
+}
+
+.usage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 280px) 1fr 52px;
+  gap: 12px;
+  align-items: center;
+  padding: 3px 0;
+}
+
+.usage-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-track {
+  height: 10px;
+  background: var(--surface-raised);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.usage-track > i {
+  display: block;
+  height: 100%;
+  min-width: 1px;
+  background: var(--accent-cost);
+  border-radius: 2px;
+}
+
+.usage-row:hover .usage-track { outline: 1px solid var(--text-tertiary); }
+
+.usage-pct {
+  font-size: 12px;
+  text-align: right;
+  color: var(--text-primary);
+}
+
+@media (max-width: 720px) {
+  .usage-row { grid-template-columns: minmax(0, 1fr) 40px; }
+  .usage-track { display: none; }
+}

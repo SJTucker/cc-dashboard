@@ -633,6 +633,36 @@ function drawModelMix(container, legendContainer, models) {
   }
 }
 
+// Horizontal bars for the attribution breakdowns. Every bar is scaled against
+// one `scaleMax` so lengths stay comparable across groups; the number beside it
+// is always the true share of total cost. Row identity comes from the label, so
+// a single fill colour is enough and no texture is needed.
+function drawUsageBars(container, rows, total, scaleMax) {
+  container.innerHTML = '';
+  if (!rows.length) {
+    container.appendChild(el('div', { class: 'bar-empty', text: 'Nothing attributed in this range.' }));
+    return;
+  }
+
+  for (const row of rows) {
+    const pct = total > 0 ? (row.cost / total) * 100 : 0;
+    const fill = el('i');
+    fill.style.width = (scaleMax > 0 ? (row.cost / scaleMax) * 100 : 0) + '%';
+
+    const node = el('div', { class: 'usage-row' }, [
+      el('span', { class: 'usage-name', text: row.name, title: row.name }),
+      el('span', { class: 'usage-track' }, [fill]),
+      el('span', { class: 'usage-pct', text: pct.toFixed(1) + '%' }),
+    ]);
+    // Skill and subagent names come from log files, so they are escaped here.
+    node.addEventListener('mousemove', (evt) =>
+      showTooltip(evt, `<b>${escapeHtml(row.name)}</b><br>${formatCost(row.cost)} &middot; ${pct.toFixed(1)}% of total`)
+    );
+    node.addEventListener('mouseleave', hideTooltip);
+    container.appendChild(node);
+  }
+}
+
 // A table rather than a list, because $/MTok is the number that explains why a
 // model's token share and its cost share are different. escapeHtml is used on
 // the model name: it comes from a log file, not from this codebase.
@@ -766,6 +796,22 @@ async function loadAndRender() {
   drawStackedChart(document.getElementById('workingTokenChart'), data.daily, WORKING_TOKEN_SERIES);
 
   drawModelList(document.getElementById('modelList'), data.models);
+
+  // Every bar in the panel shares one scale. Groups on separate scales made a
+  // 30.8% subagent bar draw longer than a 68.2% thread bar.
+  const threadRows = [
+    { name: 'Main thread', cost: data.threads.main },
+    { name: 'Subagents', cost: data.threads.subagent },
+  ];
+  const attributionScale = [...threadRows, ...data.skills, ...data.subagents].reduce(
+    (max, r) => Math.max(max, r.cost),
+    0
+  );
+  const totalCost = data.summary.totalCost;
+  document.getElementById('attributionPanel').hidden = totalCost <= 0;
+  drawUsageBars(document.getElementById('threadBars'), threadRows, totalCost, attributionScale);
+  drawUsageBars(document.getElementById('skillBars'), data.skills.slice(0, 8), totalCost, attributionScale);
+  drawUsageBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), totalCost, attributionScale);
 
   drawModelMix(
     document.getElementById('modelMixBar'),

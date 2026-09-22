@@ -127,6 +127,25 @@
         <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
       </section>
 
+      <section class="panel" id="attributionPanel" hidden>
+        <div class="panel-head">
+          <h2>Where usage goes</h2>
+          <span class="panel-note">share of total cost &mdash; a call can carry both a skill and a subagent, so these do not sum to 100%</span>
+        </div>
+        <div class="usage-group">
+          <div class="usage-group-title">Main thread vs subagents</div>
+          <div id="threadBars"></div>
+        </div>
+        <div class="usage-group">
+          <div class="usage-group-title">Skills</div>
+          <div id="skillBars"></div>
+        </div>
+        <div class="usage-group">
+          <div class="usage-group-title">Subagents</div>
+          <div id="subagentBars"></div>
+        </div>
+      </section>
+
       <div class="panel-row">
         <section class="panel">
           <div class="panel-head">

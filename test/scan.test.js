@@ -279,3 +279,60 @@ test('summary counts distinct sessions, deduped API calls and tool_use blocks', 
   assert.strictEqual(data.summary.apiCalls, 3, 'the duplicate line is not counted twice');
   assert.strictEqual(data.summary.toolCalls, 3, '2 from the second line of the deduped pair, 0, and 1');
 });
+
+// An entry carrying the attribution fields Claude Code writes on each assistant
+// line: which skill was active, and which subagent type made the call.
+function attributedLine(isoTimestamp, { id, skill, agent, sidechain = false, output = 1e6 }) {
+  const entry = {
+    timestamp: isoTimestamp,
+    requestId: 'req-' + id,
+    sessionId: 'session-' + id,
+    isSidechain: sidechain,
+    message: {
+      id: 'msg-' + id,
+      model: 'claude-opus-5',
+      usage: { input_tokens: 0, output_tokens: output, speed: 'standard' },
+    },
+  };
+  if (skill) entry.attributionSkill = skill;
+  if (agent) entry.attributionAgent = agent;
+  return JSON.stringify(entry);
+}
+
+test('usage is attributed to skills, subagents and the thread it ran on', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(12).toISOString();
+
+  // $25 of Opus 5 output per line. The first two lines are one API response
+  // split across two JSONL lines, so the second must not be counted again.
+  const first = attributedLine(iso, { id: 'a', skill: 'playwright-cli', agent: 'Explore', sidechain: true });
+  writeSession(base, 'one', [
+    first,
+    first, // same message.id:requestId - the dedupe drops it
+    attributedLine(iso, { id: 'b', skill: 'playwright-cli' }),
+    attributedLine(iso, { id: 'c', agent: 'general-purpose', sidechain: true, output: 2e6 }),
+    attributedLine(iso, { id: 'd' }), // no attribution at all
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  assert.deepStrictEqual(
+    data.skills.map((s) => [s.name, Math.round(s.cost)]),
+    [['playwright-cli', 50]],
+    'both playwright-cli calls counted once each, sorted by cost'
+  );
+  assert.deepStrictEqual(
+    data.subagents.map((s) => [s.name, Math.round(s.cost)]),
+    [['general-purpose', 50], ['Explore', 25]],
+    'subagent costs are separate from skill costs, sorted by cost'
+  );
+
+  // Every call lands in exactly one thread bucket, so these two sum to the total.
+  assert.ok(Math.abs(data.threads.subagent - 75) < 1e-9, 'the two sidechain calls');
+  assert.ok(Math.abs(data.threads.main - 50) < 1e-9, 'the two main-thread calls');
+  assert.ok(
+    Math.abs(data.threads.main + data.threads.subagent - data.summary.totalCost) < 1e-9,
+    'the thread split is a partition of total cost'
+  );
+});
