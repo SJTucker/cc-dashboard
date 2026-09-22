@@ -1,7 +1,8 @@
 # My Claude Code Dashboard
 
-A small, local, offline dashboard for your Claude Code usage: daily cost, daily tokens
-broken out by input / output / cache-write / cache-read, and cost by model.
+A small, local, offline dashboard for your Claude Code usage: daily and cumulative cost,
+daily tokens broken out by input / output / cache-write / cache-read, cost by model with
+dollars per million tokens, and a weekday-by-hour heatmap of when the spend happens.
 
 Built to be easy to fully read in one sitting — four small files, two dependencies,
 no telemetry, no CDN, no outbound network calls of its own.
