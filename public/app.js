@@ -41,6 +41,10 @@ function costPerDay(daily) {
   const first = new Date(complete[0].date + 'T00:00:00');
   const last = new Date(complete[complete.length - 1].date + 'T00:00:00');
   const span = Math.round((last - first) / 86400000) + 1;
+  // Hour keys ('2026-09-21T14') do not parse as a date, which would make span
+  // NaN. Only the daily ranges call this today, but nothing in the signature
+  // says so.
+  if (!Number.isFinite(span) || span <= 0) return null;
   const total = complete.reduce((sum, d) => sum + d.cost, 0);
   return total / span;
 }
@@ -114,9 +118,13 @@ function axisTokens(n) {
 
 // A compact cost for the y axis: formatCost's grouped "$1,200.00" is wider than the
 // axis gutter.
+// Gridline values are round by construction but not whole: drawYAxis picks a
+// step of 0.5 whenever the max lands in (0.80, 2.00], so dropping the cents
+// labelled the $1.50 line "$2" and left two ticks reading the same number.
 function axisCost(usd) {
   if (usd >= 1000) return '$' + (usd / 1000).toFixed(1) + 'k';
-  return '$' + usd.toFixed(usd < 1 ? 2 : 0);
+  if (usd >= 10) return '$' + usd.toFixed(0);
+  return '$' + usd.toFixed(2).replace(/\.00$/, '');
 }
 
 // Rounds the top of the scale up to the next 1/2/5 x 10^n tick, draws the gridlines
@@ -237,7 +245,13 @@ function drawCumulativeChart(container, data) {
   const xAt = (i) => CHART_PAD_LEFT + i * step;
   const yAt = (total) => plotHeight - (total / max) * plotHeight;
 
-  const d = points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i)},${yAt(p.total)}`).join(' ');
+  // A one-bucket range yields a moveto with no lineto, which draws nothing at
+  // all. Give it a short horizontal segment so a single day still shows its
+  // running total instead of an apparently empty panel.
+  const d =
+    points.length === 1
+      ? `M${xAt(0)},${yAt(points[0].total)} L${width},${yAt(points[0].total)}`
+      : points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i)},${yAt(p.total)}`).join(' ');
   svg.appendChild(svgEl('path', { class: 'cumulative-line', d, fill: 'none' }));
 
   points.forEach((p, i) => {
@@ -756,7 +770,7 @@ async function loadAndRender() {
 
   if (!data.meta.dirExists) {
     banner.hidden = false;
-    banner.innerHTML = `No Claude Code project logs found at <code>${data.meta.projectsDir}</code>. Use Claude Code at least once, or set <code>CLAUDE_CONFIG_DIR</code> if you use a custom location.`;
+    banner.innerHTML = `No Claude Code project logs found at <code>${escapeHtml(data.meta.projectsDir)}</code>. Use Claude Code at least once, or set <code>CLAUDE_CONFIG_DIR</code> if you use a custom location.`;
   } else if (data.meta.scannedFiles === 0) {
     banner.hidden = false;
     banner.textContent = 'Found the projects folder, but no session files yet.';

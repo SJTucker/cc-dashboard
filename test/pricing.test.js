@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { familyFor } = require('../lib/pricing');
+const { familyFor, shortModelLabel } = require('../lib/pricing');
 
 test('familyFor maps real model names to their price-table family', () => {
   assert.strictEqual(familyFor('claude-opus-5'), 'opus');
@@ -140,4 +140,26 @@ test('familyFor reads the row family, not the row match key', () => {
   assert.strictEqual(familyFor('claude-opus-5-5'), 'opus');
   assert.strictEqual(familyFor('claude-sonnet-4-6'), 'sonnet');
   assert.strictEqual(familyFor('claude-mythos-5-1'), 'mythos');
+});
+
+test('the 3.x naming scheme prices against its own rows, not the fallbacks', () => {
+  const cases = [
+    ['claude-3-5-sonnet-20241022', 3, 15],
+    ['claude-3-7-sonnet-20250219', 3, 15],
+    ['claude-3-5-haiku-20241022', 0.8, 4],
+    ['claude-3-haiku-20240307', 0.25, 1.25],
+    ['claude-3-opus-20240229', 15, 75],
+  ];
+  for (const [model, input, output] of cases) {
+    const row = priceFor(model);
+    assert.strictEqual(row.input, input, `${model} input`);
+    assert.strictEqual(row.output, output, `${model} output`);
+  }
+});
+
+test('a release date is not read as a minor version', () => {
+  assert.strictEqual(shortModelLabel('claude-opus-4-20250514'), 'Opus');
+  assert.strictEqual(shortModelLabel('claude-sonnet-4-20250514'), 'Sonnet');
+  assert.strictEqual(shortModelLabel('claude-opus-4-1-20250805'), 'Opus 4.1');
+  assert.strictEqual(shortModelLabel('claude-opus-4-6-20260315'), 'Opus 4.6');
 });

@@ -13,7 +13,22 @@ function getArg(name) {
   return arg.includes('=') ? arg.split('=').slice(1).join('=') : process.argv[idx + 1] || null;
 }
 
-const PORT = Number(getArg('port') || process.env.PORT || 3600);
+// listen() validates the port synchronously and throws before the 'error'
+// handler below is attached, so an unusable value has to be rejected here or the
+// friendly message never prints. `--port` with no value takes the next argv
+// token, which is how `--port --open` used to become NaN.
+function getPort() {
+  const raw = getArg('port') || process.env.PORT;
+  if (raw == null) return 3600;
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 0 || port > 65535) {
+    console.error(`Invalid port ${JSON.stringify(String(raw))}. Use a whole number from 0 to 65535.`);
+    process.exit(1);
+  }
+  return port;
+}
+
+const PORT = getPort();
 const HOST = '127.0.0.1'; // intentionally not configurable - see lib/net-guard.js
 
 const app = express();
@@ -44,7 +59,19 @@ app.get('/api/summary', async (req, res) => {
       res.json(await scanUsage({ days: 'today', bucket: 'hour' }));
       return;
     }
-    const days = raw === 'all' ? null : Number(raw) || 30;
+    // Number(raw) || 30 turned days=0 and days=abc into 30 without saying so,
+    // and let a negative value through to produce a cutoff in the future.
+    let days = 30;
+    if (raw === 'all') {
+      days = null;
+    } else if (raw != null && raw !== '') {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1) {
+        res.status(400).json({ error: `Invalid days: ${String(raw)}. Use a whole number of days, 'today', or 'all'.` });
+        return;
+      }
+      days = n;
+    }
     const data = await getCached(days);
     res.json(data);
   } catch (err) {
@@ -53,7 +80,16 @@ app.get('/api/summary', async (req, res) => {
   }
 });
 
-app.post('/api/refresh', (_req, res) => {
+app.post('/api/refresh', (req, res) => {
+  // Every modern browser sends Sec-Fetch-Site on a fetch, so anything other than
+  // same-origin means another page issued this request. The Host guard cannot
+  // catch that: a browser sets Host from the address it connected to, not from
+  // the page that asked. Non-browser clients send no such header and still work.
+  const site = req.get('sec-fetch-site');
+  if (site && site !== 'same-origin') {
+    res.status(403).json({ error: 'Cross-site requests are not accepted.' });
+    return;
+  }
   cache.clear();
   res.json({ ok: true });
 });

@@ -98,7 +98,16 @@ test("bucket: 'hour' returns 24 slots keyed YYYY-MM-DDTHH, sorted, zero-filled",
   const { scanUsage } = loadScan(base);
   const data = await scanUsage({ days: 'today', bucket: 'hour' });
 
-  assert.strictEqual(data.daily.length, 24, 'every hour of the day gets a slot');
+  // 24 on an ordinary day, 23 on the spring-forward day where 2am does not
+  // exist locally. Derived from the day's real length rather than hardcoded, so
+  // this does not fail once a year. The fall-back day is 25 hours long but its
+  // repeated 1am folds into one key, so the slot count caps at 24.
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const nextDay = new Date(dayStart);
+  nextDay.setDate(nextDay.getDate() + 1);
+  const expectedSlots = Math.min(Math.round((nextDay - dayStart) / 3600000), 24);
+  assert.strictEqual(data.daily.length, expectedSlots, 'every local hour of the day gets a slot');
 
   const keys = data.daily.map((d) => d.date);
   const sorted = [...keys].sort((a, b) => a.localeCompare(b));
@@ -359,4 +368,95 @@ test('cost is split by whether the call ran at over 150k of context', async () =
     Math.abs(data.context.over + data.context.under - data.summary.totalCost) < 1e-9,
     'the context split is a partition of total cost'
   );
+});
+
+test('a line whose timestamp will not parse is skipped, not fatal', async () => {
+  const base = makeFixture();
+  const good = usageLine(atHourToday(12).toISOString(), { id: 'ok', input: 400 });
+  const bad = JSON.stringify({
+    timestamp: 'not-a-date',
+    requestId: 'req-bad',
+    message: { id: 'msg-bad', model: 'claude-opus-5', usage: { input_tokens: 1, output_tokens: 1 } },
+  });
+
+  writeSession(base, 'mixed', [bad, good]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  assert.strictEqual(data.summary.totalInput, 400, 'the valid line still counts');
+  assert.strictEqual(data.summary.apiCalls, 1, 'the unparseable line contributes nothing');
+});
+
+test('cache writes count when only the 5m/1h split is present', async () => {
+  const base = makeFixture();
+  writeSession(base, 'split', [
+    JSON.stringify({
+      timestamp: atHourToday(12).toISOString(),
+      requestId: 'req-split',
+      message: {
+        id: 'msg-split',
+        model: 'claude-opus-5',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation: { ephemeral_5m_input_tokens: 1e6, ephemeral_1h_input_tokens: 0 },
+        },
+      },
+    }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  // Opus 5 input is $5/MTok and a 5m cache write is 1.25x that.
+  assert.ok(Math.abs(data.summary.totalCost - 6.25) < 1e-9, 'the write is charged');
+  assert.strictEqual(data.summary.totalCacheCreate, 1e6, 'and the same tokens are reported');
+  assert.strictEqual(data.summary.totalTokens, 1e6, 'so cost and tokens agree');
+});
+
+test('a tool_use block with no id is counted once across duplicate lines', async () => {
+  const base = makeFixture();
+  const line = JSON.stringify({
+    timestamp: atHourToday(12).toISOString(),
+    requestId: 'req-anon',
+    sessionId: 's1',
+    message: {
+      id: 'msg-anon',
+      model: 'claude-opus-5',
+      content: [{ type: 'tool_use', name: 'Bash', input: {} }],
+      usage: { input_tokens: 1, output_tokens: 1 },
+    },
+  });
+
+  writeSession(base, 'anon', [line, line, line]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  assert.strictEqual(data.summary.apiCalls, 1, 'one API response');
+  assert.strictEqual(data.summary.toolCalls, 1, 'and one tool call, not one per line');
+});
+
+test('synthetic entries are excluded from every total', async () => {
+  const base = makeFixture();
+  writeSession(base, 'synth', [
+    JSON.stringify({
+      timestamp: atHourToday(12).toISOString(),
+      message: { id: 'msg-syn', model: '<synthetic>', usage: { input_tokens: 1000, output_tokens: 1000 } },
+    }),
+    usageLine(atHourToday(12).toISOString(), { id: 'real', input: 100, output: 0 }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  assert.strictEqual(data.summary.totalInput, 100, 'synthetic tokens stay out of the totals');
+  assert.strictEqual(data.summary.apiCalls, 1, 'a synthetic entry is not an API call');
+
+  // The invariant the byModel test asserts holds only if both sides agree on
+  // which entries count.
+  const bucket = data.daily[0];
+  const fromModels = Object.values(bucket.byModel).reduce((a, b) => a + b, 0);
+  assert.strictEqual(fromModels, bucket.input + bucket.output + bucket.cacheCreate + bucket.cacheRead);
 });

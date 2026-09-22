@@ -18,6 +18,11 @@
 
 * { box-sizing: border-box; }
 
+/* The hidden attribute is a user-agent rule, so any component that sets its own
+   display beats it - .card did, which left the two rate cards on screen showing
+   the previous range's numbers. !important is what makes hidden mean hidden. */
+[hidden] { display: none !important; }
+
 html, body {
   margin: 0;
   padding: 0;
