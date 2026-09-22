@@ -738,6 +738,9 @@ async function loadAndRender() {
   document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
   document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
   document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
+  document.getElementById('cardSessions').textContent = s.sessions.toLocaleString('en-US');
+  document.getElementById('cardCalls').textContent = s.apiCalls.toLocaleString('en-US');
+  document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');
 
   drawBarChart(document.getElementById('costChart'), data.daily, {
     color: 'var(--accent-cost)',
