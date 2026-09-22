@@ -381,17 +381,23 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
 
 // Same geometry as drawStackedChart, but the segments are models rather than token
 // types. Series order is fixed across buckets so a model keeps its vertical position
-// and its colour from day to day.
-function drawModelDailyChart(container, data, models) {
+// and its colour from day to day. mode picks whether the segments measure tokens or
+// dollars; the two differ sharply because an Opus token costs five Haiku tokens.
+function drawModelDailyChart(container, data, models, mode = 'tokens') {
+  const source = mode === 'cost' ? 'costByModel' : 'byModel';
+  const axisFmt = mode === 'cost' ? axisCost : axisTokens;
+  const tipFmt = mode === 'cost' ? formatCost : (n) => formatTokens(n) + ' tokens';
   hideTooltip();
   container.innerHTML = '';
   // Families, not model names: byModel is family-keyed, and two models of one family
   // share a colour anyway. Deduped so a family with two models yields one segment.
   const order = [...new Set([...models].sort((a, b) => b.tokens - a.tokens).map((m) => m.family))];
-  const totals = data.map((d) => order.reduce((s, name) => s + (d.byModel?.[name] || 0), 0));
+  const totals = data.map((d) => order.reduce((s, name) => s + (d[source]?.[name] || 0), 0));
 
   if (!data.length || totals.every((t) => !t)) {
-    container.appendChild(el('div', { class: 'bar-empty', text: 'No model usage in this range.' }));
+    container.appendChild(
+      el('div', { class: 'bar-empty', text: mode === 'cost' ? 'No priced model usage in this range.' : 'No model usage in this range.' })
+    );
     return;
   }
 
@@ -403,7 +409,7 @@ function drawModelDailyChart(container, data, models) {
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
   appendPatternDefs(svg, 'model', order.map((f) => ({ texture: modelTexture(f), color: modelColor(f) })));
-  const max = drawYAxis(svg, rawMax, width, axisTokens);
+  const max = drawYAxis(svg, rawMax, width, axisFmt);
   svg.appendChild(
     svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)', 'stroke-width': 1 })
   );
@@ -413,7 +419,7 @@ function drawModelDailyChart(container, data, models) {
     let cursorY = plotHeight;
 
     for (const name of order) {
-      const value = d.byModel?.[name] || 0;
+      const value = d[source]?.[name] || 0;
       if (!value) continue;
       const segHeight = (value / max) * plotHeight;
       const y = cursorY - segHeight;
@@ -425,7 +431,7 @@ function drawModelDailyChart(container, data, models) {
       rect.addEventListener('mousemove', (evt) =>
         showTooltip(
           evt,
-          `<b>${fullDate(d.date)}</b><br>${name}: ${formatTokens(value)} tokens<br>Bucket total: ${formatTokens(totals[i])} tokens`
+          `<b>${fullDate(d.date)}</b><br>${name}: ${tipFmt(value)}<br>Bucket total: ${tipFmt(totals[i])}`
         )
       );
       rect.addEventListener('mouseleave', hideTooltip);
@@ -617,8 +623,10 @@ async function loadAndRender() {
   // bar and the Cost by model panel stay on every range, Today included.
   const multiDay = currentDays !== 'today';
   document.getElementById('modelDailyPanel').hidden = !multiDay;
+  document.getElementById('modelCostDailyPanel').hidden = !multiDay;
   if (multiDay) {
     drawModelDailyChart(document.getElementById('modelDailyChart'), data.daily, data.models);
+    drawModelDailyChart(document.getElementById('modelCostDailyChart'), data.daily, data.models, 'cost');
   }
 }
 
