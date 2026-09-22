@@ -234,3 +234,42 @@ test('activity is a fully populated 7x24 matrix indexed weekday*24+hour', async 
   const totalCalls = data.activity.reduce((sum, c) => sum + c.calls, 0);
   assert.strictEqual(totalCalls, 1, 'no other cell was touched');
 });
+
+// An assistant entry whose content array carries tool_use blocks.
+function toolLine(isoTimestamp, { id, sessionId, toolCount }) {
+  const content = [{ type: 'text', text: 'working' }];
+  for (let i = 0; i < toolCount; i++) content.push({ type: 'tool_use', name: 'Bash', input: {} });
+  return JSON.stringify({
+    timestamp: isoTimestamp,
+    requestId: 'req-' + id,
+    sessionId,
+    message: {
+      id: 'msg-' + id,
+      model: 'claude-opus-5',
+      content,
+      usage: { input_tokens: 1, output_tokens: 1, speed: 'standard' },
+    },
+  });
+}
+
+test('summary counts distinct sessions, deduped API calls and tool_use blocks', async () => {
+  const base = makeFixture();
+  const noon = atHourToday(12);
+  const iso = noon.toISOString();
+
+  const duplicated = toolLine(iso, { id: 'a', sessionId: 's1', toolCount: 2 });
+
+  writeSession(base, 'first', [
+    duplicated,
+    duplicated, // same messageId:requestId - the existing dedupe must drop it
+    toolLine(iso, { id: 'b', sessionId: 's1', toolCount: 0 }),
+  ]);
+  writeSession(base, 'second', [toolLine(iso, { id: 'c', sessionId: 's2', toolCount: 1 })]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  assert.strictEqual(data.summary.sessions, 2, 's1 and s2');
+  assert.strictEqual(data.summary.apiCalls, 3, 'the duplicate line is not counted twice');
+  assert.strictEqual(data.summary.toolCalls, 3, '2 from the deduped entry, 0, and 1');
+});
