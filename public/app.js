@@ -783,6 +783,18 @@ async function loadAndRender() {
     : '';
   document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
   document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
+
+  // Claude Code's own per-session counters, shown beside Total cost rather than
+  // folded into it. Only present on the all-time range, and only for the
+  // sessions that wrote a cost-state line, so it is a floor on what the
+  // per-request scan misses, not a replacement total.
+  const reportedCard = document.getElementById('reportedCard');
+  reportedCard.hidden = s.reportedCost == null;
+  if (s.reportedCost != null) {
+    document.getElementById('cardReported').textContent = formatCost(s.reportedCost);
+    document.getElementById('cardReportedNote').textContent =
+      `over ${s.reportedSessions} of ${s.sessions} sessions \u2014 includes calls with no transcript line`;
+  }
   document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
   document.getElementById('cardSessions').textContent = s.sessions.toLocaleString('en-US');
   document.getElementById('cardCalls').textContent = s.apiCalls.toLocaleString('en-US');

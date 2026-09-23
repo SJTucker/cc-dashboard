@@ -460,3 +460,40 @@ test('synthetic entries are excluded from every total', async () => {
   const fromModels = Object.values(bucket.byModel).reduce((a, b) => a + b, 0);
   assert.strictEqual(fromModels, bucket.input + bucket.output + bucket.cacheCreate + bucket.cacheRead);
 });
+
+function costStateLine(isoTimestamp, { sessionId, cost }) {
+  return JSON.stringify({ type: 'cost-state', timestamp: isoTimestamp, sessionId, totalCostUSD: cost });
+}
+
+test('reportedCost takes the highest cost-state per session and only on an all-time scan', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+
+  // s1 writes its cumulative counter three times; only the last value is the
+  // session's cost. s2 is a second session, so the two add.
+  writeSession(base, 'one', [
+    usageLine(iso, { id: 'r1' }),
+    costStateLine(iso, { sessionId: 's1', cost: 1.5 }),
+    costStateLine(iso, { sessionId: 's1', cost: 4.25 }),
+    costStateLine(iso, { sessionId: 's1', cost: 4.25 }),
+  ]);
+  writeSession(base, 'two', [
+    usageLine(iso, { id: 'r2' }),
+    costStateLine(iso, { sessionId: 's2', cost: 2.0 }),
+  ]);
+  // No cost-state at all, so it counts toward `sessions` but not `reportedSessions`.
+  writeSession(base, 'three', [usageLine(iso, { id: 'r3' })]);
+
+  const { scanUsage } = loadScan(base);
+
+  const all = await scanUsage({ days: null });
+  assert.strictEqual(all.summary.reportedCost, 6.25);
+  assert.strictEqual(all.summary.reportedSessions, 2);
+
+  // A windowed scan cannot attribute a session's lifetime total to the window.
+  const windowed = await scanUsage({ days: 7 });
+  assert.strictEqual(windowed.summary.reportedCost, null);
+
+  // cost-state lines must not leak into the priced totals or the call count.
+  assert.strictEqual(all.summary.apiCalls, 3);
+});
