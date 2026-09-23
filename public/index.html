@@ -93,21 +93,23 @@
         </section>
       </div>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Cumulative cost</h2>
-        </div>
-        <div id="cumulativeChart" class="chart" aria-label="Line chart of cumulative cost across the range"></div>
-      </section>
+      <div class="panel-row even">
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Cumulative cost</h2>
+          </div>
+          <div id="cumulativeChart" class="chart" aria-label="Line chart of cumulative cost across the range"></div>
+        </section>
 
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Daily tokens by type</h2>
-          <div class="legend" id="tokenTypeLegend"></div>
-        </div>
-        <div id="tokenTypeChart" class="chart" aria-label="Line chart of daily input, output, cache-write and cache-read tokens on a logarithmic scale"></div>
-        <p class="panel-note">Logarithmic scale &mdash; each gridline is ten times the one below. The four types span six orders of magnitude, so a linear axis leaves input and output under a pixel.</p>
-      </section>
+        <section class="panel">
+          <div class="panel-head">
+            <h2>Daily tokens by type</h2>
+          </div>
+          <div id="tokenTypeChart" class="chart" aria-label="Line chart of daily input, output, cache-write and cache-read tokens on a logarithmic scale"></div>
+          <div class="legend split-legend" id="tokenTypeLegend"></div>
+          <p class="panel-note">Logarithmic scale &mdash; each gridline is ten times the one below.</p>
+        </section>
+      </div>
 
 
       <section class="panel" id="modelDailyPanel" hidden>
@@ -135,7 +137,7 @@
       <section class="panel" id="attributionPanel" hidden>
         <div class="panel-head">
           <h2>Where usage goes</h2>
-          <span class="panel-note">share of total cost &mdash; a call can carry both a skill and a subagent, so these do not sum to 100%</span>
+          <span class="panel-note">share of total cost</span>
         </div>
         <div class="usage-group">
           <div class="usage-group-title">Main thread vs subagents</div>
@@ -146,7 +148,7 @@
           <div id="contextBars"></div>
         </div>
         <div class="usage-group">
-          <div class="usage-group-title">Skills</div>
+          <div class="usage-group-title">Skills <span class="usage-group-note">a call can carry both a skill and a subagent, so these two lists do not sum to 100%</span></div>
           <div id="skillBars"></div>
         </div>
         <div class="usage-group">

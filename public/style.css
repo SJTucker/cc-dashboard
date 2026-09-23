@@ -507,6 +507,17 @@ html, body {
 
 .usage-group + .usage-group { margin-top: 18px; }
 
+/* The split bar's own legend sits under it, not in the panel head. */
+.split-legend { margin-top: 8px; }
+
+.usage-group-note {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-tertiary);
+  margin-left: 8px;
+}
+
 .usage-group-title {
   font-size: 10px;
   text-transform: uppercase;

@@ -232,6 +232,17 @@ function drawCumulativeChart(container, data) {
   let running = 0;
   const points = data.map((d) => ({ date: d.date, total: (running += d.cost) }));
 
+  // Buckets outside the spending are zero-filled - the Today range always carries
+  // a full 24-hour axis - and a flat line across them reads as usage continuing at
+  // that level rather than as nothing happening. The line is drawn only over the
+  // buckets that spent, starting one earlier so it still rises from zero. A flat
+  // stretch BETWEEN two spends stays, because that is what a cumulative total
+  // genuinely does there. The axis keeps its full width either way, so the labels
+  // do not move.
+  const drawTo = data.map((d) => d.cost > 0).lastIndexOf(true);
+  const drawFrom = Math.max(data.findIndex((d) => d.cost > 0) - 1, 0);
+  const drawn = points.slice(drawFrom, drawTo + 1);
+
   const width = chartWidth(container);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
   const step = (width - CHART_PAD_LEFT) / Math.max(points.length - 1, 1);
@@ -249,20 +260,22 @@ function drawCumulativeChart(container, data) {
   // all. Give it a short horizontal segment so a single day still shows its
   // running total instead of an apparently empty panel.
   const d =
-    points.length === 1
-      ? `M${xAt(0)},${yAt(points[0].total)} L${width},${yAt(points[0].total)}`
-      : points.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(i)},${yAt(p.total)}`).join(' ');
+    drawn.length === 1
+      ? `M${xAt(drawFrom)},${yAt(drawn[0].total)} L${xAt(drawFrom) + Math.max(step, 2)},${yAt(drawn[0].total)}`
+      : drawn.map((p, i) => `${i === 0 ? 'M' : 'L'}${xAt(drawFrom + i)},${yAt(p.total)}`).join(' ');
   svg.appendChild(svgEl('path', { class: 'cumulative-line', d, fill: 'none' }));
 
   points.forEach((p, i) => {
-    const hit = svgEl('rect', {
-      x: xAt(i) - step / 2, y: 0, width: Math.max(step, 1), height: plotHeight, fill: 'transparent',
-    });
-    hit.addEventListener('mousemove', (evt) =>
-      showTooltip(evt, `<b>${fullDate(p.date)}</b><br>Running total: ${formatCost(p.total)}`)
-    );
-    hit.addEventListener('mouseleave', hideTooltip);
-    svg.appendChild(hit);
+    if (i >= drawFrom && i <= drawTo) {
+      const hit = svgEl('rect', {
+        x: xAt(i) - step / 2, y: 0, width: Math.max(step, 1), height: plotHeight, fill: 'transparent',
+      });
+      hit.addEventListener('mousemove', (evt) =>
+        showTooltip(evt, `<b>${fullDate(p.date)}</b><br>Running total: ${formatCost(p.total)}`)
+      );
+      hit.addEventListener('mouseleave', hideTooltip);
+      svg.appendChild(hit);
+    }
 
     const labelEvery = Math.ceil(points.length / 12);
     if (i % labelEvery === 0) {
@@ -788,6 +801,56 @@ function drawModelMix(container, legendContainer, models) {
   }
 }
 
+// Two shares of one whole, drawn as a single split bar. Main-thread vs subagent
+// and over- vs under-threshold context are both partitions of total cost, so the
+// pair reads better as one bar than as two the eye has to add up. The skill and
+// subagent lists below are not partitions - one call can appear in both - so they
+// keep the separate-bar form.
+//
+// Validated with the dataviz skill's validate_palette.js against the panel
+// surface: CVD deltaE 27.3 (protan). Texture and the direct labels carry identity;
+// colour is secondary, as everywhere else here.
+const SPLIT_STYLE = [
+  { color: '#c98500', texture: 'solid' },
+  { color: '#9085e9', texture: 'diag' },
+];
+
+function drawSplitBar(container, rows) {
+  container.innerHTML = '';
+  const total = rows.reduce((sum, r) => sum + r.cost, 0);
+  if (!(total > 0)) {
+    container.appendChild(el('div', { class: 'bar-empty', text: 'Nothing attributed in this range.' }));
+    return;
+  }
+
+  const bar = el('div', { class: 'mix-bar' });
+  const legend = el('div', { class: 'legend split-legend' });
+
+  rows.forEach((row, i) => {
+    const pct = (row.cost / total) * 100;
+    const style = SPLIT_STYLE[i % SPLIT_STYLE.length];
+    const seg = el('div', {
+      class: 'mix-seg',
+      style: `width:${pct}%;background:${textureCss(style.texture, style.color)}`,
+    });
+    seg.addEventListener('mousemove', (evt) =>
+      showTooltip(evt, `<b>${escapeHtml(row.name)}</b><br>${formatCost(row.cost)} &middot; ${pct.toFixed(1)}% of total`)
+    );
+    seg.addEventListener('mouseleave', hideTooltip);
+    bar.appendChild(seg);
+
+    legend.appendChild(
+      el('span', { class: 'legend-item' }, [
+        el('span', { class: 'legend-swatch', style: `background:${textureCss(style.texture, style.color)}` }),
+        el('span', { text: `${row.name} ${pct.toFixed(1)}%` }),
+      ])
+    );
+  });
+
+  container.appendChild(bar);
+  container.appendChild(legend);
+}
+
 // Horizontal bars for the attribution breakdowns. Every bar is scaled against
 // one `scaleMax` so lengths stay comparable across groups; the number beside it
 // is always the true share of total cost. Row identity comes from the label, so
@@ -987,14 +1050,13 @@ async function loadAndRender() {
     { name: `Over ${axisTokens(data.contextThreshold)} context`, cost: data.context.over },
     { name: `Under ${axisTokens(data.contextThreshold)} context`, cost: data.context.under },
   ];
-  const attributionScale = [...threadRows, ...contextRows, ...data.skills, ...data.subagents].reduce(
-    (max, r) => Math.max(max, r.cost),
-    0
-  );
+  // The two split bars are self-scaling, so only the skill and subagent lists
+  // share this one, which is what keeps their lengths comparable to each other.
+  const attributionScale = [...data.skills, ...data.subagents].reduce((max, r) => Math.max(max, r.cost), 0);
   const totalCost = data.summary.totalCost;
   document.getElementById('attributionPanel').hidden = totalCost <= 0;
-  drawUsageBars(document.getElementById('threadBars'), threadRows, totalCost, attributionScale);
-  drawUsageBars(document.getElementById('contextBars'), contextRows, totalCost, attributionScale);
+  drawSplitBar(document.getElementById('threadBars'), threadRows);
+  drawSplitBar(document.getElementById('contextBars'), contextRows);
   drawUsageBars(document.getElementById('skillBars'), data.skills.slice(0, 8), totalCost, attributionScale);
   drawUsageBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), totalCost, attributionScale);
 
