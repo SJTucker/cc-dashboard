@@ -497,3 +497,65 @@ test('reportedCost takes the highest cost-state per session and only on an all-t
   // cost-state lines must not leak into the priced totals or the call count.
   assert.strictEqual(all.summary.apiCalls, 3);
 });
+
+// A response's content blocks are written one per JSONL line, sharing message.id
+// and requestId. output_tokens grows across those lines as the response streams;
+// the other three fields carry their final value on every line.
+function streamedResponse(isoTimestamp, { id, outputs, input = 10, cacheRead = 1000 }) {
+  return outputs.map((out) =>
+    JSON.stringify({
+      timestamp: isoTimestamp,
+      requestId: 'req-' + id,
+      sessionId: 's-' + id,
+      message: {
+        id: 'msg-' + id,
+        model: 'claude-sonnet-4-6-20260115',
+        usage: { input_tokens: input, output_tokens: out, cache_read_input_tokens: cacheRead },
+      },
+    })
+  );
+}
+
+test('a streamed response counts its final output once, not its first or its sum', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'streamed', streamedResponse(iso, { id: 'a', outputs: [5, 5, 5, 367] }));
+
+  const { scanUsage } = loadScan(base);
+  const { summary, daily } = await scanUsage({ days: null });
+
+  // 367, not 5 (first line) and not 382 (sum of lines).
+  assert.strictEqual(summary.totalOutput, 367);
+  // The fields that do not grow must not be multiplied by the line count either.
+  assert.strictEqual(summary.totalInput, 10);
+  assert.strictEqual(summary.totalCacheRead, 1000);
+  assert.strictEqual(summary.apiCalls, 1);
+  assert.strictEqual(daily[0].output, 367);
+});
+
+test('the same response copied into a second session file is still counted once', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  const lines = streamedResponse(iso, { id: 'b', outputs: [7, 120] });
+  writeSession(base, 'original', lines);
+  writeSession(base, 'resumed', lines);
+
+  const { scanUsage } = loadScan(base);
+  const { summary } = await scanUsage({ days: null });
+  assert.strictEqual(summary.totalOutput, 120);
+  assert.strictEqual(summary.apiCalls, 1);
+});
+
+test('two responses back to back are not merged into one', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  const { scanUsage } = loadScan(base);
+  writeSession(base, 'pair', [
+    ...streamedResponse(iso, { id: 'c', outputs: [4, 90] }),
+    ...streamedResponse(iso, { id: 'd', outputs: [6, 50] }),
+  ]);
+
+  const { summary } = await scanUsage({ days: null });
+  assert.strictEqual(summary.totalOutput, 140);
+  assert.strictEqual(summary.apiCalls, 2);
+});
