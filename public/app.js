@@ -277,18 +277,16 @@ function drawCumulativeChart(container, data) {
   container.appendChild(svg);
 }
 
+// `dash` is the stroke-dasharray the log line chart draws each series with. It is
+// the identity channel that survives colourblindness and greyscale printing, the
+// same job `texture` does for the stacked bars. Colour is the secondary channel in
+// both.
 const TOKEN_SERIES = [
-  { key: 'input', label: 'Input', color: '#c98500', texture: 'diag' },
-  { key: 'output', label: 'Output', color: '#3987e5', texture: 'diag-rev' },
-  { key: 'cacheCreate', label: 'Cache write', color: '#d55181', texture: 'dots' },
-  { key: 'cacheRead', label: 'Cache read', color: '#9085e9', texture: 'solid' },
+  { key: 'input', label: 'Input', color: '#c98500', texture: 'diag', dash: '2 4' },
+  { key: 'output', label: 'Output', color: '#3987e5', texture: 'diag-rev', dash: '9 4' },
+  { key: 'cacheCreate', label: 'Cache write', color: '#d55181', texture: 'dots', dash: '9 4 2 4' },
+  { key: 'cacheRead', label: 'Cache read', color: '#9085e9', texture: 'solid', dash: null },
 ];
-
-// Cache read is ~97-98% of all tokens, so it gets its own panel. Stacked with the
-// others it leaves them at sub-pixel heights whatever the scale, which is what made
-// their textures pointless.
-const CACHE_READ_SERIES = TOKEN_SERIES.filter((s) => s.key === 'cacheRead');
-const WORKING_TOKEN_SERIES = TOKEN_SERIES.filter((s) => s.key !== 'cacheRead');
 
 // Validated with the dataviz skill's validate_palette.js against this dashboard's
 // panel surface (#171d27, dark): every check passes, worst adjacent CVD ΔE 16.0
@@ -319,11 +317,6 @@ function modelTexture(family) {
 // SVG ids are document-global, three charts can be on the page at once, and the
 // token and model palettes reuse the same four hex values, so without a scope two
 // charts would emit colliding ids for different patterns.
-//
-// The two token panels deliberately share the 'token' scope. That is safe only
-// because CACHE_READ_SERIES and WORKING_TOKEN_SERIES partition TOKEN_SERIES, so no
-// texture+colour pair appears in both. Keep that true if you move a series between
-// them, or give each panel its own scope string.
 function patternId(scope, texture, color) {
   return `tex-${scope}-${texture}-${color.replace('#', '')}`;
 }
@@ -469,6 +462,149 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
   container.appendChild(svg);
 }
 
+// Daily tokens for all four types in one plot. The four span six orders of
+// magnitude on a typical range - 78 input tokens against 452M cache reads - which
+// a linear axis cannot show: input and output sit below one pixel. A log axis can,
+// but it rules out bars, because a bar's length is measured from zero and a log
+// axis has no zero, and stacked segments do not add in log space. So the marks are
+// lines. Read it for the gaps between the lines (cache read runs ~400x output) and
+// for each line's slope, not for area.
+function drawLogLineChart(container, data, series = TOKEN_SERIES) {
+  hideTooltip();
+  container.innerHTML = '';
+  const positive = data.flatMap((d) => series.map((ser) => d[ser.key])).filter((v) => v > 0);
+  if (!data.length || !positive.length) {
+    container.appendChild(el('div', { class: 'bar-empty', text: 'No usage in this range.' }));
+    return;
+  }
+
+  const width = chartWidth(container);
+  const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
+  // A gutter for the direct labels at the right, and headroom at the top so the
+  // highest decade's label is not clipped by the viewBox: it sits at the very top
+  // of the plot and its ascender would otherwise fall outside.
+  const padRight = 76;
+  const padTop = 9;
+  const step = (width - CHART_PAD_LEFT - padRight) / Math.max(data.length - 1, 1);
+  const xAt = (i) => CHART_PAD_LEFT + i * step;
+
+  // Whole decades only. A log axis labelled with anything but powers of ten is
+  // unreadable, and rounding the domain out to decade boundaries keeps every line
+  // inside the plot without a separate headroom calculation. The span floor of 1
+  // covers a range whose values all sit inside one decade, which would otherwise
+  // divide by zero.
+  const loExp = Math.floor(Math.log10(Math.min(...positive)));
+  const hiExp = Math.ceil(Math.log10(Math.max(...positive)));
+  const span = Math.max(hiExp - loExp, 1);
+  const yAt = (v) => plotHeight - ((Math.log10(v) - loExp) / span) * (plotHeight - padTop);
+
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
+
+  // One gridline per decade, thinned to every other one when nine decades would
+  // otherwise crowd 160px of plot into unreadable 18px bands.
+  const labelEveryDecade = span <= 6 ? 1 : 2;
+  for (let e = loExp; e <= loExp + span; e++) {
+    const y = yAt(10 ** e);
+    svg.appendChild(svgEl('line', { class: 'gridline', x1: CHART_PAD_LEFT, x2: width - padRight, y1: y, y2: y }));
+    if ((loExp + span - e) % labelEveryDecade !== 0) continue;
+    const label = svgEl('text', { class: 'axis-label', x: CHART_PAD_LEFT - 6, y: y + 3, 'text-anchor': 'end' });
+    label.textContent = axisTokens(10 ** e);
+    svg.appendChild(label);
+  }
+
+  // Zero is not a point on a log axis, so a bucket with none of a given token type
+  // breaks that line rather than being drawn at the floor. Clamping it to the
+  // bottom would draw a value that never happened - the hourly Today buckets are
+  // zero-filled, so this is the common case, not an edge one.
+  const endLabels = [];
+  for (const ser of series) {
+    let d = '';
+    let open = false;
+    data.forEach((row, i) => {
+      const v = row[ser.key];
+      if (!(v > 0)) { open = false; return; }
+      d += `${open ? 'L' : 'M'}${xAt(i)},${yAt(v)} `;
+      open = true;
+    });
+    // A lone point between two gaps is a moveto with no lineto and draws nothing,
+    // so every isolated bucket also gets a dot.
+    svg.appendChild(
+      svgEl('path', {
+        class: 'log-line', d: d.trim(), fill: 'none', stroke: ser.color,
+        ...(ser.dash ? { 'stroke-dasharray': ser.dash } : {}),
+      })
+    );
+    data.forEach((row, i) => {
+      const v = row[ser.key];
+      const prev = data[i - 1] && data[i - 1][ser.key] > 0;
+      const next = data[i + 1] && data[i + 1][ser.key] > 0;
+      if (v > 0 && !prev && !next) {
+        svg.appendChild(svgEl('circle', { cx: xAt(i), cy: yAt(v), r: 2, fill: ser.color }));
+      }
+    });
+    const lastIdx = data.map((row) => row[ser.key] > 0).lastIndexOf(true);
+    if (lastIdx >= 0) endLabels.push({ ser, y: yAt(data[lastIdx][ser.key]), x: xAt(lastIdx) + 6 });
+  }
+
+  // Direct labels, so a line can be named without crossing to the legend and
+  // without relying on its colour. Anchored to where each line actually ends
+  // rather than to the right edge: on a range whose last buckets are empty - the
+  // zero-filled hours of Today, most of the time - an edge label would hang in
+  // blank space with no line under it. Pushed apart vertically to a minimum
+  // spacing when two lines end close together.
+  endLabels.sort((a, b) => a.y - b.y);
+  endLabels.forEach((entry, i) => {
+    const floor = i === 0 ? padTop : endLabels[i - 1].y + 11;
+    entry.y = Math.min(Math.max(entry.y, floor), plotHeight);
+    const label = svgEl('text', {
+      class: 'line-label',
+      x: Math.min(entry.x, width - padRight + 7),
+      y: entry.y + 3,
+      fill: entry.ser.color,
+    });
+    label.textContent = entry.ser.label;
+    svg.appendChild(label);
+  });
+
+  const crosshair = svgEl('line', { class: 'crosshair', y1: 0, y2: plotHeight, visibility: 'hidden' });
+  svg.appendChild(crosshair);
+
+  // One full-height hit target per bucket rather than per mark: on a line chart the
+  // question is always "what were all four on this day", and a 2px stroke is far too
+  // small to aim at.
+  data.forEach((row, i) => {
+    const hit = svgEl('rect', {
+      x: xAt(i) - step / 2, y: 0, width: Math.max(step, 1), height: plotHeight, fill: 'transparent',
+    });
+    hit.addEventListener('mousemove', (evt) => {
+      crosshair.setAttribute('x1', xAt(i));
+      crosshair.setAttribute('x2', xAt(i));
+      crosshair.setAttribute('visibility', 'visible');
+      const rows = series
+        .map((ser) => `${ser.label}: ${row[ser.key] ? formatTokens(row[ser.key]) : '0'}`)
+        .reverse()
+        .join('<br>');
+      showTooltip(evt, `<b>${fullDate(row.date)}</b><br>${rows}`);
+    });
+    hit.addEventListener('mouseleave', () => {
+      crosshair.setAttribute('visibility', 'hidden');
+      hideTooltip();
+    });
+    svg.appendChild(hit);
+
+    const labelEvery = Math.ceil(data.length / 12);
+    if (i % labelEvery === 0) {
+      const label = svgEl('text', {
+        class: 'axis-label', x: xAt(i), y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
+      });
+      label.textContent = shortDate(row.date);
+      svg.appendChild(label);
+    }
+  });
+
+  container.appendChild(svg);
+}
+
 // Same geometry as drawStackedChart, but the segments are models rather than token
 // types. Series order is fixed across buckets so a model keeps its vertical position
 // and its colour from day to day. mode picks whether the segments measure tokens or
@@ -593,14 +729,19 @@ function drawActivityHeatmap(container, activity) {
   container.appendChild(axis);
 }
 
-function drawTokenLegend(container, data, series = TOKEN_SERIES) {
+function drawTokenLegend(container, data, series = TOKEN_SERIES, lineStyle = false) {
   container.innerHTML = '';
   for (const ser of series) {
     const total = (data || []).reduce((sum, d) => sum + (d[ser.key] || 0), 0);
 
     container.appendChild(
       el('span', { class: 'legend-item' }, [
-        el('span', { class: 'legend-swatch', style: `background:${textureCss(ser.texture, ser.color)}` }),
+        lineStyle
+          ? el('span', {
+              class: 'legend-line',
+              style: `border-top:2px ${ser.dash ? 'dashed' : 'solid'} ${ser.color}`,
+            })
+          : el('span', { class: 'legend-swatch', style: `background:${textureCss(ser.texture, ser.color)}` }),
         el('span', { text: total ? `${ser.label} ${formatTokens(total)}` : ser.label }),
       ])
     );
@@ -831,11 +972,8 @@ async function loadAndRender() {
     document.getElementById('cardProjection').textContent = formatCost(perDay * 30);
   }
 
-  drawTokenLegend(document.getElementById('cacheReadLegend'), data.daily, CACHE_READ_SERIES);
-  drawStackedChart(document.getElementById('cacheReadChart'), data.daily, CACHE_READ_SERIES);
-
-  drawTokenLegend(document.getElementById('workingTokenLegend'), data.daily, WORKING_TOKEN_SERIES);
-  drawStackedChart(document.getElementById('workingTokenChart'), data.daily, WORKING_TOKEN_SERIES);
+  drawTokenLegend(document.getElementById('tokenTypeLegend'), data.daily, TOKEN_SERIES, true);
+  drawLogLineChart(document.getElementById('tokenTypeChart'), data.daily, TOKEN_SERIES);
 
   drawModelList(document.getElementById('modelList'), data.models);
 

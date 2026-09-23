@@ -102,18 +102,11 @@
 
       <section class="panel">
         <div class="panel-head">
-          <h2>Daily cache reads</h2>
-          <div class="legend" id="cacheReadLegend"></div>
+          <h2>Daily tokens by type</h2>
+          <div class="legend" id="tokenTypeLegend"></div>
         </div>
-        <div id="cacheReadChart" class="chart" aria-label="Bar chart of daily cache-read tokens"></div>
-      </section>
-
-      <section class="panel">
-        <div class="panel-head">
-          <h2>Daily input, output &amp; cache writes</h2>
-          <div class="legend" id="workingTokenLegend"></div>
-        </div>
-        <div id="workingTokenChart" class="chart" aria-label="Stacked bar chart of daily input, output and cache-write tokens"></div>
+        <div id="tokenTypeChart" class="chart" aria-label="Line chart of daily input, output, cache-write and cache-read tokens on a logarithmic scale"></div>
+        <p class="panel-note">Logarithmic scale &mdash; each gridline is ten times the one below. The four types span six orders of magnitude, so a linear axis leaves input and output under a pixel.</p>
       </section>
 
 

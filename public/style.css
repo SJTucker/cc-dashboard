@@ -281,6 +281,39 @@ html, body {
   opacity: 0.55;
 }
 
+.log-line {
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: butt;
+}
+
+.line-label {
+  font-family: var(--font-data);
+  font-size: 10px;
+}
+
+.crosshair {
+  stroke: var(--text-tertiary);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  pointer-events: none;
+}
+
+/* A short rule rather than a filled square: the legend has to sample the mark the
+   chart actually draws, and for a line chart that is a stroke, dashed or solid. */
+.legend-line {
+  width: 16px;
+  height: 0;
+  display: inline-block;
+  vertical-align: middle;
+}
+
+.panel-note {
+  margin: 10px 0 0;
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
 .cumulative-line {
   stroke: var(--accent-cost);
   stroke-width: 2;
