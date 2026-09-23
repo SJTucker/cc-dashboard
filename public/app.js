@@ -493,12 +493,13 @@ function drawLogLineChart(container, data, series = TOKEN_SERIES) {
 
   const width = chartWidth(container);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
-  // A gutter for the direct labels at the right, and headroom at the top so the
-  // highest decade's label is not clipped by the viewBox: it sits at the very top
-  // of the plot and its ascender would otherwise fall outside.
-  const padRight = 76;
+  // Headroom at the top so the highest decade's label is not clipped by the
+  // viewBox: it sits at the very top of the plot and its ascender would otherwise
+  // fall outside. There is no right gutter - the legend beside the chart names the
+  // series, in the same top-to-bottom order the lines run, so the plot gets the
+  // full width.
   const padTop = 9;
-  const step = (width - CHART_PAD_LEFT - padRight) / Math.max(data.length - 1, 1);
+  const step = (width - CHART_PAD_LEFT) / Math.max(data.length - 1, 1);
   const xAt = (i) => CHART_PAD_LEFT + i * step;
 
   // Whole decades only. A log axis labelled with anything but powers of ten is
@@ -518,7 +519,7 @@ function drawLogLineChart(container, data, series = TOKEN_SERIES) {
   const labelEveryDecade = span <= 6 ? 1 : 2;
   for (let e = loExp; e <= loExp + span; e++) {
     const y = yAt(10 ** e);
-    svg.appendChild(svgEl('line', { class: 'gridline', x1: CHART_PAD_LEFT, x2: width - padRight, y1: y, y2: y }));
+    svg.appendChild(svgEl('line', { class: 'gridline', x1: CHART_PAD_LEFT, x2: width, y1: y, y2: y }));
     if ((loExp + span - e) % labelEveryDecade !== 0) continue;
     const label = svgEl('text', { class: 'axis-label', x: CHART_PAD_LEFT - 6, y: y + 3, 'text-anchor': 'end' });
     label.textContent = axisTokens(10 ** e);
@@ -529,7 +530,6 @@ function drawLogLineChart(container, data, series = TOKEN_SERIES) {
   // breaks that line rather than being drawn at the floor. Clamping it to the
   // bottom would draw a value that never happened - the hourly Today buckets are
   // zero-filled, so this is the common case, not an edge one.
-  const endLabels = [];
   for (const ser of series) {
     let d = '';
     let open = false;
@@ -555,29 +555,7 @@ function drawLogLineChart(container, data, series = TOKEN_SERIES) {
         svg.appendChild(svgEl('circle', { cx: xAt(i), cy: yAt(v), r: 2, fill: ser.color }));
       }
     });
-    const lastIdx = data.map((row) => row[ser.key] > 0).lastIndexOf(true);
-    if (lastIdx >= 0) endLabels.push({ ser, y: yAt(data[lastIdx][ser.key]), x: xAt(lastIdx) + 6 });
   }
-
-  // Direct labels, so a line can be named without crossing to the legend and
-  // without relying on its colour. Anchored to where each line actually ends
-  // rather than to the right edge: on a range whose last buckets are empty - the
-  // zero-filled hours of Today, most of the time - an edge label would hang in
-  // blank space with no line under it. Pushed apart vertically to a minimum
-  // spacing when two lines end close together.
-  endLabels.sort((a, b) => a.y - b.y);
-  endLabels.forEach((entry, i) => {
-    const floor = i === 0 ? padTop : endLabels[i - 1].y + 11;
-    entry.y = Math.min(Math.max(entry.y, floor), plotHeight);
-    const label = svgEl('text', {
-      class: 'line-label',
-      x: Math.min(entry.x, width - padRight + 7),
-      y: entry.y + 3,
-      fill: entry.ser.color,
-    });
-    label.textContent = entry.ser.label;
-    svg.appendChild(label);
-  });
 
   const crosshair = svgEl('line', { class: 'crosshair', y1: 0, y2: plotHeight, visibility: 'hidden' });
   svg.appendChild(crosshair);
@@ -1035,7 +1013,10 @@ async function loadAndRender() {
     document.getElementById('cardProjection').textContent = formatCost(perDay * 30);
   }
 
-  drawTokenLegend(document.getElementById('tokenTypeLegend'), data.daily, TOKEN_SERIES, true);
+  // Reversed so the legend reads in the order the lines actually appear, cache read
+  // at the top down to input at the bottom. TOKEN_SERIES is copied, not reversed in
+  // place: the stacked charts rely on its order.
+  drawTokenLegend(document.getElementById('tokenTypeLegend'), data.daily, [...TOKEN_SERIES].reverse(), true);
   drawLogLineChart(document.getElementById('tokenTypeChart'), data.daily, TOKEN_SERIES);
 
   drawModelList(document.getElementById('modelList'), data.models);

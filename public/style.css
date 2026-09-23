@@ -287,10 +287,6 @@ html, body {
   stroke-linecap: butt;
 }
 
-.line-label {
-  font-family: var(--font-data);
-  font-size: 10px;
-}
 
 .crosshair {
   stroke: var(--text-tertiary);
@@ -509,6 +505,57 @@ html, body {
 
 /* The split bar's own legend sits under it, not in the panel head. */
 .split-legend { margin-top: 8px; }
+
+/* A legend beside the plot rather than under it, so this panel is exactly as tall
+   as the plain chart it sits next to. The caller reverses the series so the rows
+   run in the same order as the lines, cache read down to input. */
+.chart-with-legend {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+}
+
+.chart-with-legend .chart {
+  flex: 1;
+  min-width: 0; /* a flex item defaults to min-content, which would stop the SVG shrinking */
+}
+
+/* The legend and the scale caveat share the column beside the plot. The caveat
+   used to sit in the panel head, where at half width it wrapped to a second line
+   and made this panel taller than the chart beside it. */
+.chart-side {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  flex-shrink: 0;
+  max-width: 36%;
+  padding-top: 2px;
+}
+
+.side-legend {
+  flex-direction: column;
+  gap: 9px;
+}
+
+.side-note { margin: 0; }
+
+/* Two shares side by side rather than stacked: each group is two numbers, and
+   four full-width rows made this panel taller than every chart above it. */
+.usage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px 28px;
+  align-items: start;
+}
+
+.usage-grid .usage-group + .usage-group { margin-top: 0; }
+
+@media (max-width: 900px) {
+  .usage-grid { grid-template-columns: 1fr; }
+  .chart-with-legend { flex-direction: column; }
+  .chart-side { max-width: none; }
+  .side-legend { flex-direction: row; flex-wrap: wrap; }
+}
 
 .usage-group-note {
   font-weight: 400;
