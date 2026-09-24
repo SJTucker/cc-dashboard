@@ -164,6 +164,23 @@
         <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk filtered out per day"></div>
       </section>
 
+      <section class="panel" id="rtkCommandPanel" hidden>
+        <div class="panel-head">
+          <h2>What rtk filtered</h2>
+          <span class="panel-note">pick a command on the left to see the invocations behind it</span>
+        </div>
+        <div class="usage-grid">
+          <div class="usage-group">
+            <div class="usage-group-title">By command</div>
+            <div id="rtkCommandBars"></div>
+          </div>
+          <div class="usage-group">
+            <div class="usage-group-title" id="rtkDetailTitle">Detail</div>
+            <div id="rtkDetailBars"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel" id="attributionPanel" hidden>
         <div class="panel-head">
           <h2>Where usage goes</h2>
