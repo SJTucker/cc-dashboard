@@ -951,6 +951,27 @@ function renderTools(tools) {
     : 'No breakdown for this tool - its input has no field that groups calls.';
 }
 
+// rtk figures are deliberately not folded into any summary card. They count output
+// bytes rtk filtered before the text reached the model, estimated by rtk's own
+// tokeniser; the cards above count tokens Anthropic billed. Adding one to the other
+// would produce a number that means nothing.
+function renderRtk(rtk) {
+  const dailyPanel = document.getElementById('rtkDailyPanel');
+  const hasDaily = Boolean(rtk && rtk.meta.dbExists && rtk.daily.some((d) => d.saved > 0));
+  dailyPanel.hidden = !hasDaily;
+  if (!hasDaily) return;
+
+  drawBarChart(document.getElementById('rtkDailyChart'), rtk.daily, {
+    // Single series, so no legend and no new hue: this borrows the token palette's
+    // blue the way the daily-tokens chart borrows cache-read purple.
+    color: '#3987e5',
+    valueKey: 'saved',
+    tooltipFn: (d) =>
+      `<b>${fullDate(d.date)}</b><br>${formatTokens(d.saved)} of ${formatTokens(d.input)} filtered out` +
+      `<br>${d.input > 0 ? ((d.saved / d.input) * 100).toFixed(1) : '0.0'}% across ${d.commands.toLocaleString('en-US')} commands`,
+  });
+}
+
 // A table rather than a list, because $/MTok is the number that explains why a
 // model's token share and its cost share are different. escapeHtml is used on
 // the model name: it comes from a log file, not from this codebase.
@@ -1035,7 +1056,19 @@ async function loadAndRender() {
 
   if (seq !== requestSeq) return; // a newer request superseded this response
 
-  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models]);
+  // Separate route, separate failure. rtk is optional, so a failed or absent read
+  // hides its panels rather than replacing the whole page with an error banner.
+  let rtk = null;
+  try {
+    const rtkRes = await fetch(`/api/rtk?days=${currentDays}`);
+    rtk = await rtkRes.json();
+    if (rtk.error) rtk = null;
+  } catch {
+    rtk = null;
+  }
+  if (seq !== requestSeq) return; // a newer request superseded this response
+
+  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
   if (signature === lastSignature) return;
   lastSignature = signature;
   banner.hidden = true;
@@ -1152,6 +1185,8 @@ async function loadAndRender() {
     drawModelDailyChart(document.getElementById('modelCostDailyChart'), data.daily, data.models, 'cost');
     drawActivityHeatmap(document.getElementById('activityHeatmap'), data.activity);
   }
+
+  renderRtk(rtk);
 }
 
 document.getElementById('rangePicker').addEventListener('click', (evt) => {
