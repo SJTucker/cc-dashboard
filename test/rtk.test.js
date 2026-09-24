@@ -183,9 +183,104 @@ test('hour bucketing produces the same key shape lib/scan.js uses', () => {
   process.env.RTK_DB = makeDb([{ timestamp: utcStamp(at14), saved_tokens: 42 }]);
 
   const out = readRtkUsage({ days: 'today', bucket: 'hour' });
-  assert.strictEqual(out.daily.length, 1);
-  assert.match(out.daily[0].date, /^\d{4}-\d{2}-\d{2}T14$/);
-  assert.strictEqual(out.daily[0].saved, 42);
+  // Length is the full-day axis, asserted by its own test; this one is about the
+  // key shape, which has to match lib/scan.js so shortDate()/fullDate() parse it.
+  const at14Bucket = out.daily.find((d) => d.saved === 42);
+  assert.match(at14Bucket.date, /^\d{4}-\d{2}-\d{2}T14$/);
+
+  if (prev === undefined) delete process.env.RTK_DB;
+  else process.env.RTK_DB = prev;
+});
+
+test('a file that exists but is not an rtk database degrades to an empty payload', () => {
+  const prev = process.env.RTK_DB;
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rtk-bad-'));
+
+  // Junk bytes: sqlite rejects this at the first statement, not at open.
+  const junk = path.join(dir, 'junk.db');
+  fs.writeFileSync(junk, 'this is definitely not a sqlite file\n');
+  process.env.RTK_DB = junk;
+  const fromJunk = readRtkUsage({ days: 7 });
+  assert.strictEqual(fromJunk.meta.dbExists, false, 'junk file reports no usable database');
+  assert.deepStrictEqual(fromJunk.daily, []);
+  assert.strictEqual(fromJunk.summary.totalCommands, 0);
+
+  // A real sqlite file that simply is not rtk's: opens fine, has no `commands`.
+  const wrong = path.join(dir, 'wrong-schema.db');
+  const other = new DatabaseSync(wrong);
+  other.exec('CREATE TABLE something_else (id INTEGER PRIMARY KEY)');
+  other.close();
+  process.env.RTK_DB = wrong;
+  const fromWrong = readRtkUsage({ days: 7 });
+  assert.strictEqual(fromWrong.meta.dbExists, false, 'wrong schema reports no usable database');
+  assert.deepStrictEqual(fromWrong.commands, []);
+
+  if (prev === undefined) delete process.env.RTK_DB;
+  else process.env.RTK_DB = prev;
+});
+
+test('detail rows are capped per command, keeping the largest', () => {
+  const now = new Date();
+  // 20 distinct original_cmd values under one subcommand, saving 1..20 tokens.
+  const rows = [];
+  for (let i = 1; i <= 20; i++) {
+    rows.push({
+      timestamp: utcStamp(now),
+      rtk_cmd: 'rtk grep x',
+      original_cmd: `grep pattern-${String(i).padStart(2, '0')}`,
+      saved_tokens: i,
+      input_tokens: 100,
+    });
+  }
+
+  const prev = process.env.RTK_DB;
+  process.env.RTK_DB = makeDb(rows);
+  const out = readRtkUsage({ days: 7 });
+
+  const grep = out.commands.find((c) => c.name === 'grep');
+  assert.strictEqual(grep.calls, 20, 'the parent row still counts every call');
+  assert.strictEqual(grep.saved, 210, 'and still sums every call');
+  assert.strictEqual(grep.details.length, 12, 'but the detail level is capped');
+  assert.strictEqual(grep.details[0].name, 'grep pattern-20', 'largest first');
+  assert.strictEqual(grep.details[11].name, 'grep pattern-09', 'and the 12 largest are the ones kept');
+
+  if (prev === undefined) delete process.env.RTK_DB;
+  else process.env.RTK_DB = prev;
+});
+
+test('the Today range gets a full-day hour axis, not just the hours with rows', () => {
+  const at13 = new Date();
+  at13.setHours(13, 20, 0, 0);
+  const prev = process.env.RTK_DB;
+  process.env.RTK_DB = makeDb([{ timestamp: utcStamp(at13), saved_tokens: 42, input_tokens: 90 }]);
+
+  const out = readRtkUsage({ days: 'today', bucket: 'hour' });
+
+  // 23 on the spring-forward day, where 2am does not exist locally - the same
+  // shape lib/scan.js produces, so the two Today charts share an axis.
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const nextDay = new Date(dayStart);
+  nextDay.setDate(nextDay.getDate() + 1);
+  const expectedSlots = Math.min(Math.round((nextDay - dayStart) / 3600000), 24);
+
+  assert.strictEqual(out.daily.length, expectedSlots, 'every hour of the day has a slot');
+  assert.deepStrictEqual(
+    out.daily.map((d) => d.date),
+    [...out.daily].sort((a, b) => a.date.localeCompare(b.date)).map((d) => d.date),
+    'slots stay in chronological order'
+  );
+
+  const filled = out.daily.find((d) => d.date.endsWith('T13'));
+  assert.strictEqual(filled.saved, 42, 'the 13:00 slot holds the fixture row');
+  assert.strictEqual(filled.commands, 1);
+
+  const empty = out.daily.find((d) => d.date.endsWith('T04'));
+  assert.deepStrictEqual(
+    { commands: empty.commands, input: empty.input, saved: empty.saved },
+    { commands: 0, input: 0, saved: 0 },
+    'an hour with no commands is a real zero, not a missing bar'
+  );
 
   if (prev === undefined) delete process.env.RTK_DB;
   else process.env.RTK_DB = prev;

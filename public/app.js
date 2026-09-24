@@ -1123,10 +1123,23 @@ async function loadAndRender() {
 
   const seq = ++requestSeq;
 
+  // Both requests are issued before either is awaited, so the summary never waits
+  // on the rtk read. Awaiting them in sequence put two optional panels on the
+  // critical path of every card and chart on the page.
+  //
+  // rtk is optional, so its promise swallows its own failures and resolves to null
+  // rather than rejecting: an absent or unreadable rtk database hides those two
+  // panels, and must not blank the dashboard with an error banner.
+  const summaryRequest = fetch(`/api/summary?days=${currentDays}`).then((res) => res.json());
+  const rtkRequest = fetch(`/api/rtk?days=${currentDays}`)
+    .then((res) => res.json())
+    .then((payload) => (payload && payload.error ? null : payload))
+    .catch(() => null);
+
   let data;
+  let rtk;
   try {
-    const res = await fetch(`/api/summary?days=${currentDays}`);
-    data = await res.json();
+    [data, rtk] = await Promise.all([summaryRequest, rtkRequest]);
     if (data.error) throw new Error(data.detail || data.error);
   } catch (err) {
     if (seq !== requestSeq) return;
@@ -1136,18 +1149,6 @@ async function loadAndRender() {
     return;
   }
 
-  if (seq !== requestSeq) return; // a newer request superseded this response
-
-  // Separate route, separate failure. rtk is optional, so a failed or absent read
-  // hides its panels rather than replacing the whole page with an error banner.
-  let rtk = null;
-  try {
-    const rtkRes = await fetch(`/api/rtk?days=${currentDays}`);
-    rtk = await rtkRes.json();
-    if (rtk.error) rtk = null;
-  } catch {
-    rtk = null;
-  }
   if (seq !== requestSeq) return; // a newer request superseded this response
 
   const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
