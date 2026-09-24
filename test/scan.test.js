@@ -559,3 +559,99 @@ test('two responses back to back are not merged into one', async () => {
   assert.strictEqual(summary.totalOutput, 140);
   assert.strictEqual(summary.apiCalls, 2);
 });
+
+function callLine(isoTimestamp, { id, calls }) {
+  return JSON.stringify({
+    timestamp: isoTimestamp,
+    requestId: 'req-' + id,
+    sessionId: 's-' + id,
+    message: {
+      id: 'msg-' + id,
+      model: 'claude-opus-5',
+      content: calls.map(([toolId, name, input]) => ({ type: 'tool_use', id: toolId, name, input })),
+      usage: { input_tokens: 1, output_tokens: 1 },
+    },
+  });
+}
+
+function resultLine(isoTimestamp, { toolId, isError }) {
+  return JSON.stringify({
+    timestamp: isoTimestamp,
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolId, is_error: isError }] },
+  });
+}
+
+test('tools are grouped by name, with a detail breakdown per tool', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'calls', [
+    callLine(iso, {
+      id: 'a',
+      calls: [
+        ['t1', 'Bash', { command: 'git status' }],
+        ['t2', 'Bash', { command: 'git log' }],
+        ['t3', 'Read', { file_path: '/a/b/one.ts' }],
+        ['t4', 'Agent', { subagent_type: 'Explore' }],
+      ],
+    }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const { tools, summary } = await scanUsage({ days: null });
+
+  assert.strictEqual(summary.toolCalls, 4);
+  assert.deepStrictEqual(
+    tools.map((t) => [t.name, t.calls]),
+    [['Bash', 2], ['Read', 1], ['Agent', 1]]
+  );
+  const bash = tools.find((t) => t.name === 'Bash');
+  assert.deepStrictEqual(bash.details, [{ name: 'git', calls: 2, errors: 0 }]);
+  assert.strictEqual(tools.find((t) => t.name === 'Read').details[0].name, '/a/b/one.ts');
+  assert.strictEqual(tools.find((t) => t.name === 'Agent').details[0].name, 'Explore');
+});
+
+test('a Bash command behind a cd or env prefix is credited to the real program', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'prefixed', [
+    callLine(iso, {
+      id: 'b',
+      calls: [
+        ['p1', 'Bash', { command: 'cd /Users/x/repo && grep -rn foo .' }],
+        ['p2', 'Bash', { command: 'grep -c bar file' }],
+        ['p3', 'Bash', { command: 'FOO=1 cd /tmp; /usr/bin/git status' }],
+        ['p4', 'Bash', { command: 'git diff' }],
+      ],
+    }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const { tools } = await scanUsage({ days: null });
+  const details = Object.fromEntries(tools.find((t) => t.name === 'Bash').details.map((d) => [d.name, d.calls]));
+  // Without prefix stripping these would be `cd` and `FOO=1`, and /usr/bin/git
+  // would be its own row rather than folding into git.
+  assert.deepStrictEqual(details, { grep: 2, git: 2 });
+});
+
+test('an errored tool_result is counted even when it lands in another file', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  // 'zz' sorts after 'aa', so the result file is read first and the join cannot
+  // depend on the call having been seen already.
+  writeSession(base, 'zz-calls', [
+    callLine(iso, { id: 'c', calls: [['e1', 'Bash', { command: 'git push' }], ['e2', 'Bash', { command: 'git pull' }]] }),
+  ]);
+  writeSession(base, 'aa-results', [
+    resultLine(iso, { toolId: 'e1', isError: true }),
+    resultLine(iso, { toolId: 'e2', isError: false }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const { tools, summary } = await scanUsage({ days: null });
+  const bash = tools.find((t) => t.name === 'Bash');
+  assert.strictEqual(bash.calls, 2);
+  assert.strictEqual(bash.errors, 1);
+  assert.strictEqual(summary.toolErrors, 1);
+  assert.deepStrictEqual(bash.details, [{ name: 'git', calls: 2, errors: 1 }]);
+});

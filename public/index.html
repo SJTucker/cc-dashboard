@@ -138,6 +138,24 @@
         <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
       </section>
 
+      <section class="panel" id="toolPanel" hidden>
+        <div class="panel-head">
+          <h2>Tool calls</h2>
+          <span class="panel-note">pick a tool on the left to break it down</span>
+        </div>
+        <div class="usage-grid">
+          <div class="usage-group">
+            <div class="usage-group-title">By tool</div>
+            <div id="toolBars"></div>
+          </div>
+          <div class="usage-group">
+            <div class="usage-group-title" id="toolDetailTitle">Detail</div>
+            <div id="toolDetailBars"></div>
+            <div class="panel-note" id="toolDetailNote"></div>
+          </div>
+        </div>
+      </section>
+
       <section class="panel" id="attributionPanel" hidden>
         <div class="panel-head">
           <h2>Where usage goes</h2>

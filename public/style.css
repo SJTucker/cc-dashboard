@@ -575,7 +575,7 @@ html, body {
 
 .usage-row {
   display: grid;
-  grid-template-columns: minmax(0, 280px) 1fr 52px;
+  grid-template-columns: minmax(0, 280px) 1fr auto;
   gap: 12px;
   align-items: center;
   padding: 3px 0;
@@ -605,6 +605,18 @@ html, body {
 }
 
 .usage-row:hover .usage-track { outline: 1px solid var(--text-tertiary); }
+
+/* Only the tool list is clickable; the cost breakdowns have nothing to drill into. */
+.usage-row.selectable { cursor: pointer; border-radius: 3px; }
+.usage-row.selectable:hover { background: var(--surface-raised); }
+.usage-row.selectable:focus-visible { outline: 1px solid var(--accent-cost); outline-offset: 1px; }
+
+.usage-row.selected .usage-name { color: var(--text-primary); }
+.usage-row.selected .usage-track > i { background: var(--accent-cost); }
+.usage-row.selected { background: var(--surface-raised); }
+
+/* Counts run wider than the "99.9%" the cost rows show. */
+.usage-count { min-width: 96px; }
 
 .usage-pct {
   font-size: 12px;

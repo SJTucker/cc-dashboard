@@ -859,6 +859,98 @@ function drawUsageBars(container, rows, total, scaleMax) {
   }
 }
 
+// Tool call counts, and the same list one level down. Kept separate from
+// drawUsageBars rather than adding options to it: these rows are counts not cost,
+// they carry an error rate, and one of them is selected. Folding four behaviours
+// into one function costs more than the twenty lines repeated here.
+//
+// A detail row for Read, Write or Edit is an absolute file path. The name cell
+// truncates from the right, which on a path shows the part every row has in common,
+// so the basename is displayed and the full path goes in the tooltip.
+function toolRowLabel(name) {
+  return name.startsWith('/') ? name.split('/').pop() || name : name;
+}
+
+function drawToolBars(container, rows, scaleMax, onSelect, selectedName) {
+  container.innerHTML = '';
+  if (!rows.length) {
+    container.appendChild(el('div', { class: 'bar-empty', text: 'No tool calls in this range.' }));
+    return;
+  }
+
+  for (const row of rows) {
+    const fill = el('i');
+    fill.style.width = (scaleMax > 0 ? (row.calls / scaleMax) * 100 : 0) + '%';
+
+    const value = row.errors
+      ? `${row.calls.toLocaleString('en-US')} · ${((row.errors / row.calls) * 100).toFixed(1)}% err`
+      : row.calls.toLocaleString('en-US');
+
+    // Tool and file names come from log files, so they are escaped before use.
+    const node = el('div', { class: 'usage-row' + (onSelect ? ' selectable' : '') + (row.name === selectedName ? ' selected' : '') }, [
+      el('span', { class: 'usage-name', text: toolRowLabel(row.name), title: row.name }),
+      el('span', { class: 'usage-track' }, [fill]),
+      el('span', { class: 'usage-pct usage-count', text: value }),
+    ]);
+    node.addEventListener('mousemove', (evt) =>
+      showTooltip(
+        evt,
+        `<b>${escapeHtml(row.name)}</b><br>${row.calls.toLocaleString('en-US')} calls` +
+          (row.errors ? `<br>${row.errors.toLocaleString('en-US')} returned an error` : '')
+      )
+    );
+    node.addEventListener('mouseleave', hideTooltip);
+    if (onSelect) {
+      node.addEventListener('click', () => onSelect(row.name));
+      node.tabIndex = 0;
+      node.addEventListener('keydown', (evt) => {
+        if (evt.key === 'Enter' || evt.key === ' ') {
+          evt.preventDefault();
+          onSelect(row.name);
+        }
+      });
+    }
+    container.appendChild(node);
+  }
+}
+
+// Which tool the detail column is showing. Held across renders so a range switch
+// or a live poll does not throw the reader back to the first tool; it falls back
+// to the busiest tool when the selected one has no calls in the new range.
+let selectedTool = null;
+
+function renderTools(tools) {
+  const panel = document.getElementById('toolPanel');
+  panel.hidden = !tools.length;
+  if (!tools.length) return;
+
+  if (!tools.some((t) => t.name === selectedTool)) selectedTool = tools[0].name;
+  const current = tools.find((t) => t.name === selectedTool);
+
+  const shown = tools.slice(0, 12);
+  drawToolBars(
+    document.getElementById('toolBars'),
+    shown,
+    Math.max(...shown.map((t) => t.calls)),
+    (name) => {
+      selectedTool = name;
+      renderTools(tools);
+    },
+    selectedTool
+  );
+
+  document.getElementById('toolDetailTitle').textContent = `Inside ${toolRowLabel(current.name)}`;
+  const details = current.details;
+  drawToolBars(
+    document.getElementById('toolDetailBars'),
+    details,
+    details.length ? Math.max(...details.map((d) => d.calls)) : 0
+  );
+  document.getElementById('toolDetailNote').textContent = details.length
+    ? ''
+    : 'No breakdown for this tool - its input has no field that groups calls.';
+}
+
 // A table rather than a list, because $/MTok is the number that explains why a
 // model's token share and its cost share are different. escapeHtml is used on
 // the model name: it comes from a log file, not from this codebase.
@@ -1040,6 +1132,8 @@ async function loadAndRender() {
   drawSplitBar(document.getElementById('contextBars'), contextRows);
   drawUsageBars(document.getElementById('skillBars'), data.skills.slice(0, 8), totalCost, attributionScale);
   drawUsageBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), totalCost, attributionScale);
+
+  renderTools(data.tools || []);
 
   drawModelMix(
     document.getElementById('modelMixBar'),
