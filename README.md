@@ -4,7 +4,10 @@ A small, local, offline dashboard for your Claude Code usage: daily and cumulati
 daily tokens broken out by input / output / cache-write / cache-read, cost by model with
 dollars per million tokens, and a weekday-by-hour heatmap of when the spend happens.
 
-Built to be easy to fully read in one sitting — four small files, two dependencies,
+If you use `rtk`, it also charts the command output rtk filtered out before it reached
+the model. See "rtk savings" below.
+
+Built to be easy to fully read in one sitting — five small files, two dependencies,
 no telemetry, no CDN, no outbound network calls of its own.
 
 ## Run it
@@ -29,11 +32,37 @@ location, set `CLAUDE_CONFIG_DIR` before starting it, same as Claude Code itself
 CLAUDE_CONFIG_DIR=/path/to/.claude npm start
 ```
 
+## rtk savings (optional)
+
+If you use `rtk` to filter command output before it reaches Claude, two extra panels
+appear: how much output it stripped per day, and which commands it stripped the most
+from.
+
+These are read straight from rtk's own sqlite history, opened read-only. Nothing
+invokes the `rtk` binary, because every `rtk` call writes a row and would inflate the
+numbers being displayed.
+
+The default location is macOS's `~/Library/Application Support/rtk/history.db`.
+Elsewhere, point at it yourself:
+
+```bash
+RTK_DB=~/.local/share/rtk/history.db npm start
+```
+
+No rtk, or a Node older than 22 (which is where the built-in `node:sqlite` arrived)?
+The panels simply do not appear. Nothing else changes.
+
+**These numbers are not billed tokens.** They are rtk's own estimate of output it
+filtered out before the model saw it. The cost and token figures everywhere else on
+the page come from Claude Code's transcripts and count what Anthropic billed. Do not
+add one to the other.
+
 ## What it does and doesn't do
 
 - **Read-only.** It only ever calls `fs.readdirSync` / `fs.createReadStream` on your
-  `~/.claude/projects` folder. There is no file-write code path anywhere in this
-  project — grep for `writeFile` yourself and you won't find it.
+  `~/.claude/projects` folder, and opens rtk's `history.db` with sqlite's `readOnly`
+  flag. There is no file-write code path anywhere in this project — grep for
+  `writeFile` yourself and you won't find it.
 - **No network calls.** Unlike some similar tools, this one does not fetch pricing
   from the internet, load a charting library from a CDN, or phone home in any way.
   The bar charts are hand-drawn SVG (see `public/app.js`). Pricing is a small
@@ -54,13 +83,14 @@ CLAUDE_CONFIG_DIR=/path/to/.claude npm start
 ## File layout
 
 ```
-server.js          Express app: binds to localhost, serves /api/summary, serves public/
+server.js          Express app: binds to localhost, serves /api/summary and /api/rtk
 lib/scan.js         Walks ~/.claude/projects, parses JSONL, aggregates by day and model
+lib/rtk.js          Reads rtk's history.db read-only, aggregates by day and command
 lib/pricing.js       Offline per-token price table + cost calculation
 lib/net-guard.js    Host-header check + security headers
 public/index.html   Page shell
 public/style.css    All styling
-public/app.js        Fetches /api/summary, draws the SVG bar charts, no dependencies
+public/app.js        Fetches both routes, draws the SVG charts, no dependencies
 ```
 
 ## Extending it
