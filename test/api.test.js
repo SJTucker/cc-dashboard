@@ -27,6 +27,10 @@ function startServer() {
   });
   fs.writeFileSync(path.join(dir, 'session.jsonl'), line + '\n');
 
+  // Without this the route would read the developer's real rtk database and the
+  // assertions below would depend on their shell history.
+  process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
+
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.PORT = '0'; // let the OS pick a free port
   delete require.cache[require.resolve('../lib/scan')];
@@ -122,4 +126,41 @@ test('POST /api/refresh refuses a cross-site request', async (t) => {
 
   const noHeader = await fetch(url, { method: 'POST' });
   assert.strictEqual(noHeader.status, 200, 'a non-browser client still can');
+});
+
+test('GET /api/rtk returns an empty payload when there is no rtk database', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/rtk?days=30`);
+  const data = await res.json();
+
+  assert.strictEqual(res.status, 200, 'a missing rtk database is not an error');
+  assert.strictEqual(data.meta.dbExists, false);
+  assert.deepStrictEqual(data.daily, []);
+  assert.strictEqual(data.summary.totalCommands, 0);
+});
+
+test('GET /api/rtk rejects a malformed days value the same way /api/summary does', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/rtk?days=-3`);
+  assert.strictEqual(res.status, 400);
+  const data = await res.json();
+  assert.match(data.error, /Invalid days/);
+});
+
+test('GET /api/rtk?days=today buckets by hour', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/rtk?days=today`);
+  const data = await res.json();
+  assert.strictEqual(res.status, 200);
+  // No fixture rows, so the assertion is on shape, not content.
+  assert.ok(Array.isArray(data.daily));
 });

@@ -4,6 +4,7 @@
 const express = require('express');
 const path = require('path');
 const { scanUsage, getProjectsDir } = require('./lib/scan');
+const { readRtkUsage } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 
 function getArg(name) {
@@ -77,6 +78,40 @@ app.get('/api/summary', async (req, res) => {
   } catch (err) {
     console.error('[API] /api/summary failed:', err);
     res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
+  }
+});
+
+// No cache. A full read of the reference database - 21,867 rows, both GROUP BYs,
+// open and close - measured 13ms, against ~1.9s for a 30-day scanUsage(). Putting
+// this behind the 60s cache above would either serve stale savings or force every
+// rtk request to bust a cache that exists to protect the slow JSONL scan.
+//
+// The days parsing below duplicates /api/summary's rather than sharing a helper: the
+// two routes disagree on what 'today' means (that one returns early past the cache,
+// this one has no cache at all), and folding them together would need a flags
+// argument for a nine-line branch.
+app.get('/api/rtk', (req, res) => {
+  try {
+    const raw = req.query.days;
+    if (raw === 'today') {
+      res.json(readRtkUsage({ days: 'today', bucket: 'hour' }));
+      return;
+    }
+    let days = 30;
+    if (raw === 'all') {
+      days = null;
+    } else if (raw != null && raw !== '') {
+      const n = Number(raw);
+      if (!Number.isInteger(n) || n < 1) {
+        res.status(400).json({ error: `Invalid days: ${String(raw)}. Use a whole number of days, 'today', or 'all'.` });
+        return;
+      }
+      days = n;
+    }
+    res.json(readRtkUsage({ days }));
+  } catch (err) {
+    console.error('[API] /api/rtk failed:', err);
+    res.status(500).json({ error: 'Failed to read rtk history', detail: err.message });
   }
 });
 
