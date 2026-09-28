@@ -1095,6 +1095,381 @@ function shortModel(name) {
 
 // #endregion
 
+// #region setup changes
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const WEEK_MS = 7 * DAY_MS;
+
+// Shape carries the kind of change, so the marker row reads without colour.
+const MARKER_SHAPES = {
+  plugin: (x, y) => svgEl('path', { d: `M${x},${y - 5} L${x + 5},${y + 4} L${x - 5},${y + 4} Z` }),
+  hook: (x, y) => svgEl('path', { d: `M${x - 5},${y - 4} L${x + 5},${y - 4} L${x},${y + 5} Z` }),
+  skill: (x, y) => svgEl('rect', { x: x - 4, y: y - 4, width: 8, height: 8 }),
+  'claude-md': (x, y) => svgEl('path', { d: `M${x},${y - 5} L${x + 5},${y} L${x},${y + 5} L${x - 5},${y} Z` }),
+  rtk: (x, y) => svgEl('circle', { cx: x, cy: y, r: 4.5 }),
+  config: (x, y) => svgEl('path', { d: `M${x - 5},${y} L${x + 5},${y} M${x},${y - 5} L${x},${y + 5} M${x - 3.5},${y - 3.5} L${x + 3.5},${y + 3.5} M${x + 3.5},${y - 3.5} L${x - 3.5},${y + 3.5}` }),
+  effort: (x, y) => svgEl('path', { d: `M${x - 4},${y - 4} L${x + 4},${y + 4} M${x + 4},${y - 4} L${x - 4},${y + 4}` }),
+  model: (x, y) => svgEl('path', { d: `M${x - 5},${y} L${x + 5},${y} M${x},${y - 5} L${x},${y + 5}` }),
+  other: (x, y) => svgEl('path', { d: `M${x - 5},${y} L${x + 5},${y}` }),
+};
+
+const MARKER_KIND_NAMES = {
+  plugin: 'plugin', hook: 'hook', skill: 'skill', 'claude-md': 'CLAUDE.md', rtk: 'rtk',
+  config: 'config', effort: 'effort', model: 'model', other: 'other',
+};
+
+// Session dots: shape by model, most-used model first.
+const DOT_SHAPES = [
+  { square: false, hollow: false },
+  { square: false, hollow: true },
+  { square: true, hollow: false },
+  { square: true, hollow: true },
+];
+
+function markerGlyph(kind, x, y) {
+  const shape = (MARKER_SHAPES[kind] || MARKER_SHAPES.other)(x, y);
+  shape.setAttribute('class', 'marker-glyph');
+  return shape;
+}
+
+function markerIcon(kind) {
+  const svg = svgEl('svg', { width: 14, height: 14, viewBox: '-7 -7 14 14', 'aria-hidden': 'true', class: 'marker-icon' });
+  svg.appendChild(markerGlyph(kind, 0, 0));
+  return svg;
+}
+
+function sessionDot(shape, x, y) {
+  const node = shape.square
+    ? svgEl('rect', { x: x - 3, y: y - 3, width: 6, height: 6 })
+    : svgEl('circle', { cx: x, cy: y, r: 3.2 });
+  node.setAttribute('class', shape.hollow ? 'session-dot hollow' : 'session-dot');
+  return node;
+}
+
+function markerDate(t) {
+  return new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+function medianOf(values) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  const mid = sorted.length >> 1;
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+// Local midnight on the Monday of t's week.
+function weekStart(t) {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.getTime();
+}
+
+function dayNoon(dateKey) {
+  return new Date(`${dateKey}T12:00`).getTime();
+}
+
+// Both charts share one time axis so a marker sits at the same x in each.
+function timeDomain(report) {
+  const times = [
+    ...report.sessions.map((s) => s.t),
+    ...report.markers.map((m) => m.t),
+    ...report.bashDaily.map((d) => dayNoon(d.date)),
+  ];
+  return [Math.min(...times) - DAY_MS / 2, Math.max(...times) + DAY_MS / 2];
+}
+
+function timeScale(domain, width) {
+  return (t) => CHART_PAD_LEFT + ((t - domain[0]) / (domain[1] - domain[0])) * (width - CHART_PAD_LEFT);
+}
+
+// One label per Monday.
+function drawTimeAxis(svg, domain, xOf) {
+  const d = new Date(domain[0]);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + ((8 - d.getDay()) % 7));
+  for (; d.getTime() <= domain[1]; d.setDate(d.getDate() + 7)) {
+    const label = svgEl('text', { class: 'axis-label', x: xOf(d.getTime()), y: CHART_HEIGHT - 4, 'text-anchor': 'middle' });
+    label.textContent = shortDate(localDateStr(d));
+    svg.appendChild(label);
+  }
+}
+
+function withTooltip(node, html) {
+  node.addEventListener('mousemove', (evt) => showTooltip(evt, html));
+  node.addEventListener('mouseleave', hideTooltip);
+  return node;
+}
+
+function markerTooltip(m) {
+  const source = m.source === 'file' ? 'from changes.json' : `detected from ${m.source === 'plugin' ? 'the plugin list' : 'transcripts'}`;
+  return `<strong>${escapeHtml(markerDate(m.t))}</strong><br>${escapeHtml(m.label)}<br>${escapeHtml(source)}`;
+}
+
+function modelShapes(sessions) {
+  const counts = new Map();
+  for (const s of sessions) counts.set(s.model, (counts.get(s.model) || 0) + 1);
+  const ranked = [...counts].sort((a, b) => b[1] - a[1]).map(([model]) => model);
+  return new Map(ranked.map((model, i) => [model, DOT_SHAPES[Math.min(i, DOT_SHAPES.length - 1)]]));
+}
+
+function drawWeeklyMedian(svg, sessions, domain, xOf, yOf) {
+  const weeks = new Map();
+  for (const s of sessions) {
+    const w = weekStart(s.t);
+    if (!weeks.has(w)) weeks.set(w, []);
+    weeks.get(w).push(s.context);
+  }
+  let d = '';
+  for (const [w, values] of [...weeks].sort((a, b) => a[0] - b[0])) {
+    const x1 = xOf(Math.max(w, domain[0]));
+    const x2 = xOf(Math.min(w + WEEK_MS, domain[1]));
+    const y = yOf(medianOf(values));
+    d += `${d ? 'L' : 'M'}${x1},${y} L${x2},${y} `;
+    const label = svgEl('text', { class: 'step-label', x: (x1 + x2) / 2, y: y - 6, 'text-anchor': 'middle' });
+    label.textContent = axisTokens(Math.round(medianOf(values)));
+    svg.appendChild(label);
+  }
+  svg.appendChild(svgEl('path', { class: 'step-line', d }));
+}
+
+function drawSessionStartChart(container, report) {
+  hideTooltip();
+  container.innerHTML = '';
+  const { sessions, markers } = report;
+  if (!sessions.length) {
+    container.appendChild(el('div', { class: 'bar-empty', text: 'No sessions yet.' }));
+    return;
+  }
+  const width = chartWidth(container);
+  const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
+  const domain = timeDomain(report);
+  const xOf = timeScale(domain, width);
+
+  // A glyph closer than 12px to the one before it stacks one row lower.
+  let lastX = -Infinity;
+  let row = 0;
+  let rows = 1;
+  const placed = markers.map((m) => {
+    const x = xOf(m.t);
+    row = x - lastX < 12 ? row + 1 : 0;
+    lastX = x;
+    rows = Math.max(rows, row + 1);
+    return { m, x, row };
+  });
+  const railTop = CHART_HEIGHT + 12;
+  const height = railTop + rows * 13;
+
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, height, class: 'changes-chart' });
+  const max = drawYAxis(svg, Math.max(...sessions.map((s) => s.context)), width, axisTokens);
+  const yOf = (v) => plotHeight - (v / max) * plotHeight;
+  svg.appendChild(svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)' }));
+  drawTimeAxis(svg, domain, xOf);
+
+  for (const { m, x, row: r } of placed) {
+    svg.appendChild(svgEl('line', { class: 'marker-guide', x1: x, x2: x, y1: 0, y2: plotHeight }));
+    svg.appendChild(withTooltip(markerGlyph(m.kind, x, railTop + r * 13), markerTooltip(m)));
+  }
+
+  const shapes = modelShapes(sessions);
+  for (const s of sessions) {
+    const dot = sessionDot(shapes.get(s.model), xOf(s.t), yOf(s.context));
+    svg.appendChild(withTooltip(dot, `<strong>${escapeHtml(markerDate(s.t))}</strong><br>${formatTokens(s.context)} tokens at the first call<br>${escapeHtml(s.model || 'unknown model')}`));
+  }
+  drawWeeklyMedian(svg, sessions, domain, xOf, yOf);
+  container.appendChild(svg);
+
+  const legend = document.getElementById('sessionStartLegend');
+  legend.replaceChildren();
+  for (const [model, shape] of shapes) {
+    const icon = svgEl('svg', { width: 10, height: 10, viewBox: '0 0 10 10', 'aria-hidden': 'true' });
+    icon.appendChild(sessionDot(shape, 5, 5));
+    legend.appendChild(el('span', { class: 'legend-item' }, [icon, document.createTextNode(model || 'unknown model')]));
+  }
+  legend.appendChild(el('span', { class: 'legend-item' }, [el('span', { class: 'legend-line step-swatch' }), document.createTextNode('weekly median')]));
+  for (const kind of new Set(markers.map((m) => m.kind))) {
+    legend.appendChild(el('span', { class: 'legend-item' }, [markerIcon(kind), document.createTextNode(MARKER_KIND_NAMES[kind] || kind)]));
+  }
+}
+
+function drawBashChart(container, report, marker) {
+  hideTooltip();
+  container.innerHTML = '';
+  const days = report.bashDaily;
+  if (!days.length) {
+    container.appendChild(el('div', { class: 'bar-empty', text: 'No Bash calls on the main thread yet.' }));
+    return;
+  }
+  const width = chartWidth(container);
+  const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
+  const domain = timeDomain(report);
+  const xOf = timeScale(domain, width);
+  const clampX = (x) => Math.min(width, Math.max(CHART_PAD_LEFT, x));
+  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT, class: 'changes-chart' });
+  const max = drawYAxis(svg, Math.max(...days.map((d) => d.median)), width, axisTokens);
+  const yOf = (v) => plotHeight - (v / max) * plotHeight;
+  const barWidth = Math.max(((width - CHART_PAD_LEFT) * DAY_MS) / (domain[1] - domain[0]) * 0.7, 2);
+
+  if (marker) {
+    const b0 = clampX(xOf(marker.t - WEEK_MS));
+    const mid = clampX(xOf(marker.t));
+    const a1 = clampX(xOf(marker.t + WEEK_MS));
+    svg.appendChild(svgEl('rect', { class: 'window-before', x: b0, y: 0, width: mid - b0, height: plotHeight }));
+    svg.appendChild(svgEl('rect', { class: 'window-after', x: mid, y: 0, width: a1 - mid, height: plotHeight }));
+  }
+
+  for (const d of days) {
+    const t = dayNoon(d.date);
+    let cls = 'bash-bar';
+    if (marker && t >= marker.t - WEEK_MS && t < marker.t + WEEK_MS) cls += t >= marker.t ? ' after' : ' before';
+    const h = (d.median / max) * plotHeight;
+    const rect = svgEl('rect', { class: cls, x: xOf(t) - barWidth / 2, y: plotHeight - h, width: barWidth, height: Math.max(h, 1), rx: 1 });
+    svg.appendChild(withTooltip(rect, `<strong>${shortDate(d.date)}</strong><br>median ${formatTokens(Math.round(d.median))} tokens<br>${d.n} Bash calls`));
+  }
+
+  if (marker) {
+    const line = (from, to, value, cls) => {
+      if (value == null) return;
+      svg.appendChild(svgEl('line', { class: `window-median ${cls}`, x1: clampX(xOf(from)), x2: clampX(xOf(to)), y1: yOf(value), y2: yOf(value) }));
+    };
+    line(marker.t - WEEK_MS, marker.t, marker.before.bashMedian, 'before');
+    line(marker.t, marker.t + WEEK_MS, marker.after.bashMedian, 'after');
+    svg.appendChild(svgEl('line', { class: 'marker-line', x1: xOf(marker.t), x2: xOf(marker.t), y1: 0, y2: plotHeight }));
+  }
+  svg.appendChild(svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)' }));
+  drawTimeAxis(svg, domain, xOf);
+  container.appendChild(svg);
+}
+
+const tokensCell = (v) => formatTokens(Math.round(v));
+const BA_ROWS = [
+  { name: 'Session start context', key: 'sessionStart', n: 'sessions', fmt: tokensCell },
+  { name: 'Bash result, median', key: 'bashMedian', n: 'bashN', fmt: tokensCell },
+  { name: 'Bash result, p90', key: 'bashP90', n: 'bashN', fmt: tokensCell },
+  { name: 'Cost per prompt, median', key: 'costPerPrompt', n: 'prompts', fmt: formatCost },
+  { name: 'API calls per prompt, median', key: 'callsPerPrompt', n: 'prompts', fmt: (v) => String(Math.round(v * 10) / 10) },
+  { name: 'Cache hit rate', key: 'cacheHit', n: null, fmt: formatPercent, points: true },
+];
+const RTK_ROWS = [
+  { name: 'Tokens kept per command', key: 'keptPerCommand', n: 'commands', fmt: tokensCell },
+  { name: 'Share of output filtered', key: 'filteredShare', n: 'commands', fmt: formatPercent, points: true },
+];
+
+// A share (cache hit, filtered) changes in percentage points; everything else as a
+// relative change. Under 5% (or 1 point) is shown dimmed with no arrow: the spike
+// measured day-to-day swings well above that on every row.
+function changeCell(a, b, points) {
+  const td = el('td', { class: 'num' });
+  if (a == null || b == null || (!points && a === 0)) {
+    td.textContent = '—';
+    td.classList.add('dim');
+    return td;
+  }
+  const diff = points ? (b - a) * 100 : ((b - a) / a) * 100;
+  const small = Math.abs(diff) < (points ? 1 : 5);
+  td.textContent = `${diff > 0 ? '+' : ''}${Math.round(diff)}${points ? ' pts' : '%'}`;
+  td.classList.add(small ? 'dim' : diff < 0 ? 'down' : 'up');
+  return td;
+}
+
+function baRow(row, before, after) {
+  const a = before ? before[row.key] : null;
+  const b = after ? after[row.key] : null;
+  const name = el('td', { text: row.name });
+  if (row.n) name.appendChild(el('span', { class: 'n', text: `n ${before ? before[row.n] : 0}→${after ? after[row.n] : 0}` }));
+  return el('tr', {}, [
+    name,
+    el('td', { class: 'num', text: a == null ? '—' : row.fmt(a) }),
+    el('td', { class: 'num', text: b == null ? '—' : row.fmt(b) }),
+    changeCell(a, b, row.points),
+  ]);
+}
+
+function renderBeforeAfter(report, marker) {
+  const table = document.getElementById('beforeAfterTable');
+  const note = document.getElementById('overlapNote');
+  table.replaceChildren();
+  note.textContent = '';
+  if (!marker) return;
+  const head = el('tr', {}, ['7 days', 'before', 'after', 'change'].map((text, i) => el('th', { text, class: i ? 'num' : '' })));
+  const body = el('tbody', {}, BA_ROWS.map((row) => baRow(row, marker.before, marker.after)));
+  if (marker.before.rtk || marker.after.rtk) {
+    body.appendChild(el('tr', { class: 'group' }, [el('td', { text: "From rtk's own history", colspan: '4' })]));
+    for (const row of RTK_ROWS) body.appendChild(baRow(row, marker.before.rtk, marker.after.rtk));
+  }
+  table.append(el('thead', {}, [head]), body);
+
+  const near = report.markers.filter((o) => o !== marker && Math.abs(o.t - marker.t) <= WEEK_MS);
+  note.textContent = near.length
+    ? `${near.length} other change${near.length > 1 ? 's' : ''} in this window: ${near.map((o) => `${markerDate(o.t)} ${o.label}`).join('; ')}. The numbers above cover all of them together.`
+    : 'No other change in this window.';
+}
+
+const markerKey = (m) => `${m.t}|${m.label}`;
+let changesReport = null;
+let selectedMarkerKey = null;
+
+function selectMarker(report, marker) {
+  selectedMarkerKey = marker ? markerKey(marker) : null;
+  for (const btn of document.querySelectorAll('#markerList .marker-btn')) {
+    btn.setAttribute('aria-pressed', String(btn.dataset.key === selectedMarkerKey));
+  }
+  drawBashChart(document.getElementById('bashDailyChart'), report, marker);
+  renderBeforeAfter(report, marker);
+}
+
+function renderChangesFileNote(file) {
+  const note = document.getElementById('changesFileNote');
+  note.hidden = false;
+  note.classList.toggle('changes-error', file.status === 'error');
+  if (file.status === 'error') note.textContent = `Couldn't read all of ${file.path}: ${file.error}`;
+  else if (file.status === 'missing') note.textContent = `Plugin installs and new models are marked on their own. Add anything else (CLAUDE.md edits, hooks, rtk config) to ${file.path} — the README shows the format.`;
+  else note.hidden = true;
+}
+
+function renderChanges(report) {
+  changesReport = report;
+  document.getElementById('sessionStartPanel').hidden = false;
+  document.getElementById('beforeAfterPanel').hidden = false;
+  renderChangesFileNote(report.changesFile);
+  drawSessionStartChart(document.getElementById('sessionStartChart'), report);
+
+  const list = document.getElementById('markerList');
+  list.replaceChildren();
+  if (!report.markers.length) {
+    list.appendChild(el('p', { class: 'panel-note', text: 'No changes to compare yet.' }));
+    selectMarker(report, null);
+    return;
+  }
+  for (const m of report.markers) {
+    const btn = el('button', { type: 'button', class: 'marker-btn', 'data-key': markerKey(m), 'aria-pressed': 'false' });
+    btn.append(markerIcon(m.kind), `${shortDate(localDateStr(new Date(m.t)))} · ${m.label}`);
+    btn.addEventListener('click', () => selectMarker(report, m));
+    list.appendChild(btn);
+  }
+  const kept = report.markers.find((m) => markerKey(m) === selectedMarkerKey);
+  selectMarker(report, kept || report.markers[report.markers.length - 1]);
+}
+
+// Independent of the range picker, so it loads once and again on Refresh, not on
+// every range change.
+async function loadChanges() {
+  try {
+    const res = await fetch('/api/changes');
+    const report = await res.json();
+    if (report.error) throw new Error(report.detail || report.error);
+    renderChanges(report);
+  } catch (err) {
+    document.getElementById('sessionStartPanel').hidden = false;
+    const note = document.getElementById('changesFileNote');
+    note.hidden = false;
+    note.classList.add('changes-error');
+    note.textContent = `Couldn't load setup changes: ${err.message}`;
+  }
+}
+
+// #endregion
+
 // #region app state + rendering
 
 let currentDays = 'today';
@@ -1288,6 +1663,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
   await fetch('/api/refresh', { method: 'POST' });
   lastSignature = null;
   loadAndRender();
+  loadChanges();
 });
 
 window.addEventListener('resize', () => {
@@ -1296,10 +1672,12 @@ window.addEventListener('resize', () => {
   window.__resizeTimer = setTimeout(() => {
     lastSignature = null; // width changed, so the same data still needs redrawing
     loadAndRender();
+    if (changesReport) renderChanges(changesReport);
   }, 150);
 });
 
 setLive(currentDays === 'today');
 loadAndRender();
+loadChanges();
 
 // #endregion

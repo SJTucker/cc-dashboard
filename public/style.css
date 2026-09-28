@@ -628,3 +628,56 @@ html, body {
   .usage-row { grid-template-columns: minmax(0, 1fr) 40px; }
   .usage-track { display: none; }
 }
+
+/* ---------- Setup changes ---------- */
+
+/* SVG glyphs stroke with currentColor, so a pressed button can recolour its icon. */
+.changes-chart { color: var(--text-primary); }
+.changes-legend { flex-wrap: wrap; margin-top: 8px; }
+.marker-icon { color: inherit; flex: none; }
+.marker-glyph { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.marker-guide { stroke: var(--text-tertiary); stroke-width: 1; stroke-dasharray: 1 4; opacity: 0.7; }
+.session-dot { fill: var(--text-secondary); stroke: var(--text-secondary); stroke-width: 1.2; }
+.session-dot.hollow { fill: var(--surface); }
+.step-line { fill: none; stroke: var(--accent-cost); stroke-width: 2.5; }
+.step-swatch { border-top: 2.5px solid var(--accent-cost); }
+.step-label { font-family: var(--font-data); font-size: 10px; fill: var(--accent-cost); }
+
+.bash-bar { fill: var(--border); }
+.bash-bar.before { fill: var(--text-secondary); }
+.bash-bar.after { fill: var(--accent-cost); }
+.window-before { fill: var(--text-primary); opacity: 0.04; }
+.window-after { fill: var(--accent-cost); opacity: 0.08; }
+.window-median { stroke-width: 2; }
+.window-median.before { stroke: var(--text-primary); stroke-dasharray: 5 3; }
+.window-median.after { stroke: var(--accent-cost); }
+.marker-line { stroke: var(--accent-cost); stroke-width: 1.5; }
+
+.marker-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
+.marker-btn {
+  font: inherit;
+  font-size: 11px;
+  color: var(--text-secondary);
+  background: var(--surface-raised);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 4px 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.marker-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
+.marker-btn[aria-pressed="true"] { color: var(--bg); background: var(--accent-cost); border-color: var(--accent-cost); }
+.marker-btn:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 2px; }
+
+.ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 860px) { .ba-grid { grid-template-columns: 1fr; } }
+.ba-table { width: 100%; }
+.ba-table .n { color: var(--text-tertiary); font-size: 10px; margin-left: 6px; }
+.ba-table .dim { color: var(--text-tertiary); }
+.ba-table .down::before { content: "▼ "; font-size: 9px; }
+.ba-table .up::before { content: "▲ "; font-size: 9px; }
+.ba-table .group td { color: var(--text-tertiary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.changes-file-note { margin: 0 0 10px; }
+.changes-error { color: var(--accent-cost); }

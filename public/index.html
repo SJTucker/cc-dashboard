@@ -222,6 +222,34 @@
           <div id="modelMixBar" class="mix-bar" aria-label="Share of tokens by model"></div>
         </section>
       </div>
+
+      <section class="panel" id="sessionStartPanel" hidden>
+        <div class="panel-head">
+          <h2>Setup changes &middot; context at session start</h2>
+          <span class="panel-note">all history, whatever range is picked above &mdash; tokens in each session's first call: system prompt, tools, CLAUDE.md, skill list, hook output</span>
+        </div>
+        <p id="changesFileNote" class="panel-note changes-file-note" hidden></p>
+        <div id="sessionStartChart" class="chart" aria-label="Context at the first call of each session, with setup changes marked below the axis"></div>
+        <div id="sessionStartLegend" class="legend changes-legend"></div>
+      </section>
+
+      <section class="panel" id="beforeAfterPanel" hidden>
+        <div class="panel-head">
+          <h2>Setup changes &middot; before and after</h2>
+          <span class="panel-note">7 days either side of the change you pick &mdash; trust it only when no other change falls in the same 14 days</span>
+        </div>
+        <div id="markerList" class="marker-list" role="group" aria-label="Choose a change"></div>
+        <div class="ba-grid">
+          <div>
+            <div class="usage-group-title">Median Bash result on the main thread, tokens per day</div>
+            <div id="bashDailyChart" class="chart" aria-label="Median Bash result size per day on the main thread"></div>
+          </div>
+          <div>
+            <table class="model-table ba-table" id="beforeAfterTable" aria-live="polite"></table>
+            <p id="overlapNote" class="panel-note"></p>
+          </div>
+        </div>
+      </section>
     </main>
 
     <footer class="footer">
