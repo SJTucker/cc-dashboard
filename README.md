@@ -57,6 +57,38 @@ filtered out before the model saw it. The cost and token figures everywhere else
 the page come from Claude Code's transcripts and count what Anthropic billed. Do not
 add one to the other.
 
+## Setup changes
+
+Two panels at the bottom show whether a change to your setup moved the numbers. Both
+cover all history, whatever range is picked.
+
+- **Context at session start**: the tokens in each session's first call (system
+  prompt, tool definitions, CLAUDE.md, skill list, hook output), with your changes
+  marked under the time axis. The task barely affects this number, so a step up or
+  down points to a setup change or a Claude Code release.
+- **Before and after**: pick a change to compare the 7 days before it with the 7
+  days after. The chart shows the median Bash result size on the main thread per
+  day, which is what rtk acts on.
+
+Plugin installs and the first use of a new model are marked automatically. Add
+anything else to `changes.json` in this folder. It is gitignored, and the dashboard
+only reads it:
+
+```json
+[
+  { "date": "2026-09-04T11:15", "kind": "rtk", "label": "rtk config.toml rewritten" },
+  { "date": "2026-09-15T10:45", "kind": "claude-md", "label": "CLAUDE.md: don't commit docs" }
+]
+```
+
+`date` is local time. Include the time: a bare date means midnight, which puts that
+whole day in "after". `kind` is one of `plugin`, `skill`, `hook`, `claude-md`,
+`rtk`, `config`, `effort`, `model`, `other`, and picks the marker's shape. Keep the
+file somewhere else with `CHANGES_FILE=~/path/changes.json npm start`.
+
+A before/after is only as clean as its window. When another change falls within 7
+days either side, the panel lists it, and the numbers cover both.
+
 ## What it does and doesn't do
 
 - **Read-only.** It only ever calls `fs.readdirSync` / `fs.createReadStream` on your
@@ -83,9 +115,11 @@ add one to the other.
 ## File layout
 
 ```
-server.js          Express app: binds to localhost, serves /api/summary and /api/rtk
+server.js          Express app: binds to localhost, serves /api/summary, /api/rtk and /api/changes
 lib/scan.js         Walks ~/.claude/projects, parses JSONL, aggregates by day and model
 lib/rtk.js          Reads rtk's history.db read-only, aggregates by day and command
+lib/efficiency.js   Session start, Bash result and per-prompt statistics per time window
+lib/changes.js      Setup change markers: plugin installs, new models, changes.json
 lib/pricing.js       Offline per-token price table + cost calculation
 lib/net-guard.js    Host-header check + security headers
 public/index.html   Page shell
@@ -108,3 +142,22 @@ A few obvious next steps if you want to keep going, roughly in order of effort:
   messages into rolling 5-hour windows instead of calendar days.
 - **A `--live` mode**: rerun the scan on an interval and push updates over SSE
   instead of requiring a manual refresh.
+- **Same-week model comparison**: when two models run in the same week, compare them
+  side by side (cost per prompt, calls per prompt, output and thinking tokens per
+  call). Inside one week the calendar and the setup are the same for both, which
+  comparing this month with last month cannot give you. The efficiency records from
+  `lib/scan.js` already carry the model per call.
+- **Tool error rate by model**: `lib/scan.js` already joins tool_use to tool_result
+  errors. Split that by the model that made the call, and by cause. Without the cause
+  split the rate misleads: here Opus 5.5 looked twice as error-prone as Opus 5, but 64
+  of its 135 errors were the worktree isolation check blocking commands, which says
+  where it was run, not how well it used the tools.
+- **Cost per unit of work**: weekly spend divided by commits (from `git log` in each
+  session's `cwd`, counted once per repository because worktrees share history) or by
+  Edit/Write calls. It trends, but day-to-day values swing by a coefficient of
+  variation near 0.7, so label it as noisy.
+- **Claude Code version markers**: every line carries `version`. Left off the marker
+  row because 23 versions shipped in one month here, several on the same day.
+- **A hook that appends to `changes.json`**: a Claude Code hook on edits to
+  `~/.claude/settings.json`, `CLAUDE.md` or skills could add an entry, so the file
+  keeps itself current. That write would belong to the hook, not the dashboard.
