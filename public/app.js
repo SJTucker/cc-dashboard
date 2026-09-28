@@ -1204,10 +1204,10 @@ function renderRecord(daily) {
   document.getElementById('cardRecordDate').textContent =
     shownAllTime ? `${shortDate(shownAllTime.date)} · all time` : '';
 
+  // On Today the range record is today itself, and Total tokens already shows
+  // that number, so the note stays empty.
   let note = '';
-  if (currentDays === 'today') {
-    note = `today so far: ${formatTokens(todayTotal)}`;
-  } else if (rangeRecord) {
+  if (currentDays !== 'today' && rangeRecord) {
     note = shownAllTime && rangeRecord.date === shownAllTime.date
       ? 'this range holds the record'
       : `this range: ${formatTokens(rangeRecord.tokens)} · ${shortDate(rangeRecord.date)}`;
