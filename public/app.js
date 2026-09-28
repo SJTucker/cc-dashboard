@@ -1825,11 +1825,13 @@ async function loadAndRender({ busy = false } = {}) {
   if (busy) setBusy(true);
 
   // All three requests are issued before any is awaited, so the summary never
-  // waits on rtk or limits. rtk and limits are optional: each one's promise
-  // swallows its own failures and resolves to null rather than rejecting, so an
-  // absent or unreadable source hides its panel instead of blanking the dashboard
-  // with an error banner.
-  const summaryRequest = fetch(`/api/summary?days=${currentDays}`).then((res) => res.json());
+  // waits on rtk or limits. None of the three promises rejects. rtk and limits
+  // are optional and resolve to null on failure, so an absent or unreadable source
+  // hides its panel. A failed summary resolves to an error payload, which becomes
+  // the error banner below after limits have rendered.
+  const summaryRequest = fetch(`/api/summary?days=${currentDays}`)
+    .then((res) => res.json())
+    .catch((err) => ({ error: err.message }));
   const rtkRequest = fetch(`/api/rtk?days=${currentDays}`)
     .then((res) => res.json())
     .then((payload) => (payload && payload.error ? null : payload))
@@ -1837,30 +1839,23 @@ async function loadAndRender({ busy = false } = {}) {
 
   const limitsRequest = requestLimits();
 
-  let data;
-  let rtk;
-  let limits;
-  try {
-    [data, rtk, limits] = await Promise.all([summaryRequest, rtkRequest, limitsRequest]);
-    if (data.error) throw new Error(data.detail || data.error);
-  } catch (err) {
-    if (seq !== requestSeq) return;
-    setBusy(false);
-    banner.hidden = false;
-    banner.textContent = `Couldn't load usage data: ${err.message}`;
-    lastSignature = null;
-    return;
-  }
-
+  const [data, rtk, limits] = await Promise.all([summaryRequest, rtkRequest, limitsRequest]);
   if (seq !== requestSeq) return; // a newer request superseded this response
   setBusy(false);
 
   // Plan usage describes right now: its "stale" suffix and its reset wording
   // (today vs. a dated form) depend on the clock, not on the fetched numbers, so
-  // this has to run on every settled response, even one the signature below
-  // would otherwise treat as unchanged and skip.
+  // this has to run on every settled response. That includes one whose summary
+  // failed, and one the signature below would otherwise treat as unchanged.
   renderLimits(limits);
   renderLimitsBanner(limits);
+
+  if (data.error) {
+    banner.hidden = false;
+    banner.textContent = `Couldn't load usage data: ${data.detail || data.error}`;
+    lastSignature = null;
+    return;
+  }
 
   const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
   if (signature === lastSignature) return;
