@@ -841,3 +841,8 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
 .panel.row-collapsed > :not(.panel-head),
 .panel-row.row-collapsed > .panel > :not(.panel-head) { display: none; }
 .row-collapsed .panel-head { margin-bottom: 0; }
+
+/* A collapsed Skills or Subagents list in Where usage goes keeps only its title
+   (see setupUsageGroupToggles in app.js). */
+.usage-group.group-collapsed > :not(.usage-group-title) { display: none; }
+.usage-group.group-collapsed .usage-group-title { margin-bottom: 0; }

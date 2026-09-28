@@ -9,12 +9,10 @@ then on.
 
 | Idea | Status |
 |---|---|
-| [Where usage goes panel: move and collapse](where-usage-goes-panel.md) | not started |
 | [Cyberpunk restyle](cyberpunk-restyle.md) | not started |
 | [Live sessions panel](live-sessions-panel.md) | not started |
 | [Refresh prices button](refresh-prices.md) | not started |
 | [Daily share of the weekly limit](daily-weekly-budget.md) | not started |
 | [Record day: add the total cost](record-day-cost.md) | not started |
 
-Suggested order: the Where usage goes panel next, and the restyle last so the new
-layout is restyled once.
+Suggested order: the restyle last, so the new layout is restyled once.

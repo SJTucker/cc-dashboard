@@ -1801,6 +1801,22 @@ function setupCollapsibleRows() {
   }
 }
 
+// The Skills and Subagents lists in Where usage goes each collapse to their title.
+// They start collapsed from the markup on every load, and the state is not saved.
+// The toggles sit outside #skillBars and #subagentBars, which drawUsageBars
+// rebuilds on every render, so a re-render leaves an open list open.
+function setupUsageGroupToggles() {
+  for (const toggle of document.querySelectorAll('#attributionPanel .group-toggle')) {
+    const group = toggle.closest('.usage-group');
+    toggle.addEventListener('click', () => {
+      const isCollapsed = !group.classList.contains('group-collapsed');
+      group.classList.toggle('group-collapsed', isCollapsed);
+      toggle.setAttribute('aria-expanded', String(!isCollapsed));
+      toggle.setAttribute('aria-label', `${isCollapsed ? 'Expand' : 'Collapse'} ${toggle.dataset.name}`);
+    });
+  }
+}
+
 // #endregion
 
 // #region app state + rendering
@@ -2079,6 +2095,7 @@ window.addEventListener('resize', () => {
 });
 
 setupCollapsibleRows();
+setupUsageGroupToggles();
 placeSummaryCards();
 setLive(currentDays === 'today');
 refreshRecords();
