@@ -4,18 +4,29 @@ Add a button to the **Cost by model** panel (`#modelList` in `public/index.html`
 updates the price table from Anthropic's published pricing, so a new model or a price
 change does not need a code edit in `lib/pricing.js`.
 
-## First decision: the no-network promise
+## Decided: the no-network promise can change
 
 The README says the dashboard makes "no outbound network calls of its own" (line 11)
-and "does not fetch pricing from the internet" (line 157). A refresh button breaks
-both statements. If this goes ahead:
+and "does not fetch pricing from the internet" (line 157). The button breaks both
+statements. On 2026-09-28 the owner decided that is acceptable, for two reasons:
+
+- The promise came from evaluating third-party dashboards, where outbound calls meant
+  trusting someone else's code. This project is fully under the owner's control, so
+  that concern does not apply.
+- Prompt injection is not a risk here. A fixed parser reads the page, no model reads
+  it, and the one source is Anthropic's own pricing page.
+
+What still holds:
 
 - The fetch runs only when someone clicks the button. It never runs on page load or
   on a timer.
 - The server makes the request. The browser's Content-Security-Policy is
   `default-src 'self'`, so the page could not fetch the pricing page anyway.
-- Both README statements change to say exactly which request exists and what
-  triggers it.
+- The request goes only to `platform.claude.com`. The URL is a constant in the code,
+  not something the page or a config file can change.
+- The commit that adds the button rewrites both README statements, to say which
+  request exists and what triggers it. Until then the README stays as it is, because
+  it is still accurate.
 
 ## How to get the prices
 
