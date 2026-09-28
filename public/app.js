@@ -963,6 +963,39 @@ function drawRtkBars(container, rows, scaleMax, onSelect, selectedName) {
 // to the busiest tool when the selected one has no calls in the new range.
 let selectedTool = null;
 
+// Error text comes from tool results on disk, so it only ever reaches the page
+// through textContent. Each group is a <details> so the full example opens on
+// click or keyboard, which a hover tooltip cannot do on a touch screen.
+function renderToolErrors(tool) {
+  const title = document.getElementById('toolErrorTitle');
+  const causes = document.getElementById('toolErrorCauses');
+  const list = document.getElementById('toolErrorList');
+  causes.replaceChildren();
+  list.replaceChildren();
+  title.hidden = !tool.errors;
+  if (!tool.errors) return;
+
+  title.textContent = `Errors · ${tool.errors.toLocaleString('en-US')}`;
+  for (const { cause, count } of tool.errorCauses) {
+    causes.appendChild(el('span', { class: 'error-cause' }, [
+      document.createTextNode(cause),
+      el('b', { text: count.toLocaleString('en-US') }),
+    ]));
+  }
+  for (const g of tool.errorGroups) {
+    const summary = el('summary', {}, [
+      el('span', { class: 'error-count', text: g.count.toLocaleString('en-US') }),
+      el('span', { class: 'error-message', text: g.message }),
+    ]);
+    const when = el('div', { class: 'error-when', text: `${g.cause} · latest ${new Date(g.t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` });
+    list.appendChild(el('details', { class: 'error-group' }, [summary, when, el('pre', { class: 'error-example', text: g.example })]));
+  }
+  const shown = tool.errorGroups.reduce((n, g) => n + g.count, 0);
+  if (shown < tool.errors) {
+    list.appendChild(el('div', { class: 'panel-note', text: `${(tool.errors - shown).toLocaleString('en-US')} more in smaller groups.` }));
+  }
+}
+
 function renderTools(tools) {
   const panel = document.getElementById('toolPanel');
   panel.hidden = !tools.length;
@@ -993,6 +1026,7 @@ function renderTools(tools) {
   document.getElementById('toolDetailNote').textContent = details.length
     ? ''
     : 'No breakdown for this tool - its input has no field that groups calls.';
+  renderToolErrors(current);
 }
 
 // rtk figures are deliberately not folded into any summary card. They count output

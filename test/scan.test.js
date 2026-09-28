@@ -722,3 +722,71 @@ test('efficiency.prompts keeps typed and queued prompts only, once per uuid', as
 
   assert.deepStrictEqual(efficiency.prompts.map((p) => p.t).sort(), [Date.parse(iso(0)), Date.parse(iso(1))]);
 });
+
+function errorResultLine(isoTimestamp, toolId, content) {
+  return JSON.stringify({
+    timestamp: isoTimestamp,
+    type: 'user',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolId, is_error: true, content }] },
+  });
+}
+
+test('tool errors are grouped by cause and by message, with the latest example', async () => {
+  const base = makeFixture();
+  const at = (h) => atHourToday(h).toISOString();
+  writeSession(base, 'calls', [
+    callLine(at(9), {
+      id: 'err',
+      calls: [
+        ['x1', 'Bash', { command: 'cd /repo && grep foo src' }],
+        ['x2', 'Bash', { command: 'grep bar src' }],
+        ['x3', 'Bash', { command: 'git worktree list' }],
+        ['x4', 'Bash', { command: 'pnpm test' }],
+        ['x5', 'Edit', { file_path: '/a/one.ts' }],
+        ['x6', 'Edit', { file_path: '/b/two.ts' }],
+        ['x7', 'Read', { file_path: '/c' }],
+      ],
+    }),
+  ]);
+  writeSession(base, 'results', [
+    errorResultLine(at(9), 'x1', 'Exit code 1\n'),
+    errorResultLine(at(10), 'x2', 'Exit code 1\nsrc: nothing'),
+    errorResultLine(at(9), 'x3', 'This session is isolated in the worktree /Users/me/wt-1, but this command is too complex to verify'),
+    errorResultLine(at(9), 'x4', [{ type: 'text', text: 'Exit code 2\n' + 'x'.repeat(500) }]),
+    errorResultLine(at(9), 'x5', '<tool_use_error>String to replace not found in file.\nString: foo</tool_use_error>'),
+    errorResultLine(at(11), 'x6', '<tool_use_error>String to replace not found in file.\nString: bar</tool_use_error>'),
+    errorResultLine(at(9), 'x7', 'EISDIR: illegal operation on a directory, read \'/c\''),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const { tools, summary } = await scanUsage({ days: null });
+  assert.strictEqual(summary.toolErrors, 7);
+
+  const bash = tools.find((t) => t.name === 'Bash');
+  assert.deepStrictEqual(bash.errorCauses, [
+    { cause: 'command failed', count: 3 },
+    { cause: 'blocked by the worktree check', count: 1 },
+  ]);
+  const grepGroup = bash.errorGroups.find((g) => g.message === 'exit 1 · grep');
+  assert.strictEqual(grepGroup.count, 2, 'a leading cd is stripped, so both greps group together');
+  assert.strictEqual(grepGroup.example, 'Exit code 1\nsrc: nothing', 'the example is the most recent error');
+  assert.strictEqual(grepGroup.t, Date.parse(at(10)));
+  const pnpm = bash.errorGroups.find((g) => g.message === 'exit 2 · pnpm');
+  assert.strictEqual(pnpm.example.length, 300, 'error text is capped');
+  assert.ok(bash.errorGroups.some((g) => g.message === 'This session is isolated in the worktree <path>, but this command is too complex to verify'));
+
+  const edit = tools.find((t) => t.name === 'Edit');
+  assert.deepStrictEqual(edit.errorGroups.map((g) => [g.cause, g.message, g.count]), [
+    ['tool misused', 'String to replace not found in file.', 2],
+  ]);
+  assert.strictEqual(tools.find((t) => t.name === 'Read').errorGroups[0].message, "EISDIR: illegal operation on a directory, read '<path>'");
+});
+
+test('a tool with no errors has empty error lists', async () => {
+  const base = makeFixture();
+  writeSession(base, 'calls', [callLine(atHourToday(9).toISOString(), { id: 'ok', calls: [['y1', 'Read', { file_path: '/a' }]] })]);
+  const { scanUsage } = loadScan(base);
+  const { tools } = await scanUsage({ days: null });
+  assert.deepStrictEqual(tools[0].errorCauses, []);
+  assert.deepStrictEqual(tools[0].errorGroups, []);
+});

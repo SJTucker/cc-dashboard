@@ -680,4 +680,48 @@ html, body {
 .ba-table .up::before { content: "▲ "; font-size: 9px; }
 .ba-table .group td { color: var(--text-tertiary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
 .changes-file-note { margin: 0 0 10px; }
+
+/* ---------- Tool errors ---------- */
+
+.tool-error-title { margin-top: 16px; }
+.error-causes { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.error-cause {
+  display: inline-flex;
+  gap: 6px;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1px 8px;
+}
+.error-cause b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.error-list { display: flex; flex-direction: column; gap: 2px; }
+.error-group summary {
+  display: grid;
+  grid-template-columns: 3.5em minmax(0, 1fr);
+  gap: 8px;
+  padding: 3px 4px;
+  cursor: pointer;
+  font-size: 12px;
+  list-style: none;
+}
+.error-group summary::-webkit-details-marker { display: none; }
+.error-group summary:hover { background: var(--surface-hover); }
+.error-group summary:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 1px; }
+.error-group[open] summary { background: var(--surface-raised); }
+.error-count { text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.error-message { overflow-wrap: anywhere; }
+.error-when { font-size: 10px; color: var(--text-tertiary); padding: 4px 4px 0 calc(3.5em + 12px); }
+.error-example {
+  margin: 4px 0 8px calc(3.5em + 12px);
+  padding: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  font-size: 11px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  max-height: 12em;
+  overflow: auto;
+}
 .changes-error { color: var(--accent-cost); }
