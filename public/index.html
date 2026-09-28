@@ -23,6 +23,53 @@
         <span id="liveDot" class="live-dot is-off">&#9679; live</span>
         <button id="refreshBtn" class="refresh-btn" title="Re-scan logs">&#8635; Refresh</button>
         <span id="loadStatus" class="load-status" role="status"></span>
+        <div id="headerCards" class="header-cards">
+          <section class="cards cards-compact" id="summaryCards">
+            <div class="card">
+              <span class="card-label">Total cost</span>
+              <span class="card-value cost" id="cardCost">&mdash;</span>
+              <span class="card-note" id="cardCostNote"></span>
+            </div>
+            <div class="card">
+              <span class="card-label">Total tokens</span>
+              <span class="card-value" id="cardTokens">&mdash;</span>
+            </div>
+            <div class="card">
+              <span class="card-label">Record day</span>
+              <span class="card-value" id="cardRecord">&mdash;</span>
+              <span class="card-note" id="cardRecordDate"></span>
+              <span class="card-note" id="cardRecordNote"></span>
+            </div>
+            <div class="card" id="reportedCard" hidden>
+              <span class="card-label">Claude Code reported</span>
+              <span class="card-value cost" id="cardReported">&mdash;</span>
+              <span class="card-note" id="cardReportedNote"></span>
+            </div>
+            <div class="card" title="share of eligible input served from cache">
+              <span class="card-label">Cache efficiency</span>
+              <span class="card-value" id="cardCache">&mdash;</span>
+              <span class="card-note">share of eligible input served from cache</span>
+            </div>
+            <div class="card" id="burnCard">
+              <span class="card-label">Cost per day</span>
+              <span class="card-value cost" id="cardBurn">&mdash;</span>
+              <span class="card-note">complete days only &mdash; today is partial</span>
+            </div>
+            <div class="card" id="projectionCard">
+              <span class="card-label">30 days at this rate</span>
+              <span class="card-value cost" id="cardProjection">&mdash;</span>
+            </div>
+            <div class="card" title="found by the directory walk, not all read">
+              <span class="card-label">Session files on disk</span>
+              <span class="card-value" id="cardFiles">&mdash;</span>
+              <span class="card-note">found by the directory walk, not all read</span>
+            </div>
+            <div class="card">
+              <span class="card-label">Tool calls</span>
+              <span class="card-value" id="cardTools">&mdash;</span>
+            </div>
+          </section>
+        </div>
       </div>
     </header>
 
@@ -30,51 +77,7 @@
       <div id="limitsBanner" class="status-banner limits-banner" hidden></div>
       <div id="statusBanner" class="status-banner" hidden></div>
 
-      <section class="cards" id="summaryCards">
-        <div class="card">
-          <span class="card-label">Total cost</span>
-          <span class="card-value cost" id="cardCost">&mdash;</span>
-          <span class="card-note" id="cardCostNote"></span>
-        </div>
-        <div class="card">
-          <span class="card-label">Total tokens</span>
-          <span class="card-value" id="cardTokens">&mdash;</span>
-        </div>
-        <div class="card">
-          <span class="card-label">Record day</span>
-          <span class="card-value" id="cardRecord">&mdash;</span>
-          <span class="card-note" id="cardRecordDate"></span>
-          <span class="card-note" id="cardRecordNote"></span>
-        </div>
-        <div class="card" id="reportedCard" hidden>
-          <span class="card-label">Claude Code reported</span>
-          <span class="card-value cost" id="cardReported">&mdash;</span>
-          <span class="card-note" id="cardReportedNote"></span>
-        </div>
-        <div class="card">
-          <span class="card-label">Cache efficiency</span>
-          <span class="card-value" id="cardCache">&mdash;</span>
-          <span class="card-note">share of eligible input served from cache</span>
-        </div>
-        <div class="card" id="burnCard">
-          <span class="card-label">Cost per day</span>
-          <span class="card-value cost" id="cardBurn">&mdash;</span>
-          <span class="card-note">complete days only &mdash; today is partial</span>
-        </div>
-        <div class="card" id="projectionCard">
-          <span class="card-label">30 days at this rate</span>
-          <span class="card-value cost" id="cardProjection">&mdash;</span>
-        </div>
-        <div class="card">
-          <span class="card-label">Session files on disk</span>
-          <span class="card-value" id="cardFiles">&mdash;</span>
-          <span class="card-note">found by the directory walk, not all read</span>
-        </div>
-        <div class="card">
-          <span class="card-label">Tool calls</span>
-          <span class="card-value" id="cardTools">&mdash;</span>
-        </div>
-      </section>
+      <div id="mainCards"></div>
 
       <section class="panel" id="limitsPanel" hidden>
         <div class="panel-head">

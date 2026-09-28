@@ -76,9 +76,16 @@ html, body {
 
 .topbar-controls {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 12px;
+  width: 100%;
 }
+
+/* Holds #summaryCards on Today (see placeSummaryCards in app.js). Its flex basis
+   makes the cards wrap onto their own line when the controls row runs out of
+   width. placeSummaryCards hides it on other ranges. */
+.header-cards { flex: 1 1 560px; }
 
 .range-picker {
   display: flex;
@@ -189,6 +196,27 @@ html, body {
   font-size: 10px;
   color: var(--text-tertiary);
 }
+
+/* The compact form used in the header on Today: label and value only. The
+   unpriced-tokens warning and the record day's date stay visible. The other
+   notes are hidden, and the static ones are title tooltips on their cards. */
+.cards.cards-compact {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 0;
+}
+
+.cards-compact .card {
+  flex: 1 1 110px;
+  padding: 6px 12px;
+  gap: 1px;
+}
+
+.cards-compact .card-value { font-size: 16px; }
+
+.cards-compact .card-note:not(#cardCostNote):not(#cardRecordDate),
+.cards-compact .card-note:empty { display: none; }
 
 /* ---------- Panels ---------- */
 

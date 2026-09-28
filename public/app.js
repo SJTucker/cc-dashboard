@@ -1854,6 +1854,19 @@ function setLive(on) {
   document.getElementById('refreshBtn').hidden = on;
 }
 
+// On Today the summary cards sit in the sticky header in a compact form, so they
+// stay in view while scrolling. Other ranges show them as full cards in the page.
+// The one #summaryCards element moves between the two slots, so every card id
+// stays unique and loadAndRender fills it the same way wherever it is.
+function placeSummaryCards() {
+  const cards = document.getElementById('summaryCards');
+  const today = currentDays === 'today';
+  document.getElementById(today ? 'headerCards' : 'mainCards').appendChild(cards);
+  cards.classList.toggle('cards-compact', today);
+  // Hidden off Today, so the empty slot cannot wrap onto a line of its own.
+  document.getElementById('headerCards').hidden = !today;
+}
+
 async function loadAndRender({ busy = false } = {}) {
   const banner = document.getElementById('statusBanner');
 
@@ -2022,6 +2035,7 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   btn.classList.add('active');
   const value = btn.dataset.days;
   currentDays = value === 'all' || value === 'today' ? value : Number(value);
+  placeSummaryCards();
   lastSignature = null; // the bucket keys change, so force a redraw
   setLive(currentDays === 'today');
   loadAndRender({ busy: true });
@@ -2051,6 +2065,7 @@ window.addEventListener('resize', () => {
 });
 
 setupCollapsibleRows();
+placeSummaryCards();
 setLive(currentDays === 'today');
 refreshRecords();
 loadAndRender({ busy: true });
