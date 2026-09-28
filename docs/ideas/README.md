@@ -13,6 +13,7 @@ then on.
 | [Summary cards in the sticky header](sticky-header-cards.md) | not started |
 | [Where usage goes panel: move and collapse](where-usage-goes-panel.md) | not started |
 | [Cyberpunk restyle](cyberpunk-restyle.md) | not started |
+| [Live sessions panel](live-sessions-panel.md) | not started |
 
 Suggested order: the record-day card fixes the card set, the sticky header then
 sizes those cards, the Where usage goes panel moves next, and the restyle comes last
