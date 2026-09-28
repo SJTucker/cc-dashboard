@@ -35,17 +35,34 @@ test('pluginMarkers reads installedAt from installed_plugins.json', () => {
   ]);
 });
 
+test('pluginMarkers labels a non-user-scope install with its scope and project', () => {
+  const { changes } = setup({
+    plugins: {
+      plugins: {
+        'typescript-lsp@claude-plugins-official': [
+          { scope: 'project', projectPath: '/Users/me/code/my-project', installedAt: '2026-09-28T16:02:37.361Z' },
+          { scope: 'user', installedAt: '2026-09-28T16:04:14.225Z' },
+        ],
+      },
+    },
+  });
+  assert.deepStrictEqual(changes.pluginMarkers(), [
+    { t: Date.parse('2026-09-28T16:02:37.361Z'), kind: 'plugin', label: 'typescript-lsp plugin installed (project my-project)', source: 'plugin' },
+    { t: Date.parse('2026-09-28T16:04:14.225Z'), kind: 'plugin', label: 'typescript-lsp plugin installed', source: 'plugin' },
+  ]);
+});
+
 test('pluginMarkers returns [] for a missing or malformed file', () => {
   assert.deepStrictEqual(setup().changes.pluginMarkers(), []);
   assert.deepStrictEqual(setup({ plugins: '{not json' }).changes.pluginMarkers(), []);
 });
 
-test('modelMarkers skips models already in use when history begins', () => {
+test('modelMarkers skips models within a 7-day before-window of the earliest call', () => {
   const { changes } = setup();
   const t0 = Date.parse('2026-08-25T12:00:00Z');
   const calls = [
     { t: t0, model: 'claude-opus-5' },
-    { t: t0 + DAY / 2, model: 'claude-haiku-4-5' }, // within 24h of the first call
+    { t: t0 + 3 * DAY, model: 'claude-haiku-4-5' }, // within the 7-day before-window
     { t: t0 + 20 * DAY, model: 'claude-opus-5-5' },
     { t: t0 + 21 * DAY, model: 'claude-opus-5-5' },
     { t: t0 + 22 * DAY, model: null },
