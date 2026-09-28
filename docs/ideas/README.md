@@ -14,6 +14,7 @@ then on.
 | [Cyberpunk restyle](cyberpunk-restyle.md) | not started |
 | [Live sessions panel](live-sessions-panel.md) | not started |
 | [Refresh prices button](refresh-prices.md) | not started |
+| [Daily share of the weekly limit](daily-weekly-budget.md) | not started |
 
 Suggested order: the sticky header first, the Where usage goes panel next, and the
 restyle last so the new layout is restyled once.
