@@ -1792,7 +1792,6 @@ async function loadAndRender({ busy = false } = {}) {
   }
   document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
   document.getElementById('cardSessions').textContent = s.sessions.toLocaleString('en-US');
-  document.getElementById('cardCalls').textContent = s.apiCalls.toLocaleString('en-US');
   document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');
 
   drawBarChart(document.getElementById('costChart'), data.daily, {
