@@ -747,6 +747,17 @@ html, body {
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { .spinner { animation: none; } }
 
+/* Same height as a chart, so the panel keeps its size when the chart replaces it. */
+.chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 180px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 /* The setup changes panels load on their own schedule (Task 2), and the banner
    carries errors, so neither dims with the range-dependent content. */
 main[aria-busy="true"] > :not(#statusBanner):not(#sessionStartPanel):not(#beforeAfterPanel) { opacity: 0.5; }

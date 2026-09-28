@@ -1548,15 +1548,36 @@ function renderChanges(report) {
   selectMarker(report, kept || report.markers[report.markers.length - 1]);
 }
 
+const CHANGES_CHARTS = ['sessionStartChart', 'bashDailyChart'];
+
+// /api/changes reads the all-history scan, about 2.4s when that cache entry is
+// cold. Both panels show straight away with a placeholder, so the page does not
+// jump when the data arrives. The chart draw functions clear their container, so
+// the placeholder needs no explicit removal on success.
+function showChangesLoading() {
+  document.getElementById('sessionStartPanel').hidden = false;
+  document.getElementById('beforeAfterPanel').hidden = false;
+  for (const id of CHANGES_CHARTS) {
+    document.getElementById(id).replaceChildren(
+      el('div', { class: 'chart-loading' }, [spinnerNode(), document.createTextNode('Loading setup changes…')])
+    );
+  }
+}
+
 // Independent of the range picker, so it loads once and again on Refresh, not on
 // every range change.
 async function loadChanges() {
+  showChangesLoading();
   try {
     const res = await fetch('/api/changes');
     const report = await res.json();
     if (report.error) throw new Error(report.detail || report.error);
     renderChanges(report);
   } catch (err) {
+    // A spinner that never stops reads as still loading, so it goes, and the
+    // before/after panel has nothing to show without a report.
+    for (const id of CHANGES_CHARTS) document.getElementById(id).replaceChildren();
+    document.getElementById('beforeAfterPanel').hidden = true;
     document.getElementById('sessionStartPanel').hidden = false;
     const note = document.getElementById('changesFileNote');
     note.hidden = false;
