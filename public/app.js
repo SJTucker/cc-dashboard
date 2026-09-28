@@ -1902,8 +1902,6 @@ async function loadAndRender({ busy = false } = {}) {
   lastSignature = signature;
   banner.hidden = true;
 
-  document.getElementById('projectsDirLabel').textContent = data.meta.projectsDir;
-
   if (!data.meta.dirExists) {
     banner.hidden = false;
     banner.innerHTML = `No Claude Code project logs found at <code>${escapeHtml(data.meta.projectsDir)}</code>. Use Claude Code at least once, or set <code>CLAUDE_CONFIG_DIR</code> if you use a custom location.`;
