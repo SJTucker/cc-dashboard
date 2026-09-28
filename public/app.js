@@ -963,6 +963,28 @@ function drawRtkBars(container, rows, scaleMax, onSelect, selectedName) {
 // to the busiest tool when the selected one has no calls in the new range.
 let selectedTool = null;
 
+// Name of the tool renderToolErrors last drew the error list for. A 5s poll on the
+// Today range calls renderToolErrors again for the same tool and must not close a
+// group the reader opened; clicking a different tool in the bars above is a real
+// change of subject and starts closed. Paired with errorGroupKey below, which is
+// stored on each <details> so a rebuilt element can be matched back to its group.
+let toolErrorsFor = null;
+
+function errorGroupKey(g) {
+  return `${g.cause}\n${g.message}`;
+}
+
+// The keys of currently open groups, or an empty set when the tool just changed.
+// A poll rebuilds the whole list every time (see renderToolErrors), so "open" has
+// to be read off the DOM before the old elements are replaced.
+function openErrorKeys(list, tool) {
+  if (toolErrorsFor !== tool.name) {
+    toolErrorsFor = tool.name;
+    return new Set();
+  }
+  return new Set([...list.querySelectorAll('details[open]')].map((d) => d.dataset.key));
+}
+
 // Error text comes from tool results on disk, so it only ever reaches the page
 // through textContent. Each group is a <details> so the full example opens on
 // click or keyboard, which a hover tooltip cannot do on a touch screen.
@@ -970,6 +992,7 @@ function renderToolErrors(tool) {
   const title = document.getElementById('toolErrorTitle');
   const causes = document.getElementById('toolErrorCauses');
   const list = document.getElementById('toolErrorList');
+  const openKeys = openErrorKeys(list, tool);
   causes.replaceChildren();
   list.replaceChildren();
   title.hidden = !tool.errors;
@@ -983,12 +1006,15 @@ function renderToolErrors(tool) {
     ]));
   }
   for (const g of tool.errorGroups) {
+    const key = errorGroupKey(g);
     const summary = el('summary', {}, [
       el('span', { class: 'error-count', text: g.count.toLocaleString('en-US') }),
       el('span', { class: 'error-message', text: g.message }),
     ]);
     const when = el('div', { class: 'error-when', text: `${g.cause} · latest ${new Date(g.t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` });
-    list.appendChild(el('details', { class: 'error-group' }, [summary, when, el('pre', { class: 'error-example', text: g.example })]));
+    const group = el('details', { class: 'error-group', 'data-key': key }, [summary, when, el('pre', { class: 'error-example', text: g.example })]);
+    group.open = openKeys.has(key);
+    list.appendChild(group);
   }
   const shown = tool.errorGroups.reduce((n, g) => n + g.count, 0);
   if (shown < tool.errors) {
