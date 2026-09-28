@@ -1093,7 +1093,9 @@ function renderRtkCommands(commands) {
 // "Resets 5:20pm" today, "Resets Oct 4 at 5am" on another day, worded the way
 // Claude Code's /usage screen words it.
 function formatReset(ms) {
-  const d = new Date(ms);
+  // The cache's resets_at lands a few milliseconds either side of the minute
+  // (e.g. 22:19:59.941Z), so round to the nearest minute before formatting.
+  const d = new Date(Math.round(ms / 60000) * 60000);
   const time = d
     .toLocaleTimeString('en-US', { hour: 'numeric', minute: d.getMinutes() ? '2-digit' : undefined })
     .replace(/\s/g, '')
@@ -1105,6 +1107,13 @@ function formatReset(ms) {
 // Claude Code only refreshes its usage cache while it runs. /usage itself stops
 // trusting cached bars after 60 minutes, so the panel says so past that age.
 const LIMITS_STALE_MS = 60 * 60 * 1000;
+
+// Plan usage describes right now, not a date range, so only Today asks for it.
+// Like rtk it is optional: a failure resolves to null and hides the panel.
+function requestLimits() {
+  if (currentDays !== 'today') return Promise.resolve(null);
+  return fetch('/api/limits').then((res) => res.json()).catch(() => null);
+}
 
 function renderLimits(limits) {
   const panel = document.getElementById('limitsPanel');
@@ -1702,11 +1711,7 @@ async function loadAndRender({ busy = false } = {}) {
     .then((payload) => (payload && payload.error ? null : payload))
     .catch(() => null);
 
-  // Plan usage describes right now, not a date range, so only Today asks for it.
-  // Like rtk it is optional: a failure resolves to null and hides the panel.
-  const limitsRequest = currentDays === 'today'
-    ? fetch('/api/limits').then((res) => res.json()).catch(() => null)
-    : Promise.resolve(null);
+  const limitsRequest = requestLimits();
 
   let data;
   let rtk;
@@ -1726,7 +1731,13 @@ async function loadAndRender({ busy = false } = {}) {
   if (seq !== requestSeq) return; // a newer request superseded this response
   setBusy(false);
 
-  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary, limits]);
+  // Plan usage describes right now: its "stale" suffix and its reset wording
+  // (today vs. a dated form) depend on the clock, not on the fetched numbers, so
+  // this has to run on every settled response, even one the signature below
+  // would otherwise treat as unchanged and skip.
+  renderLimits(limits);
+
+  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
   if (signature === lastSignature) return;
   lastSignature = signature;
   banner.hidden = true;
@@ -1845,7 +1856,6 @@ async function loadAndRender({ busy = false } = {}) {
   }
 
   renderRtk(rtk);
-  renderLimits(limits);
 }
 
 document.getElementById('rangePicker').addEventListener('click', (evt) => {
