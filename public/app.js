@@ -1663,6 +1663,10 @@ const CHANGES_CHARTS = ['sessionStartChart', 'bashDailyChart'];
 // jump when the data arrives. The chart draw functions clear their container, so
 // the placeholder needs no explicit removal on success.
 function showChangesLoading() {
+  // A load in progress has no report yet: without this, a failed reload's catch
+  // block would leave the previous report in place, and a later redraw (e.g. a
+  // row expand) would show stale data instead of the error state it just set.
+  changesReport = null;
   document.getElementById('sessionStartPanel').hidden = false;
   document.getElementById('beforeAfterPanel').hidden = false;
   for (const id of CHANGES_CHARTS) {
@@ -1725,6 +1729,7 @@ function setupCollapsibleRows() {
   const collapsed = loadCollapsedRows();
   for (const row of document.querySelectorAll('#app > .panel-row, #app > .panel')) {
     const headings = [...row.querySelectorAll('.panel-head h2')];
+    if (!headings.length) continue;
     const key = headings[0].textContent;
     const names = headings.map((h) => h.textContent).join(' and ');
     const toggle = el('button', { type: 'button', class: 'row-toggle' });
@@ -1739,8 +1744,11 @@ function setupCollapsibleRows() {
       if (isCollapsed) collapsed.add(key);
       else collapsed.delete(key);
       saveCollapsedRows(collapsed);
-      // A chart drawn while hidden has the 200px fallback width.
-      if (!isCollapsed) redrawCharts();
+      // A chart drawn while hidden has the 200px fallback width, so an expand
+      // needs a redraw. Only the changes charts belong to this row when it's
+      // Setup changes (session-start or before/after); other rows' redraw covers
+      // only their own charts, via loadAndRender.
+      if (!isCollapsed) redrawCharts({ changes: row.id === 'sessionStartPanel' || row.id === 'beforeAfterPanel' });
     });
     headings[0].prepend(toggle);
     setCollapsed(collapsed.has(key));
@@ -1810,13 +1818,11 @@ async function loadAndRender({ busy = false } = {}) {
   // response is dropped below and would never clear it.
   if (busy) setBusy(true);
 
-  // Both requests are issued before either is awaited, so the summary never waits
-  // on the rtk read. Awaiting them in sequence put two optional panels on the
-  // critical path of every card and chart on the page.
-  //
-  // rtk is optional, so its promise swallows its own failures and resolves to null
-  // rather than rejecting: an absent or unreadable rtk database hides those two
-  // panels, and must not blank the dashboard with an error banner.
+  // All three requests are issued before any is awaited, so the summary never
+  // waits on rtk or limits. rtk and limits are optional: each one's promise
+  // swallows its own failures and resolves to null rather than rejecting, so an
+  // absent or unreadable source hides its panel instead of blanking the dashboard
+  // with an error banner.
   const summaryRequest = fetch(`/api/summary?days=${currentDays}`).then((res) => res.json());
   const rtkRequest = fetch(`/api/rtk?days=${currentDays}`)
     .then((res) => res.json())
@@ -1984,16 +1990,18 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
 
 document.getElementById('refreshBtn').addEventListener('click', async () => {
   setBusy(true);
-  await fetch('/api/refresh', { method: 'POST' });
+  // A rejected refresh (e.g. the server is down) must not skip loadAndRender below:
+  // its failed summary request is what clears busy and shows the error banner.
+  await fetch('/api/refresh', { method: 'POST' }).catch(() => {});
   lastSignature = null;
   loadAndRender({ busy: true });
   loadChanges();
 });
 
-function redrawCharts() {
+function redrawCharts({ changes = true } = {}) {
   lastSignature = null; // the width changed, so the same data still needs redrawing
   loadAndRender();
-  if (changesReport) renderChanges(changesReport);
+  if (changes && changesReport) renderChanges(changesReport);
 }
 
 window.addEventListener('resize', () => {

@@ -149,7 +149,7 @@ lib/pricing.js       Offline per-token price table + cost calculation
 lib/net-guard.js    Host-header check + security headers
 public/index.html   Page shell
 public/style.css    All styling
-public/app.js        Fetches both routes, draws the SVG charts, no dependencies
+public/app.js        Fetches /api/summary, /api/rtk, /api/limits and /api/changes, draws the SVG charts, no dependencies
 ```
 
 ## Extending it
