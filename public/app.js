@@ -1090,6 +1090,46 @@ function renderRtkCommands(commands) {
   );
 }
 
+// "Resets 5:20pm" today, "Resets Oct 4 at 5am" on another day, worded the way
+// Claude Code's /usage screen words it.
+function formatReset(ms) {
+  const d = new Date(ms);
+  const time = d
+    .toLocaleTimeString('en-US', { hour: 'numeric', minute: d.getMinutes() ? '2-digit' : undefined })
+    .replace(/\s/g, '')
+    .toLowerCase();
+  if (localDateStr(d) === localDateStr(new Date())) return `Resets ${time}`;
+  return `Resets ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${time}`;
+}
+
+// Claude Code only refreshes its usage cache while it runs. /usage itself stops
+// trusting cached bars after 60 minutes, so the panel says so past that age.
+const LIMITS_STALE_MS = 60 * 60 * 1000;
+
+function renderLimits(limits) {
+  const panel = document.getElementById('limitsPanel');
+  panel.hidden = !limits;
+  if (!limits) return;
+  const rows = document.getElementById('limitsRows');
+  rows.replaceChildren();
+  for (const limit of limits.limits) {
+    const fill = el('i');
+    fill.style.width = Math.min(100, Math.max(0, limit.percent)) + '%';
+    rows.appendChild(el('div', { class: 'limit-row' }, [
+      el('span', { class: 'limit-name', text: limit.label }),
+      el('span', { class: 'usage-track' }, [fill]),
+      el('span', { class: 'limit-pct', text: `${Math.round(limit.percent)}% used` }),
+      el('span', { class: 'limit-reset', text: limit.resetsAt == null ? '' : formatReset(limit.resetsAt) }),
+    ]));
+  }
+  const asOf = new Date(limits.fetchedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const stale = Date.now() - limits.fetchedAt > LIMITS_STALE_MS
+    ? ' — may be stale: Claude Code updates it while a session runs'
+    : '';
+  document.getElementById('limitsNote').textContent = `from Claude Code's usage cache, as of ${asOf} (${zone})${stale}`;
+}
+
 function renderRtk(rtk) {
   const live = Boolean(rtk && rtk.meta.dbExists);
 
@@ -1662,10 +1702,17 @@ async function loadAndRender({ busy = false } = {}) {
     .then((payload) => (payload && payload.error ? null : payload))
     .catch(() => null);
 
+  // Plan usage describes right now, not a date range, so only Today asks for it.
+  // Like rtk it is optional: a failure resolves to null and hides the panel.
+  const limitsRequest = currentDays === 'today'
+    ? fetch('/api/limits').then((res) => res.json()).catch(() => null)
+    : Promise.resolve(null);
+
   let data;
   let rtk;
+  let limits;
   try {
-    [data, rtk] = await Promise.all([summaryRequest, rtkRequest]);
+    [data, rtk, limits] = await Promise.all([summaryRequest, rtkRequest, limitsRequest]);
     if (data.error) throw new Error(data.detail || data.error);
   } catch (err) {
     if (seq !== requestSeq) return;
@@ -1679,7 +1726,7 @@ async function loadAndRender({ busy = false } = {}) {
   if (seq !== requestSeq) return; // a newer request superseded this response
   setBusy(false);
 
-  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
+  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary, limits]);
   if (signature === lastSignature) return;
   lastSignature = signature;
   banner.hidden = true;
@@ -1798,6 +1845,7 @@ async function loadAndRender({ busy = false } = {}) {
   }
 
   renderRtk(rtk);
+  renderLimits(limits);
 }
 
 document.getElementById('rangePicker').addEventListener('click', (evt) => {

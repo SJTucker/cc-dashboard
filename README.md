@@ -57,6 +57,20 @@ filtered out before the model saw it. The cost and token figures everywhere else
 the page come from Claude Code's transcripts and count what Anthropic billed. Do not
 add one to the other.
 
+## Plan usage
+
+On the Today range, a panel shows the two limits from Claude Code's `/usage` screen:
+the current session (the 5-hour window) and the current week across all models.
+Claude Code keeps its last usage fetch in `~/.claude.json`, or in
+`$CLAUDE_CONFIG_DIR/.claude.json` when that is set, and the dashboard reads that
+cache. It makes no request of its own.
+
+The cache is undocumented, so a Claude Code release may change it. When the cache
+is missing or in a shape the dashboard does not expect, the panel stays hidden.
+Claude Code only writes it for claude.ai subscription logins, and only while it
+runs, so the panel shows the time of the last update. Per-model weekly limits are
+left out. Read another file with `CLAUDE_JSON=~/path/.claude.json npm start`.
+
 ## Setup changes
 
 Two panels at the bottom show whether a change to your setup moved the numbers. Both
@@ -98,10 +112,10 @@ boundary back.
 
 ## What it does and doesn't do
 
-- **Read-only.** It only ever calls `fs.readdirSync` / `fs.createReadStream` on your
-  `~/.claude/projects` folder, and opens rtk's `history.db` with sqlite's `readOnly`
-  flag. There is no file-write code path anywhere in this project — grep for
-  `writeFile` yourself and you won't find it.
+- **Read-only.** It only ever reads your `~/.claude/projects` folder, the plugin
+  list and `.claude.json` beside it, and `changes.json`, and opens rtk's
+  `history.db` with sqlite's `readOnly` flag. There is no file-write code path
+  anywhere in this project — grep for `writeFile` yourself and you won't find it.
 - **No network calls.** Unlike some similar tools, this one does not fetch pricing
   from the internet, load a charting library from a CDN, or phone home in any way.
   The bar charts are hand-drawn SVG (see `public/app.js`). Pricing is a small
@@ -122,11 +136,12 @@ boundary back.
 ## File layout
 
 ```
-server.js          Express app: binds to localhost, serves /api/summary, /api/rtk and /api/changes
+server.js          Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes and /api/limits
 lib/scan.js         Walks ~/.claude/projects, parses JSONL, aggregates by day and model
 lib/rtk.js          Reads rtk's history.db read-only, aggregates by day and command
 lib/efficiency.js   Session start, Bash result and per-prompt statistics per time window
 lib/changes.js      Setup change markers: plugin installs, new models, changes.json
+lib/limits.js       Plan usage limits from Claude Code's cache in .claude.json
 lib/pricing.js       Offline per-token price table + cost calculation
 lib/net-guard.js    Host-header check + security headers
 public/index.html   Page shell

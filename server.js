@@ -8,6 +8,7 @@ const { readRtkUsage, readRtkWindows } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
+const { readLimits } = require('./lib/limits');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -130,6 +131,13 @@ app.get('/api/rtk', (req, res) => {
     console.error('[API] /api/rtk failed:', err);
     res.status(500).json({ error: 'Failed to read rtk history', detail: err.message });
   }
+});
+
+// Plan usage changes every few minutes while Claude Code runs, and reading the
+// ~70KB .claude.json takes about 1ms, so it is read on every request, uncached.
+// readLimits() returns null rather than throwing, so there is no error branch.
+app.get('/api/limits', (req, res) => {
+  res.json(readLimits());
 });
 
 // All history, whatever range the page shows: a before/after needs data on both

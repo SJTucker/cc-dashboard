@@ -290,3 +290,38 @@ test('GET /api/changes works with no marker sources at all', async (t) => {
   assert.deepStrictEqual(data.markers, []);
   assert.strictEqual(data.changesFile.status, 'missing');
 });
+
+test('GET /api/limits sends only the limits', async (t) => {
+  delete process.env.CLAUDE_JSON;
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const resets = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+  fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json'), JSON.stringify({
+    oauthAccount: { emailAddress: 'someone@example.com' },
+    cachedUsageUtilization: {
+      fetchedAtMs: 123,
+      accountUuid: 'acct-1',
+      utilization: { five_hour: { utilization: 6, resets_at: resets, used_dollars: null } },
+    },
+  }));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/limits`);
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(await res.json(), {
+    fetchedAt: 123,
+    limits: [{ key: 'five_hour', label: 'Current session', percent: 6, resetsAt: Date.parse(resets) }],
+  });
+});
+
+test('GET /api/limits returns null when there is no usage cache', async (t) => {
+  delete process.env.CLAUDE_JSON;
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/limits`);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual(await res.json(), null);
+});

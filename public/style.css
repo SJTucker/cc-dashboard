@@ -761,3 +761,20 @@ html, body {
 /* The setup changes panels load on their own schedule (Task 2), and the banner
    carries errors, so neither dims with the range-dependent content. */
 main[aria-busy="true"] > :not(#statusBanner):not(#sessionStartPanel):not(#beforeAfterPanel) { opacity: 0.5; }
+
+/* ---------- Plan usage ---------- */
+
+/* Laid out like Claude Code's /usage screen: the label on its own line, the bar
+   with its percentage beside it, the reset time underneath. */
+.limit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name name" "track pct" "reset reset";
+  column-gap: 12px;
+  row-gap: 2px;
+  padding: 4px 0 8px;
+}
+.limit-name { grid-area: name; font-size: 12px; color: var(--text-primary); }
+.limit-row .usage-track { grid-area: track; align-self: center; }
+.limit-pct { grid-area: pct; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.limit-reset { grid-area: reset; font-size: 11px; color: var(--text-tertiary); }
