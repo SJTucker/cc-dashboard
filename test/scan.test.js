@@ -415,6 +415,59 @@ test('cache writes count when only the 5m/1h split is present', async () => {
   assert.strictEqual(data.summary.totalTokens, 1e6, 'so cost and tokens agree');
 });
 
+test('a split-only cache write counts toward the 150k context split', async () => {
+  const base = makeFixture();
+  writeSession(base, 'split-context', [
+    JSON.stringify({
+      timestamp: atHourToday(12).toISOString(),
+      requestId: 'req-sc',
+      message: {
+        id: 'msg-sc',
+        model: 'claude-opus-5',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation: { ephemeral_5m_input_tokens: 3e5, ephemeral_1h_input_tokens: 0 },
+        },
+      },
+    }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  // 300k of 5m cache writes on Opus 5: 0.3 MTok x $5 x 1.25 = $1.875.
+  assert.ok(Math.abs(data.context.over - 1.875) < 1e-9, 'the call is over 150k');
+  assert.strictEqual(data.context.under, 0);
+});
+
+test('cost and token totals agree when the flat total and the split disagree', async () => {
+  const base = makeFixture();
+  writeSession(base, 'disagree', [
+    JSON.stringify({
+      timestamp: atHourToday(12).toISOString(),
+      requestId: 'req-dis',
+      message: {
+        id: 'msg-dis',
+        model: 'claude-opus-5',
+        usage: {
+          input_tokens: 0,
+          output_tokens: 0,
+          cache_creation_input_tokens: 999,
+          cache_creation: { ephemeral_5m_input_tokens: 100, ephemeral_1h_input_tokens: 0 },
+        },
+      },
+    }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+
+  // 100 tokens of 5m writes on Opus 5: 100 x $5 x 1.25 / 1e6.
+  assert.strictEqual(data.summary.totalCacheCreate, 100, 'the split wins, as it does for cost');
+  assert.ok(Math.abs(data.summary.totalCost - 0.000625) < 1e-12);
+});
+
 test('a tool_use block with no id is counted once across duplicate lines', async () => {
   const base = makeFixture();
   const line = JSON.stringify({

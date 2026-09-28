@@ -163,3 +163,38 @@ test('a release date is not read as a minor version', () => {
   assert.strictEqual(shortModelLabel('claude-opus-4-1-20250805'), 'Opus 4.1');
   assert.strictEqual(shortModelLabel('claude-opus-4-6-20260315'), 'Opus 4.6');
 });
+
+const { cacheWriteTokens } = require('../lib/pricing');
+
+test('cacheWriteTokens reads the 5m/1h split when present', () => {
+  assert.deepStrictEqual(
+    cacheWriteTokens({ cache_creation: { ephemeral_5m_input_tokens: 300, ephemeral_1h_input_tokens: 200 } }),
+    { write5m: 300, write1h: 200, total: 500 }
+  );
+});
+
+test('cacheWriteTokens falls back to the flat total as 5-minute writes', () => {
+  assert.deepStrictEqual(cacheWriteTokens({ cache_creation_input_tokens: 700 }), { write5m: 700, write1h: 0, total: 700 });
+  // A split that is present but all zero is treated as absent.
+  assert.deepStrictEqual(
+    cacheWriteTokens({
+      cache_creation_input_tokens: 700,
+      cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 0 },
+    }),
+    { write5m: 700, write1h: 0, total: 700 }
+  );
+});
+
+test('cacheWriteTokens prefers the split when it disagrees with the flat total', () => {
+  assert.deepStrictEqual(
+    cacheWriteTokens({
+      cache_creation_input_tokens: 999,
+      cache_creation: { ephemeral_5m_input_tokens: 100, ephemeral_1h_input_tokens: 0 },
+    }),
+    { write5m: 100, write1h: 0, total: 100 }
+  );
+});
+
+test('cacheWriteTokens returns zeros for a record with no cache writes', () => {
+  assert.deepStrictEqual(cacheWriteTokens({ input_tokens: 5 }), { write5m: 0, write1h: 0, total: 0 });
+});
