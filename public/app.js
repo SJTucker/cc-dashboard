@@ -1865,6 +1865,12 @@ function placeSummaryCards() {
   cards.classList.toggle('cards-compact', today);
   // Hidden off Today, so the empty slot cannot wrap onto a line of its own.
   document.getElementById('headerCards').hidden = !today;
+  // loadAndRender hides these two on Today too, but only once the load finishes.
+  // Hiding them here keeps the old range's values out of the header meanwhile.
+  if (today) {
+    document.getElementById('burnCard').hidden = true;
+    document.getElementById('projectionCard').hidden = true;
+  }
 }
 
 async function loadAndRender({ busy = false } = {}) {

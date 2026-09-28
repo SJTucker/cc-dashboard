@@ -85,7 +85,7 @@ html, body {
 /* Holds #summaryCards on Today (see placeSummaryCards in app.js). Its flex basis
    makes the cards wrap onto their own line when the controls row runs out of
    width. placeSummaryCards hides it on other ranges. */
-.header-cards { flex: 1 1 560px; }
+.header-cards { flex: 1 1 700px; }
 
 .range-picker {
   display: flex;
@@ -201,14 +201,22 @@ html, body {
    unpriced-tokens warning and the record day's date stay visible. The other
    notes are hidden, and the static ones are title tooltips on their cards. */
 .cards.cards-compact {
-  display: flex;
-  flex-wrap: wrap;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
   margin-bottom: 0;
 }
 
+/* Fixed column counts keep the six cards in even rows (3 + 3, then 2 + 2 + 2)
+   instead of leaving one card alone on the last row. */
+@media (max-width: 760px) {
+  .cards.cards-compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 480px) {
+  .cards.cards-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+
 .cards-compact .card {
-  flex: 1 1 110px;
   padding: 6px 12px;
   gap: 1px;
 }
