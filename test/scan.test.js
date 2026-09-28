@@ -568,6 +568,29 @@ test('reportedCost takes the highest cost-state per session and only on an all-t
   assert.strictEqual(all.summary.apiCalls, 3);
 });
 
+test('a session with only a cost-state line counts in the reported-sessions denominator', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  // modelLine gives this line sessionId 'session-u1'.
+  writeSession(base, 'one', [
+    modelLine(iso, { id: 'u1', model: 'claude-sonnet-4-6-20260115', input: 100 }),
+    costStateLine(iso, { sessionId: 'session-u1', cost: 1 }),
+  ]);
+  // Interrupted before any response logged usage: a cost-state line and nothing else.
+  writeSession(base, 'ghost', [costStateLine(iso, { sessionId: 'ghost', cost: 3.5 })]);
+
+  const { scanUsage } = loadScan(base);
+
+  const all = await scanUsage({ days: null });
+  assert.strictEqual(all.summary.sessions, 1);
+  assert.strictEqual(all.summary.reportedSessions, 2);
+  assert.strictEqual(all.summary.reportedSessionsOf, 2, 'never smaller than reportedSessions');
+  assert.strictEqual(all.summary.reportedCost, 4.5, "the ghost session's cost still counts");
+
+  const windowed = await scanUsage({ days: 7 });
+  assert.strictEqual(windowed.summary.reportedSessionsOf, null);
+});
+
 // A response's content blocks are written one per JSONL line, sharing message.id
 // and requestId. output_tokens grows across those lines as the response streams;
 // the other three fields carry their final value on every line.

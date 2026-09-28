@@ -1894,7 +1894,7 @@ async function loadAndRender({ busy = false } = {}) {
   if (s.reportedCost != null) {
     document.getElementById('cardReported').textContent = formatCost(s.reportedCost);
     document.getElementById('cardReportedNote').textContent =
-      `over ${s.reportedSessions} of ${s.sessions} sessions \u2014 includes calls with no transcript line`;
+      `over ${s.reportedSessions} of ${s.reportedSessionsOf} sessions \u2014 includes calls with no transcript line`;
   }
   document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
   document.getElementById('cardSessions').textContent = s.sessions.toLocaleString('en-US');
