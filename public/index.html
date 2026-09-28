@@ -87,6 +87,31 @@
         <div id="limitsRows"></div>
       </section>
 
+      <section class="panel" id="attributionPanel" hidden>
+        <div class="panel-head">
+          <h2>Where usage goes</h2>
+          <span class="panel-note">share of total cost</span>
+        </div>
+        <div class="usage-grid">
+        <div class="usage-group">
+          <div class="usage-group-title">Main thread vs subagents</div>
+          <div id="threadBars"></div>
+        </div>
+        <div class="usage-group">
+          <div class="usage-group-title">Context size</div>
+          <div id="contextBars"></div>
+        </div>
+        <div class="usage-group">
+          <div class="usage-group-title">Skills <span class="usage-group-note">with subagents, one call can be in both, so the two do not sum to 100%</span></div>
+          <div id="skillBars"></div>
+        </div>
+        <div class="usage-group">
+          <div class="usage-group-title">Subagents</div>
+          <div id="subagentBars"></div>
+        </div>
+      </div>
+      </section>
+
       <div class="panel-row even">
         <section class="panel">
           <div class="panel-head">
@@ -192,31 +217,6 @@
             <div id="rtkDetailBars"></div>
           </div>
         </div>
-      </section>
-
-      <section class="panel" id="attributionPanel" hidden>
-        <div class="panel-head">
-          <h2>Where usage goes</h2>
-          <span class="panel-note">share of total cost</span>
-        </div>
-        <div class="usage-grid">
-        <div class="usage-group">
-          <div class="usage-group-title">Main thread vs subagents</div>
-          <div id="threadBars"></div>
-        </div>
-        <div class="usage-group">
-          <div class="usage-group-title">Context size</div>
-          <div id="contextBars"></div>
-        </div>
-        <div class="usage-group">
-          <div class="usage-group-title">Skills <span class="usage-group-note">with subagents, one call can be in both, so the two do not sum to 100%</span></div>
-          <div id="skillBars"></div>
-        </div>
-        <div class="usage-group">
-          <div class="usage-group-title">Subagents</div>
-          <div id="subagentBars"></div>
-        </div>
-      </div>
       </section>
 
       <div class="panel-row">
