@@ -654,7 +654,7 @@ html, body {
 .marker-line { stroke: var(--accent-cost); stroke-width: 1.5; }
 
 .marker-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-.marker-btn {
+.marker-btn, .marker-day-btn {
   font: inherit;
   font-size: 11px;
   color: var(--text-secondary);
@@ -667,9 +667,24 @@ html, body {
   align-items: center;
   gap: 6px;
 }
-.marker-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
+.marker-btn:hover, .marker-day-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
 .marker-btn[aria-pressed="true"] { color: var(--bg); background: var(--accent-cost); border-color: var(--accent-cost); }
-.marker-btn:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 2px; }
+.marker-btn:focus-visible, .marker-day-btn:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 2px; }
+
+/* An open day takes a full line, so its changes sit directly under it. The
+   arrow and the bold text mark state without relying on colour. */
+.marker-day.open { flex-basis: 100%; }
+.marker-day-btn::after { content: '▸'; }
+.marker-day-btn[aria-expanded="true"]::after { content: '▾'; }
+.marker-day-btn.has-selected { color: var(--text-primary); border-color: var(--accent-cost); font-weight: 600; }
+.marker-day-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 6px;
+  padding-left: 10px;
+  border-left: 1px solid var(--border);
+}
 
 .ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 860px) { .ba-grid { grid-template-columns: 1fr; } }

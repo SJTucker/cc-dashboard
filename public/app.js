@@ -1578,6 +1578,11 @@ function selectMarker(report, marker) {
   for (const btn of document.querySelectorAll('#markerList .marker-btn')) {
     btn.setAttribute('aria-pressed', String(btn.dataset.key === selectedMarkerKey));
   }
+  // A closed day still shows that it holds the selected change.
+  const day = marker ? localDateStr(new Date(marker.t)) : null;
+  for (const group of document.querySelectorAll('#markerList .marker-day')) {
+    group.querySelector('.marker-day-btn').classList.toggle('has-selected', group.dataset.day === day);
+  }
   drawBashChart(document.getElementById('bashDailyChart'), report, marker);
   renderBeforeAfter(report, marker);
 }
@@ -1589,6 +1594,43 @@ function renderChangesFileNote(file) {
   if (file.status === 'error') note.textContent = `Couldn't read all of ${file.path}: ${file.error}`;
   else if (file.status === 'missing') note.textContent = `Plugin installs and new models are marked on their own. Add anything else (CLAUDE.md edits, hooks, rtk config) to ${file.path} — the README shows the format.`;
   else note.hidden = true;
+}
+
+// Changes grouped by local day, in report order. One day often holds many
+// changes (17 on 9/28), and a flat list of every change pushed the comparison
+// off screen. A day only opens and closes; the changes inside pick the comparison,
+// because each change's before/after window is measured from its own time.
+function groupMarkersByDay(markers) {
+  const days = new Map();
+  for (const m of markers) {
+    const day = localDateStr(new Date(m.t));
+    if (!days.has(day)) days.set(day, []);
+    days.get(day).push(m);
+  }
+  return [...days].map(([day, items]) => ({ day, items }));
+}
+
+function markerDayGroup(report, { day, items }, open) {
+  const listId = `markerDay-${day}`;
+  const kinds = [...new Set(items.map((m) => m.kind))];
+  const toggle = el('button', { type: 'button', class: 'marker-day-btn', 'aria-controls': listId });
+  toggle.append(...kinds.map((k) => markerIcon(k)), `${shortDate(day)} · ${items.length} change${items.length > 1 ? 's' : ''}`);
+  const list = el('div', { class: 'marker-day-items', id: listId });
+  for (const m of items) {
+    const btn = el('button', { type: 'button', class: 'marker-btn', 'data-key': markerKey(m), 'aria-pressed': 'false' });
+    btn.append(markerIcon(m.kind), m.label);
+    btn.addEventListener('click', () => selectMarker(report, m));
+    list.appendChild(btn);
+  }
+  const group = el('div', { class: 'marker-day', 'data-day': day }, [toggle, list]);
+  const setOpen = (isOpen) => {
+    list.hidden = !isOpen;
+    toggle.setAttribute('aria-expanded', String(isOpen));
+    group.classList.toggle('open', isOpen);
+  };
+  toggle.addEventListener('click', () => setOpen(list.hidden));
+  setOpen(open);
+  return group;
 }
 
 function renderChanges(report) {
@@ -1605,14 +1647,13 @@ function renderChanges(report) {
     selectMarker(report, null);
     return;
   }
-  for (const m of report.markers) {
-    const btn = el('button', { type: 'button', class: 'marker-btn', 'data-key': markerKey(m), 'aria-pressed': 'false' });
-    btn.append(markerIcon(m.kind), `${shortDate(localDateStr(new Date(m.t)))} · ${m.label}`);
-    btn.addEventListener('click', () => selectMarker(report, m));
-    list.appendChild(btn);
+  const selected = report.markers.find((m) => markerKey(m) === selectedMarkerKey)
+    || report.markers[report.markers.length - 1];
+  const selectedDay = localDateStr(new Date(selected.t));
+  for (const group of groupMarkersByDay(report.markers)) {
+    list.appendChild(markerDayGroup(report, group, group.day === selectedDay));
   }
-  const kept = report.markers.find((m) => markerKey(m) === selectedMarkerKey);
-  selectMarker(report, kept || report.markers[report.markers.length - 1]);
+  selectMarker(report, selected);
 }
 
 const CHANGES_CHARTS = ['sessionStartChart', 'bashDailyChart'];
