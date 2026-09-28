@@ -44,13 +44,22 @@ app.use(express.static(path.join(__dirname, 'public')));
 const CACHE_TTL_MS = 60_000;
 const cache = new Map();
 
+// Caches the scan's promise, not just its result. Refresh on the All range fires
+// /api/summary?days=all and /api/changes together, both cold on the same key, and
+// without this each ran its own scan of the same files (measured 4.0s vs 2.2s for
+// the two combined). The promise is cached before the await so the second request
+// finds it already in the map, and evicted on rejection so the next request retries
+// instead of replaying the same failure until the entry expires.
 async function getCached(days) {
   const key = String(days);
   const hit = cache.get(key);
   if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.data;
-  const data = await scanUsage({ days });
-  cache.set(key, { data, ts: Date.now() });
-  return data;
+  const promise = scanUsage({ days }).catch((err) => {
+    cache.delete(key);
+    throw err;
+  });
+  cache.set(key, { data: promise, ts: Date.now() });
+  return promise;
 }
 
 // The per-call records feed /api/changes only. Sent here they would add a few

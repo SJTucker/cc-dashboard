@@ -177,6 +177,50 @@ test('GET /api/summary does not send the per-call efficiency records', async (t)
   }
 });
 
+test('two concurrent cold requests for the same range call scanUsage once', async (t) => {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-inflight-'));
+  const dir = path.join(base, 'projects', 'demo');
+  fs.mkdirSync(dir, { recursive: true });
+  const line = JSON.stringify({
+    timestamp: new Date().toISOString(),
+    requestId: 'req-1',
+    message: { id: 'msg-1', model: 'claude-sonnet-4-6-20260115', usage: { input_tokens: 100, output_tokens: 20 } },
+  });
+  fs.writeFileSync(path.join(dir, 'session.jsonl'), line + '\n');
+
+  process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
+  process.env.CLAUDE_CONFIG_DIR = base;
+  process.env.PORT = '0';
+  delete require.cache[require.resolve('../lib/scan')];
+  const scanModule = require('../lib/scan');
+  let calls = 0;
+  const realScanUsage = scanModule.scanUsage;
+  // A spy on the real scan, not a fake result: the point is counting runs, and the
+  // response still has to be the genuine scan output for the assertions to mean
+  // anything. There is no seam to count invocations through the HTTP API alone,
+  // since a cache hit and a shared in-flight promise return the same response shape.
+  scanModule.scanUsage = (...args) => {
+    calls += 1;
+    return realScanUsage(...args);
+  };
+  delete require.cache[require.resolve('../server')];
+  const server = require('../server');
+  t.after(() => {
+    scanModule.scanUsage = realScanUsage;
+    server.close();
+  });
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const port = server.address().port;
+  const [a, b] = await Promise.all([
+    fetch(`http://127.0.0.1:${port}/api/summary?days=30`),
+    fetch(`http://127.0.0.1:${port}/api/summary?days=30`),
+  ]);
+  assert.strictEqual(a.status, 200);
+  assert.strictEqual(b.status, 200);
+  assert.strictEqual(calls, 1, 'the second cold request awaited the first scan instead of starting its own');
+});
+
 // A fixture with one session that starts on Sep 1 and one on Sep 10, and a
 // changes.json marker on Sep 5 between them.
 function startChangesServer({ changes, plugins } = {}) {
