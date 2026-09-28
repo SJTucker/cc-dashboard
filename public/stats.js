@@ -2,7 +2,8 @@
 
 // Loaded two ways, so the server and the browser compute the same numbers:
 // index.html loads it as a script before app.js, which makes these functions
-// globals, and lib/efficiency.js loads it with require().
+// globals, and lib/efficiency.js loads it with require(). server.js's
+// /api/records route also requires it directly.
 
 function median(values) {
   if (!values.length) return null;
@@ -19,4 +20,23 @@ function percentile(values, p) {
   return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
 }
 
-if (typeof module === 'object') module.exports = { median, percentile };
+// The busiest calendar day across a `daily` array. Entries keyed by hour
+// (`YYYY-MM-DDTHH`, used for the Today range) are summed into their day first,
+// so a caller never has to know whether it is looking at hourly or daily
+// buckets. Returns null for an empty array or when every day has 0 tokens.
+function busiestDay(daily) {
+  const totals = new Map(); // date -> tokens
+  for (const entry of daily) {
+    const date = entry.date.slice(0, 10);
+    const tokens = entry.input + entry.output + entry.cacheCreate + entry.cacheRead;
+    totals.set(date, (totals.get(date) || 0) + tokens);
+  }
+  let best = null;
+  for (const [date, tokens] of totals) {
+    if (tokens <= 0) continue;
+    if (!best || tokens > best.tokens || (tokens === best.tokens && date < best.date)) best = { date, tokens };
+  }
+  return best;
+}
+
+if (typeof module === 'object') module.exports = { median, percentile, busiestDay };

@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { localDateStr } = require('../lib/scan');
 
 // Boot the real Express app on an ephemeral port against a fixture log directory.
 // CLAUDE_CONFIG_DIR has to be set before server.js is required, because
@@ -325,6 +326,18 @@ test('GET /api/limits returns null when there is no usage cache', async (t) => {
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/limits`);
   assert.strictEqual(res.status, 200);
   assert.strictEqual(await res.json(), null);
+});
+
+test('GET /api/records returns the all-time busiest day', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/records`);
+  const data = await res.json();
+
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(data, { allTime: { date: localDateStr(new Date()), tokens: 1200 } });
 });
 
 test('GET /stats.js serves the shared statistics helpers', async (t) => {

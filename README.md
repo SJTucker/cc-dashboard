@@ -174,7 +174,7 @@ boundary back.
 ## File layout
 
 ```
-server.js          Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes and /api/limits
+server.js          Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits and /api/records
 lib/scan.js         Walks ~/.claude/projects, parses JSONL, aggregates by day and model
 lib/rtk.js          Reads rtk's history.db read-only, aggregates by day and command
 lib/efficiency.js   Session start, Bash result and per-prompt statistics per time window
@@ -185,7 +185,7 @@ lib/net-guard.js    Host-header check + security headers
 bin/record-limits   Reads statusLine JSON from stdin, writes it to the rate-limits file via lib/limits.js
 public/index.html   Page shell
 public/style.css    All styling
-public/app.js        Fetches /api/summary, /api/rtk, /api/limits and /api/changes, draws the SVG charts, no dependencies
+public/app.js        Fetches /api/summary, /api/rtk, /api/limits, /api/changes and /api/records, draws the SVG charts, no dependencies
 ```
 
 ## Extending it

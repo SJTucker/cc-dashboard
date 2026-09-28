@@ -1160,6 +1160,61 @@ function renderLimitsBanner(limits) {
   );
 }
 
+// The Record day card's all-time value. Fetched once on load and once on
+// Refresh, not on the 5s live poll or a range switch: /api/records shares the
+// days=all cache with /api/summary and /api/changes, so polling it on every
+// tick would buy nothing while the cache is warm and force a scan when it
+// isn't. A failure resolves to null, same as requestLimits.
+function requestRecords() {
+  return fetch('/api/records').then((res) => res.json()).catch(() => null);
+}
+
+// Kept so /api/records resolving after the first render can redraw the card
+// with the same daily data the last summary produced.
+let lastRecordDaily = null;
+let recordsData = null;
+
+function refreshRecords() {
+  requestRecords().then((data) => {
+    recordsData = data;
+    if (lastRecordDaily) renderRecord(lastRecordDaily);
+  });
+}
+
+// The value and date line show the all-time record. The note shows the record
+// within the range on screen. Today's total grows on every live poll, and the
+// range's scan can be newer than the cached all-time scan behind /api/records.
+// So either one is shown as the all-time record when it is bigger.
+function renderRecord(daily) {
+  lastRecordDaily = daily;
+
+  const todayStr = localDateStr(new Date());
+  const todayTotal = daily
+    .filter((d) => d.date.slice(0, 10) === todayStr)
+    .reduce((sum, d) => sum + d.input + d.output + d.cacheCreate + d.cacheRead, 0);
+  const rangeRecord = busiestDay(daily);
+
+  let shownAllTime = recordsData && recordsData.allTime;
+  if (shownAllTime) {
+    if (todayTotal > shownAllTime.tokens) shownAllTime = { date: todayStr, tokens: todayTotal };
+    if (rangeRecord && rangeRecord.tokens > shownAllTime.tokens) shownAllTime = rangeRecord;
+  }
+
+  document.getElementById('cardRecord').textContent = shownAllTime ? formatTokens(shownAllTime.tokens) : '—';
+  document.getElementById('cardRecordDate').textContent =
+    shownAllTime ? `${shortDate(shownAllTime.date)} · all time` : '';
+
+  let note = '';
+  if (currentDays === 'today') {
+    note = `today so far: ${formatTokens(todayTotal)}`;
+  } else if (rangeRecord) {
+    note = shownAllTime && rangeRecord.date === shownAllTime.date
+      ? 'this range holds the record'
+      : `this range: ${formatTokens(rangeRecord.tokens)} · ${shortDate(rangeRecord.date)}`;
+  }
+  document.getElementById('cardRecordNote').textContent = note;
+}
+
 function renderRtk(rtk) {
   const live = Boolean(rtk && rtk.meta.dbExists);
 
@@ -1877,8 +1932,8 @@ async function loadAndRender({ busy = false } = {}) {
       `over ${s.reportedSessions} of ${s.reportedSessionsOf} sessions \u2014 includes calls with no transcript line`;
   }
   document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
-  document.getElementById('cardSessions').textContent = s.sessions.toLocaleString('en-US');
   document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');
+  renderRecord(data.daily);
 
   drawBarChart(document.getElementById('costChart'), data.daily, {
     color: 'var(--accent-cost)',
@@ -1980,6 +2035,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
   // its failed summary request is what clears busy and shows the error banner.
   await fetch('/api/refresh', { method: 'POST' }).catch(() => {});
   lastSignature = null;
+  refreshRecords();
   loadAndRender({ busy: true });
   loadChanges();
 });
@@ -1998,6 +2054,7 @@ window.addEventListener('resize', () => {
 
 setupCollapsibleRows();
 setLive(currentDays === 'today');
+refreshRecords();
 loadAndRender({ busy: true });
 loadChanges();
 

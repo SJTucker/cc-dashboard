@@ -9,6 +9,7 @@ const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits } = require('./lib/limits');
+const { busiestDay } = require('./public/stats');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -153,6 +154,18 @@ app.get('/api/changes', async (req, res) => {
   } catch (err) {
     console.error('[API] /api/changes failed:', err);
     res.status(500).json({ error: 'Failed to build the setup changes report', detail: err.message });
+  }
+});
+
+// The Record day card's all-time value. It uses the days=all cache entry that
+// /api/summary and /api/changes also use, so the three share one scan.
+app.get('/api/records', async (req, res) => {
+  try {
+    const data = await getCached(null);
+    res.json({ allTime: busiestDay(data.daily) });
+  } catch (err) {
+    console.error('[API] /api/records failed:', err);
+    res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
   }
 });
 
