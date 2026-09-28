@@ -3,3 +3,4 @@ node_modules/
 .superpowers/
 .claude/handoffs/
 docs/superpowers/
+changes.json
