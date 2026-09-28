@@ -1217,6 +1217,14 @@ function medianOf(values) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
 }
 
+// Nearest-rank, mirroring percentile() in lib/efficiency.js: always a value that
+// occurred.
+function percentileOf(values, p) {
+  if (!values.length) return null;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
+}
+
 // Local midnight on the Monday of t's week.
 function weekStart(t) {
   const d = new Date(t);
@@ -1293,6 +1301,13 @@ function drawWeeklyMedian(svg, sessions, domain, xOf, yOf) {
   svg.appendChild(svgEl('path', { class: 'step-line', d }));
 }
 
+// Real value stays in the tooltip even for a dot clamped to the top edge below -
+// only its position is capped at the 95th-percentile axis max, not the number shown.
+function sessionTooltip(s, max) {
+  const offScale = s.context > max ? ' (off the top of the scale)' : '';
+  return `<strong>${escapeHtml(markerDate(s.t))}</strong><br>${formatTokens(s.context)} tokens at the first call${offScale}<br>${escapeHtml(s.model || 'unknown model')}`;
+}
+
 function drawSessionStartChart(container, report) {
   hideTooltip();
   container.innerHTML = '';
@@ -1321,8 +1336,12 @@ function drawSessionStartChart(container, report) {
   const height = railTop + rows * 13;
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, height, class: 'changes-chart' });
-  const max = drawYAxis(svg, Math.max(...sessions.map((s) => s.context)), width, axisTokens);
-  const yOf = (v) => plotHeight - (v / max) * plotHeight;
+  // The 95th percentile, not the max: one outlier session (a 260,620-token session
+  // measured against a typical 38k-52k) otherwise sets the axis top and squashes
+  // every ordinary session into the bottom slice of the plot. A dot above the
+  // percentile still draws, clamped to the top edge by yOf below.
+  const max = drawYAxis(svg, percentileOf(sessions.map((s) => s.context), 95), width, axisTokens);
+  const yOf = (v) => plotHeight - (Math.min(v, max) / max) * plotHeight;
   svg.appendChild(svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)' }));
   drawTimeAxis(svg, domain, xOf);
 
@@ -1334,7 +1353,7 @@ function drawSessionStartChart(container, report) {
   const shapes = modelShapes(sessions);
   for (const s of sessions) {
     const dot = sessionDot(shapes.get(s.model), xOf(s.t), yOf(s.context));
-    svg.appendChild(withTooltip(dot, `<strong>${escapeHtml(markerDate(s.t))}</strong><br>${formatTokens(s.context)} tokens at the first call<br>${escapeHtml(s.model || 'unknown model')}`));
+    svg.appendChild(withTooltip(dot, sessionTooltip(s, max)));
   }
   drawWeeklyMedian(svg, sessions, domain, xOf, yOf);
   container.appendChild(svg);
