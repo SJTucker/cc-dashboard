@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 
-const { getRtkDbPath, readRtkUsage } = require('../lib/rtk');
+const { getRtkDbPath, readRtkUsage, readRtkWindows } = require('../lib/rtk');
 
 // Build a throwaway database with rtk's exact schema. Timestamps are written as
 // UTC ISO strings with an explicit +00:00 offset, matching what rtk stores.
@@ -284,4 +284,38 @@ test('the Today range gets a full-day hour axis, not just the hours with rows', 
 
   if (prev === undefined) delete process.env.RTK_DB;
   else process.env.RTK_DB = prev;
+});
+
+test('readRtkWindows returns one entry per range, exact to the second at the boundary', () => {
+  const prev = process.env.RTK_DB;
+  const t = new Date('2026-09-04T16:15:00Z').getTime();
+  try {
+    process.env.RTK_DB = makeDb([
+      { timestamp: utcStamp(new Date(t - 60_000)), input_tokens: 1000, saved_tokens: 600 },
+      { timestamp: utcStamp(new Date(t)), input_tokens: 1000, saved_tokens: 900 }, // exactly at t: after
+      { timestamp: utcStamp(new Date(t + 60_000)), input_tokens: 500, saved_tokens: 400 },
+    ]);
+    const [before, after, empty] = readRtkWindows([[t - 3_600_000, t], [t, t + 3_600_000], [0, 1000]]);
+    assert.deepStrictEqual(before, { commands: 1, keptPerCommand: 400, filteredShare: 0.6 });
+    assert.deepStrictEqual(after, { commands: 2, keptPerCommand: 100, filteredShare: 1300 / 1500 });
+    assert.deepStrictEqual(empty, { commands: 0, keptPerCommand: null, filteredShare: null });
+  } finally {
+    if (prev === undefined) delete process.env.RTK_DB;
+    else process.env.RTK_DB = prev;
+  }
+});
+
+test('readRtkWindows returns null when the database is missing or not rtk', () => {
+  const prev = process.env.RTK_DB;
+  try {
+    process.env.RTK_DB = path.join(os.tmpdir(), 'no-such-rtk.db');
+    assert.strictEqual(readRtkWindows([[0, 1]]), null);
+    const junk = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rtk-')), 'junk.db');
+    fs.writeFileSync(junk, 'not a database');
+    process.env.RTK_DB = junk;
+    assert.strictEqual(readRtkWindows([[0, 1]]), null);
+  } finally {
+    if (prev === undefined) delete process.env.RTK_DB;
+    else process.env.RTK_DB = prev;
+  }
 });
