@@ -758,9 +758,10 @@ html, body {
   color: var(--text-secondary);
 }
 
-/* The setup changes panels load on their own schedule (Task 2), and the banner
-   carries errors, so neither dims with the range-dependent content. */
-main[aria-busy="true"] > :not(#statusBanner):not(#sessionStartPanel):not(#beforeAfterPanel) { opacity: 0.5; }
+/* The setup changes panels load on their own schedule (Task 2), and the two
+   banners carry errors and the limits warning, so none dims with the
+   range-dependent content. */
+main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStartPanel):not(#beforeAfterPanel) { opacity: 0.5; }
 
 /* ---------- Plan usage ---------- */
 
@@ -778,3 +779,6 @@ main[aria-busy="true"] > :not(#statusBanner):not(#sessionStartPanel):not(#before
 .limit-row .usage-track { grid-area: track; align-self: center; }
 .limit-pct { grid-area: pct; font-size: 12px; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .limit-reset { grid-area: reset; font-size: 11px; color: var(--text-tertiary); }
+
+/* The heading carries the warning in text, so it does not rely on the amber edge. */
+.limits-banner strong { display: block; color: var(--text-primary); }

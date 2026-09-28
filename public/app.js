@@ -1108,17 +1108,17 @@ function formatReset(ms) {
 // trusting cached bars after 60 minutes, so the panel says so past that age.
 const LIMITS_STALE_MS = 60 * 60 * 1000;
 
-// Plan usage describes right now, not a date range, so only Today asks for it.
-// Like rtk it is optional: a failure resolves to null and hides the panel.
+// Plan usage describes right now, not a date range. The panel shows only on
+// Today, and the 75% warning banner shows on every range. Like rtk it is
+// optional: a failure resolves to null and hides both.
 function requestLimits() {
-  if (currentDays !== 'today') return Promise.resolve(null);
   return fetch('/api/limits').then((res) => res.json()).catch(() => null);
 }
 
 function renderLimits(limits) {
   const panel = document.getElementById('limitsPanel');
-  panel.hidden = !limits;
-  if (!limits) return;
+  panel.hidden = !limits || currentDays !== 'today';
+  if (panel.hidden) return;
   const rows = document.getElementById('limitsRows');
   rows.replaceChildren();
   for (const limit of limits.limits) {
@@ -1137,6 +1137,24 @@ function renderLimits(limits) {
     ? ' — may be stale: Claude Code updates it while a session runs'
     : '';
   document.getElementById('limitsNote').textContent = `from Claude Code's usage cache, as of ${asOf} (${zone})${stale}`;
+}
+
+// Warn once either window reaches 75%, on every range. Within a window the percent
+// only rises, and readLimits() drops a window past its reset, so a stale cache
+// understates usage and never raises a false warning. The rounded percent is
+// compared so the banner agrees with the "N% used" the panel shows.
+const LIMIT_WARN_PERCENT = 75;
+
+function renderLimitsBanner(limits) {
+  const banner = document.getElementById('limitsBanner');
+  const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
+  banner.hidden = !high.length;
+  banner.replaceChildren(
+    el('strong', { text: 'Nearing your plan limit' }),
+    ...high.map((l) => el('div', {
+      text: `${l.label}: ${Math.round(l.percent)}% used${l.resetsAt == null ? '' : ` · ${formatReset(l.resetsAt)}`}`,
+    }))
+  );
 }
 
 function renderRtk(rtk) {
@@ -1736,6 +1754,7 @@ async function loadAndRender({ busy = false } = {}) {
   // this has to run on every settled response, even one the signature below
   // would otherwise treat as unchanged and skip.
   renderLimits(limits);
+  renderLimitsBanner(limits);
 
   const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
   if (signature === lastSignature) return;

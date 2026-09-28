@@ -65,6 +65,9 @@ Claude Code keeps its last usage fetch in `~/.claude.json`, or in
 `$CLAUDE_CONFIG_DIR/.claude.json` when that is set, and the dashboard reads that
 cache. It makes no request of its own.
 
+When either window reaches 75%, a warning banner at the top of the page shows on
+every range, with the percentage and the reset time.
+
 The cache is undocumented, so a Claude Code release may change it. When the cache
 is missing or in a shape the dashboard does not expect, the panel stays hidden.
 Claude Code only writes it for claude.ai subscription logins, and only while it
