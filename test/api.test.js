@@ -326,3 +326,14 @@ test('GET /api/limits returns null when there is no usage cache', async (t) => {
   assert.strictEqual(res.status, 200);
   assert.strictEqual(await res.json(), null);
 });
+
+test('GET /stats.js serves the shared statistics helpers', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/stats.js`);
+  assert.strictEqual(res.status, 200);
+  assert.match(res.headers.get('content-type'), /javascript/);
+  assert.match(await res.text(), /function percentile/);
+});

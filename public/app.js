@@ -1283,21 +1283,6 @@ function markerDate(t) {
   return new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
 
-function medianOf(values) {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  const mid = sorted.length >> 1;
-  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
-}
-
-// Nearest-rank, mirroring percentile() in lib/efficiency.js: always a value that
-// occurred.
-function percentileOf(values, p) {
-  if (!values.length) return null;
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.min(sorted.length - 1, Math.ceil((p / 100) * sorted.length) - 1)];
-}
-
 // Local midnight on the Monday of t's week.
 function weekStart(t) {
   const d = new Date(t);
@@ -1376,10 +1361,10 @@ function drawWeeklyMedian(svg, sessions, domain, xOf, yOf) {
   for (const [w, values] of [...weeks].sort((a, b) => a[0] - b[0])) {
     const x1 = xOf(Math.max(w, domain[0]));
     const x2 = xOf(Math.min(w + WEEK_MS, domain[1]));
-    const y = yOf(medianOf(values));
+    const y = yOf(median(values));
     d += `${d ? 'L' : 'M'}${x1},${y} L${x2},${y} `;
     const label = svgEl('text', { class: 'step-label', x: (x1 + x2) / 2, y: y - 6, 'text-anchor': 'middle' });
-    label.textContent = axisTokens(Math.round(medianOf(values)));
+    label.textContent = axisTokens(Math.round(median(values)));
     svg.appendChild(label);
   }
   svg.appendChild(svgEl('path', { class: 'step-line', d }));
@@ -1425,7 +1410,7 @@ function drawSessionStartChart(container, report) {
   // measured against a typical 38k-52k) otherwise sets the axis top and squashes
   // every ordinary session into the bottom slice of the plot. A dot above the
   // percentile still draws, clamped to the top edge by yOf below.
-  const max = drawYAxis(svg, percentileOf(sessions.map((s) => s.context), 95), width, axisTokens);
+  const max = drawYAxis(svg, percentile(sessions.map((s) => s.context), 95), width, axisTokens);
   const yOf = (v) => plotHeight - (Math.min(v, max) / max) * plotHeight;
   svg.appendChild(svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)' }));
   drawTimeAxis(svg, domain, xOf);

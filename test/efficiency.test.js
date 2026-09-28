@@ -109,3 +109,9 @@ test('buildReport attaches before/after windows and rtk entries in range order',
   assert.deepStrictEqual(report.changesFile, { path: '/x', status: 'missing' });
   assert.strictEqual(buildReport({ calls: [], prompts: [] }, markers, null, {}).markers[0].before.rtk, null);
 });
+
+test('the browser and the server share one median and percentile', () => {
+  const stats = require('../public/stats');
+  assert.strictEqual(median, stats.median);
+  assert.strictEqual(percentile, stats.percentile);
+});
