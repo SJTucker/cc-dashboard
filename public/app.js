@@ -1104,8 +1104,10 @@ function formatReset(ms) {
   return `Resets ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${time}`;
 }
 
-// Claude Code only refreshes its usage cache while it runs. /usage itself stops
-// trusting cached bars after 60 minutes, so the panel says so past that age.
+// The usage-cache source only refreshes while Claude Code runs, and /usage itself
+// stops trusting cached bars after 60 minutes, so the panel says so past that age.
+// The statusline source changes after every API response, so it only reaches this
+// age when no session has run for an hour. The same threshold applies to it.
 const LIMITS_STALE_MS = 60 * 60 * 1000;
 
 // Plan usage describes right now, not a date range. The panel shows only on
@@ -1136,7 +1138,8 @@ function renderLimits(limits) {
   const stale = Date.now() - limits.fetchedAt > LIMITS_STALE_MS
     ? ' — may be stale: Claude Code updates it while a session runs'
     : '';
-  document.getElementById('limitsNote').textContent = `from Claude Code's usage cache, as of ${asOf} (${zone})${stale}`;
+  const sourceLabel = limits.source === 'statusline' ? "Claude Code's statusline" : "Claude Code's usage cache";
+  document.getElementById('limitsNote').textContent = `from ${sourceLabel}, as of ${asOf} (${zone})${stale}`;
 }
 
 // Warn once either window reaches 75%, on every range. Within a window the percent

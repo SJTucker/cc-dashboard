@@ -312,6 +312,7 @@ test('GET /api/limits sends only the limits', async (t) => {
   assert.deepStrictEqual(await res.json(), {
     fetchedAt: 123,
     limits: [{ key: 'five_hour', label: 'Current session', percent: 6, resetsAt: Date.parse(resets) }],
+    source: 'usage-cache',
   });
 });
 

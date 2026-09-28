@@ -61,18 +61,50 @@ add one to the other.
 
 On the Today range, a panel shows the two limits from Claude Code's `/usage` screen:
 the current session (the 5-hour window) and the current week across all models.
-Claude Code keeps its last usage fetch in `~/.claude.json`, or in
-`$CLAUDE_CONFIG_DIR/.claude.json` when that is set, and the dashboard reads that
-cache. It makes no request of its own.
+The dashboard reads two possible sources and shows whichever was updated more
+recently. It makes no network request of its own.
+
+- **The usage cache.** Claude Code keeps its last `/usage` fetch in
+  `~/.claude.json`, or in `$CLAUDE_CONFIG_DIR/.claude.json` when that is set.
+  This file only updates when someone runs `/usage`, so between sessions it goes
+  stale.
+- **The statusline.** Claude Code's `statusLine` command receives a JSON object on
+  stdin, which includes `rate_limits` after the first API response of a session.
+  `bin/record-limits` reads that JSON from stdin and writes the rate limits to
+  `~/.claude/rate-limits.json`, or `$CLAUDE_CONFIG_DIR/rate-limits.json` when that
+  is set. Its numbers change after every API response in any running session.
+
+To feed the statusline source, add one line to your existing statusline script
+(the command `statusLine.command` in `~/.claude/settings.json` points at):
+
+```bash
+echo "$input" | ~/code/cc-dashboard/bin/record-limits
+```
+
+`record-limits` never writes to stdout or stderr and always exits 0, so adding it
+does not change what the statusline shows. Do not point `statusLine.command`
+straight at `record-limits`. It prints nothing, so the statusline would be blank.
+With no statusline script yet, a minimal one looks like this:
+
+```bash
+#!/bin/bash
+input=$(cat)
+echo "$input" | ~/code/cc-dashboard/bin/record-limits
+echo "$input" | jq -r '.model.display_name'
+```
 
 When either window reaches 75%, a warning banner at the top of the page shows on
 every range, with the percentage and the reset time.
 
-The cache is undocumented, so a Claude Code release may change it. When the cache
-is missing or in a shape the dashboard does not expect, the panel stays hidden.
-Claude Code only writes it for claude.ai subscription logins, and only while it
-runs, so the panel shows the time of the last update. Per-model weekly limits are
-left out. Read another file with `CLAUDE_JSON=~/path/.claude.json npm start`.
+Both sources are undocumented internal detail, so a Claude Code release may change
+either shape. When a source is missing, unreadable, or in a shape the dashboard
+does not expect, it is treated as absent, not an error; if both are absent, the
+panel stays hidden. The panel's note names which source it used. Claude Code only
+produces either source for claude.ai subscription logins, and only while it runs,
+so the panel shows the time of the last update. Per-model weekly limits are left
+out. Read the usage cache from another file with `CLAUDE_JSON=~/path/.claude.json
+npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.json
+npm start`.
 
 ## Setup changes
 
@@ -115,10 +147,13 @@ boundary back.
 
 ## What it does and doesn't do
 
-- **Read-only.** It only ever reads your `~/.claude/projects` folder, the plugin
-  list and `.claude.json` beside it, and `changes.json`, and opens rtk's
-  `history.db` with sqlite's `readOnly` flag. There is no file-write code path
-  anywhere in this project — grep for `writeFile` yourself and you won't find it.
+- **Read-only, except for one script.** The dashboard server only ever reads your
+  `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
+  `changes.json`, and `rate-limits.json`, and opens rtk's `history.db` with
+  sqlite's `readOnly` flag. The one write path in this project is
+  `bin/record-limits`, a separate script your own statusline pipes into (see
+  "Plan usage" above); it writes only `rate-limits.json`, and nothing under
+  `server.js` or `public/` calls it.
 - **No network calls.** Unlike some similar tools, this one does not fetch pricing
   from the internet, load a charting library from a CDN, or phone home in any way.
   The bar charts are hand-drawn SVG (see `public/app.js`). Pricing is a small
@@ -144,9 +179,10 @@ lib/scan.js         Walks ~/.claude/projects, parses JSONL, aggregates by day an
 lib/rtk.js          Reads rtk's history.db read-only, aggregates by day and command
 lib/efficiency.js   Session start, Bash result and per-prompt statistics per time window
 lib/changes.js      Setup change markers: plugin installs, new models, changes.json
-lib/limits.js       Plan usage limits from Claude Code's cache in .claude.json
+lib/limits.js       Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
 lib/pricing.js       Offline per-token price table + cost calculation
 lib/net-guard.js    Host-header check + security headers
+bin/record-limits   Reads statusLine JSON from stdin, writes it to the rate-limits file via lib/limits.js
 public/index.html   Page shell
 public/style.css    All styling
 public/app.js        Fetches /api/summary, /api/rtk, /api/limits and /api/changes, draws the SVG charts, no dependencies
