@@ -1582,18 +1582,51 @@ let lastSignature = null;
 // number, and a response is dropped unless its number is still the newest one.
 let requestSeq = 0;
 
+function spinnerNode() {
+  return el('span', { class: 'spinner', 'aria-hidden': 'true' });
+}
+
+// A range switch, Refresh or first load can take seconds (a cold 30d scan takes
+// ~1.9s, All longer), and the previous range's numbers stay on screen meanwhile.
+// Those loads mark the page busy, but only after 250ms, so a ~0.17s Today load
+// never flashes a spinner. The status element stays in the DOM so screen readers
+// track it as a live region.
+const BUSY_DELAY_MS = 250;
+let busyTimer = null;
+
+function setBusy(on) {
+  clearTimeout(busyTimer);
+  busyTimer = null;
+  const main = document.getElementById('app');
+  const status = document.getElementById('loadStatus');
+  if (!on) {
+    main.removeAttribute('aria-busy');
+    status.replaceChildren();
+    return;
+  }
+  busyTimer = setTimeout(() => {
+    main.setAttribute('aria-busy', 'true');
+    status.replaceChildren(spinnerNode(), document.createTextNode('Loading…'));
+  }, BUSY_DELAY_MS);
+}
+
 function setLive(on) {
   clearInterval(liveTimer);
-  liveTimer = on ? setInterval(loadAndRender, LIVE_POLL_MS) : null;
+  liveTimer = on ? setInterval(() => loadAndRender(), LIVE_POLL_MS) : null;
   document.getElementById('liveDot').classList.toggle('is-off', !on);
   // A live range re-scans every 5 seconds, so a manual refresh has nothing to do.
   document.getElementById('refreshBtn').hidden = on;
 }
 
-async function loadAndRender() {
+async function loadAndRender({ busy = false } = {}) {
   const banner = document.getElementById('statusBanner');
 
   const seq = ++requestSeq;
+
+  // Only user-started loads show the busy state. Whichever request is newest
+  // clears it when it settles, even a quiet poll, because an older busy request's
+  // response is dropped below and would never clear it.
+  if (busy) setBusy(true);
 
   // Both requests are issued before either is awaited, so the summary never waits
   // on the rtk read. Awaiting them in sequence put two optional panels on the
@@ -1615,6 +1648,7 @@ async function loadAndRender() {
     if (data.error) throw new Error(data.detail || data.error);
   } catch (err) {
     if (seq !== requestSeq) return;
+    setBusy(false);
     banner.hidden = false;
     banner.textContent = `Couldn't load usage data: ${err.message}`;
     lastSignature = null;
@@ -1622,6 +1656,7 @@ async function loadAndRender() {
   }
 
   if (seq !== requestSeq) return; // a newer request superseded this response
+  setBusy(false);
 
   const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
   if (signature === lastSignature) return;
@@ -1753,13 +1788,14 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   currentDays = value === 'all' || value === 'today' ? value : Number(value);
   lastSignature = null; // the bucket keys change, so force a redraw
   setLive(currentDays === 'today');
-  loadAndRender();
+  loadAndRender({ busy: true });
 });
 
 document.getElementById('refreshBtn').addEventListener('click', async () => {
+  setBusy(true);
   await fetch('/api/refresh', { method: 'POST' });
   lastSignature = null;
-  loadAndRender();
+  loadAndRender({ busy: true });
   loadChanges();
 });
 
@@ -1774,7 +1810,7 @@ window.addEventListener('resize', () => {
 });
 
 setLive(currentDays === 'today');
-loadAndRender();
+loadAndRender({ busy: true });
 loadChanges();
 
 // #endregion
