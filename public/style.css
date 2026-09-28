@@ -797,3 +797,23 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
 
 /* The heading carries the warning in text, so it does not rely on the amber edge. */
 .limits-banner strong { display: block; color: var(--text-primary); }
+
+/* ---------- Collapsible rows ---------- */
+
+.row-toggle {
+  font: inherit;
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  padding: 0 6px 0 0;
+  cursor: pointer;
+}
+.row-toggle::before { content: '▾'; }
+.row-toggle[aria-expanded="false"]::before { content: '▸'; }
+.row-toggle:hover { color: var(--text-primary); }
+.row-toggle:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 2px; }
+
+/* A collapsed row keeps only its headings. */
+.panel.row-collapsed > :not(.panel-head),
+.panel-row.row-collapsed > .panel > :not(.panel-head) { display: none; }
+.row-collapsed .panel-head { margin-bottom: 0; }

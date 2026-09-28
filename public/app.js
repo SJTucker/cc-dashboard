@@ -1696,6 +1696,59 @@ async function loadChanges() {
 
 // #endregion
 
+// #region collapsible rows
+
+// Each visual row of panels collapses to its headings. A two-panel row collapses
+// as one, and a full-width panel is a row of its own. Collapsed rows are kept in
+// localStorage, keyed by the first panel's heading, so the page reopens as it was
+// left. Storage can throw (a private window, blocked site data), and then every
+// row starts expanded.
+const COLLAPSED_ROWS_KEY = 'cc-dashboard:collapsed-rows';
+
+function loadCollapsedRows() {
+  try {
+    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_ROWS_KEY)) || []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsedRows(keys) {
+  try {
+    localStorage.setItem(COLLAPSED_ROWS_KEY, JSON.stringify([...keys]));
+  } catch {
+    // Not saved. The row still toggles for this page view.
+  }
+}
+
+function setupCollapsibleRows() {
+  const collapsed = loadCollapsedRows();
+  for (const row of document.querySelectorAll('#app > .panel-row, #app > .panel')) {
+    const headings = [...row.querySelectorAll('.panel-head h2')];
+    const key = headings[0].textContent;
+    const names = headings.map((h) => h.textContent).join(' and ');
+    const toggle = el('button', { type: 'button', class: 'row-toggle' });
+    const setCollapsed = (isCollapsed) => {
+      row.classList.toggle('row-collapsed', isCollapsed);
+      toggle.setAttribute('aria-expanded', String(!isCollapsed));
+      toggle.setAttribute('aria-label', `${isCollapsed ? 'Expand' : 'Collapse'} ${names}`);
+    };
+    toggle.addEventListener('click', () => {
+      const isCollapsed = !row.classList.contains('row-collapsed');
+      setCollapsed(isCollapsed);
+      if (isCollapsed) collapsed.add(key);
+      else collapsed.delete(key);
+      saveCollapsedRows(collapsed);
+      // A chart drawn while hidden has the 200px fallback width.
+      if (!isCollapsed) redrawCharts();
+    });
+    headings[0].prepend(toggle);
+    setCollapsed(collapsed.has(key));
+  }
+}
+
+// #endregion
+
 // #region app state + rendering
 
 let currentDays = 'today';
@@ -1937,16 +1990,19 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
   loadChanges();
 });
 
+function redrawCharts() {
+  lastSignature = null; // the width changed, so the same data still needs redrawing
+  loadAndRender();
+  if (changesReport) renderChanges(changesReport);
+}
+
 window.addEventListener('resize', () => {
   // Redraw charts on resize so the SVG bars stay full-width (debounced lightly).
   clearTimeout(window.__resizeTimer);
-  window.__resizeTimer = setTimeout(() => {
-    lastSignature = null; // width changed, so the same data still needs redrawing
-    loadAndRender();
-    if (changesReport) renderChanges(changesReport);
-  }, 150);
+  window.__resizeTimer = setTimeout(redrawCharts, 150);
 });
 
+setupCollapsibleRows();
 setLive(currentDays === 'today');
 loadAndRender({ busy: true });
 loadChanges();
