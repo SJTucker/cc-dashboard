@@ -1931,14 +1931,22 @@ async function loadAndRender({ busy = false } = {}) {
 
   const s = data.summary;
   document.getElementById('cardCost').textContent = formatCost(s.totalCost);
-  document.getElementById('cardCostNote').textContent = s.unpricedTokens
+  // The compact header card on Today has room for a short note only, so there
+  // the full sentence moves to the note's tooltip.
+  const unpricedNote = s.unpricedTokens
     ? `${formatTokens(s.unpricedTokens)} tokens from unrecognized models not priced`
     : '';
+  const costNote = document.getElementById('cardCostNote');
+  const compact = currentDays === 'today';
+  costNote.textContent = compact && s.unpricedTokens
+    ? `${formatTokens(s.unpricedTokens)} unpriced`
+    : unpricedNote;
+  costNote.title = compact ? unpricedNote : '';
   document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
   document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
 
-  // Claude Code's own per-session counters, shown beside Total cost rather than
-  // folded into it. Only present on the all-time range, and only for the
+  // Claude Code's own per-session counters, shown as a separate card rather than
+  // folded into Total cost. Only present on the all-time range, and only for the
   // sessions that wrote a cost-state line, so it is a floor on what the
   // per-request scan misses, not a replacement total.
   const reportedCard = document.getElementById('reportedCard');
