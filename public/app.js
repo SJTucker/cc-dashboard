@@ -1416,17 +1416,19 @@ const RTK_ROWS = [
 ];
 
 // A share (cache hit, filtered) changes in percentage points; everything else as a
-// relative change. Under 5% (or 1 point) is shown dimmed with no arrow: the spike
-// measured day-to-day swings well above that on every row.
+// relative change. Either way, a change under 5% relative to the "before" value is
+// shown dimmed with no arrow, per spec: the spike measured day-to-day swings well
+// above that on every row. A zero "before" value has no relative change to compute,
+// so it falls back to the same dimmed dash as a missing before or after value.
 function changeCell(a, b, points) {
   const td = el('td', { class: 'num' });
-  if (a == null || b == null || (!points && a === 0)) {
+  if (a == null || b == null || a === 0) {
     td.textContent = '—';
     td.classList.add('dim');
     return td;
   }
   const diff = points ? (b - a) * 100 : ((b - a) / a) * 100;
-  const small = Math.abs(diff) < (points ? 1 : 5);
+  const small = Math.abs((b - a) / a) < 0.05;
   td.textContent = `${diff > 0 ? '+' : ''}${Math.round(diff)}${points ? ' pts' : '%'}`;
   td.classList.add(small ? 'dim' : diff < 0 ? 'down' : 'up');
   return td;
