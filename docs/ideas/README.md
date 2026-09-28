@@ -1,8 +1,11 @@
 # Ideas
 
 Future work for the dashboard, one file per idea. Each file records what was asked
-for, the decisions made so far, and the questions still open. When an idea ships,
-delete its file. The commit that built it is the record from then on.
+for, the decisions made so far, and the questions still open.
+
+**When an idea is complete, delete its file and its row in the table below, in the
+same change that finishes the work.** The commit that built it is the record from
+then on.
 
 | Idea | Status |
 |---|---|
