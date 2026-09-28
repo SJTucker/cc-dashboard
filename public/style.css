@@ -846,3 +846,12 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
    (see setupUsageGroupToggles in app.js). */
 .usage-group.group-collapsed > :not(.usage-group-title) { display: none; }
 .usage-group.group-collapsed .usage-group-title { margin-bottom: 0; }
+
+/* The list name sits inside its toggle, so clicking the name opens the list.
+   A button does not inherit the title's case or letter spacing on its own. */
+.group-toggle {
+  padding: 0;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+.group-toggle::before { margin-right: 6px; }
