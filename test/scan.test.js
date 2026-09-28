@@ -655,3 +655,70 @@ test('an errored tool_result is counted even when it lands in another file', asy
   assert.strictEqual(summary.toolErrors, 1);
   assert.deepStrictEqual(bash.details, [{ name: 'git', calls: 2, errors: 1 }]);
 });
+
+// A response line with the fields the efficiency records read. content holds the
+// block for this line: a response is one line per block, all sharing id/requestId.
+function effCallLine(iso, { id, sessionId = 's1', sidechain = false, model = 'claude-opus-5', input = 10, cacheRead = 0, cacheCreate = 0, output = 5, content = [] }) {
+  return JSON.stringify({
+    type: 'assistant',
+    timestamp: iso,
+    sessionId,
+    isSidechain: sidechain,
+    requestId: 'req-' + id,
+    message: {
+      id: 'msg-' + id,
+      model,
+      content,
+      usage: { input_tokens: input, output_tokens: output, cache_read_input_tokens: cacheRead, cache_creation_input_tokens: cacheCreate },
+    },
+  });
+}
+
+function promptLine(iso, { uuid, sessionId = 's1', content = 'do the thing', origin = { kind: 'human' }, promptSource = 'typed', isMeta } = {}) {
+  return JSON.stringify({ type: 'user', timestamp: iso, uuid, sessionId, isMeta, origin, promptSource, message: { role: 'user', content } });
+}
+
+test('efficiency.calls holds one record per response, with tool names from every line', async () => {
+  const base = makeFixture();
+  const t = new Date('2026-09-10T15:00:00Z');
+  writeSession(base, 'one', [
+    effCallLine(t.toISOString(), { id: 'a', input: 100, cacheRead: 1000, cacheCreate: 50, output: 5, content: [{ type: 'text', text: 'hi' }] }),
+    effCallLine(t.toISOString(), { id: 'a', input: 100, cacheRead: 1000, cacheCreate: 50, output: 80, content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'ls' } }] }),
+    effCallLine(new Date(t.getTime() + 1000).toISOString(), { id: 'b', sidechain: true, sessionId: 's1' }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: null });
+
+  assert.strictEqual(efficiency.calls.length, 2);
+  const a = efficiency.calls.find((c) => c.t === t.getTime());
+  assert.deepStrictEqual(a.tools, ['Bash'], 'the tool_use on the second line of the group is kept');
+  assert.strictEqual(a.output, 80, 'output comes from the last line of the group');
+  assert.strictEqual(a.context, 1150, 'context is input + cacheCreate + cacheRead');
+  assert.strictEqual(a.cacheRead, 1000);
+  assert.strictEqual(a.main, true);
+  assert.strictEqual(a.sessionId, 's1');
+  assert.strictEqual(a.model, 'claude-opus-5');
+  assert.strictEqual(efficiency.calls.find((c) => c.t !== t.getTime()).main, false);
+});
+
+test('efficiency.prompts keeps typed and queued prompts only, once per uuid', async () => {
+  const base = makeFixture();
+  const iso = (m) => new Date(Date.UTC(2026, 8, 10, 15, m)).toISOString();
+  const lines = [
+    promptLine(iso(0), { uuid: 'u1' }),
+    promptLine(iso(1), { uuid: 'u2', promptSource: 'queued' }),
+    promptLine(iso(2), { uuid: 'u3', isMeta: true }),
+    promptLine(iso(3), { uuid: 'u4', content: '<command-name>/handoff</command-name>' }),
+    promptLine(iso(4), { uuid: 'u5', origin: { kind: 'task-notification' } }),
+    promptLine(iso(5), { uuid: 'u6', origin: null }),
+    promptLine(iso(6), { uuid: 'u7', content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }] }),
+  ];
+  writeSession(base, 'one', lines);
+  writeSession(base, 'copy', [promptLine(iso(0), { uuid: 'u1' })]); // a resumed session copies history
+
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: null });
+
+  assert.deepStrictEqual(efficiency.prompts.map((p) => p.t).sort(), [Date.parse(iso(0)), Date.parse(iso(1))]);
+});

@@ -164,3 +164,15 @@ test('GET /api/rtk?days=today buckets by hour', async (t) => {
   // No fixture rows, so the assertion is on shape, not content.
   assert.ok(Array.isArray(data.daily));
 });
+
+test('GET /api/summary does not send the per-call efficiency records', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const port = server.address().port;
+
+  for (const days of ['today', '30']) {
+    const data = await (await fetch(`http://127.0.0.1:${port}/api/summary?days=${days}`)).json();
+    assert.strictEqual(data.efficiency, undefined, `days=${days} must not include efficiency`);
+  }
+});

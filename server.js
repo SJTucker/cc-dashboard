@@ -51,13 +51,19 @@ async function getCached(days) {
   return data;
 }
 
+// The per-call records feed /api/changes only. Sent here they would add a few
+// megabytes to every summary request, and to every 5s poll on the Today range.
+function publicSummary({ efficiency, ...rest }) {
+  return rest;
+}
+
 app.get('/api/summary', async (req, res) => {
   try {
     const raw = req.query.days;
     if (raw === 'today') {
       // A today-scan reads only files written since local midnight, which is fast
       // enough that caching it would only make the live poll show stale numbers.
-      res.json(await scanUsage({ days: 'today', bucket: 'hour' }));
+      res.json(publicSummary(await scanUsage({ days: 'today', bucket: 'hour' })));
       return;
     }
     // Number(raw) || 30 turned days=0 and days=abc into 30 without saying so,
@@ -74,7 +80,7 @@ app.get('/api/summary', async (req, res) => {
       days = n;
     }
     const data = await getCached(days);
-    res.json(data);
+    res.json(publicSummary(data));
   } catch (err) {
     console.error('[API] /api/summary failed:', err);
     res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
