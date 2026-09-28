@@ -76,7 +76,7 @@ test('windowStats on an empty window returns nulls', () => {
   const w = windowStats({ starts: [], deltas: [], prompts: [], calls: [] }, T0, T0 + WEEK_MS);
   assert.deepStrictEqual(w, {
     sessions: 0, sessionStart: null, bashN: 0, bashMedian: null, bashP90: null,
-    prompts: 0, costPerPrompt: null, callsPerPrompt: null, cacheHit: null,
+    prompts: 0, costPerPrompt: null, callsPerPrompt: null, callN: 0, cacheHit: null,
   });
 });
 
@@ -94,6 +94,7 @@ test('windowStats includes from and excludes to', () => {
   assert.strictEqual(w.costPerPrompt, 2);
   assert.strictEqual(w.callsPerPrompt, 3);
   assert.strictEqual(w.cacheHit, 0.75);
+  assert.strictEqual(w.callN, 1);
 });
 
 test('buildReport attaches before/after windows and rtk entries in range order', () => {

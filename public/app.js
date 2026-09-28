@@ -1348,7 +1348,7 @@ const BA_ROWS = [
   { name: 'Bash result, p90', key: 'bashP90', n: 'bashN', fmt: tokensCell },
   { name: 'Cost per prompt, median', key: 'costPerPrompt', n: 'prompts', fmt: formatCost },
   { name: 'API calls per prompt, median', key: 'callsPerPrompt', n: 'prompts', fmt: (v) => String(Math.round(v * 10) / 10) },
-  { name: 'Cache hit rate', key: 'cacheHit', n: null, fmt: formatPercent, points: true },
+  { name: 'Cache hit rate', key: 'cacheHit', n: 'callN', fmt: formatPercent, points: true },
 ];
 const RTK_ROWS = [
   { name: 'Tokens kept per command', key: 'keptPerCommand', n: 'commands', fmt: tokensCell },
