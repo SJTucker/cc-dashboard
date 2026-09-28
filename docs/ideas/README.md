@@ -14,6 +14,7 @@ then on.
 | [Live sessions panel](live-sessions-panel.md) | not started |
 | [Refresh prices button](refresh-prices.md) | not started |
 | [Daily share of the weekly limit](daily-weekly-budget.md) | not started |
+| [Record day: add the total cost](record-day-cost.md) | not started |
 
 Suggested order: the Where usage goes panel next, and the restyle last so the new
 layout is restyled once.
