@@ -1237,14 +1237,25 @@ function dayNoon(dateKey) {
   return new Date(`${dateKey}T12:00`).getTime();
 }
 
-// Both charts share one time axis so a marker sits at the same x in each.
+// Both charts share one time axis so a marker sits at the same x in each. Built
+// from sessions and bashDaily only, not markers: Claude Code deletes transcripts
+// after cleanupPeriodDays (30 by default), so history has a sliding start, and a
+// plugin or model marker from before the earliest surviving transcript would
+// stretch the axis with an empty strip on one side. Markers outside the resulting
+// domain are filtered out where each chart draws them (see markerInDomain below).
 function timeDomain(report) {
   const times = [
     ...report.sessions.map((s) => s.t),
-    ...report.markers.map((m) => m.t),
     ...report.bashDaily.map((d) => dayNoon(d.date)),
   ];
   return [Math.min(...times) - DAY_MS / 2, Math.max(...times) + DAY_MS / 2];
+}
+
+// True when a marker falls inside the time axis both charts share. A marker just
+// outside it (see timeDomain above) keeps its place in the marker button list but
+// draws no glyph, guide, line or shaded window on either chart.
+function markerInDomain(marker, domain) {
+  return Boolean(marker) && marker.t >= domain[0] && marker.t <= domain[1];
 }
 
 function timeScale(domain, width) {
@@ -1320,12 +1331,13 @@ function drawSessionStartChart(container, report) {
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
   const domain = timeDomain(report);
   const xOf = timeScale(domain, width);
+  const visibleMarkers = markers.filter((m) => markerInDomain(m, domain));
 
   // A glyph closer than 12px to the one before it stacks one row lower.
   let lastX = -Infinity;
   let row = 0;
   let rows = 1;
-  const placed = markers.map((m) => {
+  const placed = visibleMarkers.map((m) => {
     const x = xOf(m.t);
     row = x - lastX < 12 ? row + 1 : 0;
     lastX = x;
@@ -1366,7 +1378,7 @@ function drawSessionStartChart(container, report) {
     legend.appendChild(el('span', { class: 'legend-item' }, [icon, document.createTextNode(model || 'unknown model')]));
   }
   legend.appendChild(el('span', { class: 'legend-item' }, [el('span', { class: 'legend-line step-swatch' }), document.createTextNode('weekly median')]));
-  for (const kind of new Set(markers.map((m) => m.kind))) {
+  for (const kind of new Set(visibleMarkers.map((m) => m.kind))) {
     legend.appendChild(el('span', { class: 'legend-item' }, [markerIcon(kind), document.createTextNode(MARKER_KIND_NAMES[kind] || kind)]));
   }
 }
@@ -1389,7 +1401,11 @@ function drawBashChart(container, report, marker) {
   const yOf = (v) => plotHeight - (v / max) * plotHeight;
   const barWidth = Math.max(((width - CHART_PAD_LEFT) * DAY_MS) / (domain[1] - domain[0]) * 0.7, 2);
 
-  if (marker) {
+  // A marker outside the shared time axis (see timeDomain) has no "before" this
+  // chart's x-axis can place, so it draws no shaded window, line or bar coloring.
+  const showMarker = markerInDomain(marker, domain);
+
+  if (showMarker) {
     const b0 = clampX(xOf(marker.t - WEEK_MS));
     const mid = clampX(xOf(marker.t));
     const a1 = clampX(xOf(marker.t + WEEK_MS));
@@ -1400,13 +1416,13 @@ function drawBashChart(container, report, marker) {
   for (const d of days) {
     const t = dayNoon(d.date);
     let cls = 'bash-bar';
-    if (marker && t >= marker.t - WEEK_MS && t < marker.t + WEEK_MS) cls += t >= marker.t ? ' after' : ' before';
+    if (showMarker && t >= marker.t - WEEK_MS && t < marker.t + WEEK_MS) cls += t >= marker.t ? ' after' : ' before';
     const h = (d.median / max) * plotHeight;
     const rect = svgEl('rect', { class: cls, x: xOf(t) - barWidth / 2, y: plotHeight - h, width: barWidth, height: Math.max(h, 1), rx: 1 });
     svg.appendChild(withTooltip(rect, `<strong>${shortDate(d.date)}</strong><br>median ${formatTokens(Math.round(d.median))} tokens<br>${d.n} Bash calls`));
   }
 
-  if (marker) {
+  if (showMarker) {
     const line = (from, to, value, cls) => {
       if (value == null) return;
       svg.appendChild(svgEl('line', { class: `window-median ${cls}`, x1: clampX(xOf(from)), x2: clampX(xOf(to)), y1: yOf(value), y2: yOf(value) }));

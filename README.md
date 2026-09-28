@@ -89,6 +89,13 @@ file somewhere else with `CHANGES_FILE=~/path/changes.json npm start`.
 A before/after is only as clean as its window. When another change falls within 7
 days either side, the panel lists it, and the numbers cover both.
 
+Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default), so
+history has a sliding start rather than a fixed one. A before/after needs history on
+both sides of a change, so a change less than 7 days newer than your oldest surviving
+transcript has no "before" window to compare and gets no marker. Raising
+`cleanupPeriodDays` in `~/.claude/settings.json` keeps more history and pushes that
+boundary back.
+
 ## What it does and doesn't do
 
 - **Read-only.** It only ever calls `fs.readdirSync` / `fs.createReadStream` on your
