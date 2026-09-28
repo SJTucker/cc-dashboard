@@ -176,3 +176,73 @@ test('GET /api/summary does not send the per-call efficiency records', async (t)
     assert.strictEqual(data.efficiency, undefined, `days=${days} must not include efficiency`);
   }
 });
+
+// A fixture with one session that starts on Sep 1 and one on Sep 10, and a
+// changes.json marker on Sep 5 between them.
+function startChangesServer({ changes, plugins } = {}) {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-changes-api-'));
+  const dir = path.join(base, 'projects', 'demo');
+  fs.mkdirSync(dir, { recursive: true });
+  const line = (iso, id, sessionId, context) => JSON.stringify({
+    type: 'assistant', timestamp: iso, sessionId, requestId: 'req-' + id,
+    message: { id: 'msg-' + id, model: 'claude-opus-5', content: [], usage: { input_tokens: context, output_tokens: 10 } },
+  });
+  fs.writeFileSync(path.join(dir, 'a.jsonl'), [
+    line('2026-09-01T15:00:00Z', 'a', 's1', 40000),
+    line('2026-09-10T15:00:00Z', 'b', 's2', 50000),
+  ].join('\n') + '\n');
+  if (plugins) {
+    fs.mkdirSync(path.join(base, 'plugins'));
+    fs.writeFileSync(path.join(base, 'plugins', 'installed_plugins.json'), JSON.stringify(plugins));
+  }
+  const changesPath = path.join(base, 'changes.json');
+  if (changes) fs.writeFileSync(changesPath, JSON.stringify(changes));
+  process.env.CHANGES_FILE = changesPath;
+  process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
+  process.env.CLAUDE_CONFIG_DIR = base;
+  process.env.PORT = '0';
+  for (const mod of ['../lib/scan', '../lib/changes', '../lib/efficiency', '../server']) delete require.cache[require.resolve(mod)];
+  return { server: require('../server'), changesPath };
+}
+
+test('GET /api/changes returns sessions and before/after windows per marker', async (t) => {
+  const { server } = startChangesServer({ changes: [{ date: '2026-09-05T12:00', kind: 'skill', label: 'a skill' }] });
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/changes`);
+  const data = await res.json();
+
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(data.sessions.map((s) => s.context), [40000, 50000]);
+  assert.strictEqual(data.markers.length, 1);
+  const m = data.markers[0];
+  assert.strictEqual(m.label, 'a skill');
+  assert.strictEqual(m.before.sessionStart, 40000);
+  assert.strictEqual(m.after.sessionStart, 50000);
+  assert.strictEqual(m.before.rtk, null, 'no rtk database in the fixture');
+  assert.strictEqual(data.changesFile.status, 'ok');
+});
+
+test('GET /api/changes re-reads changes.json on every request', async (t) => {
+  const { server, changesPath } = startChangesServer({ changes: [] });
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const url = `http://127.0.0.1:${server.address().port}/api/changes`;
+
+  assert.strictEqual((await (await fetch(url)).json()).markers.length, 0);
+  fs.writeFileSync(changesPath, JSON.stringify([{ date: '2026-09-05T12:00', kind: 'hook', label: 'new hook' }]));
+  const second = await (await fetch(url)).json();
+  assert.deepStrictEqual(second.markers.map((m) => m.label), ['new hook'], 'the scan is cached, the marker file is not');
+});
+
+test('GET /api/changes works with no marker sources at all', async (t) => {
+  const { server } = startChangesServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/changes`);
+  const data = await res.json();
+
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(data.markers, []);
+  assert.strictEqual(data.changesFile.status, 'missing');
+});

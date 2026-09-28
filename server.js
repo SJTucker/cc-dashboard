@@ -4,8 +4,10 @@
 const express = require('express');
 const path = require('path');
 const { scanUsage, getProjectsDir } = require('./lib/scan');
-const { readRtkUsage } = require('./lib/rtk');
+const { readRtkUsage, readRtkWindows } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
+const { collectMarkers } = require('./lib/changes');
+const { buildReport, windowRanges } = require('./lib/efficiency');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -118,6 +120,22 @@ app.get('/api/rtk', (req, res) => {
   } catch (err) {
     console.error('[API] /api/rtk failed:', err);
     res.status(500).json({ error: 'Failed to read rtk history', detail: err.message });
+  }
+});
+
+// All history, whatever range the page shows: a before/after needs data on both
+// sides of a change. It reads the days=all cache entry, so it shares a scan with
+// the "all" range. The marker files are read on every request, so an edit to
+// changes.json shows on the next refresh instead of up to 60s later.
+app.get('/api/changes', async (req, res) => {
+  try {
+    const data = await getCached(null);
+    const { markers, changesFile } = collectMarkers(data.efficiency.calls);
+    const rtkWindows = readRtkWindows(windowRanges(markers));
+    res.json(buildReport(data.efficiency, markers, rtkWindows, changesFile));
+  } catch (err) {
+    console.error('[API] /api/changes failed:', err);
+    res.status(500).json({ error: 'Failed to build the setup changes report', detail: err.message });
   }
 });
 
