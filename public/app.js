@@ -1197,14 +1197,17 @@ function drawModelList(container, models) {
   const totalCost = models.reduce((sum, m) => sum + m.cost, 0);
   const rows = models
     .map((m) => {
+      // An unpriced model's cost is 0 because no rate is known. Showing $0.00,
+      // 0.0% or $0.00/MTok would read as a measured value.
+      const unpriced = !m.priced;
       const perMillion = m.tokens > 0 ? m.cost / (m.tokens / 1e6) : 0;
       const share = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
       return `<tr>
         <td class="model-name"><span class="swatch" style="${segmentTexture(m.family)}"></span>${escapeHtml(m.model)}</td>
         <td class="num">${formatTokens(m.tokens)}</td>
-        <td class="num cost-cell">${formatCost(m.cost)}</td>
-        <td class="num">${share.toFixed(1)}%</td>
-        <td class="num">${formatCost(perMillion)}</td>
+        <td class="num cost-cell">${unpriced ? 'unpriced' : formatCost(m.cost)}</td>
+        <td class="num">${unpriced ? '&mdash;' : share.toFixed(1) + '%'}</td>
+        <td class="num">${unpriced ? '&mdash;' : formatCost(perMillion)}</td>
       </tr>`;
     })
     .join('');

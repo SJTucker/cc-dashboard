@@ -370,6 +370,23 @@ test('cost is split by whether the call ran at over 150k of context', async () =
   );
 });
 
+test('models[] marks a model with no known price as unpriced', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(12).toISOString();
+  writeSession(base, 'mixed-models', [
+    modelLine(iso, { id: 'z', model: 'claude-zeta-9', input: 6e5 }),
+    modelLine(iso, { id: 's', model: 'claude-sonnet-4-6-20260115', input: 1000 }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+  const byName = Object.fromEntries(data.models.map((m) => [m.model, m]));
+
+  assert.strictEqual(byName['claude-zeta-9'].priced, false);
+  assert.strictEqual(byName['claude-zeta-9'].cost, 0);
+  assert.strictEqual(byName['claude-sonnet-4-6-20260115'].priced, true);
+});
+
 test('a line whose timestamp will not parse is skipped, not fatal', async () => {
   const base = makeFixture();
   const good = usageLine(atHourToday(12).toISOString(), { id: 'ok', input: 400 });
