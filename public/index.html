@@ -87,6 +87,28 @@
         <div id="limitsRows"></div>
       </section>
 
+      <section class="panel" id="sessionsPanel" hidden>
+        <div class="panel-head">
+          <h2>Live sessions</h2>
+          <span class="panel-note" id="sessionsNote"></span>
+        </div>
+        <table class="sessions-table">
+          <thead>
+            <tr>
+              <th scope="col">Project</th>
+              <th scope="col">Model</th>
+              <th scope="col" class="num">Cost</th>
+              <th scope="col" class="num">Duration</th>
+              <th scope="col" class="num">API time</th>
+              <th scope="col" class="num">Lines</th>
+              <th scope="col" class="num">Tokens today</th>
+              <th scope="col">Last active</th>
+            </tr>
+          </thead>
+          <tbody id="sessionsTable"></tbody>
+        </table>
+      </section>
+
       <section class="panel" id="attributionPanel" hidden>
         <div class="panel-head">
           <h2>Where usage goes</h2>

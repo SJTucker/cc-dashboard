@@ -22,6 +22,24 @@ function formatPercent(x) {
   return (x * 100).toFixed(1) + '%';
 }
 
+// Wall and API durations for the Live sessions panel.
+function formatDuration(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  return `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
+// How long ago a session last wrote to its transcript. After an hour the clock
+// time reads better than "137m ago".
+function formatAgo(ms, now = Date.now()) {
+  const m = Math.floor((now - ms) / 60_000);
+  if (m < 1) return 'just now';
+  if (m < 60) return `${m}m ago`;
+  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
 // Mirrors localDateStr in lib/scan.js so the front end can tell which bucket is
 // today without parsing a locale-formatted string.
 function localDateStr(d) {
@@ -1142,6 +1160,56 @@ function renderLimits(limits) {
   document.getElementById('limitsNote').textContent = `from ${sourceLabel}, as of ${asOf} (${zone})${stale}`;
 }
 
+// Today's sessions from the statusline snapshots (see lib/sessions.js). A
+// failure resolves to null, same as requestLimits.
+function requestSessions() {
+  return fetch('/api/sessions/live')
+    .then((res) => res.json())
+    .then((payload) => (payload && payload.error ? null : payload))
+    .catch(() => null);
+}
+
+// Runs on every loadAndRender, like renderLimits, because "Last active" moves
+// with the clock even when the payload does not. Hidden off Today and when no
+// session has a snapshot, for example with no statusline hook set up.
+function renderSessions(live) {
+  const panel = document.getElementById('sessionsPanel');
+  panel.hidden = !live || !live.sessions.length || currentDays !== 'today';
+  if (panel.hidden) return;
+
+  const now = Date.now();
+  const cell = (text, cls) => el('td', cls ? { class: cls, text } : { text });
+  const lines = (added, removed) => `+${added} −${removed}`;
+  const rows = live.sessions.map((s) => el('tr', {}, [
+    cell(s.project || '—'),
+    cell(s.model || '—'),
+    cell(formatCost(s.costUsd), 'num cost'),
+    cell(formatDuration(s.durationMs), 'num'),
+    cell(formatDuration(s.apiDurationMs), 'num'),
+    cell(lines(s.linesAdded, s.linesRemoved), 'num'),
+    cell(formatTokens(s.tokens), 'num'),
+    // The word, not only a colour, marks a live session.
+    cell(s.live ? `${formatAgo(s.lastActiveAt, now)} · live` : formatAgo(s.lastActiveAt, now), s.live ? 'is-live' : ''),
+  ]));
+  const t = live.total;
+  rows.push(el('tr', { class: 'sessions-total' }, [
+    cell('Total'),
+    cell(''),
+    cell(formatCost(t.costUsd), 'num cost'),
+    // Concurrent sessions overlap, so wall durations do not add up.
+    cell('—', 'num'),
+    cell(formatDuration(t.apiDurationMs), 'num'),
+    cell(lines(t.linesAdded, t.linesRemoved), 'num'),
+    cell(formatTokens(t.tokens), 'num'),
+    cell(''),
+  ]));
+  document.getElementById('sessionsTable').replaceChildren(...rows);
+
+  const liveCount = live.sessions.filter((s) => s.live).length;
+  document.getElementById('sessionsNote').textContent =
+    `${live.sessions.length} today · ${liveCount} live in the last 10 min`;
+}
+
 // Warn once either window reaches 75%, on every range. Within a window the percent
 // only rises, and readLimits() drops a window past its reset, so a stale cache
 // understates usage and never raises a false warning. The rounded percent is
@@ -1913,8 +1981,10 @@ async function loadAndRender({ busy = false } = {}) {
     .catch(() => null);
 
   const limitsRequest = requestLimits();
+  // Only Today shows the panel, so other ranges skip the request and its Today scan.
+  const sessionsRequest = currentDays === 'today' ? requestSessions() : Promise.resolve(null);
 
-  const [data, rtk, limits] = await Promise.all([summaryRequest, rtkRequest, limitsRequest]);
+  const [data, rtk, limits, sessions] = await Promise.all([summaryRequest, rtkRequest, limitsRequest, sessionsRequest]);
   if (seq !== requestSeq) return; // a newer request superseded this response
   setBusy(false);
 
@@ -1923,6 +1993,7 @@ async function loadAndRender({ busy = false } = {}) {
   // this has to run on every settled response. That includes one whose summary
   // failed, and one the signature below would otherwise treat as unchanged.
   renderLimits(limits);
+  renderSessions(sessions);
   renderLimitsBanner(limits);
 
   if (data.error) {

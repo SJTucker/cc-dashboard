@@ -597,6 +597,34 @@ html, body {
   margin-bottom: 8px;
 }
 
+/* Live sessions panel (renderSessions in app.js). */
+.sessions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.sessions-table th {
+  font-size: 10px;
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-tertiary);
+  text-align: left;
+  padding: 0 12px 8px 0;
+}
+.sessions-table td {
+  padding: 6px 12px 6px 0;
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+}
+.sessions-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.sessions-table .cost { color: var(--accent-cost); }
+.sessions-table .is-live { color: var(--text-primary); }
+.sessions-total td { font-weight: 600; }
+
+/* Eight columns do not fit a narrow window, so the table scrolls inside its panel. */
+#sessionsPanel { overflow-x: auto; }
+
 .usage-row {
   display: grid;
   grid-template-columns: minmax(0, 280px) 1fr auto;
