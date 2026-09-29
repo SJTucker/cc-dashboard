@@ -129,6 +129,19 @@ test('recordSession prunes day-old files and keeps recent ones', () => {
   assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['abc-123.json', 'recent-session.json']);
 });
 
+test('recordSession prunes only its own snapshot files', () => {
+  const dir = tmpDir();
+  const notes = path.join(dir, 'notes.txt');
+  const backup = path.join(dir, 'backup.json.bak');
+  const badName = path.join(dir, 'bad name.json');
+  const old = path.join(dir, 'old-session.json');
+  for (const f of [notes, backup, badName, old]) fs.writeFileSync(f, '{}');
+  const past = (NOW - DAY - 60_000) / 1000;
+  for (const f of [notes, backup, badName, old]) fs.utimesSync(f, past, past);
+  recordSession(statuslineInput(), dir, NOW);
+  assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['abc-123.json', 'backup.json.bak', 'bad name.json', 'notes.txt']);
+});
+
 test('recordSession never throws, even when the directory cannot be created', () => {
   const blocker = path.join(tmpDir(), 'a-file');
   fs.writeFileSync(blocker, '');
