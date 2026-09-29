@@ -11,6 +11,9 @@ const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits } = require('./lib/limits');
 const { readSessions, buildLiveSessions } = require('./lib/sessions');
 const { busiestDay } = require('./public/stats');
+const { currentRows } = require('./lib/pricing');
+const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
+const { PRICING_URL, PriceParseError, fetchPricingPage, parsePricingPage, diffPrices } = require('./lib/price-fetch');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -72,6 +75,15 @@ async function getCached(days) {
 // request retries.
 const TODAY_SHARE_MS = 2000;
 let todayScan = null; // { promise, ts }
+
+// Before the first scan, so every cost uses the applied price history.
+loadPriceFile();
+
+// Costs are computed inside scanUsage, so a price change needs both scan caches dropped.
+function clearScans() {
+  cache.clear();
+  todayScan = null;
+}
 
 function getTodayScan() {
   if (todayScan && Date.now() - todayScan.ts < TODAY_SHARE_MS) return todayScan.promise;
@@ -202,25 +214,77 @@ app.get('/api/sessions/live', async (req, res) => {
   }
 });
 
-app.post('/api/refresh', (req, res) => {
-  // Every modern browser sends Sec-Fetch-Site on a fetch, so anything other than
-  // same-origin means another page issued this request. The Host guard cannot
-  // catch that: a browser sets Host from the address it connected to, not from
-  // the page that asked. Non-browser clients send no such header and still work.
+// Every modern browser sends Sec-Fetch-Site on a fetch, so anything other than
+// same-origin means another page issued this request. The Host guard cannot
+// catch that: a browser sets Host from the address it connected to, not from
+// the page that asked. Non-browser clients send no such header and still work.
+function sameOriginOnly(req, res, next) {
   const site = req.get('sec-fetch-site');
   if (site && site !== 'same-origin') {
     res.status(403).json({ error: 'Cross-site requests are not accepted.' });
     return;
   }
-  cache.clear();
-  todayScan = null;
+  next();
+}
+
+app.post('/api/refresh', sameOriginOnly, (req, res) => {
+  clearScans();
   res.json({ ok: true });
+});
+
+// The rows the last check found new or changed. Apply saves exactly these, so what
+// the panel showed is what gets saved, and the browser never sends prices.
+let pendingCheck = null;
+
+app.get('/api/prices', (req, res) => {
+  res.json(pricesSource());
+});
+
+// The dashboard's only outbound request. It runs when someone clicks Check prices.
+app.post('/api/prices/check', sameOriginOnly, async (req, res) => {
+  pendingCheck = null;
+  let page;
+  try {
+    page = await fetchPricingPage();
+  } catch (err) {
+    res.status(502).json({ error: `Could not fetch ${PRICING_URL}: ${err.message}` });
+    return;
+  }
+  try {
+    const { rows, skipped } = parsePricingPage(page);
+    const diff = diffPrices(rows, currentRows());
+    pendingCheck = [...diff.added, ...diff.changed.map((c) => c.after)];
+    res.json({ ...diff, skipped, checkedAt: new Date().toISOString() });
+  } catch (err) {
+    if (err instanceof PriceParseError) {
+      res.status(422).json({ error: `The pricing page did not parse, so prices are unchanged: ${err.message}` });
+      return;
+    }
+    console.error('[API] /api/prices/check failed:', err);
+    res.status(500).json({ error: 'Failed to check prices', detail: err.message });
+  }
+});
+
+app.post('/api/prices/apply', sameOriginOnly, express.json({ limit: '1kb' }), (req, res) => {
+  if (!pendingCheck || !pendingCheck.length) {
+    res.status(409).json({ error: 'Nothing to apply. Check prices first.' });
+    return;
+  }
+  const effectiveFrom = req.body ? req.body.effectiveFrom : undefined;
+  const result = appendSnapshot({ effectiveFrom, rows: pendingCheck, source: PRICING_URL });
+  if (result.error) {
+    res.status(400).json({ error: result.error });
+    return;
+  }
+  pendingCheck = null;
+  clearScans();
+  res.json(result.source);
 });
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`\nMy Claude Code Dashboard running at http://localhost:${PORT}`);
   console.log(`Reading logs from: ${getProjectsDir()}`);
-  console.log('Read-only. No outbound network requests. Bound to localhost only.\n');
+  console.log('Bound to localhost only. The one outbound request is Check prices, to platform.claude.com.\n');
   if (process.argv.includes('--open')) {
     import('open').then((mod) => mod.default(`http://localhost:${PORT}`)).catch(() => {});
   }

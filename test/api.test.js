@@ -33,6 +33,7 @@ function startServer() {
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
 
   delete process.env.LIVE_SESSIONS_DIR; // snapshots resolve under CLAUDE_CONFIG_DIR
+  delete process.env.PRICES_JSON; // prices.json resolves under CLAUDE_CONFIG_DIR
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.PORT = '0'; // let the OS pick a free port
   delete require.cache[require.resolve('../lib/scan')];
@@ -41,6 +42,44 @@ function startServer() {
   const server = require('../server');
   return server;
 }
+
+const PAGE = fs.readFileSync(path.join(__dirname, 'fixtures', 'pricing-page.md'), 'utf8');
+
+// server.js runs in this process, so its fetch of the pricing page goes through
+// globalThis.fetch. Requests to the test server itself pass through.
+function stubPricingPage(t, body, status = 200) {
+  const { PRICING_URL } = require('../lib/price-fetch');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (url, opts) =>
+    String(url) === PRICING_URL ? Promise.resolve(new Response(body, { status })) : realFetch(url, opts);
+  t.after(() => { globalThis.fetch = realFetch; });
+}
+
+// Same helper as in test/price-fetch.test.js: replaces price cells in the Model
+// pricing row named `name`. `values` is [input, 5m write, 1h write, cache hit, output].
+function withModelCells(md, name, values) {
+  let done = false;
+  return md.split('\n').map((line) => {
+    const cells = line.split('|');
+    if (done || cells.length < 3 || cells[1].trim() !== name) return line;
+    done = true;
+    values.forEach((v, i) => { if (v != null) cells[i + 2] = ` ${v} `; });
+    return cells.join('|');
+  }).join('\n');
+}
+
+async function listen(t) {
+  const server = startServer();
+  t.after(() => {
+    server.close();
+    require('../lib/pricing').setSnapshots([]);
+  });
+  await new Promise((resolve) => server.once('listening', resolve));
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+const post = (url, body) =>
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
 
 test('GET /api/summary?days=today returns one bucket per local hour', async (t) => {
   const server = startServer();
@@ -452,4 +491,89 @@ test('the Today scan is shared between /api/summary and /api/sessions/live', asy
   await new Promise((resolve) => setTimeout(resolve, 2100));
   const later = await (await fetch(`http://127.0.0.1:${port}/api/sessions/live`)).json();
   assert.strictEqual(later.sessions[0].tokens, 10);
+});
+
+test('GET /api/prices reports built-in prices when nothing was applied', async (t) => {
+  const base = await listen(t);
+  const source = await (await fetch(`${base}/api/prices`)).json();
+  assert.strictEqual(source.kind, 'built-in');
+  assert.strictEqual(source.date, '2026-09-28');
+});
+
+test('POST /api/prices/check returns the diff and changes nothing', async (t) => {
+  stubPricingPage(t, PAGE);
+  const base = await listen(t);
+  const res = await post(`${base}/api/prices/check`);
+  const diff = await res.json();
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(diff.added.map((r) => r.match), ['sonnet-5-5']);
+  assert.strictEqual(diff.unchanged, 18);
+  assert.strictEqual((await (await fetch(`${base}/api/prices`)).json()).kind, 'built-in');
+});
+
+test('POST /api/prices/apply saves the check and re-prices the summary', async (t) => {
+  stubPricingPage(t, withModelCells(PAGE, 'Claude Sonnet 4.6', ['$6 / MTok', '$7.50 / MTok', '$12 / MTok', '$0.60 / MTok', '$30 / MTok']));
+  const base = await listen(t);
+  const cost = async () => (await (await fetch(`${base}/api/summary?days=today`)).json()).summary.totalCost;
+  // The fixture log is one claude-sonnet-4-6 request: 1000 input, 200 output.
+  assert.ok(Math.abs((await cost()) - 0.006) < 1e-12);
+
+  await post(`${base}/api/prices/check`);
+  const today = localDateStr(new Date());
+  const res = await post(`${base}/api/prices/apply`, { effectiveFrom: today });
+  assert.strictEqual(res.status, 200);
+  const source = await res.json();
+  assert.strictEqual(source.kind, 'fetched');
+  assert.strictEqual(source.date, today);
+  assert.ok(Math.abs((await cost()) - 0.012) < 1e-12, 'the cached scan was dropped and re-priced');
+
+  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'prices.json');
+  const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepStrictEqual(saved.snapshots[0].rows.map((r) => r.match).sort(), ['sonnet-4-6', 'sonnet-5-5']);
+
+  const again = await post(`${base}/api/prices/apply`, { effectiveFrom: today });
+  assert.strictEqual(again.status, 409, 'a second Apply needs a new check');
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).snapshots.length, 1);
+});
+
+test('POST /api/prices/apply refuses with no check, and refuses a future date', async (t) => {
+  stubPricingPage(t, PAGE);
+  const base = await listen(t);
+  assert.strictEqual((await post(`${base}/api/prices/apply`, { effectiveFrom: '2026-09-01' })).status, 409);
+  await post(`${base}/api/prices/check`);
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const res = await post(`${base}/api/prices/apply`, { effectiveFrom: localDateStr(tomorrow) });
+  assert.strictEqual(res.status, 400);
+  assert.match((await res.json()).error, /future/);
+  assert.strictEqual((await post(`${base}/api/prices/apply`, {})).status, 400, 'a missing date is refused');
+});
+
+test('POST /api/prices/check refuses a page that does not parse, and clears the pending check', async (t) => {
+  stubPricingPage(t, PAGE);
+  const base = await listen(t);
+  await post(`${base}/api/prices/check`);
+  globalThis.fetch = ((realFetch) => (url, opts) =>
+    String(url).startsWith('https://') ? Promise.resolve(new Response('# nothing here')) : realFetch(url, opts))(globalThis.fetch);
+  const res = await post(`${base}/api/prices/check`);
+  assert.strictEqual(res.status, 422);
+  assert.match((await res.json()).error, /prices are unchanged/);
+  assert.strictEqual((await post(`${base}/api/prices/apply`, { effectiveFrom: localDateStr(new Date()) })).status, 409);
+});
+
+test('POST /api/prices/check reports a failed fetch as 502', async (t) => {
+  stubPricingPage(t, 'unavailable', 503);
+  const base = await listen(t);
+  const res = await post(`${base}/api/prices/check`);
+  assert.strictEqual(res.status, 502);
+  assert.match((await res.json()).error, /503/);
+});
+
+test('the price POST routes refuse a cross-site request', async (t) => {
+  stubPricingPage(t, PAGE);
+  const base = await listen(t);
+  for (const route of ['/api/prices/check', '/api/prices/apply']) {
+    const res = await fetch(`${base}${route}`, { method: 'POST', headers: { 'Sec-Fetch-Site': 'cross-site' } });
+    assert.strictEqual(res.status, 403, route);
+  }
 });
