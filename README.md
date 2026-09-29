@@ -70,26 +70,33 @@ recently. It makes no network request of its own.
   stale.
 - **The statusline.** Claude Code's `statusLine` command receives a JSON object on
   stdin, which includes `rate_limits` after the first API response of a session.
-  `bin/record-limits` reads that JSON from stdin and writes the rate limits to
+  `bin/record-statusline` reads that JSON from stdin and writes the rate limits to
   `~/.claude/rate-limits.json`, or `$CLAUDE_CONFIG_DIR/rate-limits.json` when that
   is set. Its numbers change after every API response in any running session.
+  The same script also keeps one small snapshot per session, holding that
+  session's cost, durations and lines changed, in
+  `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`,
+  or `LIVE_SESSIONS_DIR`). The Live sessions panel reads them. Snapshots older than a
+  day are deleted on the next write.
 
 To feed the statusline source, add one line to your existing statusline script
 (the command `statusLine.command` in `~/.claude/settings.json` points at):
 
 ```bash
-echo "$input" | ~/code/cc-dashboard/bin/record-limits
+echo "$input" | ~/code/cc-dashboard/bin/record-statusline
 ```
 
-`record-limits` never writes to stdout or stderr and always exits 0, so adding it
+`bin/record-limits` is the script's old name and still works.
+
+`record-statusline` never writes to stdout or stderr and always exits 0, so adding it
 does not change what the statusline shows. Do not point `statusLine.command`
-straight at `record-limits`. It prints nothing, so the statusline would be blank.
+straight at `record-statusline`. It prints nothing, so the statusline would be blank.
 With no statusline script yet, a minimal one looks like this:
 
 ```bash
 #!/bin/bash
 input=$(cat)
-echo "$input" | ~/code/cc-dashboard/bin/record-limits
+echo "$input" | ~/code/cc-dashboard/bin/record-statusline
 echo "$input" | jq -r '.model.display_name'
 ```
 
@@ -151,9 +158,10 @@ boundary back.
   `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
   `changes.json`, and `rate-limits.json`, and opens rtk's `history.db` with
   sqlite's `readOnly` flag. The one write path in this project is
-  `bin/record-limits`, a separate script your own statusline pipes into (see
-  "Plan usage" above); it writes only `rate-limits.json`, and nothing under
-  `server.js` or `public/` calls it.
+  `bin/record-statusline`, a separate script your own statusline pipes into (see
+  "Plan usage" above); it writes only `rate-limits.json` and the per-session
+  snapshots in `cc-dashboard/sessions/`, and nothing under `server.js` or
+  `public/` calls it.
 - **No network calls.** Unlike some similar tools, this one does not fetch pricing
   from the internet, load a charting library from a CDN, or phone home in any way.
   The bar charts are hand-drawn SVG (see `public/app.js`). Pricing is a small
@@ -182,7 +190,9 @@ lib/changes.js      Setup change markers: plugin installs, new models, changes.j
 lib/limits.js       Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
 lib/pricing.js       Offline per-token price table + cost calculation
 lib/net-guard.js    Host-header check + security headers
-bin/record-limits   Reads statusLine JSON from stdin, writes it to the rate-limits file via lib/limits.js
+lib/sessions.js     Per-session snapshots from the statusline, and today's live sessions
+bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
+bin/record-limits   Old name for bin/record-statusline, kept as a wrapper
 public/index.html   Page shell
 public/style.css    All styling
 public/app.js        Fetches /api/summary, /api/rtk, /api/limits, /api/changes and /api/records, draws the SVG charts, no dependencies

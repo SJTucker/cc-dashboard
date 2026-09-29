@@ -1,0 +1,33 @@
+#!/usr/bin/env node
+'use strict';
+
+// Piped one line of statusLine JSON on stdin by a user's statusline script.
+// Its own stdout becomes part of the rendered statusline, so this script must
+// never print anything or exit non-zero, whatever stdin contains.
+// It records two things: the plan rate limits (lib/limits.js) and a snapshot of
+// the session's cost block (lib/sessions.js). Each runs on its own, so a failure
+// in one does not stop the other.
+
+const { recordRateLimits } = require('../lib/limits');
+const { recordSession } = require('../lib/sessions');
+
+let input = '';
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+});
+process.stdin.on('error', () => process.exit(0));
+process.stdin.on('end', () => {
+  let parsed;
+  try {
+    parsed = JSON.parse(input);
+  } catch {
+    process.exit(0); // bad JSON: say nothing, exit clean
+  }
+  try {
+    recordRateLimits(parsed);
+  } catch {
+    // An unwritable file or a missing transcript: say nothing.
+  }
+  recordSession(parsed); // never throws
+  process.exit(0);
+});

@@ -1,22 +1,6 @@
 #!/usr/bin/env node
 'use strict';
 
-// Piped one line of statusLine JSON on stdin by a user's statusline script.
-// Its own stdout becomes part of the rendered statusline, so this script must
-// never print anything or exit non-zero, whatever stdin contains.
-
-const { recordRateLimits } = require('../lib/limits');
-
-let input = '';
-process.stdin.on('data', (chunk) => {
-  input += chunk;
-});
-process.stdin.on('error', () => process.exit(0));
-process.stdin.on('end', () => {
-  try {
-    recordRateLimits(JSON.parse(input));
-  } catch {
-    // Bad JSON, an unwritable file, a missing transcript: say nothing, exit clean.
-  }
-  process.exit(0);
-});
+// The old name for bin/record-statusline, kept so statusline scripts that call
+// record-limits keep working. It runs record-statusline in this process.
+require('./record-statusline');
