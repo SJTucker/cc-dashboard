@@ -466,3 +466,29 @@ test('a reading with no weekly window on a new day keeps the previous reading as
   recordRateLimits(weekInput(at(2026, 9, 30, 9), 14), file);
   assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
 });
+
+test('a previous reading from earlier the same day, with no baseline, counts the day from that reading', () => {
+  // The first write after upgrading: the file has a same-morning reading and no dayStart.
+  const file = weekFile(at(2026, 9, 29, 9, 30), 21);
+  recordRateLimits(weekInput(at(2026, 9, 29, 9, 50), 22), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-29', percent: 21, from: 'first-reading' });
+});
+
+test('a previous reading just before midnight, with no baseline, starts the new day', () => {
+  const file = weekFile(at(2026, 9, 29, 23, 59), 12);
+  recordRateLimits(weekInput(at(2026, 9, 30, 0, 1), 13), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
+});
+
+test('a previous reading just after midnight, with no baseline, counts as the same day', () => {
+  const file = weekFile(at(2026, 9, 30, 0, 1), 12);
+  recordRateLimits(weekInput(at(2026, 9, 30, 8), 13), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 12, from: 'first-reading' });
+});
+
+test('a weekly reset since a same-day previous reading, with no baseline, starts the day at 0', () => {
+  const oldReset = at(2026, 9, 30, 5);
+  const file = weekFile(at(2026, 9, 30, 4), 95, undefined, oldReset);
+  recordRateLimits(weekInput(at(2026, 9, 30, 6), 1, at(2026, 10, 7, 5)), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 0, from: 'reset' });
+});

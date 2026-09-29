@@ -41,8 +41,6 @@ first wrote `dayStart` a few minutes after that.
 - Check the row again on 2026-09-30, after the first day with a baseline from
   yesterday's last reading. Compare today's share with the weekly percent at the end
   of 2026-09-29.
-- Fix `dayStartFor` to use `from: 'first-reading'` when the previous reading is from
-  the same local day and no `dayStart` exists. Add a test for that case.
 
 ## Open questions
 
