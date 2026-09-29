@@ -117,3 +117,36 @@ test('snapshots out of date order make the file ignored', (t) => {
   ] }));
   assert.match(store.loadPriceFile().error, /before the one above it/);
 });
+
+test('appendSnapshot reloads the file first, so a hand-added snapshot survives the next append', (t) => {
+  const file = useTempFile(t);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ version: 1, snapshots: [
+    { effectiveFrom: '2026-10-05', appliedAt: NOW.toISOString(), source: 'hand', rows: [ROW] },
+  ] }));
+  const result = store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [{ ...ROW, input: 9, output: 45 }], source: 'test', now: NOW });
+  assert.strictEqual(result.error, undefined);
+  const data = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.strictEqual(data.snapshots.length, 2, 'the hand-written snapshot must survive');
+  assert.strictEqual(data.snapshots[0].effectiveFrom, '2026-10-05');
+  assert.strictEqual(data.snapshots[0].source, 'hand');
+});
+
+test('appendSnapshot reloads the file first, so an append dated before a hand-added snapshot is refused', (t) => {
+  const file = useTempFile(t);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify({ version: 1, snapshots: [
+    { effectiveFrom: '2026-10-05', appliedAt: NOW.toISOString(), source: 'hand', rows: [ROW] },
+  ] }));
+  const result = store.appendSnapshot({ effectiveFrom: '2026-10-01', rows: [ROW], source: 'test', now: NOW });
+  assert.match(result.error, /2026-10-05/);
+});
+
+test('appendSnapshot reloads the file first, so a file corrupted after the last load is refused, not overwritten', (t) => {
+  const file = useTempFile(t);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '{ not json');
+  const result = store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [ROW], source: 'test', now: NOW });
+  assert.match(result.error, /unreadable/);
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), '{ not json', 'the file is left for the owner to fix');
+});
