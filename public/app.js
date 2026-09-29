@@ -1362,6 +1362,12 @@ async function postJson(url, body) {
   return res.json();
 }
 
+// The last applied snapshot's effective date, or null on built-in prices.
+// Set from loadPricesSource() and read by renderPricesCheck to floor the
+// Apply date picker: the server already refuses a date before this one, so
+// the picker should not offer it.
+let lastAppliedDate = null;
+
 async function loadPricesSource() {
   const note = document.getElementById('pricesSource');
   const source = await fetch('/api/prices').then((r) => r.json()).catch(() => null);
@@ -1369,6 +1375,7 @@ async function loadPricesSource() {
     note.textContent = '';
     return;
   }
+  lastAppliedDate = source.kind === 'fetched' ? source.date : null;
   note.textContent = source.kind === 'built-in'
     ? `Prices: built-in, checked ${source.date}`
     : `Prices: from Anthropic's pricing page, effective ${source.date}`;
@@ -1394,7 +1401,10 @@ function renderPricesCheck(result) {
     return;
   }
   const today = localDateStr(new Date());
-  const date = el('input', { type: 'date', id: 'pricesEffective', value: today, max: today });
+  const date = el('input', {
+    type: 'date', id: 'pricesEffective', value: today, max: today,
+    ...(lastAppliedDate ? { min: lastAppliedDate } : {}),
+  });
   const apply = el('button', { class: 'refresh-btn', type: 'button', text: 'Apply' });
   apply.addEventListener('click', () => applyPrices(date.value));
   box.appendChild(el('div', { class: 'prices-apply' }, [el('label', { for: 'pricesEffective', text: 'Effective from' }), date, apply]));
