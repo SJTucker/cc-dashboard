@@ -198,3 +198,88 @@ test('cacheWriteTokens prefers the split when it disagrees with the flat total',
 test('cacheWriteTokens returns zeros for a record with no cache writes', () => {
   assert.deepStrictEqual(cacheWriteTokens({ input_tokens: 5 }), { write5m: 0, write1h: 0, total: 0 });
 });
+
+const { setSnapshots, currentRows, validateRow, localMidnight } = require('../lib/pricing');
+
+function sonnet46(input, output) {
+  return { match: 'sonnet-4-6', family: 'sonnet', label: 'Sonnet', input, output };
+}
+
+test('a changed price applies from its effective date, and earlier usage keeps the old price', (t) => {
+  t.after(() => setSnapshots([]));
+  setSnapshots([{ effectiveFrom: '2026-10-15', rows: [sonnet46(6, 30)] }]);
+  const before = new Date(2026, 9, 14, 23, 59).getTime();
+  const after = new Date(2026, 9, 15, 9, 0).getTime();
+  assert.strictEqual(priceFor('claude-sonnet-4-6', before).input, 3);
+  assert.strictEqual(priceFor('claude-sonnet-4-6', after).input, 6);
+  assert.strictEqual(priceFor('claude-sonnet-4-6').input, 6, 'no time means current prices');
+});
+
+test('the effective date starts at local midnight', (t) => {
+  t.after(() => setSnapshots([]));
+  setSnapshots([{ effectiveFrom: '2026-10-15', rows: [sonnet46(6, 30)] }]);
+  const midnight = new Date(2026, 9, 15).getTime();
+  assert.strictEqual(localMidnight('2026-10-15'), midnight);
+  assert.strictEqual(priceFor('claude-sonnet-4-6', midnight - 1).input, 3);
+  assert.strictEqual(priceFor('claude-sonnet-4-6', midnight).input, 6);
+});
+
+test('two snapshots on one row each apply from their own date', (t) => {
+  t.after(() => setSnapshots([]));
+  setSnapshots([
+    { effectiveFrom: '2026-10-01', rows: [sonnet46(4, 20)] },
+    { effectiveFrom: '2026-11-01', rows: [sonnet46(6, 30)] },
+  ]);
+  assert.strictEqual(priceFor('claude-sonnet-4-6', new Date(2026, 8, 30).getTime()).input, 3);
+  assert.strictEqual(priceFor('claude-sonnet-4-6', new Date(2026, 9, 15).getTime()).input, 4);
+  assert.strictEqual(priceFor('claude-sonnet-4-6', new Date(2026, 10, 15).getTime()).input, 6);
+});
+
+test('a model new to the table is priced at its first known rate for all dates', (t) => {
+  t.after(() => setSnapshots([]));
+  setSnapshots([{ effectiveFrom: '2026-10-15', rows: [{ match: 'opus-6', family: 'opus', label: 'Opus', input: 7, output: 35 }] }]);
+  const row = priceFor('claude-opus-6', new Date(2026, 0, 1).getTime());
+  assert.strictEqual(row.match, 'opus-6', 'not the bare opus fallback');
+  assert.strictEqual(row.input, 7);
+});
+
+test('a new row lands ahead of every row whose key it contains', (t) => {
+  t.after(() => setSnapshots([]));
+  setSnapshots([{ effectiveFrom: '2026-10-15', rows: [{ match: 'opus-5-6', family: 'opus', label: 'Opus', input: 3, output: 15 }] }]);
+  assert.strictEqual(priceFor('claude-opus-5-6').match, 'opus-5-6');
+  assert.strictEqual(priceFor('claude-opus-5-5').match, 'opus-5-5');
+  assert.strictEqual(priceFor('claude-opus-5').match, 'opus-5');
+});
+
+test('costForUsage prices a record by its time', (t) => {
+  t.after(() => setSnapshots([]));
+  setSnapshots([{ effectiveFrom: '2026-10-15', rows: [sonnet46(6, 30)] }]);
+  const usage = { input_tokens: 1e6, output_tokens: 0 };
+  closeTo(costForUsage(usage, 'claude-sonnet-4-6', new Date(2026, 9, 1).getTime()).cost, 3, 'old price');
+  closeTo(costForUsage(usage, 'claude-sonnet-4-6', new Date(2026, 9, 20).getTime()).cost, 6, 'new price');
+});
+
+test('currentRows reports the latest price of every row, and setSnapshots([]) restores the built-in table', (t) => {
+  t.after(() => setSnapshots([]));
+  const builtIn = currentRows();
+  setSnapshots([{ effectiveFrom: '2026-10-15', rows: [sonnet46(6, 30), { match: 'opus-6', family: 'opus', label: 'Opus', input: 7, output: 35 }] }]);
+  const rows = currentRows();
+  assert.strictEqual(rows.length, builtIn.length + 1);
+  assert.strictEqual(rows.find((r) => r.match === 'sonnet-4-6').input, 6);
+  setSnapshots([]);
+  assert.deepStrictEqual(currentRows(), builtIn);
+});
+
+test('validateRow refuses rows the cost math cannot use', () => {
+  const ok = { match: 'opus-6', family: 'opus', label: 'Opus', input: 5, output: 25 };
+  assert.strictEqual(validateRow(ok), null);
+  assert.strictEqual(validateRow({ ...ok, cacheReadMult: 0.05, fast: { input: 10, output: 50 } }), null);
+  assert.match(validateRow({ ...ok, match: 'opus' }), /match/, 'a bare family key would shadow the fallback');
+  assert.match(validateRow({ ...ok, family: 'zephyr' }), /family/);
+  assert.match(validateRow({ ...ok, match: 'sonnet-6' }), /match/, 'key must contain its family');
+  assert.match(validateRow({ ...ok, input: 0 }), /input/);
+  assert.match(validateRow({ ...ok, output: 5 }), /output/);
+  assert.match(validateRow({ ...ok, cacheReadMult: 1.5 }), /cacheReadMult/);
+  assert.match(validateRow({ ...ok, fast: { input: 10, output: 5 } }), /fast/);
+  assert.match(validateRow(null), /object/);
+});
