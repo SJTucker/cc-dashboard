@@ -243,6 +243,17 @@ test('a model new to the table is priced at its first known rate for all dates',
   assert.strictEqual(row.input, 7);
 });
 
+test('a match key does not fire inside a longer digit run, so an auto-added key cannot re-price an existing dated id', (t) => {
+  t.after(() => setSnapshots([]));
+  // 'sonnet-4-2' lands ahead of 'sonnet-4' by the substring-containment rule,
+  // and 'claude-sonnet-4-20250514' contains 'sonnet-4-2' as a plain substring
+  // (the '2' of '20250514'). Without a digit-boundary check every dated
+  // Sonnet 4 id would be re-priced as Sonnet "4.2".
+  setSnapshots([{ effectiveFrom: '2026-10-15', rows: [{ match: 'sonnet-4-2', family: 'sonnet', label: 'Sonnet', input: 9, output: 45 }] }]);
+  assert.strictEqual(priceFor('claude-sonnet-4-20250514').match, 'sonnet-4');
+  assert.strictEqual(priceFor('claude-sonnet-4-2').match, 'sonnet-4-2');
+});
+
 test('a new row lands ahead of every row whose key it contains', (t) => {
   t.after(() => setSnapshots([]));
   setSnapshots([{ effectiveFrom: '2026-10-15', rows: [{ match: 'opus-5-6', family: 'opus', label: 'Opus', input: 3, output: 15 }] }]);
