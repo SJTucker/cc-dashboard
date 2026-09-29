@@ -13,5 +13,6 @@ then on.
 | [Record day: add the total cost](record-day-cost.md) | not started |
 | [Live sessions: cleared session row, and move below where usage goes](live-sessions-after-clear.md) | not started |
 | [Reorder the panels](reorder-panels.md) | not started |
+| [Today (share of the week): double-check the numbers](today-share-check.md) | check on 2026-09-30 |
 
 Suggested order: the restyle last, so the new layout is restyled once.
