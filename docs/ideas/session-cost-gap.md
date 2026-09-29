@@ -1,8 +1,8 @@
 # Live sessions: Cost today above Session cost
 
 On 2026-09-29 the Live sessions panel showed a new cc-dashboard session with Session
-cost $0.39 and Cost today $0.48. Split out of
-[live-sessions-after-clear.md](live-sessions-after-clear.md) on 2026-09-29.
+cost $0.39 and Cost today $0.48. Split out of the Live sessions /clear idea on
+2026-09-29.
 
 ## What was seen
 

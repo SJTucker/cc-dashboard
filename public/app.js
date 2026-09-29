@@ -1202,6 +1202,14 @@ function requestSessions() {
     .catch(() => null);
 }
 
+// The suffix of a Live sessions row's Last active cell. Words, not only a colour,
+// mark each state: a /clear, any other end, or a response in the last 10 minutes.
+function sessionState(s) {
+  if (s.ended === 'clear') return ' · cleared';
+  if (s.ended) return ' · ended';
+  return s.live ? ' · live' : '';
+}
+
 // Runs on every loadAndRender, like renderLimits, because "Last active" moves
 // with the clock even when the payload does not. Hidden off Today and when no
 // session has a snapshot, for example with no statusline hook set up.
@@ -1222,8 +1230,7 @@ function renderSessions(live) {
     cell(lines(s.linesAdded, s.linesRemoved), 'num'),
     cell(formatCost(s.costTodayUsd), 'num cost'),
     cell(formatTokens(s.tokens), 'num'),
-    // The word, not only a colour, marks a live session.
-    cell(s.live ? `${formatAgo(s.lastActiveAt, now)} · live` : formatAgo(s.lastActiveAt, now), s.live ? 'is-live' : ''),
+    cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
   ]));
   const t = live.total;
   rows.push(el('tr', { class: 'sessions-total' }, [
@@ -1241,8 +1248,10 @@ function renderSessions(live) {
   document.getElementById('sessionsTable').replaceChildren(...rows);
 
   const liveCount = live.sessions.filter((s) => s.live).length;
+  const endedCount = live.sessions.filter((s) => s.ended).length;
+  const ended = endedCount ? ` · ${endedCount} ended` : '';
   document.getElementById('sessionsNote').textContent =
-    `${live.sessions.length} today · ${liveCount} live in the last 10 min · session figures include earlier days`;
+    `${live.sessions.length} today · ${liveCount} live in the last 10 min${ended} · session figures include earlier days`;
 }
 
 // Warn once either window reaches 75%, on every range. Within a window the percent

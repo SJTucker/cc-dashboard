@@ -7,16 +7,16 @@ moving `<section class="panel">` blocks in `public/index.html`. Asked for on
 ## Where the order comes from now
 
 The order is the source order of the sections in `public/index.html`. It runs Plan
-usage, Live sessions, Where usage goes, the daily charts, the per-model charts, When
+usage, Where usage goes, Live sessions, the daily charts, the per-model charts, When
 usage happens, Tool calls, the rtk panels, Cost by model beside Model mix, then the
 Setup changes panels. Some panels sit in pairs inside a `.panel-row` (Daily cost with
 Daily tokens, Cost by model with Model mix). Several panels are `hidden` until their
 data exists or until a range shows them.
 
 Recent commits moved panels by editing that file: "move the where usage goes panel
-below plan usage" (7af5468). The Live sessions idea
-([live-sessions-after-clear.md](live-sessions-after-clear.md)) asks for another such
-move. With this feature, both would be a default-order change plus a drag.
+below plan usage" (7af5468). A later change moved Live sessions below Where usage
+goes the same way. With this feature, both would be a default-order change plus a
+drag.
 
 ## Open questions
 
