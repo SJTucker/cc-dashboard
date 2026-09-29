@@ -390,3 +390,13 @@ test('bin/record-session-end is silent and exits 0 on bad or empty input', () =>
     assert.strictEqual(result.stdout + result.stderr, '', `input ${JSON.stringify(input)}`);
   }
 });
+
+test('buildLiveSessions keeps a session ended when its last activity is within END_GRACE_MS after the end', () => {
+  const { END_GRACE_MS } = require('../lib/sessions');
+  const result = buildLiveSessions([
+    snapshot({ sessionId: 'late-render', lastActiveAt: NOW - 30_000 + END_GRACE_MS, endedAt: NOW - 30_000, endReason: 'clear' }),
+    snapshot({ sessionId: 'resumed', lastActiveAt: NOW - 30_000 + END_GRACE_MS + 1, endedAt: NOW - 30_000, endReason: 'clear' }),
+  ], [], NOW);
+  assert.strictEqual(END_GRACE_MS, 5000);
+  assert.deepStrictEqual(result.sessions.map((s) => [s.ended, s.live]), [['clear', false], [null, true]]);
+});
