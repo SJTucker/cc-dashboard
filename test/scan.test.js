@@ -883,3 +883,27 @@ test('a tool with no errors has empty error lists', async () => {
   assert.deepStrictEqual(tools[0].errorCauses, []);
   assert.deepStrictEqual(tools[0].errorGroups, []);
 });
+
+test('a price change applies only to usage from its effective date on', async (t) => {
+  const { setSnapshots } = require('../lib/pricing');
+  t.after(() => setSnapshots([]));
+  const base = makeFixture();
+  const daysAgo = (n) => {
+    const d = atHourToday(12);
+    d.setDate(d.getDate() - n);
+    return d;
+  };
+  writeSession(base, 'old', [usageLine(daysAgo(3).toISOString(), { id: 'a', input: 1e6, output: 0 })]);
+  writeSession(base, 'new', [usageLine(daysAgo(1).toISOString(), { id: 'b', input: 1e6, output: 0 })]);
+
+  const { scanUsage, localDateStr } = loadScan(base);
+  setSnapshots([{
+    effectiveFrom: localDateStr(daysAgo(2)),
+    rows: [{ match: 'sonnet-4-6', family: 'sonnet', label: 'Sonnet', input: 6, output: 30 }],
+  }]);
+  const data = await scanUsage({ days: null });
+
+  const costOn = (d) => data.daily.find((x) => x.date === localDateStr(d)).cost;
+  assert.ok(Math.abs(costOn(daysAgo(3)) - 3) < 1e-9, 'before the change: $3 per million input');
+  assert.ok(Math.abs(costOn(daysAgo(1)) - 6) < 1e-9, 'after the change: $6 per million input');
+});
