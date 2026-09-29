@@ -1417,6 +1417,8 @@ async function applyPrices(effectiveFrom) {
   const box = document.getElementById('pricesCheck');
   if (result.error) {
     // Keep the diff on screen, so a refused date can be corrected and applied again.
+    // Drop any earlier error line first, so retrying a bad date doesn't pile them up.
+    box.querySelectorAll('.prices-error').forEach((node) => node.remove());
     box.appendChild(el('p', { class: 'panel-note prices-error', text: result.error }));
     return;
   }
