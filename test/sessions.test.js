@@ -302,3 +302,74 @@ test('buildLiveSessions with no snapshots is an empty list and zero totals', () 
     total: { costUsd: 0, costTodayUsd: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
   });
 });
+
+const { recordSessionEnd } = require('../lib/sessions');
+
+const readFile = (dir, id) => JSON.parse(fs.readFileSync(path.join(dir, `${id}.json`), 'utf8'));
+
+test('recordSessionEnd marks an existing snapshot and leaves its other fields alone', () => {
+  const dir = writeSnapshots([snapshot({ sessionId: 's1' })]);
+  recordSessionEnd({ session_id: 's1', reason: 'clear' }, dir, NOW);
+  assert.deepStrictEqual(readFile(dir, 's1'), { ...snapshot({ sessionId: 's1' }), endedAt: NOW, endReason: 'clear' });
+});
+
+test('recordSessionEnd writes nothing without a snapshot, a safe id, or a reason', () => {
+  const empty = tmpDir();
+  recordSessionEnd({ session_id: 's1', reason: 'clear' }, empty, NOW);
+  assert.deepStrictEqual(fs.readdirSync(empty), []);
+
+  const dir = writeSnapshots([snapshot({ sessionId: 's1' })]);
+  const before = fs.readFileSync(path.join(dir, 's1.json'), 'utf8');
+  recordSessionEnd({ session_id: '../s1', reason: 'clear' }, dir, NOW);
+  recordSessionEnd({ session_id: 's1' }, dir, NOW);
+  recordSessionEnd(null, dir, NOW);
+  assert.strictEqual(fs.readFileSync(path.join(dir, 's1.json'), 'utf8'), before);
+  assert.deepStrictEqual(fs.readdirSync(dir), ['s1.json']);
+});
+
+test('recordSession keeps endedAt and endReason when it rewrites a snapshot', () => {
+  const dir = tmpDir();
+  recordSession(statuslineInput(), dir, NOW);
+  recordSessionEnd({ session_id: 'abc-123', reason: 'clear' }, dir, NOW);
+  recordSession(statuslineInput({ cost: { ...statuslineInput().cost, total_cost_usd: 2 } }), dir, NOW);
+  const written = readSnapshot(dir);
+  assert.strictEqual(written.costUsd, 2);
+  assert.strictEqual(written.endedAt, NOW);
+  assert.strictEqual(written.endReason, 'clear');
+});
+
+test('readSessions keeps a valid end and drops malformed end fields', () => {
+  const dir = writeSnapshots([
+    snapshot({ sessionId: 'good', lastActiveAt: NOW - 5000, endedAt: NOW - 1000, endReason: 'prompt_input_exit' }),
+    snapshot({ sessionId: 'bad', lastActiveAt: NOW - 10_000, endedAt: 'soon', endReason: '<script>' }),
+  ]);
+  const [good, bad] = readSessions(dir, NOW);
+  assert.strictEqual(good.endedAt, NOW - 1000);
+  assert.strictEqual(good.endReason, 'prompt_input_exit');
+  assert.strictEqual(bad.sessionId, 'bad');
+  assert.strictEqual('endedAt' in bad, false);
+  assert.strictEqual('endReason' in bad, false);
+});
+
+test('buildLiveSessions marks an ended session as not live, with its reason', () => {
+  const result = buildLiveSessions([
+    snapshot({ sessionId: 'cleared', lastActiveAt: NOW - 60_000, endedAt: NOW - 30_000, endReason: 'clear' }),
+    snapshot({ sessionId: 'resumed', lastActiveAt: NOW - 10_000, endedAt: NOW - 30_000, endReason: 'resume' }),
+    snapshot({ sessionId: 'no-reason', lastActiveAt: NOW - 60_000, endedAt: NOW - 30_000 }),
+    snapshot({ sessionId: 'open', lastActiveAt: NOW - 60_000 }),
+  ], [], NOW);
+  assert.deepStrictEqual(result.sessions.map((s) => [s.ended, s.live]), [
+    ['clear', false],
+    [null, true],
+    ['other', false],
+    [null, true],
+  ]);
+});
+
+test('buildLiveSessions counts ended sessions in the totals', () => {
+  const result = buildLiveSessions([
+    snapshot({ sessionId: 's1', costUsd: 1.5, endedAt: NOW, endReason: 'clear' }),
+    snapshot({ sessionId: 's2', costUsd: 0.5 }),
+  ], [], NOW);
+  assert.strictEqual(result.total.costUsd, 2);
+});

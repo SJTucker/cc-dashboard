@@ -430,6 +430,7 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
   assert.strictEqual(body.sessions.length, 1);
   assert.strictEqual(body.sessions[0].tokens, 1000);
   assert.strictEqual(body.sessions[0].live, true);
+  assert.strictEqual(body.sessions[0].ended, null);
   assert.strictEqual(body.sessions[0].project, 'demo');
   assert.strictEqual('sessionId' in body.sessions[0], false);
   assert.ok(body.sessions[0].costTodayUsd > 0);
@@ -439,6 +440,23 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
   assert.strictEqual(body.total.linesAdded, 5);
   assert.strictEqual(body.total.linesRemoved, 1);
   assert.strictEqual(body.total.tokens, 1000);
+});
+
+test('GET /api/sessions/live marks a session that ended', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  writeSnapshot(process.env.CLAUDE_CONFIG_DIR, {
+    sessionId: 'sess-b', lastActiveAt: Date.now() - 60_000, project: 'demo', model: 'Sonnet 4.6',
+    costUsd: 0.1, durationMs: 60_000, apiDurationMs: 5_000, linesAdded: 0, linesRemoved: 0,
+    endedAt: Date.now() - 30_000, endReason: 'clear',
+  });
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  const body = await res.json();
+  assert.strictEqual(body.sessions[0].ended, 'clear');
+  assert.strictEqual(body.sessions[0].live, false);
+  assert.strictEqual('sessionId' in body.sessions[0], false);
 });
 
 test('GET /api/sessions/live is empty with no snapshot directory', async (t) => {
