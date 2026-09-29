@@ -1345,6 +1345,87 @@ function drawModelList(container, models) {
   </table>`;
 }
 
+// Prices per million tokens, as the pricing page writes them: "$4 / $20".
+function rateText(row) {
+  let text = `$${row.input} / $${row.output}`;
+  if (row.cacheReadMult != null) text += ` · cache read ${row.cacheReadMult}x`;
+  if (row.fast) text += ` · fast $${row.fast.input} / $${row.fast.output}`;
+  return text;
+}
+
+async function postJson(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: body ? { 'Content-Type': 'application/json' } : {},
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  return res.json();
+}
+
+async function loadPricesSource() {
+  const note = document.getElementById('pricesSource');
+  const source = await fetch('/api/prices').then((r) => r.json()).catch(() => null);
+  if (!source) {
+    note.textContent = '';
+    return;
+  }
+  note.textContent = source.kind === 'built-in'
+    ? `Prices: built-in, checked ${source.date}`
+    : `Prices: from Anthropic's pricing page, effective ${source.date}`;
+  if (source.error) note.textContent += ` · prices.json ignored: ${source.error}`;
+}
+
+function renderPricesCheck(result) {
+  const box = document.getElementById('pricesCheck');
+  box.hidden = false;
+  box.innerHTML = '';
+  if (result.error) {
+    box.appendChild(el('p', { class: 'panel-note', text: result.error }));
+    return;
+  }
+  const lines = [
+    ...result.added.map((r) => `New: ${r.name} ${rateText(r)}`),
+    ...result.changed.map((c) => `Changed: ${c.after.name} ${rateText(c.before)} → ${rateText(c.after)}`),
+    ...result.skipped.map((s) => `Skipped: ${s.name} (${s.reason})`),
+  ];
+  for (const text of lines) box.appendChild(el('p', { class: 'panel-note', text }));
+  if (!result.added.length && !result.changed.length) {
+    box.appendChild(el('p', { class: 'panel-note', text: `Prices match Anthropic's pricing page (${result.unchanged} models).` }));
+    return;
+  }
+  const today = localDateStr(new Date());
+  const date = el('input', { type: 'date', id: 'pricesEffective', value: today, max: today });
+  const apply = el('button', { class: 'refresh-btn', type: 'button', text: 'Apply' });
+  apply.addEventListener('click', () => applyPrices(date.value));
+  box.appendChild(el('div', { class: 'prices-apply' }, [el('label', { for: 'pricesEffective', text: 'Effective from' }), date, apply]));
+  box.appendChild(el('p', { class: 'panel-note', text: 'Usage before this date keeps its old prices. New models are priced for all dates.' }));
+}
+
+async function applyPrices(effectiveFrom) {
+  const result = await postJson('/api/prices/apply', { effectiveFrom })
+    .catch((err) => ({ error: `Could not reach the dashboard server: ${err.message}` }));
+  const box = document.getElementById('pricesCheck');
+  if (result.error) {
+    // Keep the diff on screen, so a refused date can be corrected and applied again.
+    box.appendChild(el('p', { class: 'panel-note prices-error', text: result.error }));
+    return;
+  }
+  box.hidden = true;
+  loadPricesSource();
+  reloadAll();
+}
+
+document.getElementById('checkPricesBtn').addEventListener('click', async (event) => {
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  btn.textContent = 'Checking…';
+  const result = await postJson('/api/prices/check')
+    .catch((err) => ({ error: `Could not reach the dashboard server: ${err.message}` }));
+  btn.disabled = false;
+  btn.textContent = 'Check prices';
+  renderPricesCheck(result);
+});
+
 function shortModel(name) {
   // e.g. "claude-sonnet-4-6-20260115" -> "sonnet-4-6"
   const m = name.match(/claude-([a-z]+)-(\d[\d.-]*\d)/i);
@@ -2144,15 +2225,21 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   loadAndRender({ busy: true });
 });
 
+// Everything the Refresh button re-fetches. Applying prices calls it too, because
+// costs are computed in the server's scan and the server has just dropped that scan.
+function reloadAll() {
+  lastSignature = null;
+  refreshRecords();
+  loadAndRender({ busy: true });
+  loadChanges();
+}
+
 document.getElementById('refreshBtn').addEventListener('click', async () => {
   setBusy(true);
   // A rejected refresh (e.g. the server is down) must not skip loadAndRender below:
   // its failed summary request is what clears busy and shows the error banner.
   await fetch('/api/refresh', { method: 'POST' }).catch(() => {});
-  lastSignature = null;
-  refreshRecords();
-  loadAndRender({ busy: true });
-  loadChanges();
+  reloadAll();
 });
 
 function redrawCharts({ changes = true } = {}) {
@@ -2174,5 +2261,6 @@ setLive(currentDays === 'today');
 refreshRecords();
 loadAndRender({ busy: true });
 loadChanges();
+loadPricesSource();
 
 // #endregion

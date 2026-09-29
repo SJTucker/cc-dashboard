@@ -883,3 +883,31 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
   letter-spacing: inherit;
 }
 .group-toggle::before { margin-right: 6px; }
+
+.panel-head .refresh-btn { padding: 4px 10px; font-size: 11px; }
+.refresh-btn:disabled { opacity: 0.6; cursor: default; }
+
+.prices-check { margin-top: 12px; }
+.prices-check .panel-note { margin: 4px 0 0; }
+.prices-error { color: var(--text-primary); }
+
+.prices-apply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.prices-apply input[type="date"] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: 6px;
+  padding: 4px 8px;
+  font-family: var(--font-data);
+  font-size: 12px;
+  color-scheme: dark;
+}
