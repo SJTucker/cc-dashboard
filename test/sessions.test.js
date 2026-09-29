@@ -264,32 +264,41 @@ test('readSessions returns [] when the directory does not exist', () => {
   assert.deepStrictEqual(readSessions(path.join(tmpDir(), 'none'), NOW), []);
 });
 
+function round6(n) {
+  return Math.round(n * 1e6) / 1e6;
+}
+
 test('buildLiveSessions joins tokens by sessionId and totals the rows', () => {
   const snaps = [
     snapshot({ sessionId: 's1', costUsd: 1.5, apiDurationMs: 60_000, linesAdded: 10, linesRemoved: 2, lastActiveAt: NOW - 60_000 }),
     snapshot({ sessionId: 's2', costUsd: 0.5, apiDurationMs: 30_000, linesAdded: 1, linesRemoved: 0, lastActiveAt: NOW - LIVE_WINDOW_MS - 1 }),
   ];
   const calls = [
-    { sessionId: 's1', context: 1000, output: 200 },
-    { sessionId: 's1', context: 500, output: 50 },
-    { sessionId: 's2', context: 10, output: 5 },
-    { sessionId: 'other', context: 99999, output: 1 },
+    { sessionId: 's1', context: 1000, output: 200, cost: 0.2 },
+    { sessionId: 's1', context: 500, output: 50, cost: 0.05 },
+    { sessionId: 's2', context: 10, output: 5, cost: 0.01 },
+    { sessionId: 'other', context: 99999, output: 1, cost: 9 },
   ];
   const result = buildLiveSessions(snaps, calls, NOW);
   assert.deepStrictEqual(result.sessions.map((s) => [s.tokens, s.live]), [[1750, true], [15, false]]);
+  assert.deepStrictEqual(result.sessions.map((s) => round6(s.costTodayUsd)), [0.25, 0.01]);
   assert.strictEqual('sessionId' in result.sessions[0], false);
-  assert.deepStrictEqual(result.total, { costUsd: 2, apiDurationMs: 90_000, linesAdded: 11, linesRemoved: 2, tokens: 1765 });
+  assert.strictEqual(round6(result.total.costTodayUsd), 0.26);
+  assert.deepStrictEqual({ ...result.total, costTodayUsd: round6(result.total.costTodayUsd) }, {
+    costUsd: 2, costTodayUsd: 0.26, apiDurationMs: 90_000, linesAdded: 11, linesRemoved: 2, tokens: 1765,
+  });
 });
 
 test('buildLiveSessions gives 0 tokens to a session with no calls today', () => {
   const result = buildLiveSessions([snapshot()], [], NOW);
   assert.strictEqual(result.sessions[0].tokens, 0);
+  assert.strictEqual(result.sessions[0].costTodayUsd, 0);
   assert.strictEqual(result.total.tokens, 0);
 });
 
 test('buildLiveSessions with no snapshots is an empty list and zero totals', () => {
-  assert.deepStrictEqual(buildLiveSessions([], [{ sessionId: 'x', context: 1, output: 1 }], NOW), {
+  assert.deepStrictEqual(buildLiveSessions([], [{ sessionId: 'x', context: 1, output: 1, cost: 1 }], NOW), {
     sessions: [],
-    total: { costUsd: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
+    total: { costUsd: 0, costTodayUsd: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
   });
 });

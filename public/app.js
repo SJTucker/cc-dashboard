@@ -1187,6 +1187,7 @@ function renderSessions(live) {
     cell(formatDuration(s.durationMs), 'num'),
     cell(formatDuration(s.apiDurationMs), 'num'),
     cell(lines(s.linesAdded, s.linesRemoved), 'num'),
+    cell(formatCost(s.costTodayUsd), 'num cost'),
     cell(formatTokens(s.tokens), 'num'),
     // The word, not only a colour, marks a live session.
     cell(s.live ? `${formatAgo(s.lastActiveAt, now)} · live` : formatAgo(s.lastActiveAt, now), s.live ? 'is-live' : ''),
@@ -1200,6 +1201,7 @@ function renderSessions(live) {
     cell('—', 'num'),
     cell(formatDuration(t.apiDurationMs), 'num'),
     cell(lines(t.linesAdded, t.linesRemoved), 'num'),
+    cell(formatCost(t.costTodayUsd), 'num cost'),
     cell(formatTokens(t.tokens), 'num'),
     cell(''),
   ]));
@@ -1207,7 +1209,7 @@ function renderSessions(live) {
 
   const liveCount = live.sessions.filter((s) => s.live).length;
   document.getElementById('sessionsNote').textContent =
-    `${live.sessions.length} today · ${liveCount} live in the last 10 min`;
+    `${live.sessions.length} today · ${liveCount} live in the last 10 min · session figures include earlier days`;
 }
 
 // Warn once either window reaches 75%, on every range. Within a window the percent

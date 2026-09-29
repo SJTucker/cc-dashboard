@@ -392,7 +392,13 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
   assert.strictEqual(body.sessions[0].live, true);
   assert.strictEqual(body.sessions[0].project, 'demo');
   assert.strictEqual('sessionId' in body.sessions[0], false);
-  assert.deepStrictEqual(body.total, { costUsd: 0.42, apiDurationMs: 20_000, linesAdded: 5, linesRemoved: 1, tokens: 1000 });
+  assert.ok(body.sessions[0].costTodayUsd > 0);
+  assert.strictEqual(body.total.costTodayUsd, body.sessions[0].costTodayUsd);
+  assert.strictEqual(body.total.costUsd, 0.42);
+  assert.strictEqual(body.total.apiDurationMs, 20_000);
+  assert.strictEqual(body.total.linesAdded, 5);
+  assert.strictEqual(body.total.linesRemoved, 1);
+  assert.strictEqual(body.total.tokens, 1000);
 });
 
 test('GET /api/sessions/live is empty with no snapshot directory', async (t) => {
@@ -403,7 +409,7 @@ test('GET /api/sessions/live is empty with no snapshot directory', async (t) => 
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), {
     sessions: [],
-    total: { costUsd: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
+    total: { costUsd: 0, costTodayUsd: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
   });
 });
 

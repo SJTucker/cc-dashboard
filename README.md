@@ -77,7 +77,11 @@ recently. It makes no network request of its own.
   session's cost, durations and lines changed, in
   `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`,
   or `LIVE_SESSIONS_DIR`). The Live sessions panel reads them. Snapshots older than a
-  day are deleted on the next write.
+  day are deleted on the next write. The panel's Session cost, Session length, API
+  time and Lines columns come from that snapshot, so they cover the whole session
+  from whenever it started. Its Cost today and Tokens today columns come from
+  today's transcripts instead, so a session that started yesterday shows more
+  session cost than cost today.
 
 To feed the statusline source, add one line to your existing statusline script
 (the command `statusLine.command` in `~/.claude/settings.json` points at):
@@ -182,28 +186,29 @@ boundary back.
 ## File layout
 
 ```
-server.js          Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records and /api/sessions/live
-lib/scan.js         Walks ~/.claude/projects, parses JSONL, aggregates by day and model
-lib/rtk.js          Reads rtk's history.db read-only, aggregates by day and command
-lib/efficiency.js   Session start, Bash result and per-prompt statistics per time window
-lib/changes.js      Setup change markers: plugin installs, new models, changes.json
-lib/limits.js       Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
-lib/pricing.js       Offline per-token price table + cost calculation
-lib/net-guard.js    Host-header check + security headers
-lib/sessions.js     Per-session snapshots from the statusline, and today's live sessions
+server.js              Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records and /api/sessions/live
+lib/scan.js            Walks ~/.claude/projects, parses JSONL, aggregates by day and model
+lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command
+lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window
+lib/changes.js         Setup change markers: plugin installs, new models, changes.json
+lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
+lib/pricing.js         Offline per-token price table + cost calculation
+lib/net-guard.js       Host-header check + security headers
+lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
-bin/record-limits   Old name for bin/record-statusline, kept as a wrapper
-public/index.html   Page shell
-public/style.css    All styling
-public/app.js        Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/changes and /api/records, draws the SVG charts, no dependencies
+bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
+public/index.html      Page shell
+public/style.css       All styling
+public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/changes and /api/records, draws the SVG charts, no dependencies
 ```
 
 ## Extending it
 
 A few obvious next steps if you want to keep going, roughly in order of effort:
-- **Session drill-down**: `lib/scan.js` already has everything needed per-file; add
-  an `/api/sessions` route that returns per-session totals instead of only the
-  daily/model rollups.
+- **All-time session drill-down**: `lib/scan.js` already has everything needed
+  per-file; add a route such as `/api/sessions/history` that returns per-session
+  totals across all time, instead of only the daily/model rollups. `/api/sessions/live`
+  already covers today's sessions, so a new route needs a different name.
 - **Per-project breakdown**: project folder names under `~/.claude/projects` are
   the encoded path (e.g. `-Users-you-code-myapp`) — decode and group by them.
   Skipped in this offline version to keep the pricing table's approach honest: it's
