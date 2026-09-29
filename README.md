@@ -114,13 +114,13 @@ the weekly percent when the day started. `bin/record-statusline` keeps that
 starting point in `rate-limits.json` as `dayStart`. A day starts at the last
 reading before it, so the day's first API response counts toward that day. After
 a weekly reset, the day counts from 0. If `rate-limits.json` has a reading from
-earlier the same day but no `dayStart`, the day counts from that reading. The row
-then says "counted from today's first reading", because usage before that reading
-is not known. On a workday (Monday to Friday) the share is compared with two
-budgets. The fixed budget is 20% of the week. The rolling budget
-is the weekly percent left at the start of the day, divided by the workdays left
-before the reset. The warning banner shows when today reaches 19%. Weekends show
-the share with no budget. The budget and the workdays are constants in
+earlier the same day but no `dayStart`, the day counts from that reading. The
+"Today (share of the week)" row then says "counted from today's first reading",
+because usage before that reading is not known. On a workday (Monday to Friday) the
+share is compared with two budgets. The fixed budget is 20% of the week. The
+rolling budget is the weekly percent left at the start of the day, divided by the
+workdays left before the reset. The warning banner shows when today reaches 19%.
+Weekends show the share with no budget. The budget and the workdays are constants in
 `lib/limits.js`. Usage outside Claude Code, such as claude.ai, reaches the weekly
 percent but produces no statusline reading. That usage is counted toward the day of
 the next Claude Code API response.

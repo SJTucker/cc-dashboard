@@ -24,7 +24,9 @@ first wrote `dayStart` a few minutes after that.
   the previous reading is from an earlier day. When the previous reading is from
   today, the true start of the day is unknown. The row should then say "counted
   from today's first reading" (`from: 'first-reading'`), not present the value as
-  the day's start.
+  the day's start. Fixed on 2026-09-29: `dayStartFor` now returns
+  `from: 'first-reading'` when the previous reading is from the same day and no
+  `dayStart` exists.
 - **Where else it happens.** This case only arises when the file has a same-day
   reading and no `dayStart`: the first write after upgrading, or a file written by
   an older copy of the script. From 2026-09-30 on, the baseline should be
