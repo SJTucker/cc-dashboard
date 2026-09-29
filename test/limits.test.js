@@ -356,14 +356,14 @@ test('a skipped older reading leaves the day baseline alone', () => {
   assert.deepStrictEqual(written.dayStart, dayStart);
 });
 
-test('a reading with no weekly window keeps a same-day baseline and drops an old one', () => {
+test('a reading with no weekly window keeps a same-day baseline and replaces an old one', () => {
   const sameDay = weekFile(at(2026, 9, 30, 9), 13, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
   recordRateLimits(statuslineInput({ transcript_path: makeTranscript(at(2026, 9, 30, 10)) }), sameDay);
   assert.deepStrictEqual(readBack(sameDay).dayStart, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
 
   const oldDay = weekFile(at(2026, 9, 29, 9), 13, { date: '2026-09-29', percent: 12, from: 'previous-reading' });
   recordRateLimits(statuslineInput({ transcript_path: makeTranscript(at(2026, 9, 30, 10)) }), oldDay);
-  assert.strictEqual(readBack(oldDay).dayStart, undefined);
+  assert.deepStrictEqual(readBack(oldDay).dayStart, { date: '2026-09-30', percent: 13, from: 'previous-reading' });
 });
 
 test('with a weekly window the file holds dayStart and still nothing else from the input', () => {
@@ -445,4 +445,24 @@ test('readDailyShare returns null with no file or no weekly window', () => {
   assert.strictEqual(readDailyShare({ rateLimits: missingFile('rate-limits.json'), now: NOW }), null);
   const noWeek = writeRateLimits({ fetchedAtMs: FETCHED, rate_limits: { five_hour: { used_percentage: 5, resets_at: null } } });
   assert.strictEqual(readDailyShare({ rateLimits: noWeek, now: NOW }), null);
+});
+
+test('a reading with no weekly window after a reset still starts the day at 0', () => {
+  // Claude Code drops a window whose reset has passed, so the first reading after a
+  // reset can carry only the five-hour window.
+  const oldReset = at(2026, 9, 30, 5);
+  const newReset = at(2026, 10, 7, 5);
+  const file = weekFile(at(2026, 9, 30, 4), 95, { date: '2026-09-30', percent: 88, from: 'previous-reading' }, oldReset);
+  recordRateLimits(statuslineInput({ transcript_path: makeTranscript(at(2026, 9, 30, 6)) }), file);
+  recordRateLimits(weekInput(at(2026, 9, 30, 7), 1, newReset), file);
+  recordRateLimits(weekInput(at(2026, 9, 30, 15), 18, newReset), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 0, from: 'reset' });
+  assert.strictEqual(readDailyShare({ rateLimits: file, now: at(2026, 9, 30, 15, 5) }).share, 18);
+});
+
+test('a reading with no weekly window on a new day keeps the previous reading as the baseline', () => {
+  const file = weekFile(at(2026, 9, 29, 18), 12, { date: '2026-09-29', percent: 9, from: 'previous-reading' });
+  recordRateLimits(statuslineInput({ transcript_path: makeTranscript(at(2026, 9, 30, 8)) }), file);
+  recordRateLimits(weekInput(at(2026, 9, 30, 9), 14), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
 });
