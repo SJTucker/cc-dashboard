@@ -1,0 +1,26 @@
+#!/usr/bin/env node
+'use strict';
+
+// Run by Claude Code's SessionEnd hook, which pipes one JSON object on stdin with
+// the ending session's session_id and the reason it ended. Claude Code shows this
+// script's stdout to the user as the session ends, so it must never print
+// anything or exit non-zero, whatever stdin contains. It marks the session's
+// snapshot as ended (lib/sessions.js).
+
+const { recordSessionEnd } = require('../lib/sessions');
+
+let input = '';
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+});
+process.stdin.on('error', () => process.exit(0));
+process.stdin.on('end', () => {
+  let parsed;
+  try {
+    parsed = JSON.parse(input);
+  } catch {
+    process.exit(0); // bad JSON: say nothing, exit clean
+  }
+  recordSessionEnd(parsed); // never throws
+  process.exit(0);
+});

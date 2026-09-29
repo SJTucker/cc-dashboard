@@ -106,6 +106,25 @@ echo "$input" | ~/code/cc-dashboard/bin/record-statusline
 echo "$input" | jq -r '.model.display_name'
 ```
 
+The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
+any other end, such as quitting or `/resume`. It learns this from
+`bin/record-session-end`, which Claude Code runs as a `SessionEnd` hook. Add this to
+`~/.claude/settings.json`, inside the existing `"hooks"` object if there is one:
+
+```json
+"hooks": {
+  "SessionEnd": [
+    { "hooks": [{ "type": "command", "command": "~/code/cc-dashboard/bin/record-session-end" }] }
+  ]
+}
+```
+
+`record-session-end` never writes to stdout or stderr and always exits 0. Without the
+hook, a session shows as live for 10 minutes after its last response. So after a
+`/clear`, the old session and the new one both show as live for up to 10 minutes. A
+resumed session keeps its session id, so its row shows as live again after its next
+response.
+
 When either window reaches 75%, a warning banner at the top of the page shows on
 every range, with the percentage and the reset time.
 

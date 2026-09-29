@@ -206,8 +206,8 @@ for (const name of ['record-statusline', 'record-limits']) {
   });
 }
 
-test('both bin scripts are executable', () => {
-  for (const name of ['record-statusline', 'record-limits']) {
+test('every bin script is executable', () => {
+  for (const name of ['record-statusline', 'record-limits', 'record-session-end']) {
     const mode = fs.statSync(path.join(__dirname, '..', 'bin', name)).mode;
     assert.ok(mode & 0o100, `${name} has the owner exec bit`);
   }
@@ -372,4 +372,21 @@ test('buildLiveSessions counts ended sessions in the totals', () => {
     snapshot({ sessionId: 's2', costUsd: 0.5 }),
   ], [], NOW);
   assert.strictEqual(result.total.costUsd, 2);
+});
+
+test('bin/record-session-end marks the snapshot and prints nothing', () => {
+  const dir = writeSnapshots([snapshot({ sessionId: 's1' })]);
+  const input = JSON.stringify({ session_id: 's1', reason: 'clear', hook_event_name: 'SessionEnd', cwd: '/tmp' });
+  const result = runBin('record-session-end', input, { LIVE_SESSIONS_DIR: dir });
+  assert.strictEqual(result.status, 0);
+  assert.strictEqual(result.stdout + result.stderr, '');
+  assert.strictEqual(readFile(dir, 's1').endReason, 'clear');
+});
+
+test('bin/record-session-end is silent and exits 0 on bad or empty input', () => {
+  for (const input of ['not json', '', 'null']) {
+    const result = runBin('record-session-end', input, { LIVE_SESSIONS_DIR: tmpDir() });
+    assert.strictEqual(result.status, 0, `input ${JSON.stringify(input)}`);
+    assert.strictEqual(result.stdout + result.stderr, '', `input ${JSON.stringify(input)}`);
+  }
 });
