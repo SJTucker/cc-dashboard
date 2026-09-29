@@ -13,6 +13,6 @@ then on.
 | [Refresh prices button](refresh-prices.md) | not started |
 | [Daily share of the weekly limit](daily-weekly-budget.md) | not started |
 | [Record day: add the total cost](record-day-cost.md) | not started |
-| [Live sessions: a cleared session shows as a second live row](live-sessions-after-clear.md) | not started |
+| [Live sessions: cleared session row, and move below where usage goes](live-sessions-after-clear.md) | not started |
 
 Suggested order: the restyle last, so the new layout is restyled once.
