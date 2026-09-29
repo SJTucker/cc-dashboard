@@ -1,7 +1,7 @@
 {
   "name": "my-cc-dashboard",
   "version": "1.0.0",
-  "description": "A local, offline Claude Code usage dashboard - reads ~/.claude/projects only, never phones home.",
+  "description": "A local Claude Code usage dashboard - reads ~/.claude/projects, and fetches Anthropic's pricing page only when asked.",
   "main": "server.js",
   "bin": {
     "my-cc-dashboard": "server.js"

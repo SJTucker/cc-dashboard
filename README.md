@@ -8,7 +8,8 @@ If you use `rtk`, it also charts the command output rtk filtered out before it r
 the model. See "rtk savings" below.
 
 Built to be easy to fully read in one sitting — five small files, two dependencies,
-no telemetry, no CDN, no outbound network calls of its own.
+no telemetry, no CDN. It makes one outbound request, and only when you click
+Check prices.
 
 ## Run it
 
@@ -115,7 +116,7 @@ produces either source for claude.ai subscription logins, and only while it runs
 so the panel shows the time of the last update. Per-model weekly limits are left
 out. Read the usage cache from another file with `CLAUDE_JSON=~/path/.claude.json
 npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.json
-npm start`.
+npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 
 ## Setup changes
 
@@ -166,22 +167,29 @@ boundary back.
   "Plan usage" above); it writes only `rate-limits.json` and the per-session
   snapshots in `cc-dashboard/sessions/`, and nothing under `server.js` or
   `public/` calls it.
-- **No network calls.** Unlike some similar tools, this one does not fetch pricing
-  from the internet, load a charting library from a CDN, or phone home in any way.
-  The bar charts are hand-drawn SVG (see `public/app.js`). Pricing is a small
-  hardcoded table in `lib/pricing.js`. The only thing that could make this reach the
-  network is `npm install` itself, to fetch its two dependencies.
+- **One network request, on demand.** The Cost by model panel has a Check prices
+  button. Clicking it makes the server fetch
+  `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's pricing
+  page as markdown. Nothing fetches on page load, on a timer, or at startup. The URL
+  is a constant in `lib/price-fetch.js`. The page's Content-Security-Policy blocks
+  the browser from contacting any other host, so the request always comes from the
+  server. The bar charts are hand-drawn SVG (see `public/app.js`), so no charting
+  library comes from a CDN.
 - **Localhost only.** The server binds to `127.0.0.1` and rejects any request whose
   `Host` header isn't `localhost`/`127.0.0.1`, which blocks the DNS-rebinding trick
   where a malicious website re-points its own hostname at your machine (see
   `lib/net-guard.js` for the full explanation). There's no login, so don't change
   the bind address to something network-reachable unless you understand that
   trade-off.
-- **Pricing is an estimate.** `lib/pricing.js` has a hardcoded price-per-token table
-  for Opus/Sonnet/Haiku/Fable/Mythos. Anthropic's pricing can change — check
-  <https://claude.com/pricing> and edit the numbers at the top of that file if they
-  drift. Any model it doesn't recognize is still counted in token totals but shown
-  as "unpriced" rather than silently costed at $0.
+- **Pricing is an estimate, with a dated history.** `lib/pricing.js` has a built-in
+  price table, last checked against Anthropic's pricing page on 2026-09-28. Check
+  prices lists new models and changed prices and changes nothing. Apply saves them
+  to `~/.claude/cc-dashboard/prices.json` (set `PRICES_JSON` to move it) with an
+  effective-from date. A changed price applies to usage from that date on, and older
+  usage keeps the price it had. A new model is priced for all dates. A page that
+  does not parse is refused with the reason, and prices stay as they are. Any model
+  the table does not recognize is still counted in token totals but shown as
+  "unpriced" rather than silently costed at $0.
 
 ## File layout
 
@@ -192,7 +200,9 @@ lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and c
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window
 lib/changes.js         Setup change markers: plugin installs, new models, changes.json
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
-lib/pricing.js         Offline per-token price table + cost calculation
+lib/pricing.js         Built-in price table, dated price versions, cost calculation
+lib/price-store.js     Applied price history in prices.json
+lib/price-fetch.js     Fetch and parse Anthropic's pricing page
 lib/net-guard.js       Host-header check + security headers
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
