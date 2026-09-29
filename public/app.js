@@ -1292,28 +1292,28 @@ function refreshRecords() {
   });
 }
 
-// The value and date line show the all-time record. The note shows the record
-// within the range on screen. Today's total grows on every live poll, and the
-// range's scan can be newer than the cached all-time scan behind /api/records.
-// So either one is shown as the all-time record when it is bigger.
+// The value and date line show the all-time record: the day with the most tokens,
+// with that day's cost. The note shows the record within the range on screen, also
+// with its cost. Today's total grows on every live poll, and the range's scan can
+// be newer than the cached all-time scan behind /api/records. So either one is
+// shown as the all-time record when it has more tokens.
 function renderRecord(daily) {
   lastRecordDaily = daily;
 
   const todayStr = localDateStr(new Date());
-  const todayTotal = daily
-    .filter((d) => d.date.slice(0, 10) === todayStr)
-    .reduce((sum, d) => sum + d.input + d.output + d.cacheCreate + d.cacheRead, 0);
+  // busiestDay over today's entries alone is today's total, with its cost.
+  const today = busiestDay(daily.filter((d) => d.date.slice(0, 10) === todayStr));
   const rangeRecord = busiestDay(daily);
 
   let shownAllTime = recordsData && recordsData.allTime;
   if (shownAllTime) {
-    if (todayTotal > shownAllTime.tokens) shownAllTime = { date: todayStr, tokens: todayTotal };
+    if (today && today.tokens > shownAllTime.tokens) shownAllTime = today;
     if (rangeRecord && rangeRecord.tokens > shownAllTime.tokens) shownAllTime = rangeRecord;
   }
 
   document.getElementById('cardRecord').textContent = shownAllTime ? formatTokens(shownAllTime.tokens) : '—';
   document.getElementById('cardRecordDate').textContent =
-    shownAllTime ? `${shortDate(shownAllTime.date)} · all time` : '';
+    shownAllTime ? `${shortDate(shownAllTime.date)} · ${formatCost(shownAllTime.cost)} · all time` : '';
 
   // On Today the range record is today itself, and Total tokens already shows
   // that number, so the note stays empty.
@@ -1321,7 +1321,7 @@ function renderRecord(daily) {
   if (currentDays !== 'today' && rangeRecord) {
     note = shownAllTime && rangeRecord.date === shownAllTime.date
       ? 'this range holds the record'
-      : `this range: ${formatTokens(rangeRecord.tokens)} · ${shortDate(rangeRecord.date)}`;
+      : `this range: ${formatTokens(rangeRecord.tokens)} · ${formatCost(rangeRecord.cost)} · ${shortDate(rangeRecord.date)}`;
   }
   document.getElementById('cardRecordNote').textContent = note;
 }
