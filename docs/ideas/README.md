@@ -14,5 +14,6 @@ then on.
 | [Daily share of the weekly limit](daily-weekly-budget.md) | not started |
 | [Record day: add the total cost](record-day-cost.md) | not started |
 | [Live sessions: cleared session row, and move below where usage goes](live-sessions-after-clear.md) | not started |
+| [Reorder the panels](reorder-panels.md) | not started |
 
 Suggested order: the restyle last, so the new layout is restyled once.

@@ -67,6 +67,17 @@ choice.
 5. The panel shows where the prices came from: "built-in, 2026-09-28" or "fetched
    2026-10-15".
 
+## Decided on 2026-09-29
+
+- **Keep a price history.** Comparing past usage with present usage needs each
+  request priced at the rate in effect when it ran. Each Apply adds a dated snapshot
+  to `~/.claude/cc-dashboard/prices.json` (`PRICES_JSON` overrides the path). A
+  changed price applies from its effective-from date, which defaults to today and
+  can be backdated. A model new to the table is priced for all dates.
+- **New models** are added when their family is one of the five known families. A
+  new family is listed as skipped.
+- **Check, then Apply.** Check shows the diff and changes nothing.
+
 ## Open questions
 
 - **Validation.** A parse that returns nonsense must be refused. For example: every
