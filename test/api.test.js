@@ -381,7 +381,7 @@ test('GET /api/records returns the all-time busiest day', async (t) => {
   const data = await res.json();
 
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(data, { allTime: { date: localDateStr(new Date()), tokens: 1200 } });
+  assert.deepStrictEqual(data, { allTime: { date: localDateStr(new Date()), tokens: 1200, cost: 0.006 } });
 });
 
 test('GET /stats.js serves the shared statistics helpers', async (t) => {

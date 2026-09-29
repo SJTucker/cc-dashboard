@@ -191,8 +191,9 @@ app.get('/api/changes', async (req, res) => {
   }
 });
 
-// The Record day card's all-time value. It uses the days=all cache entry that
-// /api/summary and /api/changes also use, so the three share one scan.
+// The Record day card's all-time value: the day with the most tokens, with its
+// token total and cost. It uses the days=all cache entry that /api/summary and
+// /api/changes also use, so the three share one scan.
 app.get('/api/records', async (req, res) => {
   try {
     const data = await getCached(null);
