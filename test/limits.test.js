@@ -290,3 +290,86 @@ test('bin/record-limits writes RATE_LIMITS_JSON with valid input', () => {
   assert.strictEqual(written.fetchedAtMs, FETCHED);
   assert.strictEqual(written.rate_limits.five_hour.used_percentage, 12.5);
 });
+
+// Local wall-clock times, so the tests hold in any timezone.
+const at = (y, m, d, h, min = 0) => new Date(y, m - 1, d, h, min).getTime();
+const RESET = at(2026, 10, 4, 5); // Sunday 2026-10-04 05:00 local
+
+function weekInput(transcriptMs, percent, resetsAtMs = RESET) {
+  return statuslineInput({
+    transcript_path: makeTranscript(transcriptMs),
+    rate_limits: { seven_day: { used_percentage: percent, resets_at: Math.floor(resetsAtMs / 1000) } },
+  });
+}
+
+function weekFile(fetchedAtMs, percent, dayStart, resetsAtMs = RESET) {
+  const content = { fetchedAtMs, rate_limits: { seven_day: { used_percentage: percent, resets_at: Math.floor(resetsAtMs / 1000) } } };
+  if (dayStart) content.dayStart = dayStart;
+  return writeRateLimits(content);
+}
+
+const readBack = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+
+test('the first reading ever starts the day at its own weekly percent', () => {
+  const file = missingFile('rate-limits.json');
+  recordRateLimits(weekInput(at(2026, 9, 30, 9), 13), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 13, from: 'first-reading' });
+});
+
+test('the first reading of a new day starts the day at the previous reading', () => {
+  const file = weekFile(at(2026, 9, 29, 18), 12, { date: '2026-09-29', percent: 9, from: 'previous-reading' });
+  recordRateLimits(weekInput(at(2026, 9, 30, 8), 13), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
+});
+
+test('a later reading on the same day keeps the day baseline', () => {
+  const file = weekFile(at(2026, 9, 30, 9), 13, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
+  recordRateLimits(weekInput(at(2026, 9, 30, 11), 15), file);
+  const written = readBack(file);
+  assert.strictEqual(written.rate_limits.seven_day.used_percentage, 15);
+  assert.deepStrictEqual(written.dayStart, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
+});
+
+test('a weekly reset since the previous reading starts the day at 0', () => {
+  const oldReset = at(2026, 9, 30, 5);
+  const file = weekFile(at(2026, 9, 29, 18), 90, { date: '2026-09-29', percent: 80, from: 'previous-reading' }, oldReset);
+  recordRateLimits(weekInput(at(2026, 9, 30, 8), 2, at(2026, 10, 7, 5)), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 0, from: 'reset' });
+});
+
+test('a weekly reset in the middle of the day restarts the day at 0, and later readings keep that', () => {
+  const oldReset = at(2026, 9, 30, 5);
+  const newReset = at(2026, 10, 7, 5);
+  const file = weekFile(at(2026, 9, 30, 4), 95, { date: '2026-09-30', percent: 88, from: 'previous-reading' }, oldReset);
+  recordRateLimits(weekInput(at(2026, 9, 30, 6), 1, newReset), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 0, from: 'reset' });
+  recordRateLimits(weekInput(at(2026, 9, 30, 7), 3, newReset), file);
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 0, from: 'reset' });
+});
+
+test('a skipped older reading leaves the day baseline alone', () => {
+  const dayStart = { date: '2026-09-30', percent: 12, from: 'previous-reading' };
+  const file = weekFile(at(2026, 9, 30, 11), 15, dayStart);
+  recordRateLimits(weekInput(at(2026, 9, 30, 10), 99), file);
+  const written = readBack(file);
+  assert.strictEqual(written.rate_limits.seven_day.used_percentage, 15);
+  assert.deepStrictEqual(written.dayStart, dayStart);
+});
+
+test('a reading with no weekly window keeps a same-day baseline and drops an old one', () => {
+  const sameDay = weekFile(at(2026, 9, 30, 9), 13, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
+  recordRateLimits(statuslineInput({ transcript_path: makeTranscript(at(2026, 9, 30, 10)) }), sameDay);
+  assert.deepStrictEqual(readBack(sameDay).dayStart, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
+
+  const oldDay = weekFile(at(2026, 9, 29, 9), 13, { date: '2026-09-29', percent: 12, from: 'previous-reading' });
+  recordRateLimits(statuslineInput({ transcript_path: makeTranscript(at(2026, 9, 30, 10)) }), oldDay);
+  assert.strictEqual(readBack(oldDay).dayStart, undefined);
+});
+
+test('with a weekly window the file holds dayStart and still nothing else from the input', () => {
+  const file = missingFile('rate-limits.json');
+  recordRateLimits(weekInput(at(2026, 9, 30, 9), 13), file);
+  const raw = fs.readFileSync(file, 'utf8');
+  assert.ok(!raw.includes('super-secret-session-id-should-not-be-written'));
+  assert.deepStrictEqual(Object.keys(JSON.parse(raw)).sort(), ['dayStart', 'fetchedAtMs', 'rate_limits']);
+});
