@@ -32,9 +32,11 @@ function startServer() {
   // assertions below would depend on their shell history.
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
 
+  delete process.env.LIVE_SESSIONS_DIR; // snapshots resolve under CLAUDE_CONFIG_DIR
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.PORT = '0'; // let the OS pick a free port
   delete require.cache[require.resolve('../lib/scan')];
+  delete require.cache[require.resolve('../lib/sessions')];
   delete require.cache[require.resolve('../server')];
   const server = require('../server');
   return server;
@@ -87,6 +89,8 @@ test('GET /api/summary?days=today is not served from the 60s cache', async (t) =
   });
   fs.appendFileSync(path.join(dir, 'session.jsonl'), line + '\n');
 
+  // Past getTodayScan's 2s share window, as every live poll is.
+  await new Promise((resolve) => setTimeout(resolve, 2100));
   const second = await (await fetch(`http://127.0.0.1:${port}/api/summary?days=today`)).json();
   assert.strictEqual(second.summary.totalOutput, 500, 'the new entry appears without a manual refresh');
 });
@@ -349,4 +353,97 @@ test('GET /stats.js serves the shared statistics helpers', async (t) => {
   assert.strictEqual(res.status, 200);
   assert.match(res.headers.get('content-type'), /javascript/);
   assert.match(await res.text(), /function percentile/);
+});
+
+function writeSnapshot(base, snap) {
+  const dir = path.join(base, 'cc-dashboard', 'sessions');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, `${snap.sessionId}.json`), JSON.stringify(snap));
+  return dir;
+}
+
+function appendCall(base, { sessionId, id, input, output }) {
+  const now = new Date();
+  now.setHours(10, 30, 0, 0);
+  fs.appendFileSync(path.join(base, 'projects', 'demo', 'session.jsonl'), JSON.stringify({
+    timestamp: now.toISOString(),
+    requestId: `req-${id}`,
+    sessionId,
+    message: { id: `msg-${id}`, model: 'claude-sonnet-4-6-20260115', usage: { input_tokens: input, output_tokens: output } },
+  }) + '\n');
+}
+
+test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const base = process.env.CLAUDE_CONFIG_DIR;
+  appendCall(base, { sessionId: 'sess-a', id: 'a1', input: 700, output: 300 });
+  writeSnapshot(base, {
+    sessionId: 'sess-a', lastActiveAt: Date.now() - 30_000, project: 'demo', model: 'Sonnet 4.6',
+    costUsd: 0.42, durationMs: 90_000, apiDurationMs: 20_000, linesAdded: 5, linesRemoved: 1,
+  });
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  assert.strictEqual(res.status, 200);
+  const body = await res.json();
+  assert.strictEqual(body.sessions.length, 1);
+  assert.strictEqual(body.sessions[0].tokens, 1000);
+  assert.strictEqual(body.sessions[0].live, true);
+  assert.strictEqual(body.sessions[0].project, 'demo');
+  assert.strictEqual('sessionId' in body.sessions[0], false);
+  assert.deepStrictEqual(body.total, { costUsd: 0.42, apiDurationMs: 20_000, linesAdded: 5, linesRemoved: 1, tokens: 1000 });
+});
+
+test('GET /api/sessions/live is empty with no snapshot directory', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(await res.json(), {
+    sessions: [],
+    total: { costUsd: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
+  });
+});
+
+test('GET /api/sessions/live skips a corrupt snapshot and serves the rest', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const base = process.env.CLAUDE_CONFIG_DIR;
+  const dir = writeSnapshot(base, {
+    sessionId: 'ok', lastActiveAt: Date.now() - 1000, project: 'demo', model: null,
+    costUsd: 1, durationMs: 1, apiDurationMs: 1, linesAdded: 0, linesRemoved: 0,
+  });
+  fs.writeFileSync(path.join(dir, 'broken.json'), '{"sessionId":');
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual((await res.json()).sessions.length, 1);
+});
+
+test('the Today scan is shared between /api/summary and /api/sessions/live', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const port = server.address().port;
+  const base = process.env.CLAUDE_CONFIG_DIR;
+  writeSnapshot(base, {
+    sessionId: 'sess-b', lastActiveAt: Date.now() - 1000, project: 'demo', model: null,
+    costUsd: 1, durationMs: 1, apiDurationMs: 1, linesAdded: 0, linesRemoved: 0,
+  });
+  // Requested together, the way loadAndRender sends them.
+  const [summary] = await Promise.all([
+    fetch(`http://127.0.0.1:${port}/api/summary?days=today`).then((r) => r.json()),
+    fetch(`http://127.0.0.1:${port}/api/sessions/live`).then((r) => r.json()),
+  ]);
+  // A line appended right after is not in a scan shared within 2 seconds...
+  appendCall(base, { sessionId: 'sess-b', id: 'b1', input: 10, output: 0 });
+  const live = await (await fetch(`http://127.0.0.1:${port}/api/sessions/live`)).json();
+  assert.strictEqual(live.sessions[0].tokens, 0);
+  assert.strictEqual(summary.summary.totalOutput, 200);
+  // ...and is after the share window, which a 5s live poll always is.
+  await new Promise((resolve) => setTimeout(resolve, 2100));
+  const later = await (await fetch(`http://127.0.0.1:${port}/api/sessions/live`)).json();
+  assert.strictEqual(later.sessions[0].tokens, 10);
 });

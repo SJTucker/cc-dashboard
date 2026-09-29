@@ -9,6 +9,7 @@ const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits } = require('./lib/limits');
+const { readSessions, buildLiveSessions } = require('./lib/sessions');
 const { busiestDay } = require('./public/stats');
 
 function getArg(name) {
@@ -64,6 +65,24 @@ async function getCached(days) {
   return promise;
 }
 
+// /api/summary?days=today and /api/sessions/live both need the Today scan, and
+// loadAndRender requests them together. Sharing one scan for 2 seconds serves
+// both from a single file walk. The 5s live poll is past that window, so each
+// poll still scans afresh. A rejected scan is dropped at once so the next
+// request retries.
+const TODAY_SHARE_MS = 2000;
+let todayScan = null; // { promise, ts }
+
+function getTodayScan() {
+  if (todayScan && Date.now() - todayScan.ts < TODAY_SHARE_MS) return todayScan.promise;
+  const promise = scanUsage({ days: 'today', bucket: 'hour' }).catch((err) => {
+    if (todayScan && todayScan.promise === promise) todayScan = null;
+    throw err;
+  });
+  todayScan = { promise, ts: Date.now() };
+  return promise;
+}
+
 // The per-call records feed /api/changes only. Sent here they would add a few
 // megabytes to every summary request, and to every 5s poll on the Today range.
 function publicSummary({ efficiency, ...rest }) {
@@ -75,8 +94,9 @@ app.get('/api/summary', async (req, res) => {
     const raw = req.query.days;
     if (raw === 'today') {
       // A today-scan reads only files written since local midnight, which is fast
-      // enough that caching it would only make the live poll show stale numbers.
-      res.json(publicSummary(await scanUsage({ days: 'today', bucket: 'hour' })));
+      // enough that caching it past getTodayScan's 2s share would only make the
+      // live poll show stale numbers.
+      res.json(publicSummary(await getTodayScan()));
       return;
     }
     // Number(raw) || 30 turned days=0 and days=abc into 30 without saying so,
@@ -169,6 +189,19 @@ app.get('/api/records', async (req, res) => {
   }
 });
 
+// Today's sessions from the statusline snapshots (lib/sessions.js), each with its
+// tokens from the Today scan. Read-only: only bin/record-statusline writes the
+// snapshots. Session ids stay on the server.
+app.get('/api/sessions/live', async (req, res) => {
+  try {
+    const data = await getTodayScan();
+    res.json(buildLiveSessions(readSessions(), data.efficiency.calls));
+  } catch (err) {
+    console.error('[API] /api/sessions/live failed:', err);
+    res.status(500).json({ error: 'Failed to read live sessions', detail: err.message });
+  }
+});
+
 app.post('/api/refresh', (req, res) => {
   // Every modern browser sends Sec-Fetch-Site on a fetch, so anything other than
   // same-origin means another page issued this request. The Host guard cannot
@@ -180,6 +213,7 @@ app.post('/api/refresh', (req, res) => {
     return;
   }
   cache.clear();
+  todayScan = null;
   res.json({ ok: true });
 });
 

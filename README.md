@@ -182,7 +182,7 @@ boundary back.
 ## File layout
 
 ```
-server.js          Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits and /api/records
+server.js          Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records and /api/sessions/live
 lib/scan.js         Walks ~/.claude/projects, parses JSONL, aggregates by day and model
 lib/rtk.js          Reads rtk's history.db read-only, aggregates by day and command
 lib/efficiency.js   Session start, Bash result and per-prompt statistics per time window
@@ -195,7 +195,7 @@ bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits 
 bin/record-limits   Old name for bin/record-statusline, kept as a wrapper
 public/index.html   Page shell
 public/style.css    All styling
-public/app.js        Fetches /api/summary, /api/rtk, /api/limits, /api/changes and /api/records, draws the SVG charts, no dependencies
+public/app.js        Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/changes and /api/records, draws the SVG charts, no dependencies
 ```
 
 ## Extending it

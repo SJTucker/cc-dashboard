@@ -212,3 +212,84 @@ test('both bin scripts are executable', () => {
     assert.ok(mode & 0o100, `${name} has the owner exec bit`);
   }
 });
+
+const { readSessions, buildLiveSessions, LIVE_WINDOW_MS } = require('../lib/sessions');
+
+function localMidnight(ms) {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+function snapshot(overrides = {}) {
+  return {
+    sessionId: 's1',
+    lastActiveAt: NOW - 60_000,
+    project: 'demo',
+    model: 'Opus 5.5',
+    costUsd: 1,
+    durationMs: 600_000,
+    apiDurationMs: 60_000,
+    linesAdded: 10,
+    linesRemoved: 2,
+    ...overrides,
+  };
+}
+
+function writeSnapshots(list) {
+  const dir = tmpDir();
+  for (const s of list) fs.writeFileSync(path.join(dir, `${s.sessionId}.json`), JSON.stringify(s));
+  return dir;
+}
+
+test('readSessions keeps only today, newest first', () => {
+  const midnight = localMidnight(NOW);
+  const dir = writeSnapshots([
+    snapshot({ sessionId: 'yesterday', lastActiveAt: midnight - 1 }),
+    snapshot({ sessionId: 'early', lastActiveAt: midnight }),
+    snapshot({ sessionId: 'late', lastActiveAt: NOW - 1000 }),
+  ]);
+  assert.deepStrictEqual(readSessions(dir, NOW).map((s) => s.sessionId), ['late', 'early']);
+});
+
+test('readSessions skips unreadable files', () => {
+  const dir = writeSnapshots([snapshot({ sessionId: 'good' })]);
+  fs.writeFileSync(path.join(dir, 'half.json'), '{"sessionId":"half","lastAc');
+  fs.writeFileSync(path.join(dir, 'wrong-shape.json'), JSON.stringify({ sessionId: 'x' }));
+  fs.writeFileSync(path.join(dir, 'good.json.999'), JSON.stringify(snapshot({ sessionId: 'tmp' })));
+  assert.deepStrictEqual(readSessions(dir, NOW).map((s) => s.sessionId), ['good']);
+});
+
+test('readSessions returns [] when the directory does not exist', () => {
+  assert.deepStrictEqual(readSessions(path.join(tmpDir(), 'none'), NOW), []);
+});
+
+test('buildLiveSessions joins tokens by sessionId and totals the rows', () => {
+  const snaps = [
+    snapshot({ sessionId: 's1', costUsd: 1.5, apiDurationMs: 60_000, linesAdded: 10, linesRemoved: 2, lastActiveAt: NOW - 60_000 }),
+    snapshot({ sessionId: 's2', costUsd: 0.5, apiDurationMs: 30_000, linesAdded: 1, linesRemoved: 0, lastActiveAt: NOW - LIVE_WINDOW_MS - 1 }),
+  ];
+  const calls = [
+    { sessionId: 's1', context: 1000, output: 200 },
+    { sessionId: 's1', context: 500, output: 50 },
+    { sessionId: 's2', context: 10, output: 5 },
+    { sessionId: 'other', context: 99999, output: 1 },
+  ];
+  const result = buildLiveSessions(snaps, calls, NOW);
+  assert.deepStrictEqual(result.sessions.map((s) => [s.tokens, s.live]), [[1750, true], [15, false]]);
+  assert.strictEqual('sessionId' in result.sessions[0], false);
+  assert.deepStrictEqual(result.total, { costUsd: 2, apiDurationMs: 90_000, linesAdded: 11, linesRemoved: 2, tokens: 1765 });
+});
+
+test('buildLiveSessions gives 0 tokens to a session with no calls today', () => {
+  const result = buildLiveSessions([snapshot()], [], NOW);
+  assert.strictEqual(result.sessions[0].tokens, 0);
+  assert.strictEqual(result.total.tokens, 0);
+});
+
+test('buildLiveSessions with no snapshots is an empty list and zero totals', () => {
+  assert.deepStrictEqual(buildLiveSessions([], [{ sessionId: 'x', context: 1, output: 1 }], NOW), {
+    sessions: [],
+    total: { costUsd: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
+  });
+});
