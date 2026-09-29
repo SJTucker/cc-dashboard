@@ -150,3 +150,21 @@ test('appendSnapshot reloads the file first, so a file corrupted after the last 
   assert.match(result.error, /unreadable/);
   assert.strictEqual(fs.readFileSync(file, 'utf8'), '{ not json', 'the file is left for the owner to fix');
 });
+
+test('a write that cannot succeed returns an error instead of throwing', (t) => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-prices-'));
+  // Read-only directory: the file itself is missing (a harmless ENOENT on
+  // load), but mkdirSync cannot create the subdirectory to hold it.
+  const locked = path.join(dir, 'locked');
+  fs.mkdirSync(locked, { mode: 0o555 });
+  const file = path.join(locked, 'sub', 'prices.json');
+  process.env.PRICES_JSON = file;
+  t.after(() => {
+    delete process.env.PRICES_JSON;
+    setSnapshots([]);
+    fs.chmodSync(locked, 0o755);
+  });
+  store.loadPriceFile();
+  const result = store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [ROW], source: 'test', now: NOW });
+  assert.match(result.error, /Could not write/);
+});
