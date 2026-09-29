@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { getClaudeJsonPath, getRateLimitsPath, recordRateLimits, readLimits } = require('../lib/limits');
+const { getClaudeJsonPath, getRateLimitsPath, recordRateLimits, readLimits, readDailyShare } = require('../lib/limits');
 
 const NOW = Date.parse('2026-09-28T17:55:00Z');
 const FETCHED = NOW - 3 * 60 * 1000;
@@ -372,4 +372,77 @@ test('with a weekly window the file holds dayStart and still nothing else from t
   const raw = fs.readFileSync(file, 'utf8');
   assert.ok(!raw.includes('super-secret-session-id-should-not-be-written'));
   assert.deepStrictEqual(Object.keys(JSON.parse(raw)).sort(), ['dayStart', 'fetchedAtMs', 'rate_limits']);
+});
+
+test('readDailyShare on a workday reports the share, the fixed budget and the rolling budget', () => {
+  // Wednesday: Wed, Thu and Fri are left before the Sunday 05:00 reset.
+  const file = weekFile(at(2026, 9, 30, 9), 17, { date: '2026-09-30', percent: 13, from: 'previous-reading' });
+  assert.deepStrictEqual(readDailyShare({ rateLimits: file, now: at(2026, 9, 30, 10) }), {
+    date: '2026-09-30',
+    weekPercent: 17,
+    dayStartPercent: 13,
+    share: 4,
+    from: 'previous-reading',
+    workday: true,
+    budget: 20,
+    rollingBudget: 29,
+    workdaysLeft: 3,
+    resetsAt: RESET,
+  });
+});
+
+test('readDailyShare on a weekend reports the share with no budget', () => {
+  const file = weekFile(at(2026, 10, 3, 9), 70, { date: '2026-10-03', percent: 66, from: 'previous-reading' });
+  const share = readDailyShare({ rateLimits: file, now: at(2026, 10, 3, 10) });
+  assert.strictEqual(share.share, 4);
+  assert.strictEqual(share.workday, false);
+  assert.strictEqual(share.budget, null);
+  assert.strictEqual(share.rollingBudget, null);
+  assert.strictEqual(share.workdaysLeft, null);
+});
+
+test('readDailyShare reports 0 for a day with no reading yet', () => {
+  const file = weekFile(at(2026, 9, 29, 18), 12, { date: '2026-09-29', percent: 9, from: 'previous-reading' });
+  const share = readDailyShare({ rateLimits: file, now: at(2026, 9, 30, 8) });
+  assert.strictEqual(share.share, 0);
+  assert.strictEqual(share.dayStartPercent, 12);
+  assert.strictEqual(share.from, 'no-reading-today');
+});
+
+test('readDailyShare reports 0 once the weekly window has reset with no newer reading', () => {
+  const oldReset = at(2026, 9, 30, 5);
+  const file = weekFile(at(2026, 9, 30, 4), 95, { date: '2026-09-30', percent: 88, from: 'previous-reading' }, oldReset);
+  const share = readDailyShare({ rateLimits: file, now: at(2026, 9, 30, 6) });
+  assert.strictEqual(share.weekPercent, 0);
+  assert.strictEqual(share.share, 0);
+  assert.strictEqual(share.from, 'reset');
+  assert.strictEqual(share.resetsAt, null);
+});
+
+test('a reset at 05:00 does not count its own day as a workday left', () => {
+  // Monday to the next Monday 05:00: Mon-Fri count, the next Monday does not.
+  const nextMonday = at(2026, 10, 5, 5);
+  const file = weekFile(at(2026, 9, 28, 9), 5, { date: '2026-09-28', percent: 3, from: 'previous-reading' }, nextMonday);
+  const share = readDailyShare({ rateLimits: file, now: at(2026, 9, 28, 10) });
+  assert.strictEqual(share.workdaysLeft, 5);
+  assert.strictEqual(share.rollingBudget, (100 - 3) / 5);
+});
+
+test('a workday whose window closes before noon has no rolling budget but keeps the fixed one', () => {
+  const file = weekFile(at(2026, 9, 30, 7), 60, { date: '2026-09-30', percent: 58, from: 'previous-reading' }, at(2026, 9, 30, 10));
+  const share = readDailyShare({ rateLimits: file, now: at(2026, 9, 30, 8) });
+  assert.strictEqual(share.workdaysLeft, 0);
+  assert.strictEqual(share.rollingBudget, null);
+  assert.strictEqual(share.budget, 20);
+});
+
+test('readDailyShare never reports a negative share', () => {
+  const file = weekFile(at(2026, 9, 30, 9), 18, { date: '2026-09-30', percent: 20, from: 'previous-reading' });
+  assert.strictEqual(readDailyShare({ rateLimits: file, now: at(2026, 9, 30, 10) }).share, 0);
+});
+
+test('readDailyShare returns null with no file or no weekly window', () => {
+  assert.strictEqual(readDailyShare({ rateLimits: missingFile('rate-limits.json'), now: NOW }), null);
+  const noWeek = writeRateLimits({ fetchedAtMs: FETCHED, rate_limits: { five_hour: { used_percentage: 5, resets_at: null } } });
+  assert.strictEqual(readDailyShare({ rateLimits: noWeek, now: NOW }), null);
 });

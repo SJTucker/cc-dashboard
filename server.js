@@ -8,7 +8,7 @@ const { readRtkUsage, readRtkWindows } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
-const { readLimits } = require('./lib/limits');
+const { readLimits, readDailyShare } = require('./lib/limits');
 const { readSessions, buildLiveSessions } = require('./lib/sessions');
 const { busiestDay } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
@@ -168,9 +168,11 @@ app.get('/api/rtk', (req, res) => {
 
 // Plan usage changes every few minutes while Claude Code runs, and reading the
 // ~70KB .claude.json takes about 1ms, so it is read on every request, uncached.
-// readLimits() returns null rather than throwing, so there is no error branch.
+// readLimits() and readDailyShare() return null rather than throwing, so there is
+// no error branch.
 app.get('/api/limits', (req, res) => {
-  res.json(readLimits());
+  const limits = readLimits();
+  res.json(limits && { ...limits, today: readDailyShare() });
 });
 
 // All history, whatever range the page shows: a before/after needs data on both

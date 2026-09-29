@@ -357,6 +357,7 @@ test('GET /api/limits sends only the limits', async (t) => {
     fetchedAt: 123,
     limits: [{ key: 'five_hour', label: 'Current session', percent: 6, resetsAt: Date.parse(resets) }],
     source: 'usage-cache',
+    today: null,
   });
 });
 
@@ -576,4 +577,26 @@ test('the price POST routes refuse a cross-site request', async (t) => {
     const res = await fetch(`${base}${route}`, { method: 'POST', headers: { 'Sec-Fetch-Site': 'cross-site' } });
     assert.strictEqual(res.status, 403, route);
   }
+});
+
+test('GET /api/limits adds today\'s share of the weekly limit', async (t) => {
+  delete process.env.CLAUDE_JSON;
+  delete process.env.RATE_LIMITS_JSON;
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const now = Date.now();
+  fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, 'rate-limits.json'), JSON.stringify({
+    fetchedAtMs: now,
+    rate_limits: { seven_day: { used_percentage: 17, resets_at: Math.floor(now / 1000) + 2 * 24 * 60 * 60 } },
+    dayStart: { date: localDateStr(new Date(now)), percent: 13, from: 'previous-reading' },
+  }));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/limits`);
+  const body = await res.json();
+  assert.strictEqual(body.source, 'statusline');
+  assert.strictEqual(body.today.share, 4);
+  const workday = [1, 2, 3, 4, 5].includes(new Date().getDay());
+  assert.strictEqual(body.today.budget, workday ? 20 : null);
 });
