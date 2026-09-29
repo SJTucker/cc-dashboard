@@ -10,7 +10,6 @@ then on.
 | Idea | Status |
 |---|---|
 | [Cyberpunk restyle](cyberpunk-restyle.md) | not started |
-| [Daily share of the weekly limit](daily-weekly-budget.md) | not started |
 | [Record day: add the total cost](record-day-cost.md) | not started |
 | [Live sessions: cleared session row, and move below where usage goes](live-sessions-after-clear.md) | not started |
 | [Reorder the panels](reorder-panels.md) | not started |

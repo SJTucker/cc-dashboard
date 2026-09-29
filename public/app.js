@@ -1135,6 +1135,38 @@ function requestLimits() {
   return fetch('/api/limits').then((res) => res.json()).catch(() => null);
 }
 
+// Today's share of the weekly limit, as a row in the Plan usage panel. On a workday
+// the bar fills at the fixed budget, so a full bar means today used its whole share.
+// A weekend has no budget, so its bar is left empty and the text carries the share.
+function dailyShareRow(today) {
+  const notes = [];
+  if (today.budget == null) {
+    notes.push('weekend, no budget');
+  } else {
+    notes.push(`budget ${today.budget}%`);
+    if (today.rollingBudget != null) {
+      const days = `${today.workdaysLeft} workday${today.workdaysLeft === 1 ? '' : 's'} to reset`;
+      notes.push(`rolling ${Math.round(today.rollingBudget)}% (${days})`);
+    }
+  }
+  if (today.from === 'first-reading') notes.push("counted from today's first reading");
+  if (today.from === 'reset') notes.push('counted from the weekly reset');
+  if (today.from === 'no-reading-today') notes.push('no API response yet today');
+
+  const track = el('span', { class: 'usage-track' });
+  if (today.budget != null) {
+    const fill = el('i');
+    fill.style.width = Math.min(100, (today.share / today.budget) * 100) + '%';
+    track.appendChild(fill);
+  }
+  return el('div', { class: 'limit-row' }, [
+    el('span', { class: 'limit-name', text: 'Today (share of the week)' }),
+    track,
+    el('span', { class: 'limit-pct', text: `${Math.round(today.share)}% of the week` }),
+    el('span', { class: 'limit-reset', text: notes.join(' · ') }),
+  ]);
+}
+
 function renderLimits(limits) {
   const panel = document.getElementById('limitsPanel');
   panel.hidden = !limits || currentDays !== 'today';
@@ -1151,6 +1183,7 @@ function renderLimits(limits) {
       el('span', { class: 'limit-reset', text: limit.resetsAt == null ? '' : formatReset(limit.resetsAt) }),
     ]));
   }
+  if (limits.today) rows.appendChild(dailyShareRow(limits.today));
   const asOf = new Date(limits.fetchedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const stale = Date.now() - limits.fetchedAt > LIMITS_STALE_MS
@@ -1218,15 +1251,23 @@ function renderSessions(live) {
 // compared so the banner agrees with the "N% used" the panel shows.
 const LIMIT_WARN_PERCENT = 75;
 
+// The daily warning fires one point short of the day's budget, so there is room to
+// stop before it. It uses the fixed budget, and a weekend has none.
+const DAILY_WARN_MARGIN = 1;
+
 function renderLimitsBanner(limits) {
   const banner = document.getElementById('limitsBanner');
   const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
-  banner.hidden = !high.length;
+  const today = limits ? limits.today : null;
+  const dayHigh = today != null && today.budget != null
+    && Math.round(today.share) >= today.budget - DAILY_WARN_MARGIN;
+  banner.hidden = !high.length && !dayHigh;
   banner.replaceChildren(
-    el('strong', { text: 'Nearing your plan limit' }),
+    el('strong', { text: high.length ? 'Nearing your plan limit' : "Nearing today's budget" }),
     ...high.map((l) => el('div', {
       text: `${l.label}: ${Math.round(l.percent)}% used${l.resetsAt == null ? '' : ` · ${formatReset(l.resetsAt)}`}`,
-    }))
+    })),
+    ...(dayHigh ? [el('div', { text: `Today: ${Math.round(today.share)}% of the week, budget ${today.budget}%` })] : [])
   );
 }
 
