@@ -1,8 +1,9 @@
 # My Claude Code Dashboard
 
-A small, local, offline dashboard for your Claude Code usage: daily and cumulative cost,
-daily tokens broken out by input / output / cache-write / cache-read, cost by model with
-dollars per million tokens, and a weekday-by-hour heatmap of when the spend happens.
+A small, local dashboard for your Claude Code usage, making one network request only
+when you click Check prices: daily and cumulative cost, daily tokens broken out by
+input / output / cache-write / cache-read, cost by model with dollars per million
+tokens, and a weekday-by-hour heatmap of when the spend happens.
 
 If you use `rtk`, it also charts the command output rtk filtered out before it reached
 the model. See "rtk savings" below.
@@ -159,14 +160,15 @@ boundary back.
 
 ## What it does and doesn't do
 
-- **Read-only, except for one script.** The dashboard server only ever reads your
-  `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
+- **Read-only, except for two write paths.** The dashboard server only ever reads
+  your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
   `changes.json`, and `rate-limits.json`, and opens rtk's `history.db` with
-  sqlite's `readOnly` flag. The one write path in this project is
-  `bin/record-statusline`, a separate script your own statusline pipes into (see
-  "Plan usage" above); it writes only `rate-limits.json` and the per-session
-  snapshots in `cc-dashboard/sessions/`, and nothing under `server.js` or
-  `public/` calls it.
+  sqlite's `readOnly` flag. One write path is `bin/record-statusline`, a separate
+  script your own statusline pipes into (see "Plan usage" above); it writes only
+  `rate-limits.json` and the per-session snapshots in `cc-dashboard/sessions/`.
+  The other is the Apply button in the Cost by model panel: clicking it is the
+  only thing that writes `prices.json` (`PRICES_JSON` moves it), and nothing else
+  under `server.js` or `public/` writes anything.
 - **One network request, on demand.** The Cost by model panel has a Check prices
   button. Clicking it makes the server fetch
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's pricing
@@ -194,7 +196,7 @@ boundary back.
 ## File layout
 
 ```
-server.js              Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records and /api/sessions/live
+server.js              Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records, /api/sessions/live and the price routes (/api/prices, /api/prices/check, /api/prices/apply)
 lib/scan.js            Walks ~/.claude/projects, parses JSONL, aggregates by day and model
 lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window
@@ -209,7 +211,7 @@ bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits 
 bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
 public/index.html      Page shell
 public/style.css       All styling
-public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/changes and /api/records, draws the SVG charts, no dependencies
+public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
 ```
 
 ## Extending it
