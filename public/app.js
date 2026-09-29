@@ -1295,8 +1295,8 @@ function refreshRecords() {
 // The value and date line show the all-time record: the day with the most tokens,
 // with that day's cost. The note shows the record within the range on screen, also
 // with its cost. Today's total grows on every live poll, and the range's scan can
-// be newer than the cached all-time scan behind /api/records. So either one is
-// shown as the all-time record when it has more tokens.
+// be newer than the cached all-time scan behind /api/records. So today's total or
+// the range record replaces the fetched all-time record when it has more tokens.
 function renderRecord(daily) {
   lastRecordDaily = daily;
 
