@@ -1135,9 +1135,9 @@ function requestLimits() {
   return fetch('/api/limits').then((res) => res.json()).catch(() => null);
 }
 
-// Today's share of the weekly limit, as a row in the Plan usage panel. On a workday
-// the bar fills at the fixed budget, so a full bar means today used its whole share.
-// A weekend has no budget, so its bar is left empty and the text carries the share.
+// Today's share of the weekly limit, as a row in the Plan usage panel. The bar fills
+// against 100% of the week, like the weekly rows above it, so the two scales match.
+// On a workday a tick marks the day's budget. A weekend has no budget and no tick.
 function dailyShareRow(today) {
   const notes = [];
   if (today.budget == null) {
@@ -1153,11 +1153,14 @@ function dailyShareRow(today) {
   if (today.from === 'reset') notes.push('counted from the weekly reset');
   if (today.from === 'no-reading-today') notes.push('no API response yet today');
 
-  const track = el('span', { class: 'usage-track' });
-  if (today.budget != null) {
-    const fill = el('i');
-    fill.style.width = Math.min(100, (today.share / today.budget) * 100) + '%';
-    track.appendChild(fill);
+  const meter = shareMeter(today);
+  const fill = el('i');
+  fill.style.width = meter.fill + '%';
+  const track = el('span', { class: 'usage-track' }, [fill]);
+  if (meter.tick != null) {
+    const tick = el('b', { class: 'budget-tick', title: `budget ${meter.tick}%` });
+    tick.style.left = meter.tick + '%';
+    track.appendChild(tick);
   }
   return el('div', { class: 'limit-row' }, [
     el('span', { class: 'limit-name', text: 'Today (share of the week)' }),
