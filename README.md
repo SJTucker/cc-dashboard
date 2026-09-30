@@ -83,7 +83,12 @@ recently. It makes no network request of its own.
   time and Lines columns come from that snapshot, so they cover the whole session
   from whenever it started. Its Cost today and Tokens today columns come from
   today's transcripts instead, so a session that started yesterday shows more
-  session cost than cost today.
+  session cost than cost today. The two costs differ for a session that started
+  today, too. Session cost is Claude Code's own counter. That counter includes
+  calls that write no transcript line, such as session titles. So Session cost is
+  usually the higher of the two. Cost today can be higher while subagents run.
+  Subagent calls reach the transcripts right away. Session cost updates only on the
+  main session's next statusline render.
 
 To feed the statusline source, add one line to your existing statusline script
 (the command `statusLine.command` in `~/.claude/settings.json` points at):

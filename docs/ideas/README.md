@@ -11,7 +11,6 @@ then on.
 |---|---|
 | [Cyberpunk restyle](cyberpunk-restyle.md) | not started |
 | [Reorder the panels](reorder-panels.md) | not started |
-| [Live sessions: Cost today above Session cost](session-cost-gap.md) | not started |
 | [Today (share of the week): double-check the numbers](today-share-check.md) | check on 2026-09-30 |
 
 Suggested order: the restyle last, so the new layout is restyled once.
