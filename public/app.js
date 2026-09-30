@@ -383,7 +383,7 @@ const TEXTURES = {
   solid: { svg: null, css: (color) => color },
 };
 
-const TEXTURE_INK = '#10141b';
+const TEXTURE_INK = '#05070d';
 
 // CSS `background` value for a texture, used by every legend swatch and the mix bar.
 function textureCss(texture, color) {
@@ -692,7 +692,7 @@ const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
 // --accent-cost as RGB, so cell intensity can be expressed as an alpha without
 // color-mix. Keep in sync with --accent-cost in public/style.css.
-const HEAT_RGB = '234, 181, 77';
+const HEAT_RGB = '255, 176, 0';
 
 // One hue varying only in opacity. Magnitude is carried by lightness alone,
 // which is why this needs no texture channel the way the categorical charts do.
