@@ -1984,6 +1984,7 @@ function setupPanelLight() {
     if (frame) return;
     frame = requestAnimationFrame(() => {
       frame = 0;
+      if (!last) return;
       const panel = last.target.closest ? last.target.closest('#app .panel') : null;
       if (panel !== lit) {
         if (lit) lit.classList.remove('lit');
@@ -1997,6 +1998,11 @@ function setupPanelLight() {
     });
   });
   app.addEventListener('pointerleave', () => {
+    // A fast exit can land pointermove and pointerleave in one frame. Cancelling
+    // the pending frame stops it from lighting the panel again after the leave.
+    cancelAnimationFrame(frame);
+    frame = 0;
+    last = null;
     if (lit) lit.classList.remove('lit');
     lit = null;
   });
