@@ -2022,11 +2022,18 @@ function setupRowDrag(onDrop) {
   let dragged = null;
   for (const row of panelRows()) {
     const handle = el('span', { class: 'row-handle', title: 'Drag to move', 'aria-hidden': 'true' });
-    handle.addEventListener('pointerdown', () => { row.draggable = true; });
-    handle.addEventListener('pointerup', () => { row.draggable = false; });
+    // A release anywhere clears draggable. Some browsers send a release off the
+    // handle to the element under the pointer, so the handle's own listener would miss it.
+    handle.addEventListener('pointerdown', () => {
+      row.draggable = true;
+      document.addEventListener('pointerup', () => { row.draggable = false; }, { once: true });
+    });
     row.querySelector('.panel-head h2').prepend(handle);
 
+    // A drag of selected text, a link or an image inside the row targets that
+    // element, not the row, so only a drag from the handle moves the row.
     row.addEventListener('dragstart', (e) => {
+      if (e.target !== row) return;
       dragged = row;
       row.classList.add('row-dragging');
       e.dataTransfer.effectAllowed = 'move';

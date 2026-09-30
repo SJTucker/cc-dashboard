@@ -881,7 +881,8 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
 .row-handle:hover { color: var(--text-primary); }
 .row-dragging { opacity: 0.4; }
 /* The drop point is a 3px line in the primary text colour on the target row's top
-   or bottom edge. Its position and thickness mark the drop point, not its hue. */
+   or bottom edge. The line's position and thickness mark the drop point without
+   relying on colour. */
 .drop-before { box-shadow: 0 -3px 0 0 var(--text-primary); }
 .drop-after { box-shadow: 0 3px 0 0 var(--text-primary); }
 .row-collapsed .panel-head { margin-bottom: 0; }
