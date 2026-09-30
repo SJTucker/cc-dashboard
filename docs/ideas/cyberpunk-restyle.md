@@ -23,3 +23,8 @@ This needs design options shown side by side before a spec, for example glow on 
 accents, scanline or grid backgrounds, and a neon palette that passes the
 colourblind check. Do it after the header and panel moves, so the new layout is
 restyled once.
+
+The Plan usage panel's "Today (share of the week)" bar fills against the 20% daily
+budget. The weekly bars above it fill against 100%. Two bars with different scales
+in one panel can look like a mistake. The restyle should either fill the Today bar
+against 100% or label its scale, for example "bar is out of the 20% budget".
