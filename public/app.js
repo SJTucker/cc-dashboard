@@ -1959,13 +1959,81 @@ async function loadChanges() {
 
 // #endregion
 
+// #region row order
+
+// Each row of panels (a full-width panel or a .panel-row pair) can be moved. The
+// order is kept in localStorage as a list of row keys, so the page reopens as it
+// was left. A row's key is its first heading's text, stored in data-row-key before
+// any control is added to the heading. The collapsed-rows code reads the same key.
+// Storage can throw (a private window, blocked site data), and then the page keeps
+// the order in index.html.
+const ROW_ORDER_KEY = 'cc-dashboard:row-order';
+
+function assignRowKeys() {
+  for (const row of document.querySelectorAll('#app > .panel-row, #app > .panel')) {
+    const heading = row.querySelector('.panel-head h2');
+    if (heading) row.dataset.rowKey = heading.textContent;
+  }
+}
+
+function panelRows() {
+  return [...document.querySelectorAll('#app > .panel-row[data-row-key], #app > .panel[data-row-key]')];
+}
+
+function currentRowKeys() {
+  return panelRows().map((row) => row.dataset.rowKey);
+}
+
+function loadRowOrder() {
+  try {
+    return JSON.parse(localStorage.getItem(ROW_ORDER_KEY));
+  } catch {
+    return null;
+  }
+}
+
+function saveRowOrder(keys) {
+  try {
+    if (keys) localStorage.setItem(ROW_ORDER_KEY, JSON.stringify(keys));
+    else localStorage.removeItem(ROW_ORDER_KEY);
+  } catch {
+    // Not saved. The rows keep their new order for this page view.
+  }
+}
+
+// Re-appends the rows to #app in the order of keys. The banners and #mainCards
+// come before every row in index.html, so they stay first.
+function applyRowOrder(keys) {
+  const app = document.getElementById('app');
+  const byKey = new Map(panelRows().map((row) => [row.dataset.rowKey, row]));
+  for (const key of keys) app.appendChild(byKey.get(key));
+}
+
+// Runs before setupCollapsibleRows, which reads data-row-key.
+function setupRowOrder() {
+  assignRowKeys();
+  const defaultKeys = currentRowKeys();
+  const saved = loadRowOrder();
+  applyRowOrder(orderRowKeys(defaultKeys, saved));
+
+  const resetBtn = document.getElementById('resetLayoutBtn');
+  resetBtn.hidden = saved == null;
+  resetBtn.addEventListener('click', () => {
+    applyRowOrder(defaultKeys);
+    saveRowOrder(null);
+    resetBtn.hidden = true;
+  });
+}
+
+// #endregion
+
 // #region collapsible rows
 
 // Each visual row of panels collapses to its headings. A two-panel row collapses
 // as one, and a full-width panel is a row of its own. Collapsed rows are kept in
-// localStorage, keyed by the first panel's heading, so the page reopens as it was
-// left. Storage can throw (a private window, blocked site data), and then every
-// row starts expanded.
+// localStorage, keyed by data-row-key (see the row order region), so the page
+// reopens as it was left. Storage can throw (a private window, blocked site data),
+// and then every row starts expanded.
 const COLLAPSED_ROWS_KEY = 'cc-dashboard:collapsed-rows';
 
 function loadCollapsedRows() {
@@ -1989,7 +2057,7 @@ function setupCollapsibleRows() {
   for (const row of document.querySelectorAll('#app > .panel-row, #app > .panel')) {
     const headings = [...row.querySelectorAll('.panel-head h2')];
     if (!headings.length) continue;
-    const key = headings[0].textContent;
+    const key = row.dataset.rowKey;
     const names = headings.map((h) => h.textContent).join(' and ');
     const toggle = el('button', { type: 'button', class: 'row-toggle' });
     const setCollapsed = (isCollapsed) => {
@@ -2316,6 +2384,7 @@ window.addEventListener('resize', () => {
   window.__resizeTimer = setTimeout(redrawCharts, 150);
 });
 
+setupRowOrder();
 setupCollapsibleRows();
 setupUsageGroupToggles();
 placeSummaryCards();
