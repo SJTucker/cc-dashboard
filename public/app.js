@@ -1225,7 +1225,11 @@ function renderSessions(live) {
   const cell = (text, cls) => el('td', cls ? { class: cls, text } : { text });
   const lines = (added, removed) => `+${added} −${removed}`;
   const rows = live.sessions.map((s) => el('tr', {}, [
-    cell(s.project || '—'),
+    // ⬢ for a live session, ⬡ for any other. The Last active cell still says the state in words.
+    el('td', {}, [
+      el('span', { class: 'session-hex', 'aria-hidden': 'true', text: s.live ? '⬢' : '⬡' }),
+      document.createTextNode(s.project || '—'),
+    ]),
     cell(s.model || '—'),
     cell(formatCost(s.costUsd), 'num cost'),
     cell(formatDuration(s.durationMs), 'num'),
@@ -1962,6 +1966,44 @@ async function loadChanges() {
 
 // #endregion
 
+// #region panel light
+
+// Lights the border of the panel under the pointer in cyan, near the pointer (see
+// .panel::before in style.css). One pointermove listener on #app serves every
+// panel, throttled to one update per frame. It runs only for a pointer that can
+// hover and when reduced motion is off. The header cards are not .panel, so they
+// never light.
+function setupPanelLight() {
+  if (!matchMedia('(hover: hover) and (prefers-reduced-motion: no-preference)').matches) return;
+  const app = document.getElementById('app');
+  let lit = null;
+  let frame = 0;
+  let last = null;
+  app.addEventListener('pointermove', (e) => {
+    last = e;
+    if (frame) return;
+    frame = requestAnimationFrame(() => {
+      frame = 0;
+      const panel = last.target.closest ? last.target.closest('#app .panel') : null;
+      if (panel !== lit) {
+        if (lit) lit.classList.remove('lit');
+        lit = panel;
+        if (lit) lit.classList.add('lit');
+      }
+      if (!lit) return;
+      const box = lit.getBoundingClientRect();
+      lit.style.setProperty('--x', `${last.clientX - box.left}px`);
+      lit.style.setProperty('--y', `${last.clientY - box.top}px`);
+    });
+  });
+  app.addEventListener('pointerleave', () => {
+    if (lit) lit.classList.remove('lit');
+    lit = null;
+  });
+}
+
+// #endregion
+
 // #region row order
 
 // Each row of panels (a full-width panel or a .panel-row pair) can be moved. The
@@ -2481,6 +2523,7 @@ window.addEventListener('resize', () => {
 
 setupRowOrder();
 setupCollapsibleRows();
+setupPanelLight();
 setupUsageGroupToggles();
 placeSummaryCards();
 setLive(currentDays === 'today');

@@ -9,6 +9,3 @@ then on.
 
 | Idea | Status |
 |---|---|
-| [Cyberpunk restyle](cyberpunk-restyle.md) | not started |
-
-Suggested order: the restyle last, so the new layout is restyled once.

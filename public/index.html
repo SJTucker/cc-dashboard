@@ -7,6 +7,15 @@
 <link rel="stylesheet" href="/style.css" />
 </head>
 <body>
+  <!-- The glow the line charts take while the pointer is over them (see
+       .log-line and .cumulative-line in style.css). userSpaceOnUse sizes the
+       filter region in the chart's own units, so a flat line still glows. -->
+  <svg width="0" height="0" style="position: absolute" aria-hidden="true" focusable="false">
+    <filter id="line-glow" filterUnits="userSpaceOnUse" x="-20" y="-20" width="10000" height="1000">
+      <feGaussianBlur stdDeviation="3" result="blur" />
+      <feMerge><feMergeNode in="blur" /><feMergeNode in="SourceGraphic" /></feMerge>
+    </filter>
+  </svg>
   <div class="page">
     <header class="topbar">
       <div class="topbar-title">
