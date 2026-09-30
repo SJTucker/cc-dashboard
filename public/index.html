@@ -11,6 +11,13 @@
     <header class="topbar">
       <div class="topbar-title">
         <h1>My Claude Code Dashboard</h1>
+        <div class="status-strip" id="statusStrip">
+          <span id="liveDot" class="live-dot is-off"><i class="live-ring" aria-hidden="true"></i><span class="live-text">Paused</span></span>
+          <span class="strip-item">Sync <b id="stripSync">—</b></span>
+          <span class="strip-item">Range <b id="stripRange">—</b></span>
+          <span class="strip-item">Sessions <b id="stripSessions">—</b></span>
+          <span class="strip-item">API calls <b id="stripCalls">—</b></span>
+        </div>
       </div>
       <div class="topbar-controls">
         <div class="range-picker" id="rangePicker" role="group" aria-label="Date range">
@@ -20,7 +27,6 @@
           <button data-days="90">90d</button>
           <button data-days="all">All</button>
         </div>
-        <span id="liveDot" class="live-dot is-off">&#9679; live</span>
         <button id="refreshBtn" class="refresh-btn" title="Re-scan logs">&#8635; Refresh</button>
         <button id="resetLayoutBtn" class="refresh-btn" type="button" title="Put the panels back in their original order" hidden>Reset layout</button>
         <span id="loadStatus" class="load-status" role="status"></span>
@@ -301,6 +307,7 @@
 
   <script src="/stats.js"></script>
   <script src="/layout.js"></script>
+  <script src="/hud.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

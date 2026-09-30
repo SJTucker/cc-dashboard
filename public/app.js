@@ -2178,6 +2178,31 @@ let lastSignature = null;
 // number, and a response is dropped unless its number is still the newest one.
 let requestSeq = 0;
 
+// Time of the last successful summary load, shown as Sync in the status strip.
+let lastLoadedAt = null;
+
+// Fills the status strip under the title. loadAndRender calls it on every
+// successful summary load, before its unchanged-payload check, so Sync moves on a
+// quiet poll too. While live, the ring pulses once per call.
+function renderStatusStrip(summary) {
+  const active = document.querySelector('#rangePicker button.active');
+  const status = formatStatus({
+    loadedAt: lastLoadedAt,
+    range: active ? active.textContent : '',
+    sessions: summary.sessions,
+    apiCalls: summary.apiCalls,
+  });
+  document.getElementById('stripSync').textContent = status.sync;
+  document.getElementById('stripRange').textContent = status.range;
+  document.getElementById('stripSessions').textContent = status.sessions;
+  document.getElementById('stripCalls').textContent = status.apiCalls;
+  if (!liveTimer) return;
+  const ring = document.querySelector('#liveDot .live-ring');
+  ring.classList.remove('ping');
+  void ring.offsetWidth; // restarts the animation on the next add
+  ring.classList.add('ping');
+}
+
 function spinnerNode() {
   return el('span', { class: 'spinner', 'aria-hidden': 'true' });
 }
@@ -2210,6 +2235,7 @@ function setLive(on) {
   clearInterval(liveTimer);
   liveTimer = on ? setInterval(() => loadAndRender(), LIVE_POLL_MS) : null;
   document.getElementById('liveDot').classList.toggle('is-off', !on);
+  document.querySelector('#liveDot .live-text').textContent = on ? 'Link live' : 'Paused';
   // A live range re-scans every 5 seconds, so a manual refresh has nothing to do.
   document.getElementById('refreshBtn').hidden = on;
 }
@@ -2278,6 +2304,9 @@ async function loadAndRender({ busy = false } = {}) {
     lastSignature = null;
     return;
   }
+
+  lastLoadedAt = Date.now();
+  renderStatusStrip(data.summary);
 
   const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
   if (signature === lastSignature) return;

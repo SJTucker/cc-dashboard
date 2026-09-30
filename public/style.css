@@ -80,6 +80,8 @@ html, body {
   top: 0;
   background: var(--bg);
   z-index: 10;
+  overflow: clip;
+  isolation: isolate;
 }
 
 .topbar-title h1 {
@@ -89,6 +91,93 @@ html, body {
   font-weight: 700;
   letter-spacing: 0.24em;
   text-transform: uppercase;
+}
+
+.topbar-title {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 24px;
+  width: 100%;
+}
+
+/* A static perspective grid behind the title row, after the TRON: Legacy floor.
+   It fades out downwards before it reaches the controls and the header cards.
+   overflow: clip on .topbar keeps it from widening the page. */
+.topbar::before {
+  content: '';
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: 0;
+  height: 110px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(rgba(63, 224, 255, 0.35) 1px, transparent 1px) 0 0 / 48px 24px,
+    linear-gradient(90deg, rgba(63, 224, 255, 0.35) 1px, transparent 1px) 0 0 / 48px 24px;
+  transform: perspective(300px) rotateX(62deg);
+  transform-origin: 50% 0;
+  mask: linear-gradient(#000, transparent 85%);
+  opacity: 0.5;
+}
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 18px;
+  padding: 4px 10px;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: rgba(5, 7, 13, 0.7);
+  font-family: var(--font-label);
+  font-weight: 500;
+  font-size: 12px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.status-strip b {
+  font-family: var(--font-num);
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  color: var(--text-primary);
+}
+
+/* Live shows a cyan ring and "Link live". Paused shows a dim ring and "Paused".
+   The words carry the state, so it does not rely on colour. */
+.live-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+  color: var(--text-tertiary);
+}
+.live-dot:not(.is-off) { color: var(--text-primary); }
+.live-ring {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--text-tertiary);
+}
+.live-dot:not(.is-off) .live-ring { border-color: var(--accent-cyan); }
+.live-ring::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-cyan);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .live-ring.ping::after { animation: live-ping 900ms ease-out; }
+}
+@keyframes live-ping {
+  from { transform: scale(1); opacity: 0.9; }
+  to { transform: scale(2.6); opacity: 0; }
 }
 
 .topbar-controls {
@@ -146,17 +235,6 @@ html, body {
 
 .refresh-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
 
-.live-dot {
-  font-size: 0.75rem;
-  color: var(--accent-cost);
-  white-space: nowrap;
-}
-
-/* Kept in the layout so the controls row does not change width when the live
-   indicator turns on and off. */
-.live-dot.is-off {
-  visibility: hidden;
-}
 
 /* ---------- Status banner ---------- */
 
