@@ -2009,6 +2009,57 @@ function applyRowOrder(keys) {
   for (const key of keys) app.appendChild(byKey.get(key));
 }
 
+function clearDropMarks(row) {
+  row.classList.remove('drop-before', 'drop-after');
+}
+
+// Adds a handle to each row's first heading. Pressing the handle makes that row
+// draggable, so a drag that starts anywhere else in the row selects text as
+// before. The row under the pointer marks the drop point as a line on its top or
+// bottom edge, whichever half the pointer is in. onDrop runs after each move.
+// The handle's glyph is CSS content, so the heading's textContent is unchanged.
+function setupRowDrag(onDrop) {
+  let dragged = null;
+  for (const row of panelRows()) {
+    const handle = el('span', { class: 'row-handle', title: 'Drag to move', 'aria-hidden': 'true' });
+    handle.addEventListener('pointerdown', () => { row.draggable = true; });
+    handle.addEventListener('pointerup', () => { row.draggable = false; });
+    row.querySelector('.panel-head h2').prepend(handle);
+
+    row.addEventListener('dragstart', (e) => {
+      dragged = row;
+      row.classList.add('row-dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', row.dataset.rowKey);
+    });
+    // A drag that did not start from a handle, such as a file from the desktop,
+    // leaves dragged null, so no row accepts the drop.
+    row.addEventListener('dragover', (e) => {
+      if (!dragged || dragged === row) return;
+      e.preventDefault();
+      const box = row.getBoundingClientRect();
+      const after = e.clientY > box.top + box.height / 2;
+      row.classList.toggle('drop-before', !after);
+      row.classList.toggle('drop-after', after);
+    });
+    row.addEventListener('dragleave', (e) => {
+      if (!row.contains(e.relatedTarget)) clearDropMarks(row);
+    });
+    row.addEventListener('drop', (e) => {
+      e.preventDefault();
+      const after = row.classList.contains('drop-after');
+      clearDropMarks(row);
+      row.parentNode.insertBefore(dragged, after ? row.nextSibling : row);
+      onDrop();
+    });
+    row.addEventListener('dragend', () => {
+      row.draggable = false;
+      row.classList.remove('row-dragging');
+      dragged = null;
+    });
+  }
+}
+
 // Runs before setupCollapsibleRows, which reads data-row-key.
 function setupRowOrder() {
   assignRowKeys();
@@ -2022,6 +2073,11 @@ function setupRowOrder() {
     applyRowOrder(defaultKeys);
     saveRowOrder(null);
     resetBtn.hidden = true;
+  });
+
+  setupRowDrag(() => {
+    saveRowOrder(currentRowKeys());
+    resetBtn.hidden = false;
   });
 }
 

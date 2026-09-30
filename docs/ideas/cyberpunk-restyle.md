@@ -13,6 +13,9 @@ accent for cost and the live dot, and cards with thin borders.
   new palette keeps that. The usual cyberpunk neon red and green pair would fail it.
 - No new dependencies and no CDN assets. The Content-Security-Policy is
   `default-src 'self'`, so any font must be a file served from `public/`.
+- The row drag handle (`.row-handle`), the dragged row (`.row-dragging`) and the
+  drop line (`.drop-before`, `.drop-after`) in `public/style.css` are part of the
+  restyle.
 
 ## Open questions
 

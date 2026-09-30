@@ -868,6 +868,22 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
 /* A collapsed row keeps only its headings. */
 .panel.row-collapsed > :not(.panel-head),
 .panel-row.row-collapsed > .panel > :not(.panel-head) { display: none; }
+
+/* ---------- Row order ---------- */
+
+.row-handle {
+  color: var(--text-tertiary);
+  padding: 0 8px 0 0;
+  cursor: grab;
+  user-select: none;
+}
+.row-handle::before { content: '⠿'; }
+.row-handle:hover { color: var(--text-primary); }
+.row-dragging { opacity: 0.4; }
+/* The drop point is a 3px line in the primary text colour on the target row's top
+   or bottom edge. Its position and thickness mark the drop point, not its hue. */
+.drop-before { box-shadow: 0 -3px 0 0 var(--text-primary); }
+.drop-after { box-shadow: 0 3px 0 0 var(--text-primary); }
 .row-collapsed .panel-head { margin-bottom: 0; }
 
 /* A collapsed Skills or Subagents list in Where usage goes keeps only its title
