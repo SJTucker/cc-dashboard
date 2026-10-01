@@ -659,3 +659,16 @@ test('days accepts only the range picker values on /api/summary and /api/rtk', a
     }
   }
 });
+
+test("the POST /api routes refuse Sec-Fetch-Site: none, which only a GET from the address bar sends", async (t) => {
+  stubPricingPage(t, PAGE); // so a broken guard cannot reach platform.claude.com
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  for (const route of ['/api/refresh', '/api/prices/check', '/api/prices/apply']) {
+    const res = await fetch(base + route, { method: 'POST', headers: { 'Sec-Fetch-Site': 'none' } });
+    assert.strictEqual(res.status, 403, route);
+  }
+});

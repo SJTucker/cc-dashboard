@@ -227,12 +227,14 @@ app.get('/api/sessions/live', async (req, res) => {
 
 // Every modern browser sends Sec-Fetch-Site. Any value other than same-origin or
 // none means another page issued the request. 'none' is the user opening an /api
-// URL from the address bar. The Host guard cannot catch a cross-site request,
-// because a browser sets Host from the address it connected to, not from the page
-// that asked. Non-browser clients send no such header and still work.
+// URL from the address bar, which is always a GET, so a POST with 'none' is
+// refused. The Host guard cannot catch a cross-site request, because a browser
+// sets Host from the address it connected to, not from the page that asked.
+// Non-browser clients send no such header and still work.
 function sameOriginOnly(req, res, next) {
   const site = req.get('sec-fetch-site');
-  if (site && site !== 'same-origin' && site !== 'none') {
+  const typedUrl = site === 'none' && req.method === 'GET';
+  if (site && site !== 'same-origin' && !typedUrl) {
     res.status(403).json({ error: 'Cross-site requests are not accepted.' });
     return;
   }
