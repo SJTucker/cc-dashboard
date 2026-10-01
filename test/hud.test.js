@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { formatStatus, shareMeter } = require('../public/hud');
+const { formatStatus, shareMeter, dailyWarning } = require('../public/hud');
 
 test('formatStatus shows the load time as 24-hour local HH:MM:SS and counts with separators', () => {
   const loadedAt = new Date(2026, 8, 30, 10, 24, 21).getTime();
@@ -39,4 +39,26 @@ test('shareMeter has no tick at the weekend and still fills', () => {
 test('shareMeter clamps the fill to 0 to 100', () => {
   assert.strictEqual(shareMeter({ share: 130, budget: 20 }).fill, 100);
   assert.strictEqual(shareMeter({ share: -2, budget: 20 }).fill, 0);
+});
+
+test('dailyWarning fires within 1 point of the rolling budget', () => {
+  assert.deepStrictEqual(dailyWarning({ share: 31, budget: 20, rollingBudget: 32 }), { share: 31, budget: 32, rolling: true });
+  assert.strictEqual(dailyWarning({ share: 30, budget: 20, rollingBudget: 32 }), null);
+});
+
+test('dailyWarning ignores the fixed budget when the rolling budget is higher', () => {
+  assert.strictEqual(dailyWarning({ share: 25, budget: 20, rollingBudget: 32 }), null);
+});
+
+test('dailyWarning rounds both values the way the panel shows them', () => {
+  assert.deepStrictEqual(dailyWarning({ share: 30.6, budget: 20, rollingBudget: 31.6 }), { share: 31, budget: 32, rolling: true });
+});
+
+test('dailyWarning falls back to the fixed budget when the rolling budget is unknown', () => {
+  assert.deepStrictEqual(dailyWarning({ share: 19, budget: 20, rollingBudget: null }), { share: 19, budget: 20, rolling: false });
+});
+
+test('dailyWarning never fires at the weekend or without a reading', () => {
+  assert.strictEqual(dailyWarning({ share: 50, budget: null, rollingBudget: null }), null);
+  assert.strictEqual(dailyWarning(null), null);
 });

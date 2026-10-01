@@ -26,4 +26,24 @@ function shareMeter(today) {
   };
 }
 
-if (typeof module === 'object') module.exports = { formatStatus, shareMeter };
+// The daily warning fires one point short of the day's budget, so there is room to
+// stop before it.
+const DAILY_WARN_MARGIN = 1;
+
+// Whether the Plan usage banner warns about today's share of the week. It compares
+// against the rolling budget: the weekly percent left at the start of today, spread
+// over the workdays left before the reset. When the reset time is unknown there is no
+// rolling budget, so it falls back to the fixed budget. A weekend has neither, so it
+// never warns. Both values are rounded, as the panel shows them. Returns
+// { share, budget, rolling } or null.
+function dailyWarning(today) {
+  if (!today) return null;
+  const rolling = typeof today.rollingBudget === 'number';
+  const raw = rolling ? today.rollingBudget : today.budget;
+  if (typeof raw !== 'number') return null;
+  const share = Math.round(today.share);
+  const budget = Math.round(raw);
+  return share >= budget - DAILY_WARN_MARGIN ? { share, budget, rolling } : null;
+}
+
+if (typeof module === 'object') module.exports = { formatStatus, shareMeter, dailyWarning };

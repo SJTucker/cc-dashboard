@@ -1296,23 +1296,20 @@ function renderSessions(live) {
 // compared so the banner agrees with the "N% used" the panel shows.
 const LIMIT_WARN_PERCENT = 75;
 
-// The daily warning fires one point short of the day's budget, so there is room to
-// stop before it. It uses the fixed budget, and a weekend has none.
-const DAILY_WARN_MARGIN = 1;
-
 function renderLimitsBanner(limits) {
   const banner = document.getElementById('limitsBanner');
   const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
-  const today = limits ? limits.today : null;
-  const dayHigh = today != null && today.budget != null
-    && Math.round(today.share) >= today.budget - DAILY_WARN_MARGIN;
+  // dailyWarning (public/hud.js) compares today's share with the rolling budget.
+  const dayHigh = dailyWarning(limits ? limits.today : null);
   banner.hidden = !high.length && !dayHigh;
   banner.replaceChildren(
     el('strong', { text: high.length ? 'Nearing your plan limit' : "Nearing today's budget" }),
     ...high.map((l) => el('div', {
       text: `${l.label}: ${Math.round(l.percent)}% used${l.resetsAt == null ? '' : ` · ${formatReset(l.resetsAt)}`}`,
     })),
-    ...(dayHigh ? [el('div', { text: `Today: ${Math.round(today.share)}% of the week, budget ${today.budget}%` })] : [])
+    ...(dayHigh ? [el('div', {
+      text: `Today: ${dayHigh.share}% of the week, ${dayHigh.rolling ? 'rolling budget' : 'budget'} ${dayHigh.budget}%`,
+    })] : [])
   );
 }
 
