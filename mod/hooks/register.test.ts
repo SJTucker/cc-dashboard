@@ -10,7 +10,7 @@ const WEEK: SessionRateLimit = { kind: 'seven_day', percentUsed: 41, resetsAt: '
 // Answers every noun the mod calls, beneath it. `w` is read on each call, so a
 // test can change the session id, the model or the environment between events.
 // Returns what process.run got.
-function world(on: On, w: Partial<World> = {}, exitCode = 0) {
+function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) {
   const state: World = { id: 's1', model: 'claude-opus-5-5[1m]', env: { HOME: '/home/u' }, ...w }
   const ran: Ran[] = []
   mock.clock(on, { now: 61_000 })
@@ -23,6 +23,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0) {
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
   on('process.run', (_$, e) => {
+    if (runThrows) throw new Error('spawn failed')
     ran.push({
       argv: e.argv,
       stdin: e.init?.stdin === undefined ? undefined : JSON.parse(e.init.stdin),
@@ -107,3 +108,36 @@ test('model ids become the names the statusline shows', async ($, on) => {
     'Opus 5.5 (1M context)', 'Opus 5', 'Haiku 4.5', 'Fable 5.1', 'opus',
   ])
 })
+
+test('a process.run that throws does not reject the measure or change its result', async ($, on) => {
+  const { ran } = world(on, {}, 0, true)
+  const result = await $.session.measure(measure([FIVE]))
+  expect(result).toEqual({ changed: ['cost', 'rateLimits'] })
+  expect(ran).toEqual([])
+})
+
+test('a measure with rate limits and no cost sends rate_limits and leaves cost out', async ($, on) => {
+  const { ran } = world(on)
+  await $.session.measure(measure([FIVE], null))
+  expect(ran.length).toBe(1)
+  expect(ran[0]?.stdin).not.toHaveProperty('cost')
+  expect(ran[0]?.stdin).toHaveProperty('rate_limits.five_hour.used_percentage', 23.5)
+})
+
+test('a rate limit of another kind is left out of rate_limits', async ($, on) => {
+  const { ran } = world(on)
+  const spend: SessionRateLimit = { kind: 'spend_limit', percentUsed: 5, resetsAt: '2026-10-01T15:00:00.000Z' }
+  await $.session.measure(measure([FIVE, spend]))
+  await $.session.measure(measure([spend]))
+  const limits = ran.map((r) => (r.stdin as { rate_limits?: object }).rate_limits)
+  expect(limits[0]).toEqual({ five_hour: { used_percentage: 23.5, resets_at: 1790866800 } })
+  expect(limits[1]).toBeUndefined()
+  expect(ran[1]?.stdin).not.toHaveProperty('rate_limits')
+})
+
+test('a window with no resetsAt is sent without resets_at', async ($, on) => {
+  const { ran } = world(on)
+  await $.session.measure(measure([{ kind: 'five_hour', percentUsed: 12 }]))
+  expect((ran[0]?.stdin as { rate_limits: object }).rate_limits).toEqual({ five_hour: { used_percentage: 12 } })
+})
+
