@@ -9,4 +9,5 @@ then on.
 
 | Idea | Status |
 |---|---|
-| [Record setup changes automatically](auto-setup-changes.md) | Open: a hook, a snapshot, or both. Updates: an agent judges each changelog entry and summarizes only the relevant ones |
+| [Record setup changes automatically](auto-setup-changes.md) | Open: mostly in the mod; ConfigChange, InstructionsLoaded and PostModelSwitch need a settings hook. Labels, noise and paths still open |
+| [Mark Claude Code updates that could change usage](claude-code-updates.md) | Open: in the mod, run by a slash command. Decided: an agent judges each version and summarizes only the relevant ones |
