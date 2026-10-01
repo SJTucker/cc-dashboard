@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- A terminal prompt (amber >, cyan cursor) over the header's perspective grid,
+       in the page's colours from style.css: background #05070d, cyan #3fe0ff and
+       the cost accent #ffb000. -->
+  <defs>
+    <clipPath id="tile"><rect width="32" height="32" rx="6"/></clipPath>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="0.9" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <g clip-path="url(#tile)">
+    <rect width="32" height="32" fill="#05070d"/>
+    <g stroke="#3fe0ff" stroke-width="1" fill="none" opacity="0.55">
+      <path d="M16 19 L-8 32 M16 19 L4 32 M16 19 L16 32 M16 19 L28 32 M16 19 L40 32"/>
+      <path d="M0 19.5 H32 M0 22 H32 M0 25.5 H32 M0 30 H32"/>
+    </g>
+  </g>
+  <rect x="0.5" y="0.5" width="31" height="31" rx="5.5" fill="none" stroke="#3fe0ff" stroke-opacity="0.7"/>
+  <g filter="url(#glow)">
+    <path d="M6.5 5.5 L12.5 10.5 L6.5 15.5" fill="none" stroke="#ffb000" stroke-width="3" stroke-linecap="square" stroke-linejoin="miter"/>
+    <rect x="15" y="13" width="10" height="3" fill="#3fe0ff"/>
+  </g>
+</svg>
