@@ -4,3 +4,4 @@ node_modules/
 .claude/handoffs/
 docs/superpowers/
 changes.json
+mod/.claude-plugin/types/
