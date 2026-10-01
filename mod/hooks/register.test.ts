@@ -2,19 +2,42 @@ import type { On, SessionRateLimit, UsageUnit } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
 type Ran = { argv: readonly string[]; stdin: unknown; timeoutMs: number | undefined }
-type World = { id: string; model: string; env: Record<string, string> }
+type Entry = { name: string; kind: 'file' | 'dir' | 'other'; size: number; mtimeMs: number; isLink: boolean }
+// `exists` answers fs.exists. `dirs` maps a folder to the names fs.list returns for it.
+type World = {
+  id: string
+  model: string
+  env: Record<string, string>
+  exists: (path: string) => boolean
+  dirs: Record<string, string[]>
+}
+
+const entry = (name: string): Entry => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })
 
 const FIVE: SessionRateLimit = { kind: 'five_hour', percentUsed: 23.5, resetsAt: '2026-10-01T15:00:00.000Z' }
 const WEEK: SessionRateLimit = { kind: 'seven_day', percentUsed: 41, resetsAt: '2026-10-05T09:30:00.000Z' }
 
 // Answers every noun the mod calls, beneath it. `w` is read on each call, so a
 // test can change the session id, the model or the environment between events.
-// Returns what process.run got.
+// Returns what process.run got and the folders fs.list was asked for.
 function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) {
-  const state: World = { id: 's1', model: 'claude-opus-5-5[1m]', env: { HOME: '/home/u' }, ...w }
+  const state: World = {
+    id: 's1',
+    model: 'claude-opus-5-5[1m]',
+    env: { HOME: '/home/u' },
+    exists: () => true,
+    dirs: {},
+    ...w,
+  }
   const ran: Ran[] = []
+  const listed: string[] = []
   mock.clock(on, { now: 61_000 })
   on('fs.stat', () => ({ value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: true, realPath: '/repo/mod' } }))
+  on('fs.exists', (_$, e) => ({ value: state.exists(e.path) }))
+  on('fs.list', (_$, e) => {
+    listed.push(e.path)
+    return { value: (state.dirs[e.path] ?? []).map(entry) }
+  })
   on('env.get', (_$, e) => ({ value: state.env[e.name] }))
   on('session.id', () => ({ value: state.id }))
   on('session.root', () => ({ value: '/work/my.demo' }))
@@ -31,7 +54,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     })
     return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  return { ran, state }
+  return { ran, state, listed }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -78,6 +101,51 @@ test('CLAUDE_CONFIG_DIR replaces ~/.claude in the transcript path', async ($, on
   const { ran } = world(on, { env: { HOME: '/home/u', CLAUDE_CONFIG_DIR: '/cfg' } })
   await $.session.measure(measure([FIVE]))
   expect((ran[0]?.stdin as { transcript_path: string }).transcript_path).toBe('/cfg/projects/-work-my-demo/s1.jsonl')
+})
+
+test('a transcript outside the built path is found by searching the projects folder', async ($, on) => {
+  const found = '/home/u/.claude/projects/-work-start-dir/s1.jsonl'
+  const { ran, listed } = world(on, {
+    exists: (path) => path === found,
+    dirs: { '/home/u/.claude/projects': ['-work-my-demo', '-work-start-dir'] },
+  })
+  await $.session.measure(measure([FIVE]))
+  expect(listed).toEqual(['/home/u/.claude/projects'])
+  expect(ran.length).toBe(1)
+  const input = ran[0]?.stdin as { transcript_path: string; workspace: { project_dir: string } }
+  expect(input.transcript_path).toBe(found)
+  expect(input.workspace.project_dir).toBe('/work/my.demo')
+})
+
+test('a transcript that exists nowhere records nothing and logs once', async ($, on) => {
+  const { ran } = world(on, { exists: () => false, dirs: { '/home/u/.claude/projects': ['-work-my-demo'] } })
+  const logged: string[] = []
+  on('ui.log', (_$, e) => {
+    logged.push(e.text)
+    return { value: undefined }
+  })
+  await $.session.measure(measure([FIVE]))
+  await $.session.measure(measure([FIVE]))
+  expect(ran).toEqual([])
+  expect(logged).toEqual(['cc-dashboard: transcript not found'])
+})
+
+test('a CLAUDE_CONFIG_DIR that starts with ~ expands with HOME', async ($, on) => {
+  const { ran } = world(on, { env: { HOME: '/home/u', CLAUDE_CONFIG_DIR: '~/cfg' } })
+  await $.session.measure(measure([FIVE]))
+  expect((ran[0]?.stdin as { transcript_path: string }).transcript_path).toBe('/home/u/cfg/projects/-work-my-demo/s1.jsonl')
+})
+
+test('a second measure for the same session does not search again', async ($, on) => {
+  const found = '/home/u/.claude/projects/-work-start-dir/s1.jsonl'
+  const { ran, listed } = world(on, {
+    exists: (path) => path === found,
+    dirs: { '/home/u/.claude/projects': ['-work-start-dir'] },
+  })
+  await $.session.measure(measure([FIVE]))
+  await $.session.measure(measure([FIVE]))
+  expect(ran.length).toBe(2)
+  expect(listed.length).toBe(1)
 })
 
 test('with neither HOME nor CLAUDE_CONFIG_DIR a measure runs nothing', async ($, on) => {

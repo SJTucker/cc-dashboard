@@ -49,14 +49,42 @@ async function run($: EngineInterface, name: string, input: object, timeoutMs: n
   }
 }
 
+// Transcript paths found so far, by session id. A transcript does not move, so a
+// cached path is not checked again.
+const transcripts = new Map<string, string>()
+
 // No $ call returns the transcript's path. Claude Code keeps it at
-// <config dir>/projects/<project dir, every character outside a-z, A-Z and 0-9
-// replaced by '-'>/<session id>.jsonl. Null when neither variable is set.
+// <config dir>/projects/<folder>/<session id>.jsonl, where <folder> is the directory
+// the session started in, every character outside a-z, A-Z and 0-9 replaced by '-'.
+// Claude Code shortens and hashes a very long folder name. $.session.root() follows
+// /cd and a worktree move, so the folder built from it can be the wrong one.
+// The built path is the first guess. On a miss every folder under projects/ is
+// searched for <session id>.jsonl. Null when neither variable is set or no file is
+// found.
 async function transcriptPath($: EngineInterface, root: string, id: string) {
-  const configDir = await $.env.get('CLAUDE_CONFIG_DIR')
-  const home = configDir ? undefined : await $.env.get('HOME')
-  if (!configDir && !home) return null
-  return `${configDir ?? `${home}/.claude`}/projects/${root.replace(/[^a-zA-Z0-9]/g, '-')}/${id}.jsonl`
+  const cached = transcripts.get(id)
+  if (cached) return cached
+  const configEnv = await $.env.get('CLAUDE_CONFIG_DIR')
+  const home = await $.env.get('HOME')
+  if (!configEnv && !home) return null
+  const configDir = configEnv ? configEnv.replace(/^~(?=\/|$)/, home ?? '~') : `${home}/.claude`
+  const projects = `${configDir}/projects`
+  const folder = root.replace(/[^a-zA-Z0-9]/g, '-')
+  const built = `${projects}/${folder}/${id}.jsonl`
+  let found: string | null = (await $.fs.exists(built)) ? built : null
+  if (!found) {
+    const entries = await $.fs.list(projects).catch(() => [])
+    for (const entry of entries) {
+      if (entry.kind === 'file' || entry.name === folder) continue
+      const candidate = `${projects}/${entry.name}/${id}.jsonl`
+      if (await $.fs.exists(candidate)) {
+        found = candidate
+        break
+      }
+    }
+  }
+  if (found) transcripts.set(id, found)
+  return found
 }
 
 // $.session.model() returns the model id, and the statusline sent a display name,
@@ -100,7 +128,10 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
   const id = await $.session.id()
   const root = await $.session.root()
   const transcript = await transcriptPath($, root, id)
-  if (!transcript) return null
+  if (!transcript) {
+    fail($, 'transcript not found')
+    return null
+  }
   const input: Record<string, unknown> = {
     session_id: id,
     transcript_path: transcript,
