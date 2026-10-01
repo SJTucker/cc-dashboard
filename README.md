@@ -27,6 +27,12 @@ node server.js --port 3601      # use a different port
 node server.js --open           # also open your browser automatically
 ```
 
+While editing the code, run `npm run watch`. Node's `--watch` flag restarts
+the server when `server.js` or any file under `lib/` changes. Files under
+`public/` are read from disk on each request, so a page reload picks them up
+without a restart. A restart clears the scan cache, so the first request after
+it takes a full scan.
+
 By default it reads `~/.claude/projects`. If you use a custom Claude config
 location, set `CLAUDE_CONFIG_DIR` before starting it, same as Claude Code itself:
 
