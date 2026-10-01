@@ -9,4 +9,4 @@ then on.
 
 | Idea | Status |
 |---|---|
-| [Record setup changes automatically](auto-setup-changes.md) | Open: a hook, a snapshot, or both; Claude Code updates from transcripts and the changelog |
+| [Record setup changes automatically](auto-setup-changes.md) | Open: a hook, a snapshot, or both. Updates: an agent judges each changelog entry and summarizes only the relevant ones |

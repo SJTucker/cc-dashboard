@@ -62,6 +62,21 @@ own edits. Asked for on 2026-10-01, as part of this idea.
   could follow the same rule as Check prices: run only when the user presses a
   button, and say so in the startup line and the README.
 
+### Decided (2026-10-01)
+
+- **An agent judges each version.** An agent reads each new version's changelog
+  entry and decides whether it could change what the Setup changes panels measure.
+  Relevant means the entry mentions tokens, prompt caching, the context window,
+  compaction, tool behaviour or tool output size, subagents, or default model or
+  effort settings.
+- **Only relevant versions are shown.** A version the agent judges not relevant gets
+  no marker and appears in no list.
+- **The marker carries a short summary.** The agent writes a one-line summary of only
+  the relevant part of the entry, and the marker shows that summary. The rest of the
+  entry is left out.
+- **The marker's time comes from the transcripts.** It is the time of the first call
+  made on that version, because the changelog has no dates.
+
 ## Open questions
 
 - **Which paths count.** Candidates: `~/.claude/CLAUDE.md` and each project's
@@ -87,15 +102,24 @@ own edits. Asked for on 2026-10-01, as part of this idea.
 - **Changes that are not file edits.** `/effort` and `/model` are typed commands. A
   `UserPromptSubmit` hook could see them. Whether Claude Code also has a hook event
   for settings changes needs checking against the current hooks documentation.
-- **Which updates get a marker.** At 23 versions a month, one marker per version
-  would crowd the marker row and put another change inside almost every 7-day
-  window. Options: mark only minor versions (2.1 to 2.2); mark a version only when
-  its changelog entry mentions tokens, caching, context, compaction or a tool; or
-  list versions in a marker's tooltip instead of drawing them.
-- **Showing the changelog.** A marker's tooltip, or the "another change within 7
-  days" list, could show the changelog bullets for the versions in its window. The
-  fetched changelog would need a cache file, so the page does not refetch it on
-  every load.
+- **How the agent runs.** `claude -p` runs headless on the user's existing Claude
+  Code login, with no API key. Its runs write transcripts under `~/.claude/projects`,
+  so the dashboard would count its own judging calls in the totals. It would need a
+  dedicated working directory that the scan leaves out. The Claude API avoids that
+  but needs an API key.
+- **When it runs.** The judging could run in the same button press that fetches the
+  changelog, for versions not judged yet. Several new versions could go in one call.
+- **Storing verdicts.** A cache file could map each version to its verdict and
+  summary, so each version is judged once. Editing that file would let the user
+  override a verdict.
+- **The judging prompt.** The topic list above needs to become a prompt that also
+  sets the summary length, for example at most 15 words.
+- **Another outbound request.** The judging call goes over the network and costs
+  tokens. It needs the same rule as Check prices: it runs only on a button press,
+  and the startup line and the README say so.
+- **A marker kind for updates.** `KINDS` in `lib/changes.js` has no kind for a
+  Claude Code update. A new kind such as `claude-code` would need its own marker
+  shape.
 - **Install and scope.** The hook has to live in the user's `~/.claude/settings.json`
   to see edits from every project. Decide whether the dashboard ships the hook script
   in `bin/` the way it ships `bin/record-statusline`, plus a README step to install it.
