@@ -101,8 +101,10 @@ html, body {
   width: 100%;
 }
 
-/* A static perspective grid behind the title row, after the TRON: Legacy floor.
-   It fades out downwards before it reaches the controls and the header cards.
+/* A static perspective grid behind the whole sticky header, after the TRON:
+   Legacy floor. rotateX foreshortens the element to well under its height, so
+   640px is what covers the title row, the controls and the header cards. The
+   fade starts at 30% of the floor, so its lines reach the header's bottom edge.
    overflow: clip on .topbar keeps it from widening the page. */
 .topbar::before {
   content: '';
@@ -110,7 +112,7 @@ html, body {
   left: -20%;
   right: -20%;
   top: 0;
-  height: 110px;
+  height: 640px;
   z-index: -1;
   pointer-events: none;
   background:
@@ -118,8 +120,8 @@ html, body {
     linear-gradient(90deg, rgba(63, 224, 255, 0.35) 1px, transparent 1px) 0 0 / 48px 24px;
   transform: perspective(300px) rotateX(62deg);
   transform-origin: 50% 0;
-  mask: linear-gradient(#000, transparent 85%);
-  opacity: 0.5;
+  mask: linear-gradient(#000 30%, transparent 95%);
+  opacity: 0.55;
 }
 
 .status-strip {
