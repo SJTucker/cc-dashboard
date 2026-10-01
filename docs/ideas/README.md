@@ -9,3 +9,4 @@ then on.
 
 | Idea | Status |
 |---|---|
+| [Record setup changes automatically](auto-setup-changes.md) | Open: a hook, a snapshot, or both |
