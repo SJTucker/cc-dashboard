@@ -319,3 +319,28 @@ test('readRtkWindows returns null when the database is missing or not rtk', () =
     else process.env.RTK_DB = prev;
   }
 });
+
+test('day buckets run unbroken from the first day with rows to today', () => {
+  const threeDaysAgo = new Date();
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+  threeDaysAgo.setHours(12, 0, 0, 0);
+  const prev = process.env.RTK_DB;
+  process.env.RTK_DB = makeDb([{ timestamp: utcStamp(threeDaysAgo), saved_tokens: 42 }]);
+
+  const out = readRtkUsage({ days: 7 });
+
+  const key = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  const expected = [3, 2, 1, 0].map((n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return key(d);
+  });
+  assert.deepStrictEqual(out.daily.map((d) => d.date), expected);
+  assert.deepStrictEqual(
+    out.daily.slice(1).map((d) => [d.commands, d.input, d.saved]),
+    [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+  );
+
+  if (prev === undefined) delete process.env.RTK_DB;
+  else process.env.RTK_DB = prev;
+});
