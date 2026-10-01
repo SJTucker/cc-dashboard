@@ -1221,7 +1221,7 @@ function renderLimits(limits) {
   const stale = Date.now() - limits.fetchedAt > LIMITS_STALE_MS
     ? ' — may be stale: Claude Code updates it while a session runs'
     : '';
-  const sourceLabel = limits.source === 'statusline' ? "Claude Code's statusline" : "Claude Code's usage cache";
+  const sourceLabel = limits.source === 'statusline' ? 'the cc-dashboard recorder' : "Claude Code's usage cache";
   document.getElementById('limitsNote').textContent = `from ${sourceLabel}, as of ${asOf} (${zone})${stale}`;
 }
 
