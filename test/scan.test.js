@@ -907,3 +907,23 @@ test('a price change applies only to usage from its effective date on', async (t
   assert.ok(Math.abs(costOn(daysAgo(3)) - 3) < 1e-9, 'before the change: $3 per million input');
   assert.ok(Math.abs(costOn(daysAgo(1)) - 6) < 1e-9, 'after the change: $6 per million input');
 });
+
+test('a 7-day range starts at local midnight six days ago', async () => {
+  const base = makeFixture();
+  const firstDay = new Date();
+  firstDay.setDate(firstDay.getDate() - 6);
+  firstDay.setHours(0, 30, 0, 0);
+  const dayBefore = new Date(firstDay);
+  dayBefore.setDate(dayBefore.getDate() - 1);
+  dayBefore.setHours(23, 59, 59, 0);
+  writeSession(base, 'edge', [
+    usageLine(dayBefore.toISOString(), { id: 'old', input: 700 }),
+    usageLine(firstDay.toISOString(), { id: 'new', input: 300 }),
+  ]);
+
+  const { scanUsage, localDateStr } = loadScan(base);
+  const data = await scanUsage({ days: 7 });
+
+  assert.strictEqual(data.summary.totalInput, 300, 'the day before the range is left out at any time of day');
+  assert.strictEqual(data.daily[0].date, localDateStr(firstDay));
+});
