@@ -76,9 +76,10 @@ recently. It makes no network request of its own.
   `~/.claude.json`, or in `$CLAUDE_CONFIG_DIR/.claude.json` when that is set.
   This file only updates when someone runs `/usage`, so between sessions it goes
   stale.
-- **The statusline.** Claude Code's `statusLine` command receives a JSON object on
+- **The recorder.** `bin/record-statusline` reads Claude Code's statusline JSON on
   stdin, which includes `rate_limits` after the first API response of a session.
-  `bin/record-statusline` reads that JSON from stdin and writes the rate limits to
+  The dashboard's Claude Code mod runs it after each turn (see "Setting up the
+  recorder" below). It writes the rate limits to
   `~/.claude/rate-limits.json`, or `$CLAUDE_CONFIG_DIR/rate-limits.json` when that
   is set. Its numbers change after every API response in any running session.
   The same script also keeps one small snapshot per session, holding that
@@ -97,15 +98,35 @@ recently. It makes no network request of its own.
   Subagent calls reach the transcripts right away. Session cost updates only on the
   main session's next statusline render.
 
-To feed the statusline source, add one line to your existing statusline script
-(the command `statusLine.command` in `~/.claude/settings.json` points at):
+### Setting up the recorder
+
+The dashboard ships a Claude Code mod in `mod/`. Link it into your skills folder, and
+every Claude Code session loads it:
+
+```bash
+ln -s ~/code/cc-dashboard/mod ~/.claude/skills/cc-dashboard
+```
+
+After each main turn, and whenever a rate-limit window moves by 1%, the mod runs
+`bin/record-statusline`. When a session ends, it runs `bin/record-session-end`. It
+needs nothing in your statusline script or in `settings.json`. The mod uses Claude
+Code's function hooks, which are early access and may change between releases. If
+an update breaks it, the transcript shows one line starting `cc-dashboard:`, or the
+Plan usage panel's "as of" time stops moving. `claude plugin validate
+~/code/cc-dashboard/mod` says what the engine refuses.
+
+### Without the mod
+
+The scripts also work on their own. Use this path or the mod, not both.
+
+Add one line to your existing statusline script (the command `statusLine.command` in
+`~/.claude/settings.json` points at):
 
 ```bash
 echo "$input" | ~/code/cc-dashboard/bin/record-statusline
 ```
 
 `bin/record-limits` is the script's old name and still works.
-
 `record-statusline` never writes to stdout or stderr and always exits 0, so adding it
 does not change what the statusline shows. Do not point `statusLine.command`
 straight at `record-statusline`. It prints nothing, so the statusline would be blank.
@@ -117,6 +138,9 @@ input=$(cat)
 echo "$input" | ~/code/cc-dashboard/bin/record-statusline
 echo "$input" | jq -r '.model.display_name'
 ```
+
+For the cleared and ended marks in Live sessions, also add a `SessionEnd` hook, as
+described at the end of this section.
 
 When either window reaches 75%, a warning banner at the top of the page shows on
 every range, with the percentage and the reset time.
@@ -149,7 +173,7 @@ npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 
 The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
 any other end, such as quitting or `/resume`. It reads this from
-`bin/record-session-end`, which Claude Code runs as a `SessionEnd` hook. Add this key
+`bin/record-session-end`, which the mod runs when a session ends. Without the mod, run it as a `SessionEnd` hook: add this key
 to the `"hooks"` object in `~/.claude/settings.json`. If the file has no `"hooks"`
 object, create one at the top level, `"hooks": { … }`, and put the key inside it.
 Do not add a second `"hooks"` key: JSON keeps only the last one, and the hooks in
@@ -161,8 +185,8 @@ the other are silently dropped.
 ]
 ```
 
-`record-session-end` never writes to stdout or stderr and always exits 0. Without the
-hook, a session shows as live for 10 minutes after its last response. So after a
+`record-session-end` never writes to stdout or stderr and always exits 0. With neither, a
+session shows as live for 10 minutes after its last response. So after a
 `/clear`, the old session and the new one both show as live for up to 10 minutes. A
 resumed session keeps its session id, so its row shows as live again after its next
 response.
@@ -211,8 +235,8 @@ boundary back.
 - **Read-only, except for two write paths.** The dashboard server only ever reads
   your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
   `changes.json`, and `rate-limits.json`, and opens rtk's `history.db` with
-  sqlite's `readOnly` flag. One write path is `bin/record-statusline`, a separate
-  script your own statusline pipes into (see "Plan usage" above); it writes only
+  sqlite's `readOnly` flag. One write path is `bin/record-statusline` and `bin/record-session-end`, separate
+  scripts the dashboard's Claude Code mod runs (see "Plan usage" above); they write only
   `rate-limits.json` and the per-session snapshots in `cc-dashboard/sessions/`.
   The other is the Apply button in the Cost by model panel: clicking it is the
   only thing that writes `prices.json` (`PRICES_JSON` moves it), and nothing else
@@ -257,6 +281,8 @@ lib/net-guard.js       Host-header check + security headers
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
+bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
+mod/                   Claude Code mod that runs the two recorders after each turn and at session end
 public/index.html      Page shell
 public/style.css       All styling
 public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
