@@ -30,6 +30,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     ...w,
   }
   const ran: Ran[] = []
+  const endSawRan: number[] = []
   const listed: string[] = []
   mock.clock(on, { now: 61_000 })
   on('fs.stat', () => ({ value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: true, realPath: '/repo/mod' } }))
@@ -44,7 +45,12 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   on('session.model', () => ({ value: state.model }))
   on('session.usage', () => ({ value: { startedAt: 1_000, context: { window: 200_000 }, rateLimits: [] } }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
-  on('session.end', (_$, e) => ({ sessionId: e.sessionId }))
+  on('session.end', async (_$, e) => {
+    // Gives a script that has started a few ticks to reach process.run first.
+    for (let tick = 0; tick < 500; tick++) await Promise.resolve()
+    endSawRan.push(ran.length)
+    return { sessionId: e.sessionId }
+  })
   on('process.run', (_$, e) => {
     if (runThrows) throw new Error('spawn failed')
     ran.push({
@@ -54,7 +60,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     })
     return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  return { ran, state, listed }
+  return { ran, state, listed, endSawRan }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -216,9 +222,16 @@ test('session.end pipes session_id and reason to record-session-end', async ($, 
 })
 
 test('a failing session end still passes the event on', async ($, on) => {
-  world(on, {}, 1)
+  const { ran } = world(on, {}, 1)
   const result = await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
   expect(result).toEqual({ sessionId: 's1' })
+  expect(ran.length).toBe(1)
+})
+
+test('session.end starts the script before the event passes on', async ($, on) => {
+  const { endSawRan } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  expect(endSawRan).toEqual([1])
 })
 
 test('a failing run logs once, and a second failure logs nothing', async ($, on) => {

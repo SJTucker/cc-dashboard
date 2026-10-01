@@ -164,8 +164,11 @@ export const register: Register = (on) => {
   // cleared or ended at once instead of live for 10 minutes. A /clear arrives here
   // with reason 'clear'.
   on('session.end', async ($, e, next) => {
+    // The script starts before next, so it does not wait for the other hooks.
+    // run never throws.
+    const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
     const result = await next(e)
-    await run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
+    await running
     return result
   })
 }
