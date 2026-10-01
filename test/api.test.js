@@ -672,3 +672,28 @@ test("the POST /api routes refuse Sec-Fetch-Site: none, which only a GET from th
     assert.strictEqual(res.status, 403, route);
   }
 });
+
+test(
+  'a session file the scan cannot read is logged once per range, not on every scan',
+  { skip: process.getuid?.() === 0 && 'root can read a mode-000 file' },
+  async (t) => {
+    const server = startServer();
+    t.after(() => server.close());
+    await new Promise((resolve) => server.once('listening', resolve));
+    const base = `http://127.0.0.1:${server.address().port}`;
+    const locked = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo', 'locked.jsonl');
+    fs.writeFileSync(locked, '{}\n');
+    fs.chmodSync(locked, 0o000);
+    t.after(() => fs.chmodSync(locked, 0o644));
+    const warn = t.mock.method(console, 'warn', () => {});
+
+    for (let i = 0; i < 2; i++) {
+      await fetch(`${base}/api/refresh`, { method: 'POST' }); // drop the cache so each pass scans
+      assert.strictEqual((await fetch(`${base}/api/summary?days=today`)).status, 200);
+    }
+
+    assert.strictEqual(warn.mock.callCount(), 1);
+    assert.match(warn.mock.calls[0].arguments[0], /1 session file could not be read/);
+    assert.match(warn.mock.calls[0].arguments[0], /Today/);
+  }
+);

@@ -53,6 +53,21 @@ app.use('/api', sameOriginOnly);
 const CACHE_TTL_MS = 60_000;
 const cache = new Map();
 
+// scanUsage skips a session file it cannot read, which lowers that range's totals.
+// The terminal gets one warning per range each time the count of skipped files
+// changes, so the 5s live poll does not repeat it.
+const unreadableByRange = new Map();
+function warnUnreadable(range, data) {
+  const n = data.meta.unreadableFiles || 0;
+  if (n === (unreadableByRange.get(range) || 0)) return data;
+  unreadableByRange.set(range, n);
+  if (n) {
+    const files = n === 1 ? '1 session file could not be read and was' : `${n} session files could not be read and were`;
+    console.warn(`[scan] ${files} left out of the ${range} totals.`);
+  }
+  return data;
+}
+
 // Caches the scan's promise, not just its result. Refresh on the All range fires
 // /api/summary?days=all and /api/changes together, both cold on the same key, and
 // without this each ran its own scan of the same files (measured 4.0s vs 2.2s for
@@ -63,7 +78,8 @@ async function getCached(days) {
   const key = String(days);
   const hit = cache.get(key);
   if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.data;
-  const promise = scanUsage({ days }).catch((err) => {
+  const range = days == null ? 'all-time' : `${days}-day`;
+  const promise = scanUsage({ days }).then((data) => warnUnreadable(range, data)).catch((err) => {
     cache.delete(key);
     throw err;
   });
@@ -90,7 +106,7 @@ function clearScans() {
 
 function getTodayScan() {
   if (todayScan && Date.now() - todayScan.ts < TODAY_SHARE_MS) return todayScan.promise;
-  const promise = scanUsage({ days: 'today', bucket: 'hour' }).catch((err) => {
+  const promise = scanUsage({ days: 'today', bucket: 'hour' }).then((data) => warnUnreadable('Today', data)).catch((err) => {
     if (todayScan && todayScan.promise === promise) todayScan = null;
     throw err;
   });
