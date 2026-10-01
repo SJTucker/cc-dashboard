@@ -358,9 +358,10 @@ test('buildLiveSessions marks an ended session as not live, with its reason', ()
     snapshot({ sessionId: 'no-reason', lastActiveAt: NOW - 60_000, endedAt: NOW - 30_000 }),
     snapshot({ sessionId: 'open', lastActiveAt: NOW - 60_000 }),
   ], [], NOW);
+  // Rows are sorted by lastActiveAt, newest first, so 'resumed' comes first.
   assert.deepStrictEqual(result.sessions.map((s) => [s.ended, s.live]), [
-    ['clear', false],
     [null, true],
+    ['clear', false],
     ['other', false],
     [null, true],
   ]);
@@ -398,5 +399,26 @@ test('buildLiveSessions keeps a session ended when its last activity is within E
     snapshot({ sessionId: 'resumed', lastActiveAt: NOW - 30_000 + END_GRACE_MS + 1, endedAt: NOW - 30_000, endReason: 'clear' }),
   ], [], NOW);
   assert.strictEqual(END_GRACE_MS, 5000);
-  assert.deepStrictEqual(result.sessions.map((s) => [s.ended, s.live]), [['clear', false], [null, true]]);
+  // Rows are sorted by lastActiveAt, newest first, so 'resumed' comes first.
+  assert.deepStrictEqual(result.sessions.map((s) => [s.ended, s.live]), [[null, true], ['clear', false]]);
+});
+
+test('buildLiveSessions counts a subagent call as activity for its parent session', () => {
+  const snap = snapshot({ sessionId: 's1', lastActiveAt: NOW - LIVE_WINDOW_MS - 60_000 });
+  const calls = [{ sessionId: 's1', t: NOW - 30_000, context: 10, output: 5, cost: 0.01 }];
+  const [row] = buildLiveSessions([snap], calls, NOW).sessions;
+  assert.strictEqual(row.live, true, 'a call 30s ago makes the session live');
+  assert.strictEqual(row.lastActiveAt, NOW - 30_000);
+});
+
+test('buildLiveSessions orders rows by last activity, counting subagent calls', () => {
+  const snaps = [
+    snapshot({ sessionId: 'a', lastActiveAt: NOW - 60_000 }),
+    snapshot({ sessionId: 'b', lastActiveAt: NOW - 120_000 }),
+  ];
+  const calls = [{ sessionId: 'b', t: NOW - 1_000, context: 1, output: 1, cost: 0 }];
+  assert.deepStrictEqual(
+    buildLiveSessions(snaps, calls, NOW).sessions.map((s) => s.lastActiveAt),
+    [NOW - 1_000, NOW - 60_000]
+  );
 });
