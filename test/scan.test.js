@@ -968,3 +968,101 @@ test('day buckets run unbroken from the first day with usage to today', async ()
     [[0, 0, {}, {}], [0, 0, {}, {}], [0, 0, {}, {}]]
   );
 });
+
+// A user line holding one tool_result and the toolUseResult Claude Code stores
+// beside it, as an Edit or Write result appears in a transcript.
+function editResultLine(isoTimestamp, { toolId, sessionId = 's1', result, sidechain = false }) {
+  return JSON.stringify({
+    timestamp: isoTimestamp,
+    type: 'user',
+    sessionId,
+    isSidechain: sidechain,
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: toolId, content: 'ok' }] },
+    toolUseResult: result,
+  });
+}
+
+function hunk(lines) {
+  return { oldStart: 1, oldLines: 1, newStart: 1, newLines: 1, lines };
+}
+
+test('efficiency.linesBySession counts + and - lines in an Edit hunk', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'edit', [
+    editResultLine(iso, {
+      toolId: 'toolu_e1',
+      result: { filePath: '/a.js', oldString: 'x', newString: 'y', structuredPatch: [hunk([' keep', '-old', '+new', '+new2'])] },
+    }),
+  ]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.linesBySession, { s1: { added: 2, removed: 1 } });
+});
+
+test('a Write create counts its content lines', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'create', [
+    editResultLine(iso, { toolId: 'toolu_c1', sessionId: 'trailing', result: { type: 'create', filePath: '/a', content: 'a\nb\n', structuredPatch: [] } }),
+    editResultLine(iso, { toolId: 'toolu_c2', sessionId: 'bare', result: { type: 'create', filePath: '/b', content: 'a\nb', structuredPatch: [] } }),
+    editResultLine(iso, { toolId: 'toolu_c3', sessionId: 'empty', result: { type: 'create', filePath: '/c', content: '', structuredPatch: [] } }),
+  ]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.linesBySession, {
+    trailing: { added: 2, removed: 0 },
+    bare: { added: 2, removed: 0 },
+    empty: { added: 0, removed: 0 },
+  });
+});
+
+test('a Write over an existing file counts its hunks', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'update', [
+    editResultLine(iso, {
+      toolId: 'toolu_u1',
+      result: { type: 'update', filePath: '/a', content: 'new', structuredPatch: [hunk(['-a', '-b', '+new']), hunk(['+tail'])] },
+    }),
+  ]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.linesBySession, { s1: { added: 2, removed: 2 } });
+});
+
+test('one tool_use_id is counted once across files', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  const line = editResultLine(iso, { toolId: 'toolu_dup', result: { structuredPatch: [hunk(['+a'])] } });
+  writeSession(base, 'first', [line]);
+  writeSession(base, 'resumed-copy', [line]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.linesBySession, { s1: { added: 1, removed: 0 } });
+});
+
+test("a subagent's edits count toward its parent session", async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'parent', [
+    editResultLine(iso, { toolId: 'toolu_m', sessionId: 'parent', result: { structuredPatch: [hunk(['+a'])] } }),
+    editResultLine(iso, { toolId: 'toolu_s', sessionId: 'parent', sidechain: true, result: { structuredPatch: [hunk(['+b', '-c'])] } }),
+  ]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.linesBySession, { parent: { added: 2, removed: 1 } });
+});
+
+test("lines from before the range and Bash edit diffs count nothing", async () => {
+  const base = makeFixture();
+  const today = atHourToday(9);
+  const yesterday = new Date(today.getTime() - 24 * 60 * 60 * 1000);
+  writeSession(base, 'mixed', [
+    editResultLine(yesterday.toISOString(), { toolId: 'toolu_y', result: { structuredPatch: [hunk(['+old'])] } }),
+    editResultLine(today.toISOString(), { toolId: 'toolu_b', result: { stdout: '', stderr: '', bashEditDiff: { files: [], moreFiles: 0, shared: false } } }),
+  ]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.linesBySession, {});
+});
