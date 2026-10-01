@@ -312,7 +312,7 @@ app.post('/api/prices/apply', express.json({ limit: '1kb' }), (req, res) => {
 });
 
 const server = app.listen(PORT, HOST, () => {
-  console.log(`\nMy Claude Code Dashboard running at http://localhost:${PORT}`);
+  console.log(`\nClaude Code Dashboard running at http://localhost:${PORT}`);
   console.log(`Reading logs from: ${getProjectsDir()}`);
   console.log('Bound to localhost only. The one outbound request is Check prices, to platform.claude.com.\n');
   if (process.argv.includes('--open')) {

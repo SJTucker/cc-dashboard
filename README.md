@@ -1,4 +1,4 @@
-# My Claude Code Dashboard
+# Claude Code Dashboard
 
 A small, local dashboard for your Claude Code usage, making one network request only
 when you click Check prices: daily and cumulative cost, daily tokens broken out by
