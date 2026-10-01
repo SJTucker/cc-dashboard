@@ -618,3 +618,44 @@ test('GET /api/limits adds today\'s share of the weekly limit', async (t) => {
   const workday = [1, 2, 3, 4, 5].includes(new Date().getDay());
   assert.strictEqual(body.today.budget, workday ? 20 : null);
 });
+
+test('every GET /api route refuses a cross-site or same-site request', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  for (const route of ['/api/summary?days=today', '/api/rtk?days=today', '/api/limits', '/api/sessions/live', '/api/prices']) {
+    for (const site of ['cross-site', 'same-site']) {
+      const res = await fetch(base + route, { headers: { 'Sec-Fetch-Site': site } });
+      assert.strictEqual(res.status, 403, `${route} with Sec-Fetch-Site: ${site}`);
+    }
+  }
+});
+
+test('a GET /api request typed into the address bar is accepted', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/limits`, { headers: { 'Sec-Fetch-Site': 'none' } });
+  assert.strictEqual(res.status, 200);
+});
+
+test('days accepts only the range picker values on /api/summary and /api/rtk', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const base = `http://127.0.0.1:${server.address().port}`;
+
+  for (const route of ['/api/summary', '/api/rtk']) {
+    for (const days of ['5', '1000000000']) {
+      const res = await fetch(`${base}${route}?days=${days}`);
+      assert.strictEqual(res.status, 400, `${route}?days=${days}`);
+      assert.match((await res.json()).error, /Invalid days/);
+    }
+    for (const days of ['7', '30', '90']) {
+      assert.strictEqual((await fetch(`${base}${route}?days=${days}`)).status, 200, `${route}?days=${days}`);
+    }
+  }
+});

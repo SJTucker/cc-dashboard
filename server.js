@@ -44,6 +44,9 @@ const app = express();
 app.use(hostGuard);
 app.use(securityHeaders);
 app.use(express.static(path.join(__dirname, 'public')));
+// GET routes are guarded too, because each scan costs seconds of CPU. Another
+// page could otherwise run scans here with <img src> tags.
+app.use('/api', sameOriginOnly);
 
 // Simple 60s cache so switching the day-range control doesn't re-scan every file on
 // every click. Cleared automatically on the next scan cycle.
@@ -101,6 +104,11 @@ function publicSummary({ efficiency, ...rest }) {
   return rest;
 }
 
+// The range picker's day counts. Each distinct count is its own cached scan of up
+// to about 20 MB, and nothing evicts the cache, so only these are accepted.
+const RANGE_DAYS = new Set([7, 30, 90]);
+const INVALID_DAYS = (raw) => `Invalid days: ${String(raw)}. Use 7, 30, 90, 'today', or 'all'.`;
+
 app.get('/api/summary', async (req, res) => {
   try {
     const raw = req.query.days;
@@ -111,15 +119,15 @@ app.get('/api/summary', async (req, res) => {
       res.json(publicSummary(await getTodayScan()));
       return;
     }
-    // Number(raw) || 30 turned days=0 and days=abc into 30 without saying so,
-    // and let a negative value through to produce a cutoff in the future.
+    // Only the range picker's values are accepted. Number(raw) || 30 once turned
+    // days=0 and days=abc into 30 without saying so.
     let days = 30;
     if (raw === 'all') {
       days = null;
     } else if (raw != null && raw !== '') {
       const n = Number(raw);
-      if (!Number.isInteger(n) || n < 1) {
-        res.status(400).json({ error: `Invalid days: ${String(raw)}. Use a whole number of days, 'today', or 'all'.` });
+      if (!RANGE_DAYS.has(n)) {
+        res.status(400).json({ error: INVALID_DAYS(raw) });
         return;
       }
       days = n;
@@ -153,8 +161,8 @@ app.get('/api/rtk', (req, res) => {
       days = null;
     } else if (raw != null && raw !== '') {
       const n = Number(raw);
-      if (!Number.isInteger(n) || n < 1) {
-        res.status(400).json({ error: `Invalid days: ${String(raw)}. Use a whole number of days, 'today', or 'all'.` });
+      if (!RANGE_DAYS.has(n)) {
+        res.status(400).json({ error: INVALID_DAYS(raw) });
         return;
       }
       days = n;
@@ -217,20 +225,21 @@ app.get('/api/sessions/live', async (req, res) => {
   }
 });
 
-// Every modern browser sends Sec-Fetch-Site on a fetch, so anything other than
-// same-origin means another page issued this request. The Host guard cannot
-// catch that: a browser sets Host from the address it connected to, not from
-// the page that asked. Non-browser clients send no such header and still work.
+// Every modern browser sends Sec-Fetch-Site. Any value other than same-origin or
+// none means another page issued the request. 'none' is the user opening an /api
+// URL from the address bar. The Host guard cannot catch a cross-site request,
+// because a browser sets Host from the address it connected to, not from the page
+// that asked. Non-browser clients send no such header and still work.
 function sameOriginOnly(req, res, next) {
   const site = req.get('sec-fetch-site');
-  if (site && site !== 'same-origin') {
+  if (site && site !== 'same-origin' && site !== 'none') {
     res.status(403).json({ error: 'Cross-site requests are not accepted.' });
     return;
   }
   next();
 }
 
-app.post('/api/refresh', sameOriginOnly, (req, res) => {
+app.post('/api/refresh', (req, res) => {
   clearScans();
   res.json({ ok: true });
 });
@@ -244,7 +253,7 @@ app.get('/api/prices', (req, res) => {
 });
 
 // The dashboard's only outbound request. It runs when someone clicks Check prices.
-app.post('/api/prices/check', sameOriginOnly, async (req, res) => {
+app.post('/api/prices/check', async (req, res) => {
   pendingCheck = null;
   let page;
   try {
@@ -268,7 +277,7 @@ app.post('/api/prices/check', sameOriginOnly, async (req, res) => {
   }
 });
 
-app.post('/api/prices/apply', sameOriginOnly, express.json({ limit: '1kb' }), (req, res) => {
+app.post('/api/prices/apply', express.json({ limit: '1kb' }), (req, res) => {
   if (!pendingCheck || !pendingCheck.length) {
     res.status(409).json({ error: 'Nothing to apply. Check prices first.' });
     return;
