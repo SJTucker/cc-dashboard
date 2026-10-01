@@ -124,6 +124,31 @@ html, body {
   opacity: 0.55;
 }
 
+/* Fades the grid into the background over the header's last 16px, so the header
+   ends on its own border and not on a grid line just above it. */
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(transparent, var(--bg));
+}
+
+/* A margin in the page background around everything that sits on the grid, so
+   grid lines fade out before they reach an edge. Without it, lines stopped at
+   card edges, ran through the gaps between cards, and passed a few pixels from
+   their tops and bottoms. */
+.topbar .card,
+.topbar .range-picker,
+.topbar .refresh-btn,
+.topbar .status-strip {
+  box-shadow: 0 0 0 4px var(--bg), 0 0 10px 4px rgba(5, 7, 13, 0.7);
+}
+
 .status-strip {
   display: flex;
   flex-wrap: wrap;
@@ -132,7 +157,8 @@ html, body {
   padding: 4px 10px;
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
-  background: rgba(5, 7, 13, 0.7);
+  /* Opaque, like the cards, so no grid line runs behind the strip's text. */
+  background: var(--bg);
   font-family: var(--font-label);
   font-weight: 500;
   font-size: 12px;
