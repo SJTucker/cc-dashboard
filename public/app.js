@@ -738,6 +738,21 @@ function drawActivityHeatmap(container, activity) {
   container.appendChild(axis);
 }
 
+// A legend sample for a line chart: a short SVG line with the series' own colour
+// and dash pattern, so each entry matches its line by dash and not only by colour.
+// 28px holds a whole '9 4 2 4' cycle and the start of the next one. At 16px that
+// pattern looked the same as '9 4'.
+function legendLineSample(ser) {
+  const svg = svgEl('svg', { class: 'legend-line', width: 28, height: 4, viewBox: '0 0 28 4', 'aria-hidden': 'true' });
+  svg.appendChild(
+    svgEl('line', {
+      x1: 0, y1: 2, x2: 28, y2: 2, stroke: ser.color, 'stroke-width': 2,
+      ...(ser.dash ? { 'stroke-dasharray': ser.dash } : {}),
+    })
+  );
+  return svg;
+}
+
 function drawTokenLegend(container, data, series = TOKEN_SERIES, lineStyle = false) {
   container.innerHTML = '';
   for (const ser of series) {
@@ -746,10 +761,7 @@ function drawTokenLegend(container, data, series = TOKEN_SERIES, lineStyle = fal
     container.appendChild(
       el('span', { class: 'legend-item' }, [
         lineStyle
-          ? el('span', {
-              class: 'legend-line',
-              style: `border-top:2px ${ser.dash ? 'dashed' : 'solid'} ${ser.color}`,
-            })
+          ? legendLineSample(ser)
           : el('span', { class: 'legend-swatch', style: `background:${textureCss(ser.texture, ser.color)}` }),
         el('span', { text: total ? `${ser.label} ${formatTokens(total)}` : ser.label }),
       ])

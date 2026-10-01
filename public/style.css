@@ -437,8 +437,8 @@ html, body {
 /* A short rule rather than a filled square: the legend has to sample the mark the
    chart actually draws, and for a line chart that is a stroke, dashed or solid. */
 .legend-line {
-  width: 16px;
-  height: 0;
+  width: 28px;
+  height: 4px;
   display: inline-block;
   vertical-align: middle;
 }
@@ -815,7 +815,7 @@ html, body {
 .session-dot { fill: var(--text-secondary); stroke: var(--text-secondary); stroke-width: 1.2; }
 .session-dot.hollow { fill: var(--surface); }
 .step-line { fill: none; stroke: var(--accent-cost); stroke-width: 2.5; }
-.step-swatch { border-top: 2.5px solid var(--accent-cost); }
+.step-swatch { width: 16px; height: 0; border-top: 2.5px solid var(--accent-cost); }
 .step-label { font-family: var(--font-data); font-size: 10px; fill: var(--accent-cost); }
 
 .bash-bar { fill: var(--border); }
