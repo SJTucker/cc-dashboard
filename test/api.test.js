@@ -455,6 +455,16 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
   await new Promise((resolve) => server.once('listening', resolve));
   const base = process.env.CLAUDE_CONFIG_DIR;
   appendCall(base, { sessionId: 'sess-a', id: 'a1', input: 700, output: 300 });
+  // An Edit result: 1 line removed and 2 added, which the snapshot's 5 and 1 must not override.
+  const editTime = new Date();
+  editTime.setHours(10, 31, 0, 0);
+  fs.appendFileSync(path.join(base, 'projects', 'demo', 'session.jsonl'), JSON.stringify({
+    type: 'user',
+    timestamp: editTime.toISOString(),
+    sessionId: 'sess-a',
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'toolu_edit1', content: 'ok' }] },
+    toolUseResult: { filePath: '/a.js', structuredPatch: [{ lines: [' a', '-b', '+c', '+d'] }] },
+  }) + '\n');
   writeSnapshot(base, {
     sessionId: 'sess-a', lastActiveAt: Date.now() - 30_000, project: 'demo', model: 'Sonnet 4.6',
     costUsd: 0.42, durationMs: 90_000, apiDurationMs: 20_000, linesAdded: 5, linesRemoved: 1,
@@ -474,9 +484,9 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
   assert.strictEqual(body.total.costUsd, 0.42);
   assert.strictEqual('apiDurationMs' in body.total, false);
   assert.strictEqual('apiDurationMs' in body.sessions[0], false);
-  // No Edit or Write results in the fixture, so the snapshot's 5 and 1 are not used.
-  assert.strictEqual(body.total.linesAdded, 0);
-  assert.strictEqual(body.total.linesRemoved, 0);
+  // The lines come from the transcript's Edit result, not from the snapshot's 5 and 1.
+  assert.strictEqual(body.total.linesAdded, 2);
+  assert.strictEqual(body.total.linesRemoved, 1);
   assert.strictEqual(body.total.tokens, 1000);
 });
 
