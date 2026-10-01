@@ -947,3 +947,24 @@ test(
     }
   }
 );
+
+test('day buckets run unbroken from the first day with usage to today', async () => {
+  const base = makeFixture();
+  const threeDaysAgo = atHourToday(12);
+  threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+  writeSession(base, 'gap', [usageLine(threeDaysAgo.toISOString(), { id: 'a', input: 300 })]);
+
+  const { scanUsage, localDateStr } = loadScan(base);
+  const data = await scanUsage({ days: 7 });
+
+  const expected = [3, 2, 1, 0].map((n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return localDateStr(d);
+  });
+  assert.deepStrictEqual(data.daily.map((d) => d.date), expected);
+  assert.deepStrictEqual(
+    data.daily.slice(1).map((d) => [d.input, d.cost, d.byModel, d.costByModel]),
+    [[0, 0, {}, {}], [0, 0, {}, {}], [0, 0, {}, {}]]
+  );
+});
