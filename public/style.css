@@ -297,8 +297,9 @@ html, body {
 }
 
 /* The compact form used in the header on Today: label and value only. The
-   unpriced-tokens warning and the record day's date stay visible. The other
-   notes are hidden, and the static ones are title tooltips on their cards. */
+   unpriced-tokens warning, the record day's date and the two 7d total lines stay
+   visible. The other notes are hidden, and the static ones are title tooltips on
+   their cards. */
 .cards.cards-compact {
   grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 8px;
@@ -322,7 +323,7 @@ html, body {
 
 .cards-compact .card-value { font-size: 16px; }
 
-.cards-compact .card-note:not(#cardCostNote):not(#cardRecordDate),
+.cards-compact .card-note:not(#cardCostNote):not(#cardRecordDate):not(#cardCostWeek):not(#cardTokensWeek),
 .cards-compact .card-note:empty { display: none; }
 
 /* ---------- Panels ---------- */
