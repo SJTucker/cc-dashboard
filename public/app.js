@@ -101,13 +101,14 @@ function svgEl(tag, attrs = {}) {
 
 const tooltip = document.getElementById('tooltip');
 
+// The tooltip is measured after its content is set, so tooltipPosition can keep
+// the whole of it inside the viewport.
 function showTooltip(evt, html) {
   tooltip.innerHTML = html;
   tooltip.hidden = false;
-  const x = evt.clientX + 14;
-  const y = evt.clientY + 14;
-  tooltip.style.left = x + 'px';
-  tooltip.style.top = y + 'px';
+  const pos = tooltipPosition(evt.clientX, evt.clientY, tooltip.offsetWidth, tooltip.offsetHeight, innerWidth, innerHeight);
+  tooltip.style.left = pos.left + 'px';
+  tooltip.style.top = pos.top + 'px';
 }
 
 function hideTooltip() {
@@ -221,7 +222,7 @@ function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
     svg.appendChild(rect);
 
     // Show a date label every Nth bar so labels don't overlap on wide ranges.
-    const labelEvery = Math.ceil(data.length / 12);
+    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
         class: 'axis-label',
@@ -295,7 +296,7 @@ function drawCumulativeChart(container, data) {
       svg.appendChild(hit);
     }
 
-    const labelEvery = Math.ceil(points.length / 12);
+    const labelEvery = labelStep(points.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
         class: 'axis-label', x: xAt(i), y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
@@ -480,7 +481,7 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
       cursorY = y;
     }
 
-    const labelEvery = Math.ceil(data.length / 12);
+    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
         class: 'axis-label', x: x + barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
@@ -601,7 +602,7 @@ function drawLogLineChart(container, data, series = TOKEN_SERIES) {
     });
     svg.appendChild(hit);
 
-    const labelEvery = Math.ceil(data.length / 12);
+    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
         class: 'axis-label', x: xAt(i), y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
@@ -675,7 +676,7 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
       cursorY = y;
     }
 
-    const labelEvery = Math.ceil(data.length / 12);
+    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
         class: 'axis-label', x: x + barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',

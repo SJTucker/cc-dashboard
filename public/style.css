@@ -800,7 +800,9 @@ html, body {
 }
 
 @media (max-width: 720px) {
-  .usage-row { grid-template-columns: minmax(0, 1fr) 40px; }
+  /* auto, not a fixed 40px: a count such as "869 · 7.4% err" is wider than 40px,
+     and .usage-count's 96px minimum pushed it past the panel edge. */
+  .usage-row { grid-template-columns: minmax(0, 1fr) auto; }
   .usage-track { display: none; }
 }
 

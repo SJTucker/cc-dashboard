@@ -254,6 +254,7 @@ public/index.html      Page shell
 public/style.css       All styling
 public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
 public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
+public/chart-geometry.js  X-axis label spacing and tooltip placement for the charts
 public/fonts/          Oxanium, Saira Condensed and JetBrains Mono (SIL OFL), with their licence files
 ```
 
