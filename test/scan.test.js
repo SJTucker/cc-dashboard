@@ -927,3 +927,23 @@ test('a 7-day range starts at local midnight six days ago', async () => {
   assert.strictEqual(data.summary.totalInput, 300, 'the day before the range is left out at any time of day');
   assert.strictEqual(data.daily[0].date, localDateStr(firstDay));
 });
+
+test(
+  'a file that cannot be read is skipped and counted, and the rest of the scan still runs',
+  { skip: process.getuid?.() === 0 && 'root can read a mode-000 file' },
+  async () => {
+    const base = makeFixture();
+    const when = atHourToday(9).toISOString();
+    writeSession(base, 'good', [usageLine(when, { id: 'a', input: 300 })]);
+    const locked = writeSession(base, 'locked', [usageLine(when, { id: 'b', input: 700 })]);
+    fs.chmodSync(locked, 0o000);
+    try {
+      const { scanUsage } = loadScan(base);
+      const data = await scanUsage({ days: null });
+      assert.strictEqual(data.summary.totalInput, 300);
+      assert.strictEqual(data.meta.unreadableFiles, 1);
+    } finally {
+      fs.chmodSync(locked, 0o644);
+    }
+  }
+);
