@@ -597,7 +597,8 @@ html, body {
 
 .heatmap {
   display: grid;
-  grid-template-columns: 32px repeat(24, 1fr);
+  /* minmax(0, 1fr) lets a column narrow below its cell's minimum width. */
+  grid-template-columns: 32px repeat(24, minmax(0, 1fr));
   gap: 2px;
   align-items: center;
 }
@@ -613,6 +614,10 @@ html, body {
      makes the grid taller than the charts above it. */
   aspect-ratio: 2.4;
   min-height: 10px;
+  /* A grid item with aspect-ratio does not stretch to its column, so its width
+     came from min-height: 24px, which pushed 24 columns past a 390px screen. */
+  width: 100%;
+  min-width: 0;
   border-radius: 2px;
   border: 1px solid var(--border);
   cursor: pointer;
