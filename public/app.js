@@ -901,7 +901,17 @@ function toolRowLabel(name) {
   return name.startsWith('/') ? name.split('/').pop() || name : name;
 }
 
+// The name of the row in container that has keyboard focus, or null.
+// drawToolBars and drawRtkBars rebuild every row on a selection and on each live
+// poll, which drops focus to <body>. They call this first, then refocus the row
+// with the same name after the rebuild.
+function focusedRowName(container) {
+  const active = document.activeElement;
+  return active && active !== container && container.contains(active) ? active.dataset.name || null : null;
+}
+
 function drawToolBars(container, rows, scaleMax, onSelect, selectedName) {
+  const refocus = focusedRowName(container);
   container.innerHTML = '';
   if (!rows.length) {
     container.appendChild(el('div', { class: 'bar-empty', text: 'No tool calls in this range.' }));
@@ -933,6 +943,7 @@ function drawToolBars(container, rows, scaleMax, onSelect, selectedName) {
     if (onSelect) {
       node.addEventListener('click', () => onSelect(row.name));
       node.tabIndex = 0;
+      node.dataset.name = row.name;
       node.addEventListener('keydown', (evt) => {
         if (evt.key === 'Enter' || evt.key === ' ') {
           evt.preventDefault();
@@ -941,6 +952,7 @@ function drawToolBars(container, rows, scaleMax, onSelect, selectedName) {
       });
     }
     container.appendChild(node);
+    if (refocus !== null && row.name === refocus) node.focus({ preventScroll: true });
   }
 }
 
@@ -949,6 +961,7 @@ function drawToolBars(container, rows, scaleMax, onSelect, selectedName) {
 // tokens. A command with 15,000 cheap calls and one with 127 expensive ones both
 // show up honestly this way.
 function drawRtkBars(container, rows, scaleMax, onSelect, selectedName) {
+  const refocus = focusedRowName(container);
   container.innerHTML = '';
   if (!rows.length) {
     container.appendChild(el('div', { class: 'bar-empty', text: 'No rtk commands in this range.' }));
@@ -977,6 +990,7 @@ function drawRtkBars(container, rows, scaleMax, onSelect, selectedName) {
     if (onSelect) {
       node.addEventListener('click', () => onSelect(row.name));
       node.tabIndex = 0;
+      node.dataset.name = row.name;
       node.addEventListener('keydown', (evt) => {
         if (evt.key === 'Enter' || evt.key === ' ') {
           evt.preventDefault();
@@ -985,6 +999,7 @@ function drawRtkBars(container, rows, scaleMax, onSelect, selectedName) {
       });
     }
     container.appendChild(node);
+    if (refocus !== null && row.name === refocus) node.focus({ preventScroll: true });
   }
 }
 
