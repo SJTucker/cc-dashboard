@@ -234,13 +234,14 @@ app.get('/api/records', async (req, res) => {
   }
 });
 
-// Today's sessions from the statusline snapshots (lib/sessions.js), each with its
-// tokens from the Today scan. Read-only: only bin/record-statusline writes the
-// snapshots. Session ids stay on the server.
+// Today's sessions from the snapshots in cc-dashboard/sessions/ (lib/sessions.js),
+// each with its tokens, cost today and lines changed from the Today scan. Read-only:
+// bin/record-statusline writes the snapshots, run by the mod in mod/ or by a
+// statusline script. Session ids stay on the server.
 app.get('/api/sessions/live', async (req, res) => {
   try {
     const data = await getTodayScan();
-    res.json(buildLiveSessions(readSessions(), data.efficiency.calls));
+    res.json(buildLiveSessions(readSessions(), data.efficiency.calls, Date.now(), data.efficiency.linesBySession));
   } catch (err) {
     console.error('[API] /api/sessions/live failed:', err);
     res.status(500).json({ error: 'Failed to read live sessions', detail: err.message });

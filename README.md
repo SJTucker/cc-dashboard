@@ -82,14 +82,15 @@ recently. It makes no network request of its own.
   `~/.claude/rate-limits.json`, or `$CLAUDE_CONFIG_DIR/rate-limits.json` when that
   is set. Its numbers change after every API response in any running session.
   The same script also keeps one small snapshot per session, holding that
-  session's cost, durations and lines changed, in
+  session's cost and duration, in
   `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`,
   or `LIVE_SESSIONS_DIR`). The Live sessions panel reads them. Snapshots older than a
-  day are deleted on the next write. The panel's Session cost, Session length, API
-  time and Lines columns come from that snapshot, so they cover the whole session
-  from whenever it started. Its Cost today and Tokens today columns come from
-  today's transcripts instead, so a session that started yesterday shows more
-  session cost than cost today. The two costs differ for a session that started
+  day are deleted on the next write. The panel's Session cost and Session length columns come from that snapshot, so
+  they cover the whole session from whenever it started. Its Cost today, Tokens today
+  and Lines columns come from today's transcripts instead, so a session that started
+  yesterday shows more session cost than cost today. Lines counts the lines added and
+  removed by Edit and Write calls, subagents included. Edits made through Bash, such
+  as `sed -i`, are not counted. The two costs differ for a session that started
   today, too. Session cost is Claude Code's own counter. That counter includes
   calls that write no transcript line, such as session titles. So Session cost is
   usually the higher of the two. Cost today can be higher while subagents run.

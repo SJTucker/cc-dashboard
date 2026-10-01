@@ -1262,7 +1262,6 @@ function renderSessions(live) {
     cell(s.model || '—'),
     cell(formatCost(s.costUsd), 'num cost'),
     cell(formatDuration(s.durationMs), 'num'),
-    cell(formatDuration(s.apiDurationMs), 'num'),
     cell(lines(s.linesAdded, s.linesRemoved), 'num'),
     cell(formatCost(s.costTodayUsd), 'num cost'),
     cell(formatTokens(s.tokens), 'num'),
@@ -1275,7 +1274,6 @@ function renderSessions(live) {
     cell(formatCost(t.costUsd), 'num cost'),
     // Concurrent sessions overlap, so wall durations do not add up.
     cell('—', 'num'),
-    cell(formatDuration(t.apiDurationMs), 'num'),
     cell(lines(t.linesAdded, t.linesRemoved), 'num'),
     cell(formatCost(t.costTodayUsd), 'num cost'),
     cell(formatTokens(t.tokens), 'num'),

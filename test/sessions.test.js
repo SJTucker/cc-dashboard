@@ -268,10 +268,10 @@ function round6(n) {
   return Math.round(n * 1e6) / 1e6;
 }
 
-test('buildLiveSessions joins tokens by sessionId and totals the rows', () => {
+test('buildLiveSessions joins tokens and lines by sessionId and totals the rows', () => {
   const snaps = [
-    snapshot({ sessionId: 's1', costUsd: 1.5, apiDurationMs: 60_000, linesAdded: 10, linesRemoved: 2, lastActiveAt: NOW - 60_000 }),
-    snapshot({ sessionId: 's2', costUsd: 0.5, apiDurationMs: 30_000, linesAdded: 1, linesRemoved: 0, lastActiveAt: NOW - LIVE_WINDOW_MS - 1 }),
+    snapshot({ sessionId: 's1', costUsd: 1.5, lastActiveAt: NOW - 60_000 }),
+    snapshot({ sessionId: 's2', costUsd: 0.5, lastActiveAt: NOW - LIVE_WINDOW_MS - 1 }),
   ];
   const calls = [
     { sessionId: 's1', context: 1000, output: 200, cost: 0.2 },
@@ -279,14 +279,22 @@ test('buildLiveSessions joins tokens by sessionId and totals the rows', () => {
     { sessionId: 's2', context: 10, output: 5, cost: 0.01 },
     { sessionId: 'other', context: 99999, output: 1, cost: 9 },
   ];
-  const result = buildLiveSessions(snaps, calls, NOW);
+  const lines = { s1: { added: 10, removed: 2 }, s2: { added: 1, removed: 0 }, other: { added: 500, removed: 500 } };
+  const result = buildLiveSessions(snaps, calls, NOW, lines);
   assert.deepStrictEqual(result.sessions.map((s) => [s.tokens, s.live]), [[1750, true], [15, false]]);
+  assert.deepStrictEqual(result.sessions.map((s) => [s.linesAdded, s.linesRemoved]), [[10, 2], [1, 0]]);
   assert.deepStrictEqual(result.sessions.map((s) => round6(s.costTodayUsd)), [0.25, 0.01]);
   assert.strictEqual('sessionId' in result.sessions[0], false);
-  assert.strictEqual(round6(result.total.costTodayUsd), 0.26);
+  assert.strictEqual('apiDurationMs' in result.sessions[0], false);
   assert.deepStrictEqual({ ...result.total, costTodayUsd: round6(result.total.costTodayUsd) }, {
-    costUsd: 2, costTodayUsd: 0.26, apiDurationMs: 90_000, linesAdded: 11, linesRemoved: 2, tokens: 1765,
+    costUsd: 2, costTodayUsd: 0.26, linesAdded: 11, linesRemoved: 2, tokens: 1765,
   });
+});
+
+test("buildLiveSessions ignores the snapshot's own line counts", () => {
+  const result = buildLiveSessions([snapshot({ linesAdded: 40, linesRemoved: 9, apiDurationMs: 120_000 })], [], NOW);
+  assert.deepStrictEqual([result.sessions[0].linesAdded, result.sessions[0].linesRemoved], [0, 0]);
+  assert.deepStrictEqual(result.total, { costUsd: 1, costTodayUsd: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 });
 });
 
 test('buildLiveSessions gives 0 tokens to a session with no calls today', () => {
@@ -299,7 +307,7 @@ test('buildLiveSessions gives 0 tokens to a session with no calls today', () => 
 test('buildLiveSessions with no snapshots is an empty list and zero totals', () => {
   assert.deepStrictEqual(buildLiveSessions([], [{ sessionId: 'x', context: 1, output: 1, cost: 1 }], NOW), {
     sessions: [],
-    total: { costUsd: 0, costTodayUsd: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
+    total: { costUsd: 0, costTodayUsd: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
   });
 });
 

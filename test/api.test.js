@@ -472,9 +472,11 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
   assert.ok(body.sessions[0].costTodayUsd > 0);
   assert.strictEqual(body.total.costTodayUsd, body.sessions[0].costTodayUsd);
   assert.strictEqual(body.total.costUsd, 0.42);
-  assert.strictEqual(body.total.apiDurationMs, 20_000);
-  assert.strictEqual(body.total.linesAdded, 5);
-  assert.strictEqual(body.total.linesRemoved, 1);
+  assert.strictEqual('apiDurationMs' in body.total, false);
+  assert.strictEqual('apiDurationMs' in body.sessions[0], false);
+  // No Edit or Write results in the fixture, so the snapshot's 5 and 1 are not used.
+  assert.strictEqual(body.total.linesAdded, 0);
+  assert.strictEqual(body.total.linesRemoved, 0);
   assert.strictEqual(body.total.tokens, 1000);
 });
 
@@ -503,7 +505,7 @@ test('GET /api/sessions/live is empty with no snapshot directory', async (t) => 
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), {
     sessions: [],
-    total: { costUsd: 0, costTodayUsd: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
+    total: { costUsd: 0, costTodayUsd: 0, linesAdded: 0, linesRemoved: 0, tokens: 0 },
   });
 });
 
