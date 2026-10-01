@@ -81,22 +81,25 @@ recently. It makes no network request of its own.
   The dashboard's Claude Code mod runs it after each turn (see "Setting up the
   recorder" below). It writes the rate limits to
   `~/.claude/rate-limits.json`, or `$CLAUDE_CONFIG_DIR/rate-limits.json` when that
-  is set. Its numbers change after every API response in any running session.
+  is set. With the mod, its numbers change after each main turn, and when a
+  rate-limit window moves 1 point. Without the mod, they change after every API
+  response in any running session, as before.
   The same script also keeps one small snapshot per session, holding that
   session's cost and duration, in
   `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`,
-  or `LIVE_SESSIONS_DIR`). The Live sessions panel reads them. Snapshots older than a
-  day are deleted on the next write. The panel's Session cost and Session length columns come from that snapshot, so
-  they cover the whole session from whenever it started. Its Cost today, Tokens today
-  and Lines columns come from today's transcripts instead, so a session that started
-  yesterday shows more session cost than cost today. Lines counts the lines added and
-  removed by Edit and Write calls, subagents included. Edits made through Bash, such
-  as `sed -i`, are not counted. The two costs differ for a session that started
-  today, too. Session cost is Claude Code's own counter. That counter includes
-  calls that write no transcript line, such as session titles. So Session cost is
-  usually the higher of the two. Cost today can be higher while subagents run.
-  Subagent calls reach the transcripts right away. Session cost updates only on the
-  main session's next statusline render.
+  or `LIVE_SESSIONS_DIR`). The Live sessions panel reads them. Snapshots older than
+  a day are deleted on the next write. The panel's Session cost and Session length
+  columns come from that snapshot, so they cover the whole session from whenever it
+  started. Its Cost today, Tokens today and Lines columns come from today's
+  transcripts instead, so a session that started yesterday shows more session cost
+  than cost today. Lines counts the lines added and removed by Edit and Write
+  calls, subagents included. Edits made through Bash, such as `sed -i`, are not
+  counted. The two costs differ for a session that started today, too. Session
+  cost is Claude Code's own counter. That counter includes calls that write no
+  transcript line, such as session titles. So Session cost is usually the higher
+  of the two. Cost today can be higher while subagents run. Subagent calls reach
+  the transcripts right away. Session cost updates after the main session's next
+  turn, or on the next statusline render without the mod.
 
 ### Setting up the recorder
 
@@ -108,12 +111,12 @@ ln -s ~/code/cc-dashboard/mod ~/.claude/skills/cc-dashboard
 ```
 
 After each main turn, and whenever a rate-limit window moves by 1%, the mod runs
-`bin/record-statusline`. When a session ends, it runs `bin/record-session-end`. It
-needs nothing in your statusline script or in `settings.json`. The mod uses Claude
-Code's function hooks, which are early access and may change between releases. If
-an update breaks it, the transcript shows one line starting `cc-dashboard:`, or the
-Plan usage panel's "as of" time stops moving. `claude plugin validate
-~/code/cc-dashboard/mod` says what the engine refuses.
+`bin/record-statusline`. When a session ends, it runs `bin/record-session-end`.
+The mod needs nothing in your statusline script or in `settings.json`. It uses
+Claude Code's function hooks, which are early access and may change between
+releases. If an update breaks it, the transcript shows one line starting
+`cc-dashboard:`, or the Plan usage panel's "as of" time stops moving.
+`claude plugin validate ~/code/cc-dashboard/mod` says what the engine refuses.
 
 ### Without the mod
 
@@ -127,6 +130,7 @@ echo "$input" | ~/code/cc-dashboard/bin/record-statusline
 ```
 
 `bin/record-limits` is the script's old name and still works.
+
 `record-statusline` never writes to stdout or stderr and always exits 0, so adding it
 does not change what the statusline shows. Do not point `statusLine.command`
 straight at `record-statusline`. It prints nothing, so the statusline would be blank.
@@ -139,8 +143,21 @@ echo "$input" | ~/code/cc-dashboard/bin/record-statusline
 echo "$input" | jq -r '.model.display_name'
 ```
 
-For the cleared and ended marks in Live sessions, also add a `SessionEnd` hook, as
-described at the end of this section.
+For the cleared and ended marks in Live sessions, also run `bin/record-session-end` as
+a `SessionEnd` hook. Add this key to the `"hooks"` object in
+`~/.claude/settings.json`. If the file has no `"hooks"` object, create one at the top
+level, `"hooks": { … }`, and put the key inside it. Do not add a second `"hooks"`
+key: JSON keeps only the last one, and the hooks in the other are silently dropped.
+
+```json
+"SessionEnd": [
+  { "hooks": [{ "type": "command", "command": "~/code/cc-dashboard/bin/record-session-end" }] }
+]
+```
+
+`record-session-end` never writes to stdout or stderr and always exits 0.
+
+### What the panels show
 
 When either window reaches 75%, a warning banner at the top of the page shows on
 every range, with the percentage and the reset time.
@@ -173,23 +190,11 @@ npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 
 The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
 any other end, such as quitting or `/resume`. It reads this from
-`bin/record-session-end`, which the mod runs when a session ends. Without the mod, run it as a `SessionEnd` hook: add this key
-to the `"hooks"` object in `~/.claude/settings.json`. If the file has no `"hooks"`
-object, create one at the top level, `"hooks": { … }`, and put the key inside it.
-Do not add a second `"hooks"` key: JSON keeps only the last one, and the hooks in
-the other are silently dropped.
-
-```json
-"SessionEnd": [
-  { "hooks": [{ "type": "command", "command": "~/code/cc-dashboard/bin/record-session-end" }] }
-]
-```
-
-`record-session-end` never writes to stdout or stderr and always exits 0. With neither, a
-session shows as live for 10 minutes after its last response. So after a
-`/clear`, the old session and the new one both show as live for up to 10 minutes. A
-resumed session keeps its session id, so its row shows as live again after its next
-response.
+`bin/record-session-end`, which the mod runs when a session ends. Without the mod,
+the `SessionEnd` hook under "Without the mod" runs it. With neither, a session shows
+as live for 10 minutes after its last response. So after a `/clear`, the old session
+and the new one both show as live for up to 10 minutes. A resumed session keeps its
+session id, so its row shows as live again after its next response.
 
 ## Setup changes
 
