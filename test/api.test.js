@@ -381,7 +381,43 @@ test('GET /api/records returns the all-time busiest day', async (t) => {
   const data = await res.json();
 
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(data, { allTime: { date: localDateStr(new Date()), tokens: 1200, cost: 0.006 } });
+  assert.deepStrictEqual(data.allTime, { date: localDateStr(new Date()), tokens: 1200, cost: 0.006 });
+});
+
+test('GET /api/records returns recentDays: the 6 days before today, not today', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  // The fixture holds one line dated today. Add lines for 7, 6 and 1 days back.
+  const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo');
+  const lines = [7, 6, 1].map((back) => {
+    const when = new Date();
+    when.setHours(10, 0, 0, 0);
+    when.setDate(when.getDate() - back);
+    return JSON.stringify({
+      timestamp: when.toISOString(),
+      requestId: `req-back-${back}`,
+      message: { id: `msg-back-${back}`, model: 'claude-sonnet-4-6-20260115', usage: { input_tokens: 1000, output_tokens: 200 } },
+    });
+  });
+  fs.writeFileSync(path.join(dir, 'older.jsonl'), lines.join('\n') + '\n');
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/records`);
+  const data = await res.json();
+
+  const dateBack = (back) => {
+    const d = new Date();
+    d.setDate(d.getDate() - back);
+    return localDateStr(d);
+  };
+  assert.strictEqual(res.status, 200);
+  // The scan emits a zero entry for each empty day in the window.
+  const byDate = Object.fromEntries(data.recentDays.map((d) => [d.date, d]));
+  assert.deepStrictEqual(data.recentDays.map((d) => d.date), [6, 5, 4, 3, 2, 1].map(dateBack));
+  assert.deepStrictEqual(byDate[dateBack(6)], { date: dateBack(6), tokens: 1200, cost: 0.006 });
+  assert.deepStrictEqual(byDate[dateBack(1)], { date: dateBack(1), tokens: 1200, cost: 0.006 });
+  assert.deepStrictEqual(byDate[dateBack(3)], { date: dateBack(3), tokens: 0, cost: 0 });
 });
 
 test('GET /stats.js serves the shared statistics helpers', async (t) => {

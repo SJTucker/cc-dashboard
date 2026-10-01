@@ -3,14 +3,15 @@
 
 const express = require('express');
 const path = require('path');
-const { scanUsage, getProjectsDir } = require('./lib/scan');
+const { scanUsage, getProjectsDir, localDateStr } = require('./lib/scan');
+const { windowStart } = require('./lib/window');
 const { readRtkUsage, readRtkWindows } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits, readDailyShare } = require('./lib/limits');
 const { readSessions, buildLiveSessions } = require('./lib/sessions');
-const { busiestDay } = require('./public/stats');
+const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
 const { PRICING_URL, PriceParseError, fetchPricingPage, parsePricingPage, diffPrices } = require('./lib/price-fetch');
@@ -216,12 +217,17 @@ app.get('/api/changes', async (req, res) => {
 });
 
 // The Record day card's all-time value: the day with the most tokens, with its
-// token total and cost. It uses the days=all cache entry that /api/summary and
+// token total and cost. recentDays is the per-day totals for the 6 days before
+// today (not today), which the Today range adds to its live totals for the
+// rolling 7-day lines. It uses the days=all cache entry that /api/summary and
 // /api/changes also use, so the three share one scan.
 app.get('/api/records', async (req, res) => {
   try {
     const data = await getCached(null);
-    res.json({ allTime: busiestDay(data.daily) });
+    const todayStr = localDateStr(new Date());
+    const weekStart = localDateStr(new Date(windowStart(7)));
+    const recentDays = dayTotals(data.daily).filter((d) => d.date >= weekStart && d.date < todayStr);
+    res.json({ allTime: busiestDay(data.daily), recentDays });
   } catch (err) {
     console.error('[API] /api/records failed:', err);
     res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });

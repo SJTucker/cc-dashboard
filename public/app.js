@@ -1328,13 +1328,42 @@ function requestRecords() {
 // Kept so /api/records resolving after the first render can redraw the card
 // with the same daily data the last summary produced.
 let lastRecordDaily = null;
+let lastSummary = null;
 let recordsData = null;
+// The local date the last /api/records request was made on. recentDays holds the
+// 6 days before that date, so after midnight it is missing yesterday.
+let recordsDay = null;
 
 function refreshRecords() {
+  recordsDay = localDateStr(new Date());
   requestRecords().then((data) => {
     recordsData = data;
     if (lastRecordDaily) renderRecord(lastRecordDaily);
+    if (lastSummary) renderWeekTotals(lastSummary);
   });
+}
+
+// On Today, a second line under Total cost and Total tokens with the rolling
+// 7 days: today's live totals plus the 6 days before it from /api/records.
+// It shows a dash until /api/records has answered, which takes a few seconds
+// when the all-time scan is not cached. Empty on every other range.
+function renderWeekTotals(summary) {
+  lastSummary = summary;
+  // A page left open on Today past midnight refetches once, on the first poll of
+  // the new day. Refresh is hidden on Today, so nothing else would refetch.
+  if (currentDays === 'today' && recordsDay !== localDateStr(new Date())) refreshRecords();
+  const today = currentDays === 'today';
+  const week = today
+    ? rollingWeek(recordsData?.recentDays ?? null, localDateStr(new Date()), { cost: summary.totalCost, tokens: summary.totalTokens })
+    : null;
+  const title = today ? 'today and the 6 days before it' : '';
+  const cost = document.getElementById('cardCostWeek');
+  const tokens = document.getElementById('cardTokensWeek');
+  const line = (value) => (today ? `7d total: ${week ? value : '—'}` : '');
+  cost.textContent = line(week && formatCost(week.cost));
+  tokens.textContent = line(week && formatTokens(week.tokens));
+  cost.title = title;
+  tokens.title = title;
 }
 
 // The value and date line show the all-time record: the day with the most tokens,
@@ -2415,6 +2444,7 @@ async function loadAndRender({ busy = false } = {}) {
     : unpricedNote;
   costNote.title = compact ? unpricedNote : '';
   document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
+  renderWeekTotals(s);
   document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
 
   // Claude Code's own per-session counters, shown as a separate card rather than
