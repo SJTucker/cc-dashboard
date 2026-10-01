@@ -10,7 +10,7 @@
     "start": "node server.js",
     "dev": "node server.js --open",
     "watch": "node --watch server.js",
-    "test": "node --test"
+    "test": "node --test test/*.test.js"
   },
   "engines": {
     "node": ">=18.0.0"
