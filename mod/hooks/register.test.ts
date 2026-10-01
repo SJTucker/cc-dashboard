@@ -141,3 +141,27 @@ test('a window with no resetsAt is sent without resets_at', async ($, on) => {
   expect((ran[0]?.stdin as { rate_limits: object }).rate_limits).toEqual({ five_hour: { used_percentage: 12 } })
 })
 
+test('session.end pipes session_id and reason to record-session-end', async ($, on) => {
+  const { ran } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  expect(ran).toEqual([{ argv: ['/repo/bin/record-session-end'], timeoutMs: 1200, stdin: { session_id: 's1', reason: 'clear' } }])
+})
+
+test('a failing session end still passes the event on', async ($, on) => {
+  world(on, {}, 1)
+  const result = await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  expect(result).toEqual({ sessionId: 's1' })
+})
+
+test('a failing run logs once, and a second failure logs nothing', async ($, on) => {
+  const { ran } = world(on, {}, 1)
+  const logged: string[] = []
+  on('ui.log', (_$, e) => {
+    logged.push(e.text)
+    return { value: undefined }
+  })
+  await $.session.measure(measure([FIVE]))
+  await $.session.measure(measure([FIVE]))
+  expect(ran.length).toBe(2)
+  expect(logged).toEqual(['cc-dashboard: record-statusline failed (exit 1)'])
+})

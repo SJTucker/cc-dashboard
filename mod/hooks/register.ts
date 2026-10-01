@@ -128,4 +128,13 @@ export const register: Register = (on) => {
     }
     return result
   })
+
+  // Marks the session's snapshot as ended, so the Live sessions panel shows it as
+  // cleared or ended at once instead of live for 10 minutes. A /clear arrives here
+  // with reason 'clear'.
+  on('session.end', async ($, e, next) => {
+    const result = await next(e)
+    await run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
+    return result
+  })
 }
