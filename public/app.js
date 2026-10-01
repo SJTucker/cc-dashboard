@@ -50,8 +50,9 @@ function localDateStr(d) {
 
 // Average cost per COMPLETE day. Today is excluded because it is partial and
 // would drag the average down. The divisor is the calendar span between the
-// first and last complete bucket, not the bucket count: a day with no usage
-// produces no bucket at all, and ignoring those would overstate the rate.
+// first and last complete bucket, not the bucket count. scanUsage fills idle
+// days with zero buckets, so the two are equal for its output. The span still
+// gives the right rate for a daily list with days missing.
 function costPerDay(daily) {
   const today = localDateStr(new Date());
   const complete = daily.filter((d) => d.date !== today);
