@@ -353,6 +353,25 @@ test('a Haiku call with no answer records nothing and logs the reason', async ($
   expect(logged).toEqual(['cc-dashboard: Haiku gave no verdict for 2.1.290 (api-error)'])
 })
 
+test('UPDATES_FILE overrides the verdict file the check reads', async ($, on) => {
+  const { fetched, asked, clock } = world(on, {
+    env: { HOME: '/home/u', UPDATES_FILE: '~/elsewhere/updates.json' },
+    files: { '/home/u/elsewhere/updates.json': '{"2.1.290":{"relevant":false}}' },
+  })
+  await $.session.start(start)
+  await clock.settle()
+  expect(fetched).toEqual([])
+  expect(asked).toEqual([])
+})
+
+test('a fetch that throws logs the error name and asks Haiku nothing', async ($, on) => {
+  const { asked, logged, clock } = world(on, { fetch: () => { throw new Error('offline') } })
+  await $.session.start(start)
+  await clock.settle()
+  expect(asked).toEqual([])
+  expect(logged).toEqual(['cc-dashboard: changelog fetch failed (HooksError)'])
+})
+
 test('a dev build is not checked', async ($, on) => {
   const { fetched, clock } = world(on, { version: { version: '2.1.290-dev.20261001.t1.sha1', base: '2.1.290-dev' } })
   await $.session.start(start)
@@ -384,7 +403,7 @@ test('/backfill-updates with nothing pending says so', async ($, on) => {
   const { asked } = world(on, { scripts: { prompt: { exitCode: 0, stdout: '{"batches":[]}' } } })
   const result = await $.command.run(backfill)
   expect(asked).toEqual([])
-  expect(result.text).toBe('Every Claude Code version in the transcripts already has a verdict.')
+  expect(result.text).toBe('No Claude Code version needs a verdict.')
 })
 
 test('/backfill-updates names a failing script', async ($, on) => {

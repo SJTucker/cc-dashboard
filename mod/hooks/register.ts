@@ -244,14 +244,23 @@ async function judgeUpdates($: EngineInterface, current?: string): Promise<Judge
   return judged
 }
 
+// Where the verdicts live, as lib/updates.js getUpdatesPath finds them:
+// UPDATES_FILE with a leading ~ expanded, else <config dir>/cc-dashboard/updates.json.
+// Null when no path can be built.
+async function updatesPath($: EngineInterface) {
+  const override = await $.env.get('UPDATES_FILE')
+  if (override) return override.replace(/^~(?=\/|$)/, (await $.env.get('HOME')) ?? '~')
+  const dir = await configDir($)
+  return dir ? `${dir}/cc-dashboard/updates.json` : null
+}
+
 // Runs once per session start, after the session is up. Only the running version
 // is looked up here; /backfill-updates covers the versions before it.
 async function checkVersion($: EngineInterface) {
   const { base } = await $.session.version()
   if (!base || !RELEASE.test(base)) return // a dev build has no changelog entry
-  const dir = await configDir($)
-  if (!dir) return
-  const file = `${dir}/cc-dashboard/updates.json`
+  const file = await updatesPath($)
+  if (!file) return
   // A read that fails means no verdicts yet: the file is written on the first one.
   const text = await $.fs.read(file).then(String, () => undefined)
   let verdicts: Record<string, unknown> = {}
@@ -269,7 +278,7 @@ async function checkVersion($: EngineInterface) {
 }
 
 function backfillText(judged: Judged) {
-  if (!judged.asked && !judged.failed.length) return 'Every Claude Code version in the transcripts already has a verdict.'
+  if (!judged.asked && !judged.failed.length) return 'No Claude Code version needs a verdict.'
   const counts = `Judged ${judged.recorded} of ${judged.asked} versions, ${judged.relevant} relevant.`
   return judged.failed.length ? `${counts} Failed: ${judged.failed.join('; ')}` : counts
 }
