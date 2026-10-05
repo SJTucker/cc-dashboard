@@ -209,8 +209,9 @@ cover all history, whatever range is picked.
   days after. The chart shows the median Bash result size on the main thread per
   day, which is what rtk acts on.
 
-Plugin installs and the first use of a new model are marked automatically. Add
-anything else to `changes.json` in this folder. It is gitignored, and the dashboard
+Plugin installs, the first use of a new model, and Claude Code releases that could
+change usage are marked automatically. The releases come from the mod (see "Claude
+Code updates" below). Add anything else to `changes.json` in this folder. It is gitignored, and the dashboard
 only reads it:
 
 ```json
@@ -222,7 +223,7 @@ only reads it:
 
 `date` is local time. Include the time: a bare date means midnight, which puts that
 whole day in "after". `kind` is one of `plugin`, `skill`, `hook`, `claude-md`,
-`rtk`, `config`, `effort`, `model`, `other`, and picks the marker's shape. Keep the
+`rtk`, `config`, `effort`, `model`, `claude-code`, `other`, and picks the marker's shape. Keep the
 file somewhere else with `CHANGES_FILE=~/path/changes.json npm start`.
 
 A before/after is only as clean as its window. When another change falls within 7

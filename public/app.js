@@ -1561,6 +1561,18 @@ function shortModel(name) {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const WEEK_MS = 7 * DAY_MS;
 
+// Five points at radius 5.5 and five notches at 2.3, starting at the top. No other
+// marker has notches, so the star reads apart from the circle and the diamond.
+function starPath(x, y) {
+  const points = [];
+  for (let i = 0; i < 10; i++) {
+    const r = i % 2 ? 2.3 : 5.5;
+    const a = -Math.PI / 2 + (i * Math.PI) / 5;
+    points.push(`${(x + r * Math.cos(a)).toFixed(1)},${(y + r * Math.sin(a)).toFixed(1)}`);
+  }
+  return `M${points.join(' L')} Z`;
+}
+
 // Shape carries the kind of change, so the marker row reads without colour.
 const MARKER_SHAPES = {
   plugin: (x, y) => svgEl('path', { d: `M${x},${y - 5} L${x + 5},${y + 4} L${x - 5},${y + 4} Z` }),
@@ -1571,12 +1583,13 @@ const MARKER_SHAPES = {
   config: (x, y) => svgEl('path', { d: `M${x - 5},${y} L${x + 5},${y} M${x},${y - 5} L${x},${y + 5} M${x - 3.5},${y - 3.5} L${x + 3.5},${y + 3.5} M${x + 3.5},${y - 3.5} L${x - 3.5},${y + 3.5}` }),
   effort: (x, y) => svgEl('path', { d: `M${x - 4},${y - 4} L${x + 4},${y + 4} M${x + 4},${y - 4} L${x - 4},${y + 4}` }),
   model: (x, y) => svgEl('path', { d: `M${x - 5},${y} L${x + 5},${y} M${x},${y - 5} L${x},${y + 5}` }),
+  'claude-code': (x, y) => svgEl('path', { d: starPath(x, y) }),
   other: (x, y) => svgEl('path', { d: `M${x - 5},${y} L${x + 5},${y}` }),
 };
 
 const MARKER_KIND_NAMES = {
   plugin: 'plugin', hook: 'hook', skill: 'skill', 'claude-md': 'CLAUDE.md', rtk: 'rtk',
-  config: 'config', effort: 'effort', model: 'model', other: 'other',
+  config: 'config', effort: 'effort', model: 'model', 'claude-code': 'Claude Code update', other: 'other',
 };
 
 // Session dots: shape by model, most-used model first.
@@ -1666,8 +1679,15 @@ function withTooltip(node, html) {
   return node;
 }
 
+const MARKER_SOURCES = {
+  file: 'from changes.json',
+  plugin: 'detected from the plugin list',
+  model: 'detected from transcripts',
+  update: 'from the Claude Code changelog',
+};
+
 function markerTooltip(m) {
-  const source = m.source === 'file' ? 'from changes.json' : `detected from ${m.source === 'plugin' ? 'the plugin list' : 'transcripts'}`;
+  const source = MARKER_SOURCES[m.source] || 'detected from transcripts';
   return `<strong>${escapeHtml(markerDate(m.t))}</strong><br>${escapeHtml(m.label)}<br>${escapeHtml(source)}`;
 }
 
@@ -1883,9 +1903,20 @@ function renderBeforeAfter(report, marker) {
   table.append(el('thead', {}, [head]), body);
 
   const near = report.markers.filter((o) => o !== marker && Math.abs(o.t - marker.t) <= WEEK_MS);
-  note.textContent = near.length
-    ? `${near.length} other change${near.length > 1 ? 's' : ''} in this window: ${near.map((o) => `${markerDate(o.t)} ${o.label}`).join('; ')}. The numbers above cover all of them together.`
-    : 'No other change in this window.';
+  // Claude Code ships about once a day, so its releases get their own line instead
+  // of burying the user's own changes in the list.
+  const own = near.filter((o) => o.kind !== 'claude-code');
+  const releases = near.filter((o) => o.kind === 'claude-code');
+  const lines = [
+    own.length
+      ? `${own.length} other change${own.length > 1 ? 's' : ''} in this window: ${own.map((o) => `${markerDate(o.t)} ${o.label}`).join('; ')}. The numbers above cover all of them together.`
+      : 'No other change in this window.',
+  ];
+  if (releases.length) {
+    const named = releases.map((o) => o.label.replace(/^Claude Code (\S+): (.*)$/, '$1 ($2)'));
+    lines.push(`Claude Code updates in this window: ${named.join('; ')}. The numbers above include them.`);
+  }
+  note.replaceChildren(...lines.flatMap((text, i) => (i ? [el('br'), text] : [text])));
 }
 
 const markerKey = (m) => `${m.t}|${m.label}`;
