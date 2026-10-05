@@ -228,10 +228,10 @@ cover all history, whatever range is picked.
   days after. The chart shows the median Bash result size on the main thread per
   day, which is what rtk acts on.
 
-Plugin installs, the first use of a new model, and Claude Code releases that could
-change usage are marked automatically. The releases come from the mod (see "Claude
-Code updates" below). Add anything else to `changes.json` in this folder. It is gitignored, and the dashboard
-only reads it:
+Plugin installs, the first use of a new model, and Claude Code releases that
+could change usage are marked automatically. The releases come from the mod (see
+"Claude Code updates" above). Add anything else to `changes.json` in this folder.
+It is gitignored, and the dashboard only reads it:
 
 ```json
 [
@@ -240,10 +240,11 @@ only reads it:
 ]
 ```
 
-`date` is local time. Include the time: a bare date means midnight, which puts that
-whole day in "after". `kind` is one of `plugin`, `skill`, `hook`, `claude-md`,
-`rtk`, `config`, `effort`, `model`, `claude-code`, `other`, and picks the marker's shape. Keep the
-file somewhere else with `CHANGES_FILE=~/path/changes.json npm start`.
+`date` is local time. Include the time: a bare date means midnight, which puts
+that whole day in "after". `kind` is one of `plugin`, `skill`, `hook`,
+`claude-md`, `rtk`, `config`, `effort`, `model`, `claude-code`, `other`, and picks
+the marker's shape. Keep the file somewhere else with
+`CHANGES_FILE=~/path/changes.json npm start`.
 
 A before/after is only as clean as its window. When another change falls within 7
 days either side, the panel lists it, and the numbers cover both.
@@ -260,25 +261,28 @@ boundary back.
 - **Read-only, except for two write paths.** The dashboard server only ever reads
   your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
   `changes.json`, and `rate-limits.json`, and opens rtk's `history.db` with
-  sqlite's `readOnly` flag. One write path is `bin/record-statusline`, `bin/record-session-end` and `bin/judge-updates`, separate
-  scripts the dashboard's Claude Code mod runs (see "Plan usage" above); they write only
-  `rate-limits.json`, the per-session snapshots in `cc-dashboard/sessions/`, and, through `bin/judge-updates`, `cc-dashboard/updates.json`.
-  The other is the Apply button in the Cost by model panel: clicking it is the
-  only thing that writes `prices.json` (`PRICES_JSON` moves it), and nothing else
-  under `server.js` or `public/` writes anything.
-- **One network request from the server, on demand.** The Cost by model panel has a Check prices
-  button. Clicking it makes the server fetch
-  `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's pricing
-  page as markdown. Nothing fetches on page load, on a timer, or at startup. The URL
-  is a constant in `lib/price-fetch.js`. The page's Content-Security-Policy blocks
-  the browser from contacting any other host, so the request always comes from the
-  server. The bar charts are hand-drawn SVG (see `public/app.js`), so no charting
-  library comes from a CDN.
-  
+  sqlite's `readOnly` flag. One write path is `bin/record-statusline`,
+  `bin/record-session-end` and `bin/judge-updates`, separate scripts the
+  dashboard's Claude Code mod runs (see "Plan usage" above); they write only
+  `rate-limits.json`, the per-session snapshots in `cc-dashboard/sessions/`, and,
+  through `bin/judge-updates`, `cc-dashboard/updates.json`. The other is the Apply
+  button in the Cost by model panel: clicking it is the only thing that writes
+  `prices.json` (`PRICES_JSON` moves it), and nothing else under `server.js` or
+  `public/` writes anything.
+- **One network request from the server, on demand.** The Cost by model panel has
+  a Check prices button. Clicking it makes the server fetch
+  `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's
+  pricing page as markdown. Nothing fetches on page load, on a timer, or at
+  startup. The URL is a constant in `lib/price-fetch.js`. The page's
+  Content-Security-Policy blocks the browser from contacting any other host, so
+  the request always comes from the server. The bar charts are hand-drawn SVG (see
+  `public/app.js`), so no charting library comes from a CDN.
+
   Separately, the Claude Code mod fetches the Claude Code changelog from
-  `raw.githubusercontent.com` and makes one Haiku call per 20 versions, only when the
-  running Claude Code version has no verdict or when you run `/backfill-updates`.
-  That request comes from Claude Code, not from the dashboard server.
+  `raw.githubusercontent.com` and makes one Haiku call per 20 versions, only when
+  the running Claude Code version has no verdict or when you run
+  `/backfill-updates`. That request comes from Claude Code, not from the
+  dashboard server.
 - **Localhost only.** The server binds to `127.0.0.1` and rejects any request whose
   `Host` header isn't `localhost`/`127.0.0.1`, which blocks the DNS-rebinding trick
   where a malicious website re-points its own hostname at your machine (see
