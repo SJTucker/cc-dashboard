@@ -10,7 +10,7 @@ const DAY = 24 * 60 * 60 * 1000;
 
 // Both CLAUDE_CONFIG_DIR and CHANGES_FILE are read at call time, so each test sets
 // them and requires a fresh copy.
-function setup({ plugins, changes } = {}) {
+function setup({ plugins, changes, updates } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-changes-'));
   fs.mkdirSync(path.join(base, 'projects'), { recursive: true });
   if (plugins !== undefined) {
@@ -19,9 +19,13 @@ function setup({ plugins, changes } = {}) {
   }
   const changesPath = path.join(base, 'changes.json');
   if (changes !== undefined) fs.writeFileSync(changesPath, typeof changes === 'string' ? changes : JSON.stringify(changes));
+  const updatesPath = path.join(base, 'updates.json');
+  if (updates !== undefined) fs.writeFileSync(updatesPath, JSON.stringify(updates));
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.CHANGES_FILE = changesPath;
+  process.env.UPDATES_FILE = updatesPath;
   delete require.cache[require.resolve('../lib/scan')];
+  delete require.cache[require.resolve('../lib/updates')];
   delete require.cache[require.resolve('../lib/changes')];
   return { changes: require('../lib/changes'), changesPath };
 }
@@ -105,13 +109,43 @@ test('fileMarkers: local times, unknown kind, bad date skipped and reported', ()
   assert.match(file.error, /entry 3/);
 });
 
+test('updateMarkers marks relevant versions at their first call, after a week of history', () => {
+  const { changes } = setup({
+    updates: {
+      '2.1.280': { relevant: true, summary: 'Running when history starts' },
+      '2.1.286': { relevant: true, summary: 'Subagents share the parent cache' },
+      '2.1.287': { relevant: false },
+      '2.1.288': { relevant: true, summary: 'Never used here' },
+    },
+  });
+  const t0 = new Date(2026, 8, 1).getTime();
+  const calls = [
+    { t: t0, version: '2.1.280' },
+    { t: t0 + 9 * DAY, version: '2.1.286' },
+    { t: t0 + 8 * DAY, version: '2.1.286' },
+    { t: t0 + 10 * DAY, version: '2.1.287' },
+    { t: t0 + 11 * DAY, version: null },
+  ];
+  assert.deepStrictEqual(changes.updateMarkers(calls), [
+    { t: t0 + 8 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.286: Subagents share the parent cache', source: 'update' },
+  ]);
+});
+
+test('updateMarkers returns [] without updates.json', () => {
+  const { changes } = setup();
+  assert.deepStrictEqual(changes.updateMarkers([{ t: 0, version: '2.1.280' }, { t: 30 * DAY, version: '2.1.286' }]), []);
+});
+
 test('collectMarkers merges all sources sorted by time', () => {
   const { changes } = setup({
     plugins: { plugins: { 'figma@x': [{ installedAt: '2026-09-03T15:17:27Z' }] } },
     changes: [{ date: '2026-09-01T09:00', kind: 'skill', label: 'early' }],
+    updates: { '2.1.286': { relevant: true, summary: 'Cache shared' } },
   });
-  const { markers, changesFile } = changes.collectMarkers([]);
-  assert.deepStrictEqual(markers.map((m) => m.source), ['file', 'plugin']);
+  const t0 = new Date(2026, 7, 20).getTime();
+  const calls = [{ t: t0, version: '2.1.280' }, { t: new Date(2026, 8, 5).getTime(), version: '2.1.286' }];
+  const { markers, changesFile } = changes.collectMarkers(calls);
+  assert.deepStrictEqual(markers.map((m) => m.source), ['file', 'plugin', 'update']);
   assert.strictEqual(changesFile.status, 'ok');
 });
 

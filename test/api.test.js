@@ -286,6 +286,7 @@ function startChangesServer({ changes, plugins } = {}) {
   const changesPath = path.join(base, 'changes.json');
   if (changes) fs.writeFileSync(changesPath, JSON.stringify(changes));
   process.env.CHANGES_FILE = changesPath;
+  process.env.UPDATES_FILE = path.join(base, 'updates-nonexistent.json');
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.PORT = '0';
