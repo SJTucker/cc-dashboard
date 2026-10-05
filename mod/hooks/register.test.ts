@@ -1,4 +1,4 @@
-import type { ModelCompleteResult, On, SessionRateLimit, UsageUnit } from 'claude-code'
+import type { On, SessionRateLimit, UsageUnit } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
 type Ran = { argv: readonly string[]; stdin: unknown; timeoutMs: number | undefined }
@@ -13,7 +13,14 @@ type World = {
   files: Record<string, string>
   version: { version: string; base?: string }
   fetch: () => { status: number; ok: boolean; text: string }
-  replies: Array<{ isAnswered: true; text: string } | { isAnswered: false; reason: 'api-error' | 'empty-reply' | 'aborted' }>
+  registerFails: boolean
+  // `throws` makes model.complete reject, as an engine refusal does.
+  replies: Array<
+    | { isAnswered: true; text: string }
+    | { isAnswered: false; reason: 'api-error'; status: null; error: 'unknown' }
+    | { isAnswered: false; reason: 'empty-reply' | 'aborted' }
+    | { throws: true }
+  >
   scripts: Record<string, { exitCode: number; stdout: string; stderr?: string }>
 }
 
@@ -36,6 +43,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     version: { version: '2.1.290', base: '2.1.290' },
     fetch: () => ({ status: 200, ok: true, text: '## 2.1.290\n- Compaction keeps fewer tool results' }),
     replies: [],
+    registerFails: false,
     scripts: {},
     ...w,
   }
@@ -67,12 +75,13 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   on('model.complete', (_$, e) => {
     asked.push(e)
     const reply = state.replies.shift() ?? { isAnswered: false as const, reason: 'empty-reply' as const }
-    // The stub leaves out the status and error an api-error carries.
-    return { value: { ...reply, usage } as ModelCompleteResult }
+    if ('throws' in reply) throw new Error('refused')
+    return { value: { ...reply, usage } }
   })
   on('session.version', () => ({ value: state.version }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('command.register', (_$, e) => {
+    if (state.registerFails) throw new Error('refused')
     registered.push(e.name)
     return { value: { command: e.name } }
   })
@@ -337,7 +346,7 @@ test('a failed fetch logs and asks Haiku nothing', async ($, on) => {
 })
 
 test('a Haiku call with no answer records nothing and logs the reason', async ($, on) => {
-  const { ran, logged, clock } = world(on, { scripts: judging, replies: [{ isAnswered: false, reason: 'api-error' }] })
+  const { ran, logged, clock } = world(on, { scripts: judging, replies: [{ isAnswered: false, reason: 'api-error', status: null, error: 'unknown' }] })
   await $.session.start(start)
   await clock.settle()
   expect(ran.map((r) => r.argv[1])).toEqual(['prompt'])
@@ -383,4 +392,28 @@ test('/backfill-updates names a failing script', async ($, on) => {
   const result = await $.command.run(backfill)
   expect(asked).toEqual([])
   expect(result.text).toBe('Judged 0 of 0 versions, 0 relevant. Failed: judge-updates prompt failed (exit 1): judge-updates: boom')
+})
+
+test('a failing command.register is logged and session.start still resolves', async ($, on) => {
+  const { logged } = world(on, { registerFails: true, files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
+  await $.session.start(start)
+  expect(logged).toEqual(['cc-dashboard: could not register /backfill-updates (HooksError)'])
+})
+
+test('/backfill-updates names a prompt that printed no batches', async ($, on) => {
+  const { asked } = world(on, { scripts: { prompt: { exitCode: 0, stdout: '{}' } } })
+  const result = await $.command.run(backfill)
+  expect(asked).toEqual([])
+  expect(result.text).toBe('Judged 0 of 0 versions, 0 relevant. Failed: judge-updates prompt printed no batches')
+})
+
+test('/backfill-updates carries on after one Haiku call rejects', async ($, on) => {
+  const second = { versions: ['2.1.291'], system: 'SYSTEM', prompt: '## 2.1.291\n- x' }
+  const { ran } = world(on, {
+    scripts: { ...judging, prompt: { exitCode: 0, stdout: JSON.stringify({ batches: [BATCH, second] }) } },
+    replies: [{ throws: true }, { isAnswered: true, text: VERDICT }],
+  })
+  const result = await $.command.run(backfill)
+  expect(ran.filter((r) => r.argv[1] === 'record').length).toBe(1)
+  expect(result.text).toBe('Judged 1 of 2 versions, 1 relevant. Failed: Haiku call failed for 2.1.290 (HooksError)')
 })

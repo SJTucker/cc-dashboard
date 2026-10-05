@@ -180,6 +180,37 @@ async function judgeScript($: EngineInterface, args: string[], stdin: string, ti
 const versionSpan = (versions: string[]) =>
   versions.length > 1 ? `${versions[0]}–${versions[versions.length - 1]}` : (versions[0] ?? '')
 
+// Asks Haiku about one batch and records the answer, adding any failure to `judged`.
+async function judgeBatch($: EngineInterface, batch: Batch, judged: Judged) {
+  judged.asked += batch.versions.length
+  let reply: Awaited<ReturnType<EngineInterface['model']['complete']>>
+  try {
+    reply = await $.model.complete({
+      model: 'haiku',
+      system: batch.system,
+      prompt: batch.prompt,
+      maxTokens: 2048,
+      effort: 'low',
+      timeoutMs: MODEL_TIMEOUT_MS,
+    })
+  } catch (err) {
+    judged.failed.push(`Haiku call failed for ${versionSpan(batch.versions)} (${errorName(err)})`)
+    return
+  }
+  if (!reply.isAnswered) {
+    judged.failed.push(`Haiku gave no verdict for ${versionSpan(batch.versions)} (${reply.reason})`)
+    return
+  }
+  try {
+    const input = JSON.stringify({ versions: batch.versions, reply: reply.text })
+    const out = (await judgeScript($, ['record'], input, RECORD_TIMEOUT_MS)) as { recorded: number; relevant: number }
+    judged.recorded += out.recorded
+    judged.relevant += out.relevant
+  } catch (err) {
+    judged.failed.push(err instanceof Error ? err.message : 'judge-updates record failed')
+  }
+}
+
 // Fetches the changelog, has bin/judge-updates list what needs a verdict, asks
 // Haiku once per batch, and has bin/judge-updates record each answer. With
 // `current`, the running version is judged even before a transcript has it.
@@ -201,33 +232,15 @@ async function judgeUpdates($: EngineInterface, current?: string): Promise<Judge
   try {
     const args = current ? ['prompt', '--current', current] : ['prompt']
     batches = ((await judgeScript($, args, changelog, PROMPT_TIMEOUT_MS)) as { batches: Batch[] }).batches
+    if (!Array.isArray(batches)) {
+      judged.failed.push('judge-updates prompt printed no batches')
+      return judged
+    }
   } catch (err) {
     judged.failed.push(err instanceof Error ? err.message : 'judge-updates prompt failed')
     return judged
   }
-  for (const batch of batches) {
-    judged.asked += batch.versions.length
-    const reply = await $.model.complete({
-      model: 'haiku',
-      system: batch.system,
-      prompt: batch.prompt,
-      maxTokens: 2048,
-      effort: 'low',
-      timeoutMs: MODEL_TIMEOUT_MS,
-    })
-    if (!reply.isAnswered) {
-      judged.failed.push(`Haiku gave no verdict for ${versionSpan(batch.versions)} (${reply.reason})`)
-      continue
-    }
-    try {
-      const input = JSON.stringify({ versions: batch.versions, reply: reply.text })
-      const out = (await judgeScript($, ['record'], input, RECORD_TIMEOUT_MS)) as { recorded: number; relevant: number }
-      judged.recorded += out.recorded
-      judged.relevant += out.relevant
-    } catch (err) {
-      judged.failed.push(err instanceof Error ? err.message : 'judge-updates record failed')
-    }
-  }
+  for (const batch of batches) await judgeBatch($, batch, judged)
   return judged
 }
 
@@ -269,7 +282,7 @@ export const register: Register = (on) => {
     await $.command.register({
       name: 'backfill-updates',
       description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
-    }).catch(() => undefined)
+    }).catch((err) => note($, `could not register /backfill-updates (${errorName(err)})`))
     const result = await next(e)
     $.clock.after(0, () => {
       checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
