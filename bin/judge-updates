@@ -3,7 +3,9 @@
 
 // Run by the dashboard's Claude Code mod (mod/hooks/register.ts), which fetches
 // the changelog and calls Haiku because only the mod can. Two subcommands:
-//   prompt [--current <version>]  changelog on stdin; with --current, judges only that version; without it, judges pending transcript versions
+//   prompt [--current <version>]  changelog on stdin. With --current, judges
+//                                 only that version. Without it, judges the
+//                                 pending versions in the transcripts.
 //   record                        {"versions","reply"} on stdin; writes verdicts
 // Prints one JSON object on success. On failure it prints the reason on stderr
 // and exits 1, and the mod logs it.

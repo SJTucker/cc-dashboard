@@ -129,13 +129,18 @@ compaction, tool output, subagents, or default model or effort. `bin/judge-updat
 writes the verdict. A relevant version gets a star marker at the first call made on
 it.
 
-Run `/backfill-updates` once to judge every version in your transcripts. It reports
-how many versions it judged and how many are relevant.
+Run `/backfill-updates` to judge every version in your transcripts. It reports how
+many versions it judged and how many are relevant. Run it again whenever a version
+missed its check: session start judges only the running version, so an update you
+moved past before a later session, or a release-day changelog without the entry,
+waits for the next `/backfill-updates`.
 
 Each version is judged once. To change a verdict, edit `relevant` or `summary` in
-`updates.json`. To have a version judged again, delete its entry. Failures show as a
-transcript line starting `cc-dashboard:`. The Haiku calls write no transcript line,
-so the dashboard's totals leave out their cost.
+`updates.json`. To show a marker for a version Haiku rejected, set `relevant` to
+true. The `summary` is optional and becomes the marker's label text. To have a
+version judged again, delete its entry. Failures show as a transcript line starting
+`cc-dashboard:`. The Haiku calls write no transcript line, so the dashboard's totals
+leave out their cost.
 
 ### Without the mod
 
