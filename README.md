@@ -118,6 +118,25 @@ releases. If an update breaks it, the transcript shows one line starting
 `cc-dashboard:`, or the Plan usage panel's "as of" time stops moving.
 `claude plugin validate ~/code/cc-dashboard/mod` says what the engine refuses.
 
+### Claude Code updates
+
+The mod also marks Claude Code releases that could change usage. At each session
+start, after the session is ready, it checks whether the running version has a
+verdict in `~/.claude/cc-dashboard/updates.json`. When it has none, the mod fetches
+`CHANGELOG.md` from the `anthropics/claude-code` repository and asks Haiku, through
+your Claude Code login, whether the entry could change tokens, caching, context,
+compaction, tool output, subagents, or default model or effort. `bin/judge-updates`
+writes the verdict. A relevant version gets a star marker at the first call made on
+it.
+
+Run `/backfill-updates` once to judge every version in your transcripts. It reports
+how many versions it judged and how many are relevant.
+
+Each version is judged once. To change a verdict, edit `relevant` or `summary` in
+`updates.json`. To have a version judged again, delete its entry. Failures show as a
+transcript line starting `cc-dashboard:`. The Haiku calls write no transcript line,
+so the dashboard's totals leave out their cost.
+
 ### Without the mod
 
 The scripts also work on their own. Use this path or the mod, not both.
@@ -241,13 +260,13 @@ boundary back.
 - **Read-only, except for two write paths.** The dashboard server only ever reads
   your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
   `changes.json`, and `rate-limits.json`, and opens rtk's `history.db` with
-  sqlite's `readOnly` flag. One write path is `bin/record-statusline` and `bin/record-session-end`, separate
+  sqlite's `readOnly` flag. One write path is `bin/record-statusline`, `bin/record-session-end` and `bin/judge-updates`, separate
   scripts the dashboard's Claude Code mod runs (see "Plan usage" above); they write only
-  `rate-limits.json` and the per-session snapshots in `cc-dashboard/sessions/`.
+  `rate-limits.json`, the per-session snapshots in `cc-dashboard/sessions/`, and, through `bin/judge-updates`, `cc-dashboard/updates.json`.
   The other is the Apply button in the Cost by model panel: clicking it is the
   only thing that writes `prices.json` (`PRICES_JSON` moves it), and nothing else
   under `server.js` or `public/` writes anything.
-- **One network request, on demand.** The Cost by model panel has a Check prices
+- **One network request from the server, on demand.** The Cost by model panel has a Check prices
   button. Clicking it makes the server fetch
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's pricing
   page as markdown. Nothing fetches on page load, on a timer, or at startup. The URL
@@ -255,6 +274,11 @@ boundary back.
   the browser from contacting any other host, so the request always comes from the
   server. The bar charts are hand-drawn SVG (see `public/app.js`), so no charting
   library comes from a CDN.
+  
+  Separately, the Claude Code mod fetches the Claude Code changelog from
+  `raw.githubusercontent.com` and makes one Haiku call per 20 versions, only when the
+  running Claude Code version has no verdict or when you run `/backfill-updates`.
+  That request comes from Claude Code, not from the dashboard server.
 - **Localhost only.** The server binds to `127.0.0.1` and rejects any request whose
   `Host` header isn't `localhost`/`127.0.0.1`, which blocks the DNS-rebinding trick
   where a malicious website re-points its own hostname at your machine (see
@@ -288,7 +312,8 @@ lib/sessions.js        Per-session snapshots from the statusline, and today's li
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
 bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
-mod/                   Claude Code mod that runs the two recorders after each turn and at session end
+bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
+mod/                   Claude Code mod that runs the recorders and judges new Claude Code releases
 public/index.html      Page shell
 public/style.css       All styling
 public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
@@ -327,8 +352,6 @@ A few obvious next steps if you want to keep going, roughly in order of effort:
   session's `cwd`, counted once per repository because worktrees share history) or by
   Edit/Write calls. It trends, but day-to-day values swing by a coefficient of
   variation near 0.7, so label it as noisy.
-- **Claude Code version markers**: every line carries `version`. Left off the marker
-  row because 23 versions shipped in one month here, several on the same day.
 - **A hook that appends to `changes.json`**: a Claude Code hook on edits to
   `~/.claude/settings.json`, `CLAUDE.md` or skills could add an entry, so the file
   keeps itself current. That write would belong to the hook, not the dashboard.

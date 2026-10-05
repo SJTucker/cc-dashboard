@@ -6,8 +6,8 @@ their markers without anyone editing `changes.json` by hand. The setup includes
 2026-10-01.
 
 The recording goes in the dashboard's Claude Code mod in `mod/`, which already records
-plan usage and session ends. Claude Code updates are a separate idea:
-[claude-code-updates.md](claude-code-updates.md).
+plan usage and session ends. Claude Code updates are marked by the mod already; see
+the README's "Claude Code updates" section.
 
 ## Where markers come from now
 
