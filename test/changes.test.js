@@ -131,6 +131,22 @@ test('updateMarkers marks relevant versions at their first call, after a week of
   ]);
 });
 
+test('updateMarkers labels a relevant verdict without a summary with the version alone', () => {
+  const { changes } = setup({
+    updates: { '2.1.286': { relevant: true }, '2.1.287': { relevant: true, summary: '' } },
+  });
+  const t0 = new Date(2026, 8, 1).getTime();
+  const calls = [
+    { t: t0, version: '2.1.280' },
+    { t: t0 + 8 * DAY, version: '2.1.286' },
+    { t: t0 + 9 * DAY, version: '2.1.287' },
+  ];
+  assert.deepStrictEqual(changes.updateMarkers(calls), [
+    { t: t0 + 8 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.286', source: 'update' },
+    { t: t0 + 9 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.287', source: 'update' },
+  ]);
+});
+
 test('updateMarkers returns [] without updates.json', () => {
   const { changes } = setup();
   assert.deepStrictEqual(changes.updateMarkers([{ t: 0, version: '2.1.280' }, { t: 30 * DAY, version: '2.1.286' }]), []);

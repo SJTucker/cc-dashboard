@@ -1910,10 +1910,10 @@ function renderBeforeAfter(report, marker) {
   const lines = [
     own.length
       ? `${own.length} other change${own.length > 1 ? 's' : ''} in this window: ${own.map((o) => `${markerDate(o.t)} ${o.label}`).join('; ')}. The numbers above cover all of them together.`
-      : 'No other change in this window.',
+      : 'No other change of yours in this window.',
   ];
   if (releases.length) {
-    const named = releases.map((o) => o.label.replace(/^Claude Code (\S+): (.*)$/, '$1 ($2)'));
+    const named = releases.map((o) => o.label.replace(/^Claude Code (\S+): (.*)$/, '$1 ($2)').replace(/^Claude Code (\S+)$/, '$1'));
     lines.push(`Claude Code updates in this window: ${named.join('; ')}. The numbers above include them.`);
   }
   note.replaceChildren(...lines.flatMap((text, i) => (i ? [el('br'), text] : [text])));
