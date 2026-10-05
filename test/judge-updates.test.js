@@ -43,8 +43,8 @@ test('prompt splits pending transcript versions into batches of 20', () => {
   assert.match(out.batches[0].system, /JSON array/);
 });
 
-test('prompt --current adds a version no transcript has yet', () => {
-  const { out } = run(fixture([]), ['prompt', '--current', '2.1.290'], changelog(['2.1.290']));
+test('prompt --current judges only that version', () => {
+  const { out } = run(fixture(['2.1.288', '2.1.289']), ['prompt', '--current', '2.1.290'], changelog(['2.1.288', '2.1.289', '2.1.290']));
   assert.deepStrictEqual(out.batches.map((b) => b.versions), [['2.1.290']]);
 });
 

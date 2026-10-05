@@ -3,7 +3,7 @@
 
 // Run by the dashboard's Claude Code mod (mod/hooks/register.ts), which fetches
 // the changelog and calls Haiku because only the mod can. Two subcommands:
-//   prompt [--current <version>]  changelog on stdin; prints the batches to judge
+//   prompt [--current <version>]  changelog on stdin; with --current, judges only that version; without it, judges pending transcript versions
 //   record                        {"versions","reply"} on stdin; writes verdicts
 // Prints one JSON object on success. On failure it prints the reason on stderr
 // and exits 1, and the mod logs it.
@@ -35,8 +35,12 @@ async function prompt(args) {
   const at = args.indexOf('--current');
   const current = at >= 0 ? args[at + 1] : null;
   const changelog = parseChangelog(await readStdin());
-  const seen = await transcriptVersions();
-  if (current) seen.add(current);
+  let seen;
+  if (current) {
+    seen = new Set([current]);
+  } else {
+    seen = await transcriptVersions();
+  }
   const pending = pendingVersions(seen, readVerdicts(), changelog);
   const batches = [];
   for (let i = 0; i < pending.length; i += BATCH_SIZE) {
