@@ -1,0 +1,73 @@
+#!/usr/bin/env node
+'use strict';
+
+// Run by the dashboard's Claude Code mod (mod/hooks/register.ts), which fetches
+// the changelog and calls Haiku because only the mod can. Two subcommands:
+//   prompt [--current <version>]  changelog on stdin; prints the batches to judge
+//   record                        {"versions","reply"} on stdin; writes verdicts
+// Prints one JSON object on success. On failure it prints the reason on stderr
+// and exits 1, and the mod logs it.
+
+const {
+  BATCH_SIZE,
+  parseChangelog,
+  transcriptVersions,
+  pendingVersions,
+  readVerdicts,
+  buildPrompt,
+  parseReply,
+  recordVerdicts,
+} = require('../lib/updates');
+
+function readStdin() {
+  return new Promise((resolve, reject) => {
+    let input = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      input += chunk;
+    });
+    process.stdin.on('end', () => resolve(input));
+    process.stdin.on('error', reject);
+  });
+}
+
+async function prompt(args) {
+  const at = args.indexOf('--current');
+  const current = at >= 0 ? args[at + 1] : null;
+  const changelog = parseChangelog(await readStdin());
+  const seen = await transcriptVersions();
+  if (current) seen.add(current);
+  const pending = pendingVersions(seen, readVerdicts(), changelog);
+  const batches = [];
+  for (let i = 0; i < pending.length; i += BATCH_SIZE) {
+    const versions = pending.slice(i, i + BATCH_SIZE);
+    batches.push({ versions, ...buildPrompt(versions.map((v) => [v, changelog.get(v)])) });
+  }
+  return { batches };
+}
+
+async function record() {
+  const { versions, reply } = JSON.parse(await readStdin());
+  if (!Array.isArray(versions) || typeof reply !== 'string') throw new Error('expected {"versions": [...], "reply": "..."}');
+  const verdicts = parseReply(reply, versions);
+  const added = recordVerdicts(verdicts);
+  return {
+    recorded: added.length,
+    relevant: added.filter((v) => verdicts[v].relevant).length,
+    unjudged: versions.filter((v) => !verdicts[v]).length,
+  };
+}
+
+const [command, ...args] = process.argv.slice(2);
+const work =
+  command === 'prompt' ? prompt(args)
+  : command === 'record' ? record()
+  : Promise.reject(new Error('usage: judge-updates prompt [--current <version>] | record'));
+
+work.then(
+  (out) => process.stdout.write(JSON.stringify(out) + '\n'),
+  (err) => {
+    process.stderr.write(`judge-updates: ${err.message}\n`);
+    process.exitCode = 1;
+  },
+);
