@@ -1,4 +1,4 @@
-import type { On, SessionRateLimit, UsageUnit } from 'claude-code'
+import type { ModelCompleteResult, On, SessionRateLimit, UsageUnit } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
 type Ran = { argv: readonly string[]; stdin: unknown; timeoutMs: number | undefined }
@@ -10,6 +10,11 @@ type World = {
   env: Record<string, string>
   exists: (path: string) => boolean
   dirs: Record<string, string[]>
+  files: Record<string, string>
+  version: { version: string; base?: string }
+  fetch: () => { status: number; ok: boolean; text: string }
+  replies: Array<{ isAnswered: true; text: string } | { isAnswered: false; reason: 'api-error' | 'empty-reply' | 'aborted' }>
+  scripts: Record<string, { exitCode: number; stdout: string; stderr?: string }>
 }
 
 const entry = (name: string): Entry => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -27,12 +32,17 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     env: { HOME: '/home/u' },
     exists: () => true,
     dirs: {},
+    files: {},
+    version: { version: '2.1.290', base: '2.1.290' },
+    fetch: () => ({ status: 200, ok: true, text: '## 2.1.290\n- Compaction keeps fewer tool results' }),
+    replies: [],
+    scripts: {},
     ...w,
   }
   const ran: Ran[] = []
   const endSawRan: number[] = []
   const listed: string[] = []
-  mock.clock(on, { now: 61_000 })
+  const clock = mock.clock(on, { now: 61_000 })
   on('fs.stat', () => ({ value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: true, realPath: '/repo/mod' } }))
   on('fs.exists', (_$, e) => ({ value: state.exists(e.path) }))
   on('fs.list', (_$, e) => {
@@ -40,6 +50,36 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     return { value: (state.dirs[e.path] ?? []).map(entry) }
   })
   on('env.get', (_$, e) => ({ value: state.env[e.name] }))
+  const fetched: string[] = []
+  const asked: Array<{ model: string; system?: string; prompt: string; maxTokens?: number; effort?: string; timeoutMs?: number }> = []
+  const registered: string[] = []
+  const logged: string[] = []
+  on('fs.read', (_$, e) => {
+    const text = state.files[e.path]
+    if (text === undefined) throw new Error(`ENOENT ${e.path}`)
+    return { value: text }
+  })
+  on('http.fetch', (_$, e) => {
+    fetched.push(e.url)
+    return { value: { headers: {}, ...state.fetch() } }
+  })
+  const usage = { input_tokens: 0, output_tokens: 0, cache_read_input_tokens: 0, cache_creation_input_tokens: 0 }
+  on('model.complete', (_$, e) => {
+    asked.push(e)
+    const reply = state.replies.shift() ?? { isAnswered: false as const, reason: 'empty-reply' as const }
+    // The stub leaves out the status and error an api-error carries.
+    return { value: { ...reply, usage } as ModelCompleteResult }
+  })
+  on('session.version', () => ({ value: state.version }))
+  on('session.start', (_$, e) => ({ cwd: e.cwd }))
+  on('command.register', (_$, e) => {
+    registered.push(e.name)
+    return { value: { command: e.name } }
+  })
+  on('ui.log', (_$, e) => {
+    logged.push(e.text)
+    return { value: undefined }
+  })
   on('session.id', () => ({ value: state.id }))
   on('session.root', () => ({ value: '/work/my.demo' }))
   on('session.model', () => ({ value: state.model }))
@@ -53,14 +93,19 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('process.run', (_$, e) => {
     if (runThrows) throw new Error('spawn failed')
-    ran.push({
-      argv: e.argv,
-      stdin: e.init?.stdin === undefined ? undefined : JSON.parse(e.init.stdin),
-      timeoutMs: e.init?.timeoutMs,
-    })
-    return { value: { exitCode, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    const stdin = e.init?.stdin
+    let parsed: unknown = stdin
+    try {
+      parsed = stdin === undefined ? undefined : JSON.parse(stdin)
+    } catch {
+      // the changelog is plain text
+    }
+    ran.push({ argv: e.argv, stdin: parsed, timeoutMs: e.init?.timeoutMs })
+    const script = e.argv[0]?.endsWith('/judge-updates') ? state.scripts[e.argv[1] ?? ''] : undefined
+    const out = script ?? { exitCode, stdout: '', stderr: '' }
+    return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  return { ran, state, listed, endSawRan }
+  return { ran, state, listed, endSawRan, clock, fetched, asked, registered, logged }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -124,12 +169,7 @@ test('a transcript outside the built path is found by searching the projects fol
 })
 
 test('a transcript that exists nowhere records nothing and logs once', async ($, on) => {
-  const { ran } = world(on, { exists: () => false, dirs: { '/home/u/.claude/projects': ['-work-my-demo'] } })
-  const logged: string[] = []
-  on('ui.log', (_$, e) => {
-    logged.push(e.text)
-    return { value: undefined }
-  })
+  const { ran, logged } = world(on, { exists: () => false, dirs: { '/home/u/.claude/projects': ['-work-my-demo'] } })
   await $.session.measure(measure([FIVE]))
   await $.session.measure(measure([FIVE]))
   expect(ran).toEqual([])
@@ -235,14 +275,112 @@ test('session.end starts the script before the event passes on', async ($, on) =
 })
 
 test('a failing run logs once, and a second failure logs nothing', async ($, on) => {
-  const { ran } = world(on, {}, 1)
-  const logged: string[] = []
-  on('ui.log', (_$, e) => {
-    logged.push(e.text)
-    return { value: undefined }
-  })
+  const { ran, logged } = world(on, {}, 1)
   await $.session.measure(measure([FIVE]))
   await $.session.measure(measure([FIVE]))
   expect(ran.length).toBe(2)
   expect(logged).toEqual(['cc-dashboard: record-statusline failed (exit 1)'])
+})
+
+const UPDATES = '/home/u/.claude/cc-dashboard/updates.json'
+const start = { cwd: '/work/my.demo', surface: null, isInteractive: true }
+const backfill = { command: 'backfill-updates', args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }
+const BATCH = { versions: ['2.1.290'], system: 'SYSTEM', prompt: '## 2.1.290\n- Compaction keeps fewer tool results' }
+const VERDICT = '[{"version":"2.1.290","relevant":true,"summary":"Compaction keeps fewer tool results"}]'
+const judging = {
+  prompt: { exitCode: 0, stdout: JSON.stringify({ batches: [BATCH] }) },
+  record: { exitCode: 0, stdout: '{"recorded":1,"relevant":1,"unjudged":0}' },
+}
+
+test('session.start registers /backfill-updates', async ($, on) => {
+  const { registered } = world(on, { files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
+  await $.session.start(start)
+  expect(registered).toEqual(['backfill-updates'])
+})
+
+test('session.start returns before the check fetches', async ($, on) => {
+  const { fetched, clock } = world(on, { scripts: judging, replies: [{ isAnswered: true, text: VERDICT }] })
+  await $.session.start(start)
+  expect(fetched).toEqual([])
+  await clock.settle()
+  expect(fetched.length).toBe(1)
+})
+
+test('a version that has a verdict makes no request', async ($, on) => {
+  const { fetched, asked, clock } = world(on, { files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
+  await $.session.start(start)
+  await clock.settle()
+  expect(fetched).toEqual([])
+  expect(asked).toEqual([])
+})
+
+test('a version with no verdict is fetched, judged by Haiku and recorded', async ($, on) => {
+  const { ran, fetched, asked, clock } = world(on, { scripts: judging, replies: [{ isAnswered: true, text: VERDICT }] })
+  await $.session.start(start)
+  await clock.settle()
+  expect(fetched).toEqual(['https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md'])
+  expect(ran.map((r) => r.argv)).toEqual([
+    ['/repo/bin/judge-updates', 'prompt', '--current', '2.1.290'],
+    ['/repo/bin/judge-updates', 'record'],
+  ])
+  expect(ran[0]?.stdin).toBe('## 2.1.290\n- Compaction keeps fewer tool results')
+  expect(asked).toEqual([{ model: 'haiku', system: 'SYSTEM', prompt: BATCH.prompt, maxTokens: 2048, effort: 'low', timeoutMs: 60000 }])
+  expect(ran[1]?.stdin).toEqual({ versions: ['2.1.290'], reply: VERDICT })
+})
+
+test('a failed fetch logs and asks Haiku nothing', async ($, on) => {
+  const { asked, logged, clock } = world(on, { fetch: () => ({ status: 503, ok: false, text: '' }) })
+  await $.session.start(start)
+  await clock.settle()
+  expect(asked).toEqual([])
+  expect(logged).toEqual(['cc-dashboard: changelog fetch returned 503'])
+})
+
+test('a Haiku call with no answer records nothing and logs the reason', async ($, on) => {
+  const { ran, logged, clock } = world(on, { scripts: judging, replies: [{ isAnswered: false, reason: 'api-error' }] })
+  await $.session.start(start)
+  await clock.settle()
+  expect(ran.map((r) => r.argv[1])).toEqual(['prompt'])
+  expect(logged).toEqual(['cc-dashboard: Haiku gave no verdict for 2.1.290 (api-error)'])
+})
+
+test('a dev build is not checked', async ($, on) => {
+  const { fetched, clock } = world(on, { version: { version: '2.1.290-dev.20261001.t1.sha1', base: '2.1.290-dev' } })
+  await $.session.start(start)
+  await clock.settle()
+  expect(fetched).toEqual([])
+})
+
+test('a malformed updates.json logs and fetches nothing', async ($, on) => {
+  const { fetched, logged, clock } = world(on, { files: { [UPDATES]: '{"2.1.290": tru' } })
+  await $.session.start(start)
+  await clock.settle()
+  expect(fetched).toEqual([])
+  expect(logged).toEqual([`cc-dashboard: ${UPDATES} is not valid JSON; fix or delete it`])
+})
+
+test('/backfill-updates judges every batch and reports the counts', async ($, on) => {
+  const second = { versions: ['2.1.291'], system: 'SYSTEM', prompt: '## 2.1.291\n- x' }
+  const { ran, asked } = world(on, {
+    scripts: { ...judging, prompt: { exitCode: 0, stdout: JSON.stringify({ batches: [BATCH, second] }) } },
+    replies: [{ isAnswered: true, text: VERDICT }, { isAnswered: true, text: '[]' }],
+  })
+  const result = await $.command.run(backfill)
+  expect(ran[0]?.argv).toEqual(['/repo/bin/judge-updates', 'prompt'])
+  expect(asked.length).toBe(2)
+  expect(result.text).toBe('Judged 2 of 2 versions, 2 relevant.')
+})
+
+test('/backfill-updates with nothing pending says so', async ($, on) => {
+  const { asked } = world(on, { scripts: { prompt: { exitCode: 0, stdout: '{"batches":[]}' } } })
+  const result = await $.command.run(backfill)
+  expect(asked).toEqual([])
+  expect(result.text).toBe('Every Claude Code version in the transcripts already has a verdict.')
+})
+
+test('/backfill-updates names a failing script', async ($, on) => {
+  const { asked } = world(on, { scripts: { prompt: { exitCode: 1, stdout: '', stderr: 'judge-updates: boom\n' } } })
+  const result = await $.command.run(backfill)
+  expect(asked).toEqual([])
+  expect(result.text).toBe('Judged 0 of 0 versions, 0 relevant. Failed: judge-updates prompt failed (exit 1): judge-updates: boom')
 })

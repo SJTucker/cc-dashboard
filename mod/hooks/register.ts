@@ -1,8 +1,9 @@
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit } from 'claude-code'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
-// in bin/ that a statusline script used to run. The scripts stay the only writers,
-// so the file formats, the atomic writes and the freshness checks are theirs.
+// in bin/ that a statusline script used to run, and judges new Claude Code releases
+// for the setup changes markers through bin/judge-updates. The scripts stay the only
+// writers, so the file formats, the atomic writes and the freshness checks are theirs.
 //
 // Only engine events are hooked. Claude Code's cc-plugin-sec-default skips every
 // classic.* hook of an installed plugin, so classic SessionStart and SessionEnd
@@ -11,6 +12,12 @@ import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit }
 const MEASURE_TIMEOUT_MS = 5000
 // session.end has 1.5 s for every hook and core together.
 const END_TIMEOUT_MS = 1200
+const CHANGELOG_URL = 'https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md'
+const RELEASE = /^\d+\.\d+\.\d+$/
+// prompt reads every transcript to list versions, so it gets longer than record.
+const PROMPT_TIMEOUT_MS = 120_000
+const RECORD_TIMEOUT_MS = 10_000
+const MODEL_TIMEOUT_MS = 60_000
 
 type Frozen<T> = { readonly [K in keyof T]: T[K] }
 type Window = { used_percentage: number; resets_at?: number }
@@ -53,6 +60,15 @@ async function run($: EngineInterface, name: string, input: object, timeoutMs: n
 // cached path is not checked again.
 const transcripts = new Map<string, string>()
 
+// <config dir> is CLAUDE_CONFIG_DIR with a leading ~ expanded, else ~/.claude.
+// Null when neither variable is set.
+async function configDir($: EngineInterface) {
+  const configEnv = await $.env.get('CLAUDE_CONFIG_DIR')
+  const home = await $.env.get('HOME')
+  if (!configEnv && !home) return null
+  return configEnv ? configEnv.replace(/^~(?=\/|$)/, home ?? '~') : `${home}/.claude`
+}
+
 // No $ call returns the transcript's path. Claude Code keeps it at
 // <config dir>/projects/<folder>/<session id>.jsonl, where <folder> is the directory
 // the session started in, every character outside a-z, A-Z and 0-9 replaced by '-'.
@@ -64,11 +80,9 @@ const transcripts = new Map<string, string>()
 async function transcriptPath($: EngineInterface, root: string, id: string) {
   const cached = transcripts.get(id)
   if (cached) return cached
-  const configEnv = await $.env.get('CLAUDE_CONFIG_DIR')
-  const home = await $.env.get('HOME')
-  if (!configEnv && !home) return null
-  const configDir = configEnv ? configEnv.replace(/^~(?=\/|$)/, home ?? '~') : `${home}/.claude`
-  const projects = `${configDir}/projects`
+  const dir = await configDir($)
+  if (!dir) return null
+  const projects = `${dir}/projects`
   const folder = root.replace(/[^a-zA-Z0-9]/g, '-')
   const built = `${projects}/${folder}/${id}.jsonl`
   let found: string | null = (await $.fs.exists(built)) ? built : null
@@ -146,7 +160,125 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
   return input
 }
 
+type Batch = { versions: string[]; system: string; prompt: string }
+type Judged = { asked: number; recorded: number; relevant: number; failed: string[] }
+
+const errorName = (err: unknown) => (err instanceof Error ? err.name : 'error')
+
+// Every update failure is logged. They happen at most once per Claude Code release,
+// so the once-only rule in fail() would hide the one that matters.
+function note($: EngineInterface, text: string) {
+  $.ui.log(`cc-dashboard: ${text}`)
+}
+
+async function judgeScript($: EngineInterface, args: string[], stdin: string, timeoutMs: number): Promise<unknown> {
+  const { exitCode, stdout, stderr } = await $.process.run([await scriptPath($, 'judge-updates'), ...args], { stdin, timeoutMs })
+  if (exitCode !== 0) throw new Error(`judge-updates ${args[0]} failed (exit ${exitCode}): ${stderr.trim().split('\n')[0] ?? ''}`)
+  return JSON.parse(stdout)
+}
+
+const versionSpan = (versions: string[]) =>
+  versions.length > 1 ? `${versions[0]}–${versions[versions.length - 1]}` : (versions[0] ?? '')
+
+// Fetches the changelog, has bin/judge-updates list what needs a verdict, asks
+// Haiku once per batch, and has bin/judge-updates record each answer. With
+// `current`, the running version is judged even before a transcript has it.
+async function judgeUpdates($: EngineInterface, current?: string): Promise<Judged> {
+  const judged: Judged = { asked: 0, recorded: 0, relevant: 0, failed: [] }
+  let changelog: string
+  try {
+    const res = await $.http.fetch(CHANGELOG_URL)
+    if (!res.ok) {
+      judged.failed.push(`changelog fetch returned ${res.status}`)
+      return judged
+    }
+    changelog = res.text
+  } catch (err) {
+    judged.failed.push(`changelog fetch failed (${errorName(err)})`)
+    return judged
+  }
+  let batches: Batch[]
+  try {
+    const args = current ? ['prompt', '--current', current] : ['prompt']
+    batches = ((await judgeScript($, args, changelog, PROMPT_TIMEOUT_MS)) as { batches: Batch[] }).batches
+  } catch (err) {
+    judged.failed.push(err instanceof Error ? err.message : 'judge-updates prompt failed')
+    return judged
+  }
+  for (const batch of batches) {
+    judged.asked += batch.versions.length
+    const reply = await $.model.complete({
+      model: 'haiku',
+      system: batch.system,
+      prompt: batch.prompt,
+      maxTokens: 2048,
+      effort: 'low',
+      timeoutMs: MODEL_TIMEOUT_MS,
+    })
+    if (!reply.isAnswered) {
+      judged.failed.push(`Haiku gave no verdict for ${versionSpan(batch.versions)} (${reply.reason})`)
+      continue
+    }
+    try {
+      const input = JSON.stringify({ versions: batch.versions, reply: reply.text })
+      const out = (await judgeScript($, ['record'], input, RECORD_TIMEOUT_MS)) as { recorded: number; relevant: number }
+      judged.recorded += out.recorded
+      judged.relevant += out.relevant
+    } catch (err) {
+      judged.failed.push(err instanceof Error ? err.message : 'judge-updates record failed')
+    }
+  }
+  return judged
+}
+
+// Runs once per session start, after the session is up. Only the running version
+// is looked up here; /backfill-updates covers the versions before it.
+async function checkVersion($: EngineInterface) {
+  const { base } = await $.session.version()
+  if (!base || !RELEASE.test(base)) return // a dev build has no changelog entry
+  const dir = await configDir($)
+  if (!dir) return
+  const file = `${dir}/cc-dashboard/updates.json`
+  // A read that fails means no verdicts yet: the file is written on the first one.
+  const text = await $.fs.read(file).then(String, () => undefined)
+  let verdicts: Record<string, unknown> = {}
+  if (text !== undefined) {
+    try {
+      verdicts = JSON.parse(text) as Record<string, unknown>
+    } catch {
+      note($, `${file} is not valid JSON; fix or delete it`)
+      return
+    }
+  }
+  if (Object.hasOwn(verdicts, base)) return
+  const judged = await judgeUpdates($, base)
+  for (const failure of judged.failed) note($, failure)
+}
+
+function backfillText(judged: Judged) {
+  if (!judged.asked && !judged.failed.length) return 'Every Claude Code version in the transcripts already has a verdict.'
+  const counts = `Judged ${judged.recorded} of ${judged.asked} versions, ${judged.relevant} relevant.`
+  return judged.failed.length ? `${counts} Failed: ${judged.failed.join('; ')}` : counts
+}
+
 export const register: Register = (on) => {
+  // Registers /backfill-updates and checks whether the running Claude Code version
+  // has a verdict. The check runs from a timer, after session start returns, because
+  // session.start is awaited before the first prompt.
+  on('session.start', async ($, e, next) => {
+    await $.command.register({
+      name: 'backfill-updates',
+      description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
+    }).catch(() => undefined)
+    const result = await next(e)
+    $.clock.after(0, () => {
+      checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
+    })
+    return result
+  })
+
+  on('command.run', { command: 'backfill-updates' }, async ($) => ({ text: backfillText(await judgeUpdates($)) }))
+
   // Fires after each main-thread turn and when a rate-limit window moves a whole
   // point, so Plan usage stays current through a long turn.
   on('session.measure', async ($, e, next) => {
