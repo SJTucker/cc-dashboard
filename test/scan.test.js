@@ -751,13 +751,14 @@ test('an errored tool_result is counted even when it lands in another file', asy
 
 // A response line with the fields the efficiency records read. content holds the
 // block for this line: a response is one line per block, all sharing id/requestId.
-function effCallLine(iso, { id, sessionId = 's1', sidechain = false, model = 'claude-opus-5', input = 10, cacheRead = 0, cacheCreate = 0, output = 5, content = [] }) {
+function effCallLine(iso, { id, sessionId = 's1', sidechain = false, model = 'claude-opus-5', input = 10, cacheRead = 0, cacheCreate = 0, output = 5, content = [], version } = {}) {
   return JSON.stringify({
     type: 'assistant',
     timestamp: iso,
     sessionId,
     isSidechain: sidechain,
     requestId: 'req-' + id,
+    version,
     message: {
       id: 'msg-' + id,
       model,
@@ -793,6 +794,21 @@ test('efficiency.calls holds one record per response, with tool names from every
   assert.strictEqual(a.sessionId, 's1');
   assert.strictEqual(a.model, 'claude-opus-5');
   assert.strictEqual(efficiency.calls.find((c) => c.t !== t.getTime()).main, false);
+});
+
+test('efficiency.calls carry the Claude Code version from the line, or null without one', async () => {
+  const base = makeFixture();
+  const t = new Date('2026-09-10T15:00:00Z');
+  writeSession(base, 'one', [
+    effCallLine(t.toISOString(), { id: 'a', version: '2.1.286' }),
+    effCallLine(new Date(t.getTime() + 1000).toISOString(), { id: 'b' }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: null });
+
+  assert.strictEqual(efficiency.calls.find((c) => c.t === t.getTime()).version, '2.1.286');
+  assert.strictEqual(efficiency.calls.find((c) => c.t !== t.getTime()).version, null);
 });
 
 test('efficiency.prompts keeps typed and queued prompts only, once per uuid', async () => {
