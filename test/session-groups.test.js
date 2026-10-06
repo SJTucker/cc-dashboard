@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { groupSessions, itemCost, costShare, runningSessions } = require('../public/session-groups');
+const { groupSessions, itemCost, costShare, runningSessions, activityLabel, doingNow } = require('../public/session-groups');
 
 function session(project, lastActiveAt, overrides = {}) {
   return {
@@ -128,4 +128,38 @@ test('sessions with a null project group together', () => {
   const [g] = groupSessions([session(null, 20), session(null, 10)]);
   assert.strictEqual(g.type, 'group');
   assert.strictEqual(g.project, null);
+});
+
+test('activityLabel gives each state its own glyph and words, so no state depends on colour', () => {
+  assert.deepStrictEqual(activityLabel({ state: 'working' }), { glyph: '▶', label: 'working', attention: false, text: '▶ working' });
+  assert.deepStrictEqual(activityLabel({ state: 'waiting' }), { glyph: '⏸', label: 'waiting on you', attention: true, text: '⏸ waiting on you' });
+  assert.deepStrictEqual(activityLabel({ state: 'approval' }), { glyph: '⚠', label: 'needs approval', attention: true, text: '⚠ needs approval' });
+});
+
+test('activityLabel is null without activity or with an unknown state', () => {
+  assert.strictEqual(activityLabel(null), null);
+  assert.strictEqual(activityLabel(undefined), null);
+  assert.strictEqual(activityLabel({ state: 'constructor' }), null);
+});
+
+test('doingNow shows the tool with its detail, and the subagent count when there is one', () => {
+  const tool = { name: 'Bash', detail: 'npm test', startedAt: 1 };
+  assert.strictEqual(doingNow({ state: 'working', tool, subagents: 0 }), 'Bash: npm test');
+  assert.strictEqual(doingNow({ state: 'working', tool: { ...tool, detail: '' }, subagents: 0 }), 'Bash');
+  assert.strictEqual(doingNow({ state: 'working', tool, subagents: 2 }), 'Bash: npm test · 2 subagents');
+  assert.strictEqual(doingNow({ state: 'working', tool: null, subagents: 1 }), '1 subagent');
+});
+
+test('doingNow is null with no activity, or nothing running', () => {
+  assert.strictEqual(doingNow(null), null);
+  assert.strictEqual(doingNow({ state: 'waiting', tool: null, subagents: 0 }), null);
+});
+
+test('runningSessions keeps a session that is waiting on you after it stops being live', () => {
+  const base = { spans: [[1, 2]], lastActiveAt: 2, live: false };
+  const waiting = { ...base, project: 'waiting', activity: { state: 'waiting' } };
+  const approval = { ...base, project: 'approval', spans: [[3, 4]], activity: { state: 'approval' } };
+  const stale = { ...base, project: 'stale', activity: null };
+  const working = { ...base, project: 'working', activity: { state: 'working' } };
+  assert.deepStrictEqual(runningSessions([stale, approval, working, waiting]).map((s) => s.project), ['waiting', 'approval']);
 });

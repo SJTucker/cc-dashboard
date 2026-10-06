@@ -1384,17 +1384,23 @@ function renderSessions(live) {
   sessionToggles = toggles;
   if (focused) toggles.get(focused[0])?.focus();
 
-  // Running now: live sessions in a fixed order. State and Doing now come from the
-  // mod's activity files (phase 3) and show "—" until then.
+  // Running now: live sessions and sessions waiting on you, in a fixed order. State
+  // and Doing now come from the mod's activity files (lib/activity.js) and show "—"
+  // without the mod.
   const running = runningSessions(live.sessions);
   document.getElementById('runningSessions').hidden = !running.length;
-  document.getElementById('runningTable').replaceChildren(...running.map((s) => el('tr', {}, [
-    sessionCell(s),
-    cell('—'),
-    cell('—'),
-    costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, null),
-    cell(formatAgo(s.lastActiveAt, now) + sessionState(s), 'is-live'),
-  ])));
+  document.getElementById('runningTable').replaceChildren(...running.map((s) => {
+    const label = activityLabel(s.activity);
+    return el('tr', {}, [
+      sessionCell(s),
+      // Waiting and approval use the brighter text colour as well as their glyph.
+      el('td', label?.attention ? { class: 'is-attention', text: label.text } : { text: label ? label.text : '—' }),
+      cell(doingNow(s.activity) ?? '—'),
+      costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, null),
+      // A waiting or approval session can be past its live window, so only live rows get is-live.
+      cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
+    ]);
+  }));
 
   const liveCount = live.sessions.filter((s) => s.live).length;
   const endedCount = live.sessions.filter((s) => s.ended).length;

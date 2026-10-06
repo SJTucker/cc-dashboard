@@ -53,13 +53,15 @@ function costShare(value, max) {
   return Math.min(1, Math.max(0, value / max));
 }
 
-// The rows of the Running now table: live sessions, earliest first span start first,
+// The rows of the Running now table: live sessions and sessions waiting on the user, earliest first span start first,
 // so the order does not change while they run. A session with no span today goes
 // last. Equal starts fall back to the newest lastActiveAt.
 function runningSessions(sessions) {
   const start = (s) => (s.spans?.length ? s.spans[0][0] : Infinity);
   return sessions
-    .filter((s) => s.live)
+    // A session waiting on the user stays listed after its 10 minute live window,
+    // because that is when it most needs the user. Ended sessions have no activity.
+    .filter((s) => s.live || s.activity?.state === 'waiting' || s.activity?.state === 'approval')
     .sort((a, b) => {
       const sa = start(a);
       const sb = start(b);
@@ -68,4 +70,28 @@ function runningSessions(sessions) {
     });
 }
 
-if (typeof module === 'object') module.exports = { groupSessions, itemCost, costShare, runningSessions };
+// State column of the Running now table. Each state has a glyph and words, so the
+// states do not depend on colour. attention marks the two states that need the user.
+const ACTIVITY_STATES = {
+  working: { glyph: '▶', label: 'working', attention: false },
+  waiting: { glyph: '⏸', label: 'waiting on you', attention: true },
+  approval: { glyph: '⚠', label: 'needs approval', attention: true },
+};
+
+function activityLabel(activity) {
+  if (!activity || !Object.hasOwn(ACTIVITY_STATES, activity.state)) return null;
+  const s = ACTIVITY_STATES[activity.state];
+  return { ...s, text: `${s.glyph} ${s.label}` };
+}
+
+// Doing now column: the running tool with its detail, then the subagent count.
+// Null when nothing is running.
+function doingNow(activity) {
+  if (!activity) return null;
+  const parts = [];
+  if (activity.tool) parts.push(activity.tool.detail ? `${activity.tool.name}: ${activity.tool.detail}` : activity.tool.name);
+  if (activity.subagents > 0) parts.push(`${activity.subagents} ${activity.subagents === 1 ? 'subagent' : 'subagents'}`);
+  return parts.length ? parts.join(' · ') : null;
+}
+
+if (typeof module === 'object') module.exports = { groupSessions, itemCost, costShare, runningSessions, activityLabel, doingNow };
