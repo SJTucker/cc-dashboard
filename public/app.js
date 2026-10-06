@@ -1393,11 +1393,11 @@ function renderSessions(live) {
     const label = activityLabel(s.activity);
     return el('tr', {}, [
       sessionCell(s),
-      // Waiting and approval use the brighter text colour as well as their glyph.
+      // Waiting uses the brighter text colour as well as its glyph.
       el('td', label?.attention ? { class: 'is-attention', text: label.text } : { text: label ? label.text : '—' }),
       cell(doingNow(s.activity) ?? '—'),
       costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, null),
-      // A waiting or approval session can be past its live window, so only live rows get is-live.
+      // A waiting session can be past its live window, so only live rows get is-live.
       cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
     ]);
   }));

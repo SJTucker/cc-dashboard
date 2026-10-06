@@ -61,7 +61,7 @@ function runningSessions(sessions) {
   return sessions
     // A session waiting on the user stays listed after its 10 minute live window,
     // because that is when it most needs the user. Ended sessions have no activity.
-    .filter((s) => s.live || s.activity?.state === 'waiting' || s.activity?.state === 'approval')
+    .filter((s) => s.live || s.activity?.state === 'waiting')
     .sort((a, b) => {
       const sa = start(a);
       const sb = start(b);
@@ -71,11 +71,10 @@ function runningSessions(sessions) {
 }
 
 // State column of the Running now table. Each state has a glyph and words, so the
-// states do not depend on colour. attention marks the two states that need the user.
+// states do not depend on colour. attention marks the state that needs the user.
 const ACTIVITY_STATES = {
   working: { glyph: '▶', label: 'working', attention: false },
   waiting: { glyph: '⏸', label: 'waiting on you', attention: true },
-  approval: { glyph: '⚠', label: 'needs approval', attention: true },
 };
 
 function activityLabel(activity) {

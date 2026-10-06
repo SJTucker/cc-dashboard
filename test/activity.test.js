@@ -60,6 +60,7 @@ test('readActivity skips unreadable, wrong-shaped and unknown-state files', () =
   write(dir, '{"sessionId":"half","state":"work', 'half.json');
   write(dir, { sessionId: 'x' }, 'wrong-shape.json');
   write(dir, activity({ sessionId: 'odd', state: 'sleeping' }));
+  write(dir, activity({ sessionId: 'approval', state: 'approval' }));
   write(dir, activity({ sessionId: 'no-time', updatedAt: 'now' }));
   write(dir, activity({ sessionId: 'bad id!' }), 'bad-id.json');
   write(dir, activity({ sessionId: 'tmp' }), 'tmp.json.123');
@@ -96,11 +97,9 @@ test('readActivity skips a file last updated over 24h ago and deletes it when it
   assert.ok(fs.existsSync(path.join(dir, 'other.json.bak')), 'a name this module does not write stays');
 });
 
-test('resolveActivity drops working and approval that were last updated over 10 minutes ago', () => {
-  for (const state of ['working', 'approval']) {
-    assert.strictEqual(resolveActivity(activity({ state, updatedAt: NOW - STALE_AFTER_MS - 1 }), NOW), null);
-    assert.notStrictEqual(resolveActivity(activity({ state, updatedAt: NOW - STALE_AFTER_MS }), NOW), null);
-  }
+test('resolveActivity drops working that was last updated over 10 minutes ago', () => {
+  assert.strictEqual(resolveActivity(activity({ updatedAt: NOW - STALE_AFTER_MS - 1 }), NOW), null);
+  assert.notStrictEqual(resolveActivity(activity({ updatedAt: NOW - STALE_AFTER_MS }), NOW), null);
 });
 
 test('resolveActivity keeps waiting however old, and returns only the display fields', () => {

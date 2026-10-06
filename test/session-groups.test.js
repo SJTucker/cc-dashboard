@@ -133,13 +133,13 @@ test('sessions with a null project group together', () => {
 test('activityLabel gives each state its own glyph and words, so no state depends on colour', () => {
   assert.deepStrictEqual(activityLabel({ state: 'working' }), { glyph: '▶', label: 'working', attention: false, text: '▶ working' });
   assert.deepStrictEqual(activityLabel({ state: 'waiting' }), { glyph: '⏸', label: 'waiting on you', attention: true, text: '⏸ waiting on you' });
-  assert.deepStrictEqual(activityLabel({ state: 'approval' }), { glyph: '⚠', label: 'needs approval', attention: true, text: '⚠ needs approval' });
 });
 
 test('activityLabel is null without activity or with an unknown state', () => {
   assert.strictEqual(activityLabel(null), null);
   assert.strictEqual(activityLabel(undefined), null);
   assert.strictEqual(activityLabel({ state: 'constructor' }), null);
+  assert.strictEqual(activityLabel({ state: 'approval' }), null);
 });
 
 test('doingNow shows the tool with its detail, and the subagent count when there is one', () => {
@@ -161,5 +161,5 @@ test('runningSessions keeps a session that is waiting on you after it stops bein
   const approval = { ...base, project: 'approval', spans: [[3, 4]], activity: { state: 'approval' } };
   const stale = { ...base, project: 'stale', activity: null };
   const working = { ...base, project: 'working', activity: { state: 'working' } };
-  assert.deepStrictEqual(runningSessions([stale, approval, working, waiting]).map((s) => s.project), ['waiting', 'approval']);
+  assert.deepStrictEqual(runningSessions([stale, approval, working, waiting]).map((s) => s.project), ['waiting']);
 });

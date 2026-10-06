@@ -365,6 +365,10 @@ function backfillText(judged: Judged) {
 // session lives in memory and is written to <config dir>/cc-dashboard/activity/
 // <session id>.json when it changes, at most every ACTIVITY_WRITE_MS. Only the main
 // loop counts: events with an agentId come from a subagent.
+// No state marks a permission prompt. tool.check answers ask before the permission
+// mode settles the call, and the mod API exposes no way to read the session's mode.
+// In auto mode the classifier settles an ask with no event, so ask alone does not
+// mean a dialog opened.
 const ACTIVITY_WRITE_MS = 250
 const DETAIL_MAX = 60
 // The same characters lib/activity.js accepts, because the id becomes a file name.
@@ -373,7 +377,7 @@ const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/
 type ToolRun = { name: string; detail: string; startedAt: number }
 type Activity = {
   sessionId: string
-  state: 'working' | 'waiting' | 'approval'
+  state: 'working' | 'waiting'
   since: number
   tool: ToolRun | null
   subagents: number
@@ -384,9 +388,6 @@ const activities = new Map<string, Activity>()
 // Main-loop tools that have started and not returned, by session id and tool_use_id,
 // oldest first. Tools can run in parallel, and the newest one is the one shown.
 const runningTools = new Map<string, Map<string, ToolRun>>()
-// Main-loop tools whose tool.check answered ask, by session id and tool_use_id. The
-// state is approval while any of them runs.
-const asking = new Map<string, Set<string>>()
 // Subagents whose turn.complete has fired, by session id. The count leaves them out
 // until $.agent.list() stops reporting them as pending, running or waiting, because
 // the engine may not have updated the status yet when the turn.complete hook runs.
@@ -412,10 +413,9 @@ function toolsOf(id: string) {
 const newestTool = (tools: Map<string, ToolRun>) => [...tools.values()].pop() ?? null
 
 // A new activity starts as working. Only a main-loop event creates one: turn.start,
-// a main-loop tool.call, a tool.check that matches a running tool, or turn.complete,
-// which sets waiting at once. After a reload mid-turn, the first of these is a tool
-// call or a check, and the turn is running. Subagent events and agent.spawn create
-// none, because the main loop may be waiting.
+// a main-loop tool.call, or turn.complete, which sets waiting at once. After a reload
+// mid-turn, the first of these is a tool call, and the turn is running. Subagent
+// events and agent.spawn create none, because the main loop may be waiting.
 function setState(a: Activity, state: Activity['state'], now: number) {
   if (a.state === state) return
   a.state = state
@@ -523,7 +523,6 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
 function forgetSession(id: string) {
   activities.delete(id)
   runningTools.delete(id)
-  asking.delete(id)
   endedAgents.delete(id)
   transcripts.delete(id)
   lastWriteAt.delete(id)
@@ -531,14 +530,6 @@ function forgetSession(id: string) {
   writeTimers.delete(id)
   writing.delete(id)
   lastWritten.delete(id)
-}
-
-// The running tool a main-loop tool.check is about: the one with its tool_use_id, or,
-// when the check has none, the newest running tool of that name. Undefined when no
-// running tool matches, as for a plugin's $.tool.check query about another tool.
-function askedTool(tools: Map<string, ToolRun>, tool: string, toolUseId: string | undefined) {
-  if (toolUseId !== undefined) return tools.has(toolUseId) ? toolUseId : undefined
-  return [...tools].reverse().find(([, run]) => run.name === tool)?.[0]
 }
 
 export const register: Register = (on) => {
@@ -619,7 +610,6 @@ export const register: Register = (on) => {
     }
     await track($, (a, now) => {
       toolsOf(a.sessionId).clear()
-      asking.delete(a.sessionId)
       a.tool = null
       setState(a, 'waiting', now)
     })
@@ -647,35 +637,12 @@ export const register: Register = (on) => {
     try {
       return await next(e)
     } finally {
-      await track($, (a, now) => {
+      await track($, (a) => {
         const tools = toolsOf(a.sessionId)
         tools.delete(id)
         a.tool = newestTool(tools)
-        const asks = asking.get(a.sessionId)
-        if (asks?.delete(id) && asks.size === 0 && a.state === 'approval') setState(a, 'working', now)
       })
     }
-  })
-
-  // An ask verdict on a main-loop call means a permission prompt is about to open.
-  // tool.check fires inside tool.call's next(e), so the asking tool is already
-  // running. The state goes back to working when that tool's tool.call returns.
-  on('tool.check', async ($, e, next) => {
-    const verdict = await next(e)
-    if (verdict.decision === 'ask' && !e.agentId) {
-      await track($, (a, now) => {
-        const id = askedTool(toolsOf(a.sessionId), e.tool, e.tool_use_id)
-        if (id === undefined) return false
-        let asks = asking.get(a.sessionId)
-        if (!asks) {
-          asks = new Set()
-          asking.set(a.sessionId, asks)
-        }
-        asks.add(id)
-        setState(a, 'approval', now)
-      })
-    }
-    return verdict
   })
 
   // While subagents work, the main loop raises no event, so a spawn rewrites the

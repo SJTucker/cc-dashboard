@@ -181,15 +181,18 @@ it. It listens to the main loop's events and keeps one small state per session:
 
 - **working** from the start of a turn (`turn.start`).
 - **waiting on you** from the end of a turn (`turn.complete`), whatever the reason.
-- **needs approval** when a tool's permission check answers `ask` (`tool.check`),
-  until that tool returns. The check answers `ask` before the permission mode is
-  applied, so a tool that the mode then allows without a prompt can show "needs
-  approval" for a moment.
 - **The running tool**, set on `tool.call` and cleared when the tool returns. For
   Bash the text is the first 60 characters of the command, for Read, Edit and
   Write it is the file's name, and for any other tool the tool's name alone.
 - **Subagents**, counted from the session's pending, running and waiting agents
   (`agent.spawn` and `$.agent.list()`).
+
+No state marks a permission prompt. The mod's one signal would be a `tool.check`
+that answers `ask`, but that answer comes before the permission mode settles the
+call, and a mod cannot read the mode. In auto mode the classifier settles the ask
+without a dialog, so the session would show a prompt that never opened. A session
+held at a permission prompt shows working, and after 10 minutes without updates, no
+state.
 
 The mod writes the state to `~/.claude/cc-dashboard/activity/<session id>.json`
 (or under `$CLAUDE_CONFIG_DIR`) with `$.fs.write`, at most every 250 ms per
@@ -197,9 +200,8 @@ session. It writes the files itself, one write chain per session, so a session's
 states land in order. `readActivity` in `lib/activity.js` reads the files and
 deletes the ones older than a day. `session.end` stops the mod's writes for that
 session, and the dashboard shows no state for a session it marks ended.
-`resolveActivity` drops a working or needs approval state whose file has not
-changed for 10 minutes, because a crash sends no event. "Waiting on you" does not
-expire. The one exception is waiting while subagents are still running: that is
+`resolveActivity` drops a working state whose file has not changed for 10 minutes,
+because a crash sends no event. "Waiting on you" does not expire. The one exception is waiting while subagents are still running: that is
 shown as working, and it expires after 10 minutes like any working state. Without
 the mod, no file exists and the State and Doing now columns show "—". Subagent
 tool calls do not change the state of the main loop. A Bash command's first 60
@@ -278,11 +280,11 @@ npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 
 The Live sessions panel holds two tables. Running now lists the live sessions,
 meaning those that wrote to a transcript in the last 10 minutes, and also any
-session waiting on you or needing approval, after those 10 minutes too. Its columns are
+session waiting on you, after those 10 minutes too. Its columns are
 Session, State, Doing now, Cost today and Last active. Prompts, Length and Lines
 are only in Today. Running now is ordered by the start of each session's first span
 today (`runningSessions` in `public/session-groups.js`), so rows do not move while
-they run. State shows ▶ working, ⏸ waiting on you or ⚠ needs approval. Doing now shows the
+they run. State shows ▶ working or ⏸ waiting on you. Doing now shows the
 running tool, such as `Bash: npm test`, and the subagent count. Both show "—"
 without the mod (see "Live state"). Today lists every
 session of the day, live ones included, sorted by Cost today with the highest
