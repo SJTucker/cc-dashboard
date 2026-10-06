@@ -791,6 +791,8 @@ html, body {
 .sessions-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .sessions-table .cost { color: var(--accent-cost); }
 .sessions-table .is-live { color: var(--text-primary); }
+.sessions-table .session-child td:first-child { padding-left: 24px; }
+.sessions-table .session-group .row-toggle { padding-right: 4px; }
 .reviews-list { list-style: none; margin: 0; padding: 0; }
 .review { padding: 8px 0; border-top: 1px solid var(--border); }
 .review:first-child { border-top: none; }

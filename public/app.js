@@ -1242,6 +1242,11 @@ function sessionState(s) {
   return s.live ? ' · live' : '';
 }
 
+// Projects whose ended sessions are shown one by one. Kept for the page's lifetime
+// only, and read again by every renderSessions call so the 5 s poll keeps it.
+const expandedProjects = new Set();
+let lastLiveSessions = null;
+
 // Runs on every loadAndRender, like renderLimits, because "Last active" moves
 // with the clock even when the payload does not. Hidden off Today and when no
 // session has a snapshot, for example with no statusline hook set up.
@@ -1249,28 +1254,70 @@ function renderSessions(live) {
   const panel = document.getElementById('sessionsPanel');
   panel.hidden = !live || !live.sessions.length || currentDays !== 'today';
   if (panel.hidden) return;
+  lastLiveSessions = live;
 
   const now = Date.now();
   const cell = (text, cls) => el('td', cls ? { class: cls, text } : { text });
   const lines = (added, removed) => `+${added} −${removed}`;
-  const rows = live.sessions.map((s) => el('tr', {}, [
+  const sessionRow = (s, cls) => el('tr', cls ? { class: cls } : {}, [
     // ⬢ for a live session, ⬡ for any other. The Last active cell still says the state in words.
     el('td', {}, [
       el('span', { class: 'session-hex', 'aria-hidden': 'true', text: s.live ? '⬢' : '⬡' }),
       document.createTextNode(s.project || '—'),
     ]),
-    cell(s.model || '—'),
     cell(formatCost(s.costUsd), 'num cost'),
     cell(formatDuration(s.durationMs), 'num'),
     cell(lines(s.linesAdded, s.linesRemoved), 'num'),
     cell(formatCost(s.costTodayUsd), 'num cost'),
     cell(formatTokens(s.tokens), 'num'),
     cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
-  ]));
+  ]);
+  const groupRow = (g) => {
+    const name = g.project || '—';
+    const open = expandedProjects.has(g.project);
+    const toggle = el('button', {
+      type: 'button',
+      class: 'row-toggle',
+      'aria-expanded': String(open),
+      'aria-label': `${open ? 'Collapse' : 'Expand'} ${g.sessions.length} ended sessions of ${name}`,
+    });
+    toggle.addEventListener('click', () => {
+      if (expandedProjects.has(g.project)) expandedProjects.delete(g.project);
+      else expandedProjects.add(g.project);
+      renderSessions(lastLiveSessions);
+    });
+    const counts = [[g.cleared, 'cleared'], [g.ended, 'ended']]
+      .filter(([n]) => n)
+      .map(([n, word]) => ` · ${n} ${word}`)
+      .join('');
+    return el('tr', { class: 'session-group' }, [
+      el('td', {}, [
+        toggle,
+        el('span', { class: 'session-hex', 'aria-hidden': 'true', text: '⬡' }),
+        document.createTextNode(name),
+      ]),
+      cell(formatCost(g.costUsd), 'num cost'),
+      cell(formatDuration(g.durationMs), 'num'),
+      cell(lines(g.linesAdded, g.linesRemoved), 'num'),
+      cell(formatCost(g.costTodayUsd), 'num cost'),
+      cell(formatTokens(g.tokens), 'num'),
+      cell(formatAgo(g.lastActiveAt, now) + counts),
+    ]);
+  };
+  const rows = [];
+  for (const item of groupSessions(live.sessions)) {
+    if (item.type === 'session') {
+      rows.push(sessionRow(item.session));
+      continue;
+    }
+    rows.push(groupRow(item));
+    if (expandedProjects.has(item.project)) {
+      for (const s of item.sessions) rows.push(sessionRow(s, 'session-child'));
+    }
+  }
   const t = live.total;
   rows.push(el('tr', { class: 'sessions-total' }, [
     cell('Total'),
-    cell(''),
     cell(formatCost(t.costUsd), 'num cost'),
     // Concurrent sessions overlap, so wall durations do not add up.
     cell('—', 'num'),
