@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { labelStep, tooltipPosition, donutSlices } = require('../public/chart-geometry');
+const { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout } =require('../public/chart-geometry');
 
 test('labelStep keeps at most 12 labels on a wide chart', () => {
   assert.strictEqual(labelStep(24, 800), 2);
@@ -75,4 +75,60 @@ test('donutSlices skips zero values without moving the next slice', () => {
 test('donutSlices returns [] for empty input or a zero total', () => {
   assert.deepStrictEqual(donutSlices([], 100, 100, 96, 62), []);
   assert.deepStrictEqual(donutSlices([0, 0], 100, 100, 96, 62), []);
+});
+
+const at = (h, m = 0) => new Date(2026, 9, 6, h, m).getTime();
+
+test('hourTicks runs from the start rounded down to the end rounded up', () => {
+  assert.deepStrictEqual(hourTicks(at(9, 30), at(11, 10)), [at(9), at(10), at(11), at(12)]);
+});
+
+test('hourTicks keeps an end that falls on the hour', () => {
+  assert.deepStrictEqual(hourTicks(at(9, 30), at(11)), [at(9), at(10), at(11)]);
+});
+
+test('hourTicks returns two ticks when start and end are in one hour or equal', () => {
+  assert.deepStrictEqual(hourTicks(at(9, 5), at(9, 40)), [at(9), at(10)]);
+  assert.deepStrictEqual(hourTicks(at(9), at(9)), [at(9), at(10)]);
+});
+
+// A scale of 1 px per minute, starting at 09:00.
+const xOf = (t) => (t - at(9)) / 60_000;
+const NOW_T = at(12);
+const lane = (spans, live = false) => ({ spans, live });
+
+test('laneLayout orders lanes by first span start and drops sessions with no span', () => {
+  const late = lane([[at(11), at(11, 30)]]);
+  const early = lane([[at(9, 10), at(9, 20)]]);
+  const none = lane([]);
+  const result = laneLayout([late, none, early], xOf, NOW_T);
+  assert.deepStrictEqual(result.map((l) => [l.session, l.lane]), [[early, 0], [late, 1]]);
+});
+
+test('laneLayout gives each bar its x and width, with a minimum width', () => {
+  const s = lane([[at(10), at(10, 30)], [at(11), at(11)]]);
+  const [{ bars }] = laneLayout([s], xOf, NOW_T);
+  assert.deepStrictEqual(bars.map((b) => [b.x, b.width]), [[60, 30], [120, 3]]);
+  assert.deepStrictEqual(laneLayout([s], xOf, NOW_T, 5)[0].bars.map((b) => b.width), [30, 5]);
+});
+
+test('laneLayout runs a live session\'s last span to now and marks it open', () => {
+  const s = lane([[at(9), at(9, 10)], [at(11, 55), at(11, 58)]], true);
+  const [{ bars }] = laneLayout([s], xOf, NOW_T);
+  assert.deepStrictEqual(bars.map((b) => b.open), [false, true]);
+  assert.strictEqual(bars[1].end, NOW_T);
+  assert.strictEqual(bars[1].width, 5);
+});
+
+test('laneLayout does not stretch a live session whose last call is older than the live window', () => {
+  // live is true because the transcript was written recently, but the last call was 30 minutes ago.
+  const s = lane([[at(11, 0), at(11, 30)]], true);
+  const [{ bars }] = laneLayout([s], xOf, NOW_T);
+  assert.strictEqual(bars[0].open, false);
+  assert.strictEqual(bars[0].end, at(11, 30));
+});
+
+test('laneLayout never opens the bar of a session that is not live', () => {
+  const [{ bars }] = laneLayout([lane([[at(11, 55), at(11, 58)]], false)], xOf, NOW_T);
+  assert.strictEqual(bars[0].open, false);
 });

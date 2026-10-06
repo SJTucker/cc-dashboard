@@ -58,4 +58,45 @@ function donutSlices(values, cx, cy, rOuter, rInner) {
   });
 }
 
-if (typeof module === 'object') module.exports = { labelStep, tooltipPosition, donutSlices };
+// Hour boundaries in local time for the Session timeline's x axis, from start
+// rounded down to the hour to end rounded up to the hour. There are always at
+// least two, so the axis has a width when start and end share an hour.
+function hourTicks(start, end) {
+  const d = new Date(start);
+  d.setMinutes(0, 0, 0);
+  const ticks = [d.getTime()];
+  while (ticks[ticks.length - 1] < end) {
+    d.setHours(d.getHours() + 1);
+    ticks.push(d.getTime());
+  }
+  if (ticks.length < 2) {
+    d.setHours(d.getHours() + 1);
+    ticks.push(d.getTime());
+  }
+  return ticks;
+}
+
+// One lane per session that has a span, earliest first span at the top. Each bar
+// is { start, end, x, width, open }. The last span of a live session runs to now
+// and is open, but only when its last call is within liveWindowMs of now. A session
+// counts as live on its transcript's mtime, which can be newer than its last call,
+// and stretching the bar then would draw activity that did not happen. A bar is at
+// least minWidth px wide, so a one-call span still shows. liveWindowMs matches
+// LIVE_WINDOW_MS in lib/sessions.js.
+function laneLayout(sessions, xOf, now, minWidth = 3, liveWindowMs = 10 * 60 * 1000) {
+  return sessions
+    .filter((s) => s.spans.length)
+    .sort((a, b) => a.spans[0][0] - b.spans[0][0])
+    .map((session, lane) => {
+      const last = session.spans.length - 1;
+      const bars = session.spans.map(([start, end], i) => {
+        const open = i === last && session.live === true && now - end <= liveWindowMs;
+        const to = open ? now : end;
+        const x = xOf(start);
+        return { start, end: to, x, width: Math.max(minWidth, xOf(to) - x), open };
+      });
+      return { session, lane, bars };
+    });
+}
+
+if (typeof module === 'object') module.exports = { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout };
