@@ -152,6 +152,11 @@ to three changes. The kinds are a CLAUDE.md rule that would have prevented a
 correction, a skill or hook for repeated steps, token waste such as large tool output
 or repeated reads, and a change to how the session was run. "No suggestions" is a
 normal result. The Session reviews panel lists the reviews from the last 7 days.
+Each review shows the session's title (Claude Code's last `ai-title` line, when the
+transcript has one), the project, and the path of the transcript file. The Copy prompt
+button copies a prompt that names the transcript and lists Haiku's suggestions, so
+you can paste it into a stronger model to check them. A review made before the
+transcript path was saved shows the path found by session id, and no title.
 
 - **When it runs.** After a `/clear` or an in-process `/resume`, at once, because the
   process goes on. After an exit, at the next session start in any project. `-p` and

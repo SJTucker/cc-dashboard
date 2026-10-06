@@ -1400,6 +1400,23 @@ function reviewTime(ms, now) {
   return new Date(ms).toLocaleString([], { ...parts, hour: '2-digit', minute: '2-digit' });
 }
 
+// Each review's Copy prompt button by session id. renderReviews replaces the list, so
+// it uses this map to move keyboard focus to the new button for the same session.
+let reviewCopyButtons = new Map();
+// Session id -> "Copied" or "Copy failed" while it shows. The 5 s redraw reads it, so
+// the label stays for its 2 s.
+const reviewCopyResults = new Map();
+
+async function copyReviewPrompt(id, prompt) {
+  reviewCopyResults.set(id, await navigator.clipboard.writeText(prompt).then(() => 'Copied', () => 'Copy failed'));
+  const show = (label) => { const button = reviewCopyButtons.get(id); if (button) button.textContent = label; };
+  show(reviewCopyResults.get(id));
+  setTimeout(() => {
+    reviewCopyResults.delete(id);
+    show('Copy prompt');
+  }, 2000);
+}
+
 // Shown on every range, because a review belongs to a session, not to a day.
 // Hidden when the request failed or no session was reviewed in the last 7 days.
 function renderReviews(data) {
@@ -1407,9 +1424,29 @@ function renderReviews(data) {
   panel.hidden = !data || !data.reviews.length;
   if (panel.hidden) return;
 
+  const focused = [...reviewCopyButtons].find(([, button]) => button === document.activeElement);
+  const buttons = new Map();
   const now = Date.now();
   const items = data.reviews.map((r) => {
-    const head = el('div', { class: 'review-head', text: `${r.project || '—'} · ended ${reviewTime(r.endedAt ?? r.reviewedAt, now)}` });
+    const ended = ` · ended ${reviewTime(r.endedAt ?? r.reviewedAt, now)}`;
+    const head = r.title
+      ? el('div', { class: 'review-head' }, [
+        el('span', { class: 'session-title', title: r.title, text: r.title }),
+        el('span', { class: 'session-project', text: r.project || '—' }),
+        document.createTextNode(ended),
+      ])
+      : el('div', { class: 'review-head', text: `${r.project || '—'}${ended}` });
+    const prompt = reviewPrompt(r);
+    let source = null;
+    if (prompt) {
+      const button = el('button', { type: 'button', class: 'refresh-btn', text: reviewCopyResults.get(r.sessionId) || 'Copy prompt' });
+      button.addEventListener('click', () => copyReviewPrompt(r.sessionId, prompt));
+      buttons.set(r.sessionId, button);
+      source = el('div', { class: 'review-source' }, [
+        el('span', { class: 'review-path', title: r.transcript, text: shortPath(r.transcript, data.home) }),
+        button,
+      ]);
+    }
     let body;
     if (r.status === 'failed') {
       body = el('p', { class: 'review-empty', text: `Review failed: ${r.error || 'no reason recorded'}` });
@@ -1421,9 +1458,11 @@ function renderReviews(data) {
         document.createTextNode(` ${s.text}`),
       ])));
     }
-    return el('li', { class: 'review' }, [head, body]);
+    return el('li', { class: 'review' }, source ? [head, source, body] : [head, body]);
   });
   document.getElementById('reviewsList').replaceChildren(...items);
+  reviewCopyButtons = buttons;
+  if (focused) buttons.get(focused[0])?.focus();
 
   const withSuggestions = data.reviews.filter((r) => r.suggestions.length).length;
   document.getElementById('reviewsNote').textContent =

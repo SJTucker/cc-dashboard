@@ -852,6 +852,18 @@ html, body {
 .review { padding: 8px 0; border-top: 1px solid var(--border); }
 .review:first-child { border-top: none; }
 .review-head { color: var(--text-secondary); font-size: 0.85em; }
+.review-source { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.review-path {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-data);
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+.review-source .refresh-btn { padding: 4px 10px; font-size: 11px; flex: none; }
 .review-suggestions { margin: 4px 0 0; padding-left: 18px; }
 .review-suggestions li { margin: 2px 0; }
 .review-kind { font-weight: 600; color: var(--text-primary); }
