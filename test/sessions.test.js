@@ -442,3 +442,52 @@ test('buildLiveSessions gives a null title to a session without one', () => {
   assert.strictEqual(sessions[0].title, null);
   assert.strictEqual(buildLiveSessions([snapshot()], [], NOW).sessions[0].title, null);
 });
+
+test('buildLiveSessions turns a session\'s call times into spans, splitting at a gap over LIVE_WINDOW_MS', () => {
+  const t0 = NOW - 3 * 60 * 60 * 1000;
+  const calls = [
+    { sessionId: 's1', t: t0 + 60_000, context: 1, output: 1, cost: 0 },
+    { sessionId: 's1', t: t0, context: 1, output: 1, cost: 0 },
+    // exactly LIVE_WINDOW_MS after the previous call: still the same span
+    { sessionId: 's1', t: t0 + 60_000 + LIVE_WINDOW_MS, context: 1, output: 1, cost: 0 },
+    // more than LIVE_WINDOW_MS after the previous call: a new span
+    { sessionId: 's1', t: t0 + 60_000 + 2 * LIVE_WINDOW_MS + 1, context: 1, output: 1, cost: 0 },
+    { sessionId: 'other', t: t0, context: 1, output: 1, cost: 0 },
+  ];
+  const [row] = buildLiveSessions([snapshot()], calls, NOW).sessions;
+  assert.deepStrictEqual(row.spans, [
+    [t0, t0 + 60_000 + LIVE_WINDOW_MS],
+    [t0 + 60_000 + 2 * LIVE_WINDOW_MS + 1, t0 + 60_000 + 2 * LIVE_WINDOW_MS + 1],
+  ]);
+});
+
+test('buildLiveSessions gives a one-call span start === end', () => {
+  const calls = [{ sessionId: 's1', t: NOW - 5_000, context: 1, output: 1, cost: 0 }];
+  assert.deepStrictEqual(buildLiveSessions([snapshot()], calls, NOW).sessions[0].spans, [[NOW - 5_000, NOW - 5_000]]);
+});
+
+test('buildLiveSessions counts a subagent call in the parent session spans', () => {
+  // Subagent calls carry the parent sessionId, so they are plain entries of calls.
+  const calls = [
+    { sessionId: 's1', t: NOW - 20 * 60_000, main: true, context: 1, output: 1, cost: 0 },
+    { sessionId: 's1', t: NOW - 19 * 60_000, main: false, context: 1, output: 1, cost: 0 },
+  ];
+  assert.deepStrictEqual(buildLiveSessions([snapshot()], calls, NOW).sessions[0].spans, [[NOW - 20 * 60_000, NOW - 19 * 60_000]]);
+});
+
+test('buildLiveSessions gives spans [] to a session with no calls, and ignores a call with no time', () => {
+  assert.deepStrictEqual(buildLiveSessions([snapshot()], [], NOW).sessions[0].spans, []);
+  const calls = [{ sessionId: 's1', context: 1, output: 1, cost: 0 }];
+  assert.deepStrictEqual(buildLiveSessions([snapshot()], calls, NOW).sessions[0].spans, []);
+});
+
+test('buildLiveSessions counts the session\'s typed prompts from the prompts argument', () => {
+  const prompts = [
+    { t: NOW - 3000, sessionId: 's1' },
+    { t: NOW - 2000, sessionId: 's1' },
+    { t: NOW - 1000, sessionId: 'other' },
+  ];
+  const { sessions } = buildLiveSessions([snapshot(), snapshot({ sessionId: 's2' })], [], NOW, {}, {}, prompts);
+  assert.deepStrictEqual(sessions.map((s) => s.prompts).sort(), [0, 2]);
+  assert.strictEqual(buildLiveSessions([snapshot()], [], NOW).sessions[0].prompts, 0);
+});

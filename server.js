@@ -243,7 +243,7 @@ app.get('/api/records', async (req, res) => {
 app.get('/api/sessions/live', async (req, res) => {
   try {
     const data = await getTodayScan();
-    res.json(buildLiveSessions(readSessions(), data.efficiency.calls, Date.now(), data.efficiency.linesBySession, data.efficiency.titleBySession));
+    res.json(buildLiveSessions(readSessions(), data.efficiency.calls, Date.now(), data.efficiency.linesBySession, data.efficiency.titleBySession, data.efficiency.prompts));
   } catch (err) {
     console.error('[API] /api/sessions/live failed:', err);
     res.status(500).json({ error: 'Failed to read live sessions', detail: err.message });

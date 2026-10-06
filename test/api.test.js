@@ -492,6 +492,10 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
   assert.strictEqual(body.total.linesAdded, 2);
   assert.strictEqual(body.total.linesRemoved, 1);
   assert.strictEqual(body.total.tokens, 1000);
+  // appendCall wrote one call at 10:30 today, so the session has one one-call span.
+  assert.strictEqual(body.sessions[0].spans.length, 1);
+  assert.strictEqual(body.sessions[0].spans[0][0], body.sessions[0].spans[0][1]);
+  assert.strictEqual(body.sessions[0].prompts, 0);
 });
 
 test('GET /api/sessions/live marks a session that ended', async (t) => {
