@@ -127,7 +127,7 @@ test('updateMarkers marks relevant versions at their first call, after a week of
     { t: t0 + 11 * DAY, version: null },
   ];
   assert.deepStrictEqual(changes.updateMarkers(calls), [
-    { t: t0 + 8 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.286: Subagents share the parent cache', source: 'update' },
+    { t: t0 + 8 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.286: Subagents share the parent cache', version: '2.1.286', summary: 'Subagents share the parent cache', source: 'update' },
   ]);
 });
 
@@ -142,8 +142,8 @@ test('updateMarkers labels a relevant verdict without a summary with the version
     { t: t0 + 9 * DAY, version: '2.1.287' },
   ];
   assert.deepStrictEqual(changes.updateMarkers(calls), [
-    { t: t0 + 8 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.286', source: 'update' },
-    { t: t0 + 9 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.287', source: 'update' },
+    { t: t0 + 8 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.286', version: '2.1.286', source: 'update' },
+    { t: t0 + 9 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.287', version: '2.1.287', source: 'update' },
   ]);
 });
 

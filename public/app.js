@@ -1913,7 +1913,7 @@ function renderBeforeAfter(report, marker) {
       : 'No other change of yours in this window.',
   ];
   if (releases.length) {
-    const named = releases.map((o) => o.label.replace(/^Claude Code (\S+): (.*)$/, '$1 ($2)').replace(/^Claude Code (\S+)$/, '$1'));
+    const named = releases.map((o) => (o.summary ? `${o.version} (${o.summary})` : o.version));
     lines.push(`Claude Code updates in this window: ${named.join('; ')}. The numbers above include them.`);
   }
   note.replaceChildren(...lines.flatMap((text, i) => (i ? [el('br'), text] : [text])));
