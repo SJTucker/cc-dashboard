@@ -244,11 +244,11 @@ npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.jso
 npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 
 The Live sessions panel holds two tables. Running now lists the live sessions,
-meaning those that wrote to a transcript in the last 10 minutes. They are ordered by
-the start of each session's first span today (`runningSessions` in
-`public/session-groups.js`), so rows do not move while they run. Its State and Doing
-now columns show "—" until the mod records live state (see "Live state" under
-"Setting up the recorder"). Today lists every session of the day, live ones included,
+meaning those that wrote to a transcript in the last 10 minutes. Its columns are
+Session, State, Doing now, Cost today and Last active. Prompts, Length and Lines
+are only in Today. Running now is ordered by the start of each session's first span
+today (`runningSessions` in `public/session-groups.js`), so rows do not move while
+they run. Its State and Doing now columns show "—" for now. Today lists every session of the day, live ones included,
 sorted by Cost today with the highest first. Ended sessions of one project collapse
 into a single expandable row when the project has two or more of them. The bar
 behind each Cost today value in Today is that session's share of the day's highest
