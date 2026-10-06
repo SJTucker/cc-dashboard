@@ -32,6 +32,8 @@ type World = {
   // How long a tool.call lasts on the mock clock, and what tool.check answers.
   toolMs: number
   verdict: 'allow' | 'ask' | 'deny'
+  // Makes tool.call throw once its toolMs has passed.
+  toolFails: boolean
   // Makes fs.write reject.
   writeFails: boolean
   // How long each fs.write takes on the mock clock, in call order. A write past the
@@ -65,6 +67,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     agents: [],
     toolMs: 0,
     verdict: 'allow',
+    toolFails: false,
     writeFails: false,
     writeMs: [],
     ...w,
@@ -169,6 +172,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   on('turn.complete', () => ({ text: '' }))
   on('tool.call', async () => {
     if (state.toolMs > 0) await clock.sleep(state.toolMs)
+    if (state.toolFails) throw new Error('tool failed')
     return { result: 'ok', text: 'ok' }
   })
   on('tool.check', () => ({ decision: state.verdict }))
@@ -1052,4 +1056,106 @@ test('session.end drops the cached transcript path, so a later measure for that 
   await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
   await $.session.measure(measure([FIVE]))
   expect(listed.length).toBe(2)
+})
+
+test('approval clears when the asking tool.call throws', async ($, on) => {
+  const { writes, clock } = world(on, { toolMs: 1000, verdict: 'ask', toolFails: true })
+  const call = $.tool.call({ tool: 'Bash', command: 'rm x' } as never).catch(() => undefined)
+  await clock.settle()
+  await $.tool.check({ tool: 'Bash', input: { command: 'rm x' } })
+  await clock.advance(300)
+  expect(activityOf(writes).state).toBe('approval')
+  await clock.advance(1000)
+  await call
+  await clock.settle()
+  expect(activityOf(writes).state).toBe('working')
+  expect(activityOf(writes).tool).toBe(null)
+})
+
+test('a main-loop turn.complete clears approval', async ($, on) => {
+  const { writes, clock } = world(on, { toolMs: 1000, verdict: 'ask' })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  const call = $.tool.call({ tool: 'Bash', command: 'rm x' } as never)
+  await clock.settle()
+  await $.tool.check({ tool: 'Bash', input: { command: 'rm x' } })
+  await clock.advance(300)
+  expect(activityOf(writes).state).toBe('approval')
+  await $.turn.complete(turnEnd({ reason: 'aborted', isAborted: true }))
+  await clock.advance(300)
+  expect(activityOf(writes)).toMatchObject({ state: 'waiting', tool: null })
+  await clock.advance(1000)
+  await call
+})
+
+test('a subagent tool.call rewrites the file with the current count once it returns, and leaves waiting alone', async ($, on) => {
+  const { writes, writeLog, state, clock } = world(on, { toolMs: 1000 })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.advance(300)
+  await $.turn.complete(turnEnd())
+  await clock.advance(300)
+  state.agents = [{ id: 'a1', description: 'd', type: 'Explore', status: 'running' }]
+  const before = writeLog.length
+  const sub = $.tool.call({ tool: 'Bash', command: 'sub', agentId: 'a1' } as never)
+  await clock.settle()
+  expect(writeLog.length).toBe(before)
+  await clock.advance(1000)
+  await sub
+  await clock.settle()
+  expect(activityOf(writes)).toEqual({ ...idle, state: 'waiting', since: 61_300, subagents: 1, updatedAt: 62_600 })
+})
+
+test('with no session state yet, subagent events and an unmatched check write nothing', async ($, on) => {
+  // A fresh module after a hot reload, while the main loop waits on a subagent.
+  const { writeLog, state, clock } = world(on, { verdict: 'ask' })
+  state.agents = [{ id: 'a1', description: 'd', type: 'Explore', status: 'running' }]
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })
+  await $.agent.spawn({ prompt: 'p' })
+  await $.tool.call({ tool: 'Bash', command: 'sub', agentId: 'a1' } as never)
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await clock.advance(1000)
+  expect(writeLog).toEqual([])
+})
+
+test('a throttle timer that fires as the session ends leaves nothing behind for that id', async ($, on) => {
+  // Holds the mock clock's clock.now answer while `held` is set, and resolves
+  // `reached` when a held call arrives.
+  let held: Promise<void> | undefined
+  let release = () => {}
+  let reached = () => {}
+  const gated = ((event: string, ...rest: unknown[]) => {
+    const hook = rest.pop() as (...args: unknown[]) => unknown
+    const wrapped = event === 'clock.now'
+      ? async (...args: unknown[]) => {
+        if (held) {
+          reached()
+          await held
+        }
+        return hook(...args)
+      }
+      : hook
+    return (on as (...args: unknown[]) => unknown)(event, ...rest, wrapped)
+  }) as unknown as On
+  const { writeLog, clock } = world(gated)
+  await $.turn.start({ text: 'a', turnId: 't1' })
+  await clock.settle()
+  await $.turn.complete(turnEnd())
+  held = new Promise((resolve) => {
+    release = resolve
+  })
+  const timerAsked = new Promise<void>((resolve) => {
+    reached = resolve
+  })
+  // The timer fires at 61_250 and asks for the time. session.end runs before the
+  // answer arrives.
+  const advanced = clock.advance(250)
+  await timerAsked
+  await $.session.end({ reason: 'resume', sessionId: 's1', resume: { id: 's1' } })
+  held = undefined
+  release()
+  await advanced
+  await clock.settle()
+  const before = writeLog.length
+  await $.turn.start({ text: 'b', turnId: 't2' })
+  await clock.settle()
+  expect(writeLog.length).toBe(before + 1)
 })

@@ -411,8 +411,11 @@ function toolsOf(id: string) {
 
 const newestTool = (tools: Map<string, ToolRun>) => [...tools.values()].pop() ?? null
 
-// A new activity starts as working: the first event seen mid-turn, after a reload,
-// is a tool call or a check, and the turn is running.
+// A new activity starts as working. Only a main-loop event creates one: turn.start,
+// a main-loop tool.call, a tool.check that matches a running tool, or turn.complete,
+// which sets waiting at once. After a reload mid-turn, the first of these is a tool
+// call or a check, and the turn is running. Subagent events and agent.spawn create
+// none, because the main loop may be waiting.
 function setState(a: Activity, state: Activity['state'], now: number) {
   if (a.state === state) return
   a.state = state
@@ -477,15 +480,18 @@ function queueWrite($: EngineInterface, id: string) {
 // ACTIVITY_WRITE_MS of the last write waits for a timer and writes the newest state
 // once. A change that returns false means nothing changed, and nothing is written.
 // Never throws and never waits for a write, so a hook that calls it reaches next(e)
-// without disk I/O and still returns next(e)'s result.
-async function track($: EngineInterface, change: (a: Activity, now: number) => void | false) {
+// without disk I/O and still returns next(e)'s result. With create false, a session
+// that has no state yet is left alone.
+async function track($: EngineInterface, change: (a: Activity, now: number) => void | false, create = true) {
   try {
     const id = await $.session.id()
     if (!SESSION_ID.test(id)) return
     const now = await $.clock.now()
-    const a = activities.get(id) ?? { sessionId: id, state: 'working' as const, since: now, tool: null, subagents: 0, updatedAt: now }
-    activities.set(id, a)
+    const known = activities.get(id)
+    if (!known && !create) return
+    const a = known ?? { sessionId: id, state: 'working' as const, since: now, tool: null, subagents: 0, updatedAt: now }
     if (change(a, now) === false) return
+    activities.set(id, a)
     a.updatedAt = now
     const last = lastWriteAt.get(id)
     if (last === undefined || now - last >= ACTIVITY_WRITE_MS) {
@@ -496,6 +502,8 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
         writeTimers.delete(id)
         $.clock.now()
           .then((at) => {
+            // session.end can run while the time is asked for.
+            if (!activities.has(id)) return
             lastWriteAt.set(id, at)
             queueWrite($, id)
           })
@@ -606,7 +614,7 @@ export const register: Register = (on) => {
           endedAgents.set(a.sessionId, ended)
         }
         ended.add(agentId)
-      })
+      }, false)
       return result
     }
     await track($, (a, now) => {
@@ -620,7 +628,15 @@ export const register: Register = (on) => {
 
   // The tool is set before next(e) and cleared after it, even when the call throws.
   on('tool.call', async ($, e, next) => {
-    if (e.agentId) return next(e)
+    // A subagent's call that returns or throws rewrites the file, so subagents and
+    // updatedAt stay current while the main loop waits.
+    if (e.agentId) {
+      try {
+        return await next(e)
+      } finally {
+        await track($, () => {}, false)
+      }
+    }
     const id = e.tool_use_id
     const args = e as unknown as Record<string, unknown>
     await track($, (a, now) => {
@@ -666,7 +682,7 @@ export const register: Register = (on) => {
   // file with the new subagent count.
   on('agent.spawn', async ($, e, next) => {
     const result = await next(e)
-    await track($, () => {})
+    await track($, () => {}, false)
     return result
   })
 }
