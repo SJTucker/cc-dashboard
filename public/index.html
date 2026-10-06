@@ -30,6 +30,8 @@
           <span class="strip-item">Sessions <b id="stripSessions">—</b></span>
           <span class="strip-item">API calls <b id="stripCalls">—</b></span>
         </div>
+        <button id="hiddenMenuBtn" class="refresh-btn menu-btn" type="button" popovertarget="hiddenMenu" aria-label="Hidden panels" title="Hidden panels">&#9776;</button>
+        <div id="hiddenMenu" class="hidden-menu" popover aria-label="Hidden panels"></div>
       </div>
       <div class="topbar-controls">
         <div class="range-picker" id="rangePicker" role="group" aria-label="Date range">
@@ -44,48 +46,48 @@
         <span id="loadStatus" class="load-status" role="status"></span>
         <div id="headerCards" class="header-cards">
           <section class="cards cards-compact" id="summaryCards">
-            <div class="card">
+            <div class="card" data-hide-key="card-cost">
               <span class="card-label">Total cost</span>
               <span class="card-value cost" id="cardCost">&mdash;</span>
               <span class="card-note" id="cardCostWeek">7d total: &mdash;</span>
               <span class="card-note" id="cardCostNote"></span>
             </div>
-            <div class="card">
+            <div class="card" data-hide-key="card-tokens">
               <span class="card-label">Total tokens</span>
               <span class="card-value" id="cardTokens">&mdash;</span>
               <span class="card-note" id="cardTokensWeek">7d total: &mdash;</span>
             </div>
-            <div class="card">
+            <div class="card" data-hide-key="card-record">
               <span class="card-label">Record day</span>
               <span class="card-value" id="cardRecord">&mdash;</span>
               <span class="card-note" id="cardRecordDate"></span>
               <span class="card-note" id="cardRecordNote"></span>
             </div>
-            <div class="card" id="reportedCard" hidden>
+            <div class="card" id="reportedCard" data-hide-key="card-reported" hidden>
               <span class="card-label">Claude Code reported</span>
               <span class="card-value cost" id="cardReported">&mdash;</span>
               <span class="card-note" id="cardReportedNote"></span>
             </div>
-            <div class="card" title="share of eligible input served from cache">
+            <div class="card" data-hide-key="card-cache" title="share of eligible input served from cache">
               <span class="card-label">Cache efficiency</span>
               <span class="card-value" id="cardCache">&mdash;</span>
               <span class="card-note">share of eligible input served from cache</span>
             </div>
-            <div class="card" id="burnCard">
+            <div class="card" id="burnCard" data-hide-key="card-burn">
               <span class="card-label">Cost per day</span>
               <span class="card-value cost" id="cardBurn">&mdash;</span>
               <span class="card-note">complete days only &mdash; today is partial</span>
             </div>
-            <div class="card" id="projectionCard">
+            <div class="card" id="projectionCard" data-hide-key="card-projection">
               <span class="card-label">30 days at this rate</span>
               <span class="card-value cost" id="cardProjection">&mdash;</span>
             </div>
-            <div class="card" title="found by the directory walk, not all read">
+            <div class="card" data-hide-key="card-files" title="found by the directory walk, not all read">
               <span class="card-label">Session files on disk</span>
               <span class="card-value" id="cardFiles">&mdash;</span>
               <span class="card-note">found by the directory walk, not all read</span>
             </div>
-            <div class="card">
+            <div class="card" data-hide-key="card-tools">
               <span class="card-label">Tool calls</span>
               <span class="card-value" id="cardTools">&mdash;</span>
             </div>
@@ -100,7 +102,7 @@
 
       <div id="mainCards"></div>
 
-      <section class="panel" id="limitsPanel" hidden>
+      <section class="panel" id="limitsPanel" data-hide-key="limits" hidden>
         <div class="panel-head">
           <h2>Plan usage</h2>
           <span class="panel-note" id="limitsNote"></span>
@@ -108,7 +110,7 @@
         <div id="limitsRows"></div>
       </section>
 
-      <section class="panel" id="attributionPanel" hidden>
+      <section class="panel" id="attributionPanel" data-hide-key="attribution" hidden>
         <div class="panel-head">
           <h2>Where usage goes</h2>
           <span class="panel-note">share of total cost</span>
@@ -133,7 +135,7 @@
       </div>
       </section>
 
-      <section class="panel" id="timelinePanel" hidden>
+      <section class="panel" id="timelinePanel" data-hide-key="timeline" hidden>
         <div class="panel-head">
           <h2>Session timeline</h2>
           <span class="panel-note" id="timelineNote"></span>
@@ -143,7 +145,7 @@
         <p class="panel-note">Solid bar: live session. Striped bar: not live. Arrowhead: a live session whose last call was within the last 10 minutes. Dashed line: now.</p>
       </section>
 
-      <section class="panel" id="sessionsPanel" hidden>
+      <section class="panel" id="sessionsPanel" data-hide-key="sessions" hidden>
         <div class="panel-head">
           <h2>Live sessions</h2>
           <span class="panel-note" id="sessionsNote"></span>
@@ -183,7 +185,7 @@
         </div>
       </section>
 
-      <section class="panel" id="reviewsPanel" hidden>
+      <section class="panel" id="reviewsPanel" data-hide-key="reviews" hidden>
         <div class="panel-head">
           <h2>Session reviews</h2>
           <span class="panel-note" id="reviewsNote"></span>
@@ -192,14 +194,14 @@
       </section>
 
       <div class="panel-row even">
-        <section class="panel">
+        <section class="panel" data-hide-key="dailyCost">
           <div class="panel-head">
             <h2>Daily cost</h2>
           </div>
           <div id="costChart" class="chart" aria-label="Bar chart of daily cost"></div>
         </section>
 
-        <section class="panel">
+        <section class="panel" data-hide-key="dailyTokens">
           <div class="panel-head">
             <h2>Daily tokens</h2>
           </div>
@@ -208,14 +210,14 @@
       </div>
 
       <div class="panel-row even">
-        <section class="panel">
+        <section class="panel" data-hide-key="cumulativeCost">
           <div class="panel-head">
             <h2>Cumulative cost</h2>
           </div>
           <div id="cumulativeChart" class="chart" aria-label="Line chart of cumulative cost across the range"></div>
         </section>
 
-        <section class="panel">
+        <section class="panel" data-hide-key="tokenTypes">
           <div class="panel-head">
             <h2>Daily tokens by type</h2>
           </div>
@@ -230,21 +232,21 @@
       </div>
 
 
-      <section class="panel" id="modelDailyPanel" hidden>
+      <section class="panel" id="modelDailyPanel" data-hide-key="modelDaily" hidden>
         <div class="panel-head">
           <h2>Daily tokens by model</h2>
         </div>
         <div id="modelDailyChart" class="chart" aria-label="Stacked bar chart of daily tokens by model"></div>
       </section>
 
-      <section class="panel" id="modelCostDailyPanel" hidden>
+      <section class="panel" id="modelCostDailyPanel" data-hide-key="modelCostDaily" hidden>
         <div class="panel-head">
           <h2>Daily cost by model</h2>
         </div>
         <div id="modelCostDailyChart" class="chart" aria-label="Stacked bar chart of daily cost by model"></div>
       </section>
 
-      <section class="panel" id="activityPanel" hidden>
+      <section class="panel" id="activityPanel" data-hide-key="activity" hidden>
         <div class="panel-head">
           <h2>When usage happens</h2>
           <span class="panel-note">cost by weekday and hour, local time</span>
@@ -252,7 +254,7 @@
         <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
       </section>
 
-      <section class="panel" id="toolPanel" hidden>
+      <section class="panel" id="toolPanel" data-hide-key="tools" hidden>
         <div class="panel-head">
           <h2>Tool calls</h2>
           <span class="panel-note">pick a tool on the left to break it down</span>
@@ -273,7 +275,7 @@
         </div>
       </section>
 
-      <section class="panel" id="rtkDailyPanel" hidden>
+      <section class="panel" id="rtkDailyPanel" data-hide-key="rtkDaily" hidden>
         <div class="panel-head">
           <h2>Output rtk filtered out</h2>
           <span class="panel-note">estimated tokens rtk stripped from command output before it reached the model &mdash; not billed tokens, and not part of the cost figures above</span>
@@ -281,7 +283,7 @@
         <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk filtered out per day"></div>
       </section>
 
-      <section class="panel" id="rtkCommandPanel" hidden>
+      <section class="panel" id="rtkCommandPanel" data-hide-key="rtkCommands" hidden>
         <div class="panel-head">
           <h2>What rtk filtered</h2>
           <span class="panel-note">pick a command on the left to see the invocations behind it</span>
@@ -299,7 +301,7 @@
       </section>
 
       <div class="panel-row stretch">
-        <section class="panel">
+        <section class="panel" data-hide-key="costByModel">
           <div class="panel-head">
             <h2>Cost by model</h2>
             <button id="checkPricesBtn" class="refresh-btn" type="button" title="Compare these prices with Anthropic's pricing page">Check prices</button>
@@ -309,7 +311,7 @@
           <p id="pricesSource" class="panel-note"></p>
         </section>
 
-        <section class="panel" id="modelMixPanel">
+        <section class="panel" id="modelMixPanel" data-hide-key="modelMix">
           <div class="panel-head">
             <h2>Model mix</h2>
           </div>
@@ -317,7 +319,7 @@
         </section>
       </div>
 
-      <section class="panel" id="sessionStartPanel" hidden>
+      <section class="panel" id="sessionStartPanel" data-hide-key="sessionStart" hidden>
         <div class="panel-head">
           <h2>Setup changes &middot; context at session start</h2>
           <span class="panel-note">all history, whatever range is picked above &mdash; tokens in each session's first call: system prompt, tools, CLAUDE.md, skill list, hook output</span>
@@ -327,7 +329,7 @@
         <div id="sessionStartLegend" class="legend changes-legend"></div>
       </section>
 
-      <section class="panel" id="beforeAfterPanel" hidden>
+      <section class="panel" id="beforeAfterPanel" data-hide-key="beforeAfter" hidden>
         <div class="panel-head">
           <h2>Setup changes &middot; before and after</h2>
           <span class="panel-note">7 days either side of the change you pick &mdash; trust it only when no other change falls in the same 14 days</span>
@@ -359,6 +361,7 @@
   <script src="/session-groups.js"></script>
   <script src="/chart-geometry.js"></script>
   <script src="/reviews.js"></script>
+  <script src="/visibility.js"></script>
   <script src="/app.js"></script>
 </body>
 </html>

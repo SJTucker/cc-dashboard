@@ -1240,3 +1240,72 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
   font-size: 12px;
   color-scheme: dark;
 }
+
+/* ---------- Hidden panels ---------- */
+
+/* A panel or card the user hid (see the hidden panels region in app.js). This is
+   a separate attribute from `hidden`, which renderers set from the data, so a
+   renderer showing its panel cannot undo the user's choice. */
+[data-user-hidden] { display: none !important; }
+
+/* The panel left in a pair takes the whole row. */
+.panel-row:has(> [data-user-hidden]) { grid-template-columns: 1fr; }
+
+/* The "x" follows the panel note and any heading button, all pushed right. */
+.panel-head > h2 { margin-right: auto; }
+
+.card[data-hide-key] { position: relative; }
+
+.hide-btn {
+  background: none;
+  border: 0;
+  padding: 0 4px;
+  margin-left: 10px;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+.card > .hide-btn { position: absolute; top: 4px; right: 4px; margin: 0; }
+.panel:hover > .panel-head > .hide-btn,
+.panel:focus-within > .panel-head > .hide-btn,
+.card:hover > .hide-btn,
+.card:focus-within > .hide-btn { opacity: 1; }
+.hide-btn:hover { color: var(--text-primary); }
+.hide-btn:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 2px; }
+/* A touch screen has no hover, so the buttons always show there. */
+@media (hover: none) { .hide-btn { opacity: 1; } }
+
+/* The ☰ button sits at the right end of the title row. */
+.menu-btn { margin-left: auto; padding: 4px 10px; font-size: 14px; }
+
+/* A popover renders in the top layer, outside the header's overflow clip.
+   app.js sets top and right from the button's position each time it opens. */
+.hidden-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  min-width: 220px;
+  padding: 6px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--text-primary);
+}
+.hidden-menu-item {
+  display: block;
+  width: 100%;
+  padding: 6px 10px;
+  background: none;
+  border: 0;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hidden-menu-item:hover,
+.hidden-menu-item:focus-visible { background: var(--border); color: var(--text-primary); outline: none; }
+.hidden-menu-all { margin-top: 4px; border-top: 1px solid var(--border); border-radius: 0 0 4px 4px; }
+.hidden-menu-empty { margin: 6px 10px; color: var(--text-tertiary); font-size: 12px; }
