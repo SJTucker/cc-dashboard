@@ -32,7 +32,7 @@ let hasLogged = false
 function fail($: EngineInterface, text: string) {
   if (hasLogged) return
   hasLogged = true
-  $.ui.log(`cc-dashboard: ${text}`)
+  $.ui.log(text)
 }
 
 // mod/ is symlinked into ~/.claude/skills/, so $.plugin.root is the link's path.
@@ -171,7 +171,7 @@ const errorName = (err: unknown) => (err instanceof Error ? err.name : 'error')
 // Every update failure is logged. They happen at most once per Claude Code release,
 // so the once-only rule in fail() would hide the one that matters.
 function note($: EngineInterface, text: string) {
-  $.ui.log(`cc-dashboard: ${text}`)
+  $.ui.log(text)
 }
 
 async function judgeScript($: EngineInterface, args: string[], stdin: string, timeoutMs: number): Promise<unknown> {

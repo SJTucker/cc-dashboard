@@ -190,7 +190,7 @@ test('a transcript that exists nowhere records nothing and, with a cost, logs on
   await $.session.measure(measure([FIVE]))
   await $.session.measure(measure([FIVE]))
   expect(ran).toEqual([])
-  expect(logged).toEqual(['cc-dashboard: transcript not found'])
+  expect(logged).toEqual(['transcript not found'])
 })
 
 test('a measure without cost on a missing transcript logs nothing, and a later one with cost still logs', async ($, on) => {
@@ -199,7 +199,7 @@ test('a measure without cost on a missing transcript logs nothing, and a later o
   expect(ran).toEqual([])
   expect(logged).toEqual([])
   await $.session.measure(measure([FIVE]))
-  expect(logged).toEqual(['cc-dashboard: transcript not found'])
+  expect(logged).toEqual(['transcript not found'])
 })
 
 test('a measure without cost records once the transcript appears', async ($, on) => {
@@ -314,7 +314,7 @@ test('a failing run logs once, and a second failure logs nothing', async ($, on)
   await $.session.measure(measure([FIVE]))
   await $.session.measure(measure([FIVE]))
   expect(ran.length).toBe(2)
-  expect(logged).toEqual(['cc-dashboard: record-statusline failed (exit 1)'])
+  expect(logged).toEqual(['record-statusline failed (exit 1)'])
 })
 
 const UPDATES = '/home/u/.claude/cc-dashboard/updates.json'
@@ -368,7 +368,7 @@ test('a failed fetch logs and asks Haiku nothing', async ($, on) => {
   await $.session.start(start)
   await clock.settle()
   expect(asked).toEqual([])
-  expect(logged).toEqual(['cc-dashboard: changelog fetch returned 503'])
+  expect(logged).toEqual(['changelog fetch returned 503'])
 })
 
 test('a Haiku call with no answer records nothing and logs the reason', async ($, on) => {
@@ -376,7 +376,7 @@ test('a Haiku call with no answer records nothing and logs the reason', async ($
   await $.session.start(start)
   await clock.settle()
   expect(ran.map((r) => r.argv[1])).toEqual(['prompt'])
-  expect(logged).toEqual(['cc-dashboard: Haiku gave no verdict for 2.1.290 (api-error)'])
+  expect(logged).toEqual(['Haiku gave no verdict for 2.1.290 (api-error)'])
 })
 
 test('UPDATES_FILE overrides the verdict file the check reads', async ($, on) => {
@@ -395,7 +395,7 @@ test('a fetch that throws logs the error name and asks Haiku nothing', async ($,
   await $.session.start(start)
   await clock.settle()
   expect(asked).toEqual([])
-  expect(logged).toEqual(['cc-dashboard: changelog fetch failed (HooksError)'])
+  expect(logged).toEqual(['changelog fetch failed (HooksError)'])
 })
 
 test('a dev build is not checked', async ($, on) => {
@@ -410,7 +410,7 @@ test('a malformed updates.json logs and fetches nothing', async ($, on) => {
   await $.session.start(start)
   await clock.settle()
   expect(fetched).toEqual([])
-  expect(logged).toEqual([`cc-dashboard: ${UPDATES} is not valid JSON; fix or delete it`])
+  expect(logged).toEqual([`${UPDATES} is not valid JSON; fix or delete it`])
 })
 
 test('an updates.json holding an array or null logs and fetches nothing', async ($, on) => {
@@ -420,7 +420,7 @@ test('an updates.json holding an array or null logs and fetches nothing', async 
     await clock.settle()
     expect(fetched).toEqual([])
     expect(asked).toEqual([])
-    expect(logged).toEqual([`cc-dashboard: ${UPDATES} is not a JSON object; fix or delete it`])
+    expect(logged).toEqual([`${UPDATES} is not a JSON object; fix or delete it`])
   }
 })
 
@@ -492,7 +492,7 @@ test('/backfill-updates names a failing script', async ($, on) => {
 test('a failing command.register is logged and session.start still resolves', async ($, on) => {
   const { logged } = world(on, { registerFails: true, files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
   await $.session.start(start)
-  expect(logged).toEqual(['cc-dashboard: could not register /backfill-updates (HooksError)'])
+  expect(logged).toEqual(['could not register /backfill-updates (HooksError)'])
 })
 
 test('/backfill-updates names a prompt that printed no batches', async ($, on) => {
