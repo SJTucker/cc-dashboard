@@ -185,12 +185,30 @@ test('a transcript outside the built path is found by searching the projects fol
   expect(input.workspace.project_dir).toBe('/work/my.demo')
 })
 
-test('a transcript that exists nowhere records nothing and logs once', async ($, on) => {
+test('a transcript that exists nowhere records nothing and, with a cost, logs once', async ($, on) => {
   const { ran, logged } = world(on, { exists: () => false, dirs: { '/home/u/.claude/projects': ['-work-my-demo'] } })
   await $.session.measure(measure([FIVE]))
   await $.session.measure(measure([FIVE]))
   expect(ran).toEqual([])
   expect(logged).toEqual(['cc-dashboard: transcript not found'])
+})
+
+test('a measure without cost on a missing transcript logs nothing, and a later one with cost still logs', async ($, on) => {
+  const { ran, logged } = world(on, { exists: () => false, dirs: { '/home/u/.claude/projects': ['-work-my-demo'] } })
+  await $.session.measure(measure([FIVE], null))
+  expect(ran).toEqual([])
+  expect(logged).toEqual([])
+  await $.session.measure(measure([FIVE]))
+  expect(logged).toEqual(['cc-dashboard: transcript not found'])
+})
+
+test('a measure without cost records once the transcript appears', async ($, on) => {
+  let written = false
+  const { ran } = world(on, { exists: () => written })
+  await $.session.measure(measure([FIVE], null))
+  written = true
+  await $.session.measure(measure([FIVE], null))
+  expect(ran.length).toBe(1)
 })
 
 test('a CLAUDE_CONFIG_DIR that starts with ~ expands with HOME', async ($, on) => {

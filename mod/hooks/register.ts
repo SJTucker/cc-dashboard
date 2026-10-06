@@ -144,7 +144,9 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
   const root = await $.session.root()
   const transcript = await transcriptPath($, root, id)
   if (!transcript) {
-    fail($, 'transcript not found')
+    // The first measure can arrive before Claude Code has written the transcript.
+    // Without cost there is no session to record yet, and the next measure retries.
+    if (e.cost) fail($, 'transcript not found')
     return null
   }
   const input: Record<string, unknown> = {
