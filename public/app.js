@@ -1676,7 +1676,8 @@ function refreshRecords() {
 // On Today, a second line under Total cost and Total tokens with the rolling
 // 7 days: today's live totals plus the 6 days before it from /api/records.
 // It shows a dash until /api/records has answered, which takes a few seconds
-// when the all-time scan is not cached. Empty on every other range.
+// when records.json is missing or 3 days old and /api/records runs the all-history
+// scan. Empty on every other range.
 function renderWeekTotals(summary) {
   lastSummary = summary;
   // A page left open on Today past midnight refetches once, on the first poll of
@@ -1699,7 +1700,7 @@ function renderWeekTotals(summary) {
 // The value and date line show the all-time record: the day with the most tokens,
 // with that day's cost. The note shows the record within the range on screen, also
 // with its cost. Today's total grows on every live poll, and the range's scan can
-// be newer than the cached all-time scan behind /api/records. So today's total or
+// be newer than the records.json value that /api/records returns. So today's total or
 // the range record replaces the fetched all-time record when it has more tokens.
 function renderRecord(daily) {
   lastRecordDaily = daily;
@@ -2326,6 +2327,7 @@ function renderChanges(report) {
   renderChangesFileNote(report.changesFile);
   if (shown('sessionStart')) drawSessionStartChart(document.getElementById('sessionStartChart'), report);
   // The marker list, the Bash chart and the table all belong to the before/after panel.
+  // Showing the panel again re-runs renderChanges through showKeys (via redrawCharts or loadChanges).
   if (!shown('beforeAfter')) return;
 
   const list = document.getElementById('markerList');
@@ -2914,6 +2916,11 @@ async function loadAndRender({ busy = false } = {}) {
   // (today vs. a dated form) depend on the clock, not on the fetched numbers, so
   // this has to run on every settled response. That includes one whose summary
   // failed, and one the signature below would otherwise treat as unchanged.
+  // These three panels show on Today only. Their renderers set that, but a hidden
+  // panel's renderer is skipped, so the range rule is applied here too.
+  if (currentDays !== 'today') {
+    for (const id of ['limitsPanel', 'sessionsPanel', 'timelinePanel']) document.getElementById(id).hidden = true;
+  }
   if (shown('limits')) renderLimits(limits);
   if (shown('sessions')) renderSessions(sessions);
   if (shown('timeline')) renderTimeline(sessions);

@@ -388,7 +388,7 @@ boundary back.
 
 ## What it does and doesn't do
 
-- **Read-only, except for two write paths.** The dashboard server only ever reads
+- **Read-only, except for three write paths.** The dashboard server only ever reads
   your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
   `changes.json`, `rate-limits.json` and the activity files in
   `cc-dashboard/activity/`, and opens rtk's `history.db` with
@@ -400,8 +400,12 @@ boundary back.
   activity files (see "Live state"), and `lib/activity.js` deletes those older than
   a day. The other write path is the Apply
   button in the Cost by model panel: clicking it is the only thing that writes
-  `prices.json` (`PRICES_JSON` moves it), and nothing else under `server.js` or
-  `public/` writes anything.
+  `prices.json` (`PRICES_JSON` moves it). The third write path is the Record day
+  cache. `server.js` writes `~/.claude/cc-dashboard/records.json` (or
+  `$CLAUDE_CONFIG_DIR/cc-dashboard/records.json`, or `$RECORDS_FILE` when set) when
+  `/api/records` finds it missing or 3 days old, and when today's total passes the
+  cached record. It deletes that file on Refresh and on Apply. Nothing else under
+  `server.js` or `public/` writes anything.
 - **One network request from the server, on demand.** The Cost by model panel has
   a Check prices button. Clicking it makes the server fetch
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's

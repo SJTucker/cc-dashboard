@@ -38,7 +38,7 @@ test('writeRecord creates the directory, and readRecord returns the same record'
 test('readRecord returns null for a file that is not a record', (t) => {
   const file = useTempFile(t);
   fs.mkdirSync(path.dirname(file), { recursive: true });
-  for (const text of ['not json', 'null', '[]', '{"allTime":null,"computedAt":1}', '{"allTime":{"tokens":"5"},"computedAt":1}', '{"allTime":{"tokens":5}}']) {
+  for (const text of ['not json', 'null', '[]', '{"allTime":null,"computedAt":1}', '{"allTime":{"tokens":"5"},"computedAt":1}', '{"allTime":{"tokens":5}}', '{"allTime":{"tokens":5,"cost":1},"computedAt":1}', '{"allTime":{"date":"2026-01-01","tokens":5},"computedAt":1}']) {
     fs.writeFileSync(file, text);
     assert.strictEqual(readRecord(1), null, text);
   }

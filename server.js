@@ -251,7 +251,16 @@ app.get('/api/records', async (req, res) => {
   try {
     const todayStr = localDateStr(new Date());
     const weekStart = localDateStr(new Date(windowStart(7)));
-    const [allTime, week] = await Promise.all([allTimeRecord(), getCached(7)]);
+    const [cachedRecord, week] = await Promise.all([allTimeRecord(), getCached(7)]);
+    // A Today poll can cache a day's partial total if the dashboard closes before
+    // that day ends. The 7-day scan holds the day's final total, so it replaces a
+    // lower cached record.
+    let allTime = cachedRecord;
+    const weekBest = busiestDay(week.daily);
+    if (weekBest && (!allTime || weekBest.tokens > allTime.tokens)) {
+      allTime = weekBest;
+      writeRecord(weekBest);
+    }
     const recentDays = dayTotals(week.daily).filter((d) => d.date >= weekStart && d.date < todayStr);
     res.json({ allTime, recentDays });
   } catch (err) {

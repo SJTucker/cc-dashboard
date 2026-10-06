@@ -472,6 +472,34 @@ test('GET /api/records serves a fresh records file without the all-history scan'
   assert.ok(scans.includes(7), 'recentDays came from the 7-day scan');
 });
 
+test('GET /api/records raises a partial cached record to the 7-day scan\'s final total', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const when = new Date();
+  when.setHours(10, 0, 0, 0);
+  when.setDate(when.getDate() - 1);
+  const yesterday = localDateStr(when);
+  fs.writeFileSync(
+    path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo', 'partial.jsonl'),
+    JSON.stringify({
+      timestamp: when.toISOString(),
+      requestId: 'req-partial',
+      message: { id: 'msg-partial', model: 'claude-sonnet-4-6-20260115', usage: { input_tokens: 2000, output_tokens: 200 } },
+    }) + '\n',
+  );
+  writeRecordsFile({ date: yesterday, tokens: 500, cost: 0.1 });
+
+  const data = await (await fetch(`http://127.0.0.1:${server.address().port}/api/records`)).json();
+
+  assert.strictEqual(data.allTime.date, yesterday);
+  assert.strictEqual(data.allTime.tokens, 2200);
+  const written = JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime;
+  assert.strictEqual(written.date, yesterday);
+  assert.strictEqual(written.tokens, 2200);
+});
+
 test('GET /api/records rescans when the records file is 3 days old', async (t) => {
   const server = startServer();
   t.after(() => server.close());
