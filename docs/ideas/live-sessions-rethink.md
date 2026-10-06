@@ -43,6 +43,10 @@ Project cards, one card per project, were the third option and were not picked.
 
 ## Session titles
 
+- **Done (2026-10-06).** Live sessions shows the title. `scanUsage` reads the last
+  `ai-title` per session and `buildLiveSessions` joins it by session id. A session
+  without one shows the project name. `custom-title` was not found in any
+  transcript, so it is not read.
 - **Claude Code already writes one.** Each transcript has `ai-title` lines, for
   example `{"type":"ai-title","aiTitle":"Ideas and planning","sessionId":"…"}`. One
   session can hold dozens of these lines, so read the last one. Today's titles are
@@ -76,6 +80,30 @@ screenshots.
 - **Grafana's state timeline** draws one horizontal lane per series with bars for each
   state. That is the model for the timeline strip.
 
+## Mod events for live state
+
+Spike findings from 2026-10-06, read from the Claude Code 2.1.291 plugin types. No mod
+was run.
+
+- **Busy.** `turn.start` and `turn.complete`, for the main loop when `agentId` is
+  absent. A crash sends no event, so a staleness timeout is needed.
+- **Turn ended (waiting on the user).** `turn.complete` with `reason` set to
+  `answer`, `aborted`, `refusal` or `error`.
+- **Permission prompt open.** No event marks it. `tool.check` with an `ask` verdict
+  plus a timeout is the closest signal. `Notification` and `PermissionRequest` are
+  classic events that the mod cannot see.
+- **Current tool.** `tool.call` carries `tool`, `tool_use_id` and the args (`command`,
+  `file_path`). `await next(e)` returning means the tool finished, but `next` also
+  covers the permission prompt.
+- **Subagents.** `agent.spawn` carries `tool_use_id`, `description` and
+  `subagentType`. It ends with `turn.complete` for that `agentId`. `$.agent.list()`
+  lists the live ones.
+- **Background Bash.** `run_in_background` is on the `tool.call` input. The finish
+  arrives as a task-notification message. Unverified.
+- **Recording.** Use a separate `bin/record-activity` script that writes its own file.
+  `$.fs.write` replaces a whole file, and `bin/record-statusline` already writes the
+  session snapshot.
+
 ## Open questions
 
 - **One panel or two.** Separate panels let each be built, hidden and moved on its
@@ -84,12 +112,13 @@ screenshots.
   either way.
 - **"Waiting on me".** Every tool above leads with whether a session is waiting for
   the user. The mod only receives Claude Code's engine events. `Notification` and
-  `Stop` are classic hook events, which an installed mod cannot see. Check which
-  engine event, if any, marks the end of a turn. Otherwise a settings hook is needed,
-  as in the setup-changes idea.
+  `Stop` are classic hook events, which an installed mod cannot see. The spike in
+  "Mod events for live state" found that `turn.complete` marks the end of a turn. A
+  permission prompt has no event, so detecting it is still open.
 - **"Doing now" and subagents.** The mod sees `tool.call`. It could write the current
-  tool and the count of open Task calls into the session snapshot that
-  `bin/record-statusline` keeps. Decide how stale that may get before it is hidden.
+  tool and the count of open Task calls. "Mod events for live state" lists the events
+  and says to record them in a separate file. Decide how stale that may get before it
+  is hidden.
 - **Timeline lanes.** One lane per session, or per project with sessions as bars.
   Short sessions need a minimum bar width and a hit target. Long idle gaps inside a
   session could show as a thinner bar.
