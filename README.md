@@ -153,13 +153,14 @@ correction, a skill or hook for repeated steps, token waste such as large tool o
 or repeated reads, and a change to how the session was run. "No suggestions" is a
 normal result. The Session reviews panel lists the reviews from the last 7 days.
 
-- **When it runs.** After a `/clear`, at once, because the process goes on. After an
-  exit, at the next session start in any project.
+- **When it runs.** After a `/clear` or an in-process `/resume`, at once, because the
+  process goes on. After an exit, at the next session start in any project. `-p` and
+  Agent SDK runs do not start reviews.
 - **What is reviewed.** Sessions with an `endedAt` in their snapshot and 3 or more
-  typed prompts. Each session start reviews at most 3 sessions.
+  typed prompts. Each review pass, at a session start or a `/clear`, reviews at most 3 sessions.
 - **What Haiku sees.** A digest of the transcript, one line per typed prompt, reply
   start, tool call, tool error, large tool result and compaction. Prompts are cut to
-  400 characters and the digest to 60,000.
+  400 characters and the digest to about 60,000 characters.
 - **Where results go.** `~/.claude/cc-dashboard/reviews/<session id>.json`, written
   by `bin/review-session`. Files older than 7 days are deleted on the next run.
 - **Failures.** A failed review is retried after an hour while the session's

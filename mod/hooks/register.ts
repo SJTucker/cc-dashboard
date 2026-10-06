@@ -183,7 +183,13 @@ function note($: EngineInterface, text: string) {
 async function callScript($: EngineInterface, name: string, args: string[], stdin: string, timeoutMs: number): Promise<unknown> {
   const { exitCode, stdout, stderr } = await $.process.run([await scriptPath($, name), ...args], { stdin, timeoutMs })
   if (exitCode !== 0) throw new Error(`${name} ${args[0]} failed (exit ${exitCode}): ${stderr.trim().split('\n')[0] ?? ''}`)
-  return JSON.parse(stdout)
+  // A JSON.parse error message can quote the start of its input, which here may be
+  // transcript text, so the message is replaced.
+  try {
+    return JSON.parse(stdout)
+  } catch {
+    throw new Error(`${name} ${args[0]} printed invalid JSON`)
+  }
 }
 
 const versionSpan = (versions: string[]) =>
@@ -253,7 +259,7 @@ async function judgeUpdates($: EngineInterface, current?: string): Promise<Judge
   return judged
 }
 
-const failure = (err: unknown) => (err instanceof Error ? err.message : 'error')
+const errorText = (err: unknown) => (err instanceof Error ? err.message : 'error')
 
 // Asks Haiku to review one ended session and has bin/review-session record the
 // answer. A call with no answer is recorded as failed, so the session is tried
@@ -269,7 +275,12 @@ async function reviewSession($: EngineInterface, review: Review) {
       effort: 'low',
       timeoutMs: MODEL_TIMEOUT_MS,
     })
-    outcome = reply.isAnswered ? { reply: reply.text } : { error: `Haiku gave no answer (${reply.reason})` }
+    if (reply.isAnswered) {
+      outcome = { reply: reply.text }
+    } else {
+      const status = reply.reason === 'api-error' && reply.status !== null ? ` ${reply.status}` : ''
+      outcome = { error: `Haiku gave no answer (${reply.reason}${status})` }
+    }
   } catch (err) {
     outcome = { error: `Haiku call failed (${errorName(err)})` }
   }
@@ -282,14 +293,14 @@ async function reviewSessions($: EngineInterface) {
   const { reviews } = (await callScript($, 'review-session', ['prompt'], '', REVIEW_PROMPT_TIMEOUT_MS)) as { reviews?: unknown }
   if (!Array.isArray(reviews)) throw new Error('review-session prompt printed no reviews')
   for (const review of reviews as Review[]) {
-    await reviewSession($, review).catch((err) => note($, `session review failed (${failure(err)})`))
+    await reviewSession($, review).catch((err) => note($, `session review failed (${errorText(err)})`))
   }
 }
 
 // From a timer, so the hook that calls it returns first.
 function startReviews($: EngineInterface) {
   $.clock.after(0, () => {
-    reviewSessions($).catch((err) => note($, `session review failed (${failure(err)})`))
+    reviewSessions($).catch((err) => note($, `session review failed (${errorText(err)})`))
   })
 }
 
@@ -348,7 +359,9 @@ function backfillText(judged: Judged) {
 export const register: Register = (on) => {
   // Registers /backfill-updates, checks whether the running Claude Code version has a
   // verdict, and reviews sessions that have ended. Both run from timers, after session
-  // start returns, because session.start is awaited before the first prompt.
+  // start returns, because session.start is awaited before the first prompt. A -p or
+  // Agent SDK run starts no reviews: it can exit mid-call and leave claimed sessions
+  // pending for an hour.
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'backfill-updates',
@@ -358,7 +371,7 @@ export const register: Register = (on) => {
     $.clock.after(0, () => {
       checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
     })
-    startReviews($)
+    if (e.isInteractive) startReviews($)
     return result
   })
 
@@ -379,16 +392,17 @@ export const register: Register = (on) => {
 
   // Marks the session's snapshot as ended, so the Live sessions panel shows it as
   // cleared or ended at once instead of live for 10 minutes. A /clear arrives here
-  // with reason 'clear'. The process goes on after a /clear and no session.start
-  // follows, so the review of the cleared session starts here. After any other
-  // end, the next session.start reviews it.
+  // with reason 'clear'. The process goes on after a /clear and after an in-process
+  // /resume (reason 'resume'), and no session.start follows either, so the review
+  // of the ended session starts here. After any other end, the next session.start
+  // reviews it.
   on('session.end', async ($, e, next) => {
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
     const result = await next(e)
     await running
-    if (e.reason === 'clear') startReviews($)
+    if (e.reason === 'clear' || e.reason === 'resume') startReviews($)
     return result
   })
 }

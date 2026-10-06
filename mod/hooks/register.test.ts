@@ -17,7 +17,7 @@ type World = {
   // `throws` makes model.complete reject, as an engine refusal does.
   replies: Array<
     | { isAnswered: true; text: string }
-    | { isAnswered: false; reason: 'api-error'; status: null; error: 'unknown' }
+    | { isAnswered: false; reason: 'api-error'; status: number | null; error: 'unknown' }
     | { isAnswered: false; reason: 'empty-reply' | 'aborted' }
     | { throws: true }
   >
@@ -605,7 +605,10 @@ test('a failed record is logged and the next review still runs', async ($, on) =
   await $.session.start(start)
   await clock.settle()
   expect(reviewRan.map((r) => r.argv[1])).toEqual(['prompt', 'record', 'record'])
-  expect(logged.length).toBe(2)
+  expect(logged).toEqual([
+    'session review failed (review-session record failed (exit 1): review-session: no claimed review for old)',
+    'session review failed (review-session record failed (exit 1): review-session: no claimed review for old)',
+  ])
 })
 
 test('a /clear starts a review once record-session-end has run', async ($, on) => {
@@ -622,4 +625,36 @@ test('an exit leaves the review to the next session start', async ($, on) => {
   await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
   await clock.settle()
   expect(reviewRan).toEqual([])
+})
+
+test('a -p run starts no reviews', async ($, on) => {
+  const { reviewRan, clock } = world(on, { files: judged, reviews: reviewing() })
+  await $.session.start({ ...start, isInteractive: false })
+  await clock.settle()
+  expect(reviewRan).toEqual([])
+})
+
+test('an in-process /resume starts a review like /clear', async ($, on) => {
+  const { reviewRan, clock } = world(on, { files: judged })
+  await $.session.end({ reason: 'resume', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  expect(reviewRan.map((r) => r.argv[1])).toEqual(['prompt'])
+})
+
+test('an api-error reply keeps its status in the recorded error', async ($, on) => {
+  const { reviewRan, clock } = world(on, {
+    files: judged,
+    reviews: reviewing(),
+    replies: [{ isAnswered: false, reason: 'api-error', status: 529, error: 'unknown' }],
+  })
+  await $.session.start(start)
+  await clock.settle()
+  expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', error: 'Haiku gave no answer (api-error 529)' })
+})
+
+test('invalid JSON from review-session is logged without its text', async ($, on) => {
+  const { logged, clock } = world(on, { files: judged, reviews: { prompt: { exitCode: 0, stdout: 'not json' } } })
+  await $.session.start(start)
+  await clock.settle()
+  expect(logged).toEqual(['session review failed (review-session prompt printed invalid JSON)'])
 })

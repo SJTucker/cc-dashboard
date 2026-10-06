@@ -230,9 +230,9 @@ test('finishReview adds the outcome and reviewedAt, and refuses a review that wa
 
 test('pendingReviews returns sessions with 3 or more prompts and records the rest as skipped', async () => {
   const { review, sessionsDir, dir, projects } = fixture();
-  writeSnapshot(sessionsDir, { sessionId: 'big', project: 'demo', endedAt: 300 });
-  writeSnapshot(sessionsDir, { sessionId: 'small', project: 'demo', endedAt: 200 });
-  writeSnapshot(sessionsDir, { sessionId: 'lost', project: 'demo', endedAt: 100 });
+  writeSnapshot(sessionsDir, { sessionId: 'big', project: 'demo', endedAt: NOW - 1 });
+  writeSnapshot(sessionsDir, { sessionId: 'small', project: 'demo', endedAt: NOW - 2 });
+  writeSnapshot(sessionsDir, { sessionId: 'lost', project: 'demo', endedAt: NOW - 3 });
   writeSnapshot(sessionsDir, { sessionId: 'running', project: 'demo' });
   writeSessionTranscript(projects, 'big', 3);
   writeSessionTranscript(projects, 'small', 2);
@@ -249,10 +249,18 @@ test('pendingReviews returns sessions with 3 or more prompts and records the res
   assert.deepStrictEqual(await review.pendingReviews({ sessionsDir, dir, projects, now: NOW }), []);
 });
 
+test('pendingReviews skips a session that ended more than 7 days ago', async () => {
+  const { review, sessionsDir, dir, projects } = fixture();
+  writeSnapshot(sessionsDir, { sessionId: 'stale', project: 'demo', endedAt: NOW - 8 * 24 * 60 * 60 * 1000 });
+  writeSessionTranscript(projects, 'stale', 3);
+  assert.deepStrictEqual(await review.pendingReviews({ sessionsDir, dir, projects, now: NOW }), []);
+  assert.strictEqual(fs.existsSync(path.join(dir, 'stale.json')), false);
+});
+
 test('pendingReviews hands back at most 3 sessions per run', async () => {
   const { review, sessionsDir, dir, projects } = fixture();
   for (let i = 0; i < 5; i++) {
-    writeSnapshot(sessionsDir, { sessionId: `s${i}`, project: 'demo', endedAt: i });
+    writeSnapshot(sessionsDir, { sessionId: `s${i}`, project: 'demo', endedAt: NOW - 100 + i });
     writeSessionTranscript(projects, `s${i}`, 3);
   }
   const first = await review.pendingReviews({ sessionsDir, dir, projects, now: NOW });

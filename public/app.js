@@ -1307,7 +1307,10 @@ const REVIEW_KINDS = {
 // "5m ago" or a time for today, and a weekday with a time for earlier days.
 function reviewTime(ms, now) {
   if (localDateStr(new Date(ms)) === localDateStr(new Date(now))) return formatAgo(ms, now);
-  return new Date(ms).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+  // A review can be about 8 days old, so past 6 days a weekday alone is ambiguous.
+  const older = now - ms > 6 * 24 * 60 * 60 * 1000;
+  const parts = older ? { month: 'short', day: 'numeric' } : { weekday: 'short' };
+  return new Date(ms).toLocaleString([], { ...parts, hour: '2-digit', minute: '2-digit' });
 }
 
 // Shown on every range, because a review belongs to a session, not to a day.
