@@ -101,3 +101,46 @@ test('digestTranscript returns null for a missing file', async () => {
   const { review } = load(base);
   assert.strictEqual(await review.digestTranscript(path.join(base, 'gone.jsonl')), null);
 });
+
+test('parseReview accepts an empty list as no suggestions', () => {
+  const { review } = load(tmpDir());
+  assert.deepStrictEqual(review.parseReview('{"suggestions": []}'), []);
+});
+
+test('parseReview reads a fenced reply and collapses whitespace', () => {
+  const { review } = load(tmpDir());
+  const reply = '```json\n{"suggestions": [{"kind": "token-waste", "text": "Read  the file\\nonce."}, {"kind": "claude-md", "text": "Add a rule."}]}\n```';
+  assert.deepStrictEqual(review.parseReview(reply), [
+    { kind: 'token-waste', text: 'Read the file once.' },
+    { kind: 'claude-md', text: 'Add a rule.' },
+  ]);
+});
+
+test('parseReview drops unknown kinds and empty text, keeps at most 3, and cuts text to 300 chars', () => {
+  const { review } = load(tmpDir());
+  const items = [
+    { kind: 'magic', text: 'dropped' },
+    { kind: 'workflow', text: '   ' },
+    { kind: 'workflow', text: 'a'.repeat(400) },
+    { kind: 'skill-or-hook', text: 'two' },
+    { kind: 'claude-md', text: 'three' },
+    { kind: 'token-waste', text: 'four' },
+  ];
+  const out = review.parseReview(JSON.stringify({ suggestions: items }));
+  assert.deepStrictEqual(out.map((s) => s.kind), ['workflow', 'skill-or-hook', 'claude-md']);
+  assert.strictEqual(out[0].text.length, 300);
+});
+
+test('parseReview returns null for prose, a top-level array, or suggestions that are not a list', () => {
+  const { review } = load(tmpDir());
+  assert.strictEqual(review.parseReview('Nothing to suggest.'), null);
+  assert.strictEqual(review.parseReview('[]'), null);
+  assert.strictEqual(review.parseReview('{"suggestions": "none"}'), null);
+  assert.strictEqual(review.parseReview('null'), null);
+});
+
+test('the system prompt names every kind and allows an empty list', () => {
+  const { review } = load(tmpDir());
+  for (const kind of review.KINDS) assert.ok(review.SYSTEM.includes(`"${kind}"`), kind);
+  assert.ok(review.SYSTEM.includes('{"suggestions": []}'));
+});
