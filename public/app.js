@@ -1246,6 +1246,9 @@ function sessionState(s) {
 // only, and read again by every renderSessions call so the 5 s poll keeps it.
 const expandedProjects = new Set();
 let lastLiveSessions = null;
+// Each group row's toggle button by project. renderSessions replaces the tbody, so it
+// uses this map to move keyboard focus to the new button for the same project.
+let sessionToggles = new Map();
 
 // Runs on every loadAndRender, like renderLimits, because "Last active" moves
 // with the clock even when the payload does not. Hidden off Today and when no
@@ -1255,6 +1258,8 @@ function renderSessions(live) {
   panel.hidden = !live || !live.sessions.length || currentDays !== 'today';
   if (panel.hidden) return;
   lastLiveSessions = live;
+  const focused = [...sessionToggles].find(([, button]) => button === document.activeElement);
+  const toggles = new Map();
 
   const now = Date.now();
   const cell = (text, cls) => el('td', cls ? { class: cls, text } : { text });
@@ -1286,6 +1291,7 @@ function renderSessions(live) {
       else expandedProjects.add(g.project);
       renderSessions(lastLiveSessions);
     });
+    toggles.set(g.project, toggle);
     const counts = [[g.cleared, 'cleared'], [g.ended, 'ended']]
       .filter(([n]) => n)
       .map(([n, word]) => ` · ${n} ${word}`)
@@ -1327,6 +1333,8 @@ function renderSessions(live) {
     cell(''),
   ]));
   document.getElementById('sessionsTable').replaceChildren(...rows);
+  sessionToggles = toggles;
+  if (focused) toggles.get(focused[0])?.focus();
 
   const liveCount = live.sessions.filter((s) => s.live).length;
   const endedCount = live.sessions.filter((s) => s.ended).length;
