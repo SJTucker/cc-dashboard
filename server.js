@@ -11,6 +11,7 @@ const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits, readDailyShare } = require('./lib/limits');
 const { readSessions, buildLiveSessions } = require('./lib/sessions');
+const { readReviews } = require('./lib/review');
 const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
@@ -245,6 +246,18 @@ app.get('/api/sessions/live', async (req, res) => {
   } catch (err) {
     console.error('[API] /api/sessions/live failed:', err);
     res.status(500).json({ error: 'Failed to read live sessions', detail: err.message });
+  }
+});
+
+// Reviews of ended sessions from cc-dashboard/reviews/ (lib/review.js), from the
+// last 7 days. Read-only: bin/review-session writes them, run by the mod in mod/.
+// Session ids stay on the server.
+app.get('/api/reviews', (req, res) => {
+  try {
+    res.json({ reviews: readReviews() });
+  } catch (err) {
+    console.error('[API] /api/reviews failed:', err);
+    res.status(500).json({ error: 'Failed to read session reviews', detail: err.message });
   }
 });
 

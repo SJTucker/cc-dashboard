@@ -34,10 +34,13 @@ function startServer() {
 
   delete process.env.LIVE_SESSIONS_DIR; // snapshots resolve under CLAUDE_CONFIG_DIR
   delete process.env.PRICES_JSON; // prices.json resolves under CLAUDE_CONFIG_DIR
+  delete process.env.REVIEWS_DIR; // reviews resolve under CLAUDE_CONFIG_DIR
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.PORT = '0'; // let the OS pick a free port
   delete require.cache[require.resolve('../lib/scan')];
   delete require.cache[require.resolve('../lib/sessions')];
+  delete require.cache[require.resolve('../lib/updates')];
+  delete require.cache[require.resolve('../lib/review')];
   delete require.cache[require.resolve('../server')];
   const server = require('../server');
   return server;
@@ -746,3 +749,36 @@ test(
     assert.match(warn.mock.calls[0].arguments[0], /Today/);
   }
 );
+
+test('GET /api/reviews lists finished reviews without session ids', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'reviews');
+  fs.mkdirSync(dir, { recursive: true });
+  const now = Date.now();
+  fs.writeFileSync(path.join(dir, 'sess-a.json'), JSON.stringify({
+    sessionId: 'sess-a', project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done',
+    suggestions: [{ kind: 'token-waste', text: 'Read the file once.' }],
+  }));
+  fs.writeFileSync(path.join(dir, 'sess-b.json'), JSON.stringify({
+    sessionId: 'sess-b', project: 'demo', endedAt: now - 30_000, status: 'skipped', reason: 'under 3 prompts', reviewedAt: now,
+  }));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`);
+  assert.strictEqual(res.status, 200);
+  const body = await res.json();
+  assert.deepStrictEqual(body, {
+    reviews: [{ project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done', suggestions: [{ kind: 'token-waste', text: 'Read the file once.' }] }],
+  });
+  assert.ok(!JSON.stringify(body).includes('sess-a'));
+});
+
+test('GET /api/reviews answers an empty list before any review exists', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`);
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(await res.json(), { reviews: [] });
+});
