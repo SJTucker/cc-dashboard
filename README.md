@@ -145,6 +145,28 @@ version judged again, delete its entry. Failures show as a transcript line start
 `cc-dashboard:`. The Haiku calls write no transcript line, so the dashboard's totals
 leave out their cost.
 
+### Session reviews
+
+When a session ends or `/clear` runs, the mod asks Haiku to review it and suggest up
+to three changes. The kinds are a CLAUDE.md rule that would have prevented a
+correction, a skill or hook for repeated steps, token waste such as large tool output
+or repeated reads, and a change to how the session was run. "No suggestions" is a
+normal result. The Session reviews panel lists the reviews from the last 7 days.
+
+- **When it runs.** After a `/clear`, at once, because the process goes on. After an
+  exit, at the next session start in any project.
+- **What is reviewed.** Sessions with an `endedAt` in their snapshot and 3 or more
+  typed prompts. Each session start reviews at most 3 sessions.
+- **What Haiku sees.** A digest of the transcript, one line per typed prompt, reply
+  start, tool call, tool error, large tool result and compaction. Prompts are cut to
+  400 characters and the digest to 60,000.
+- **Where results go.** `~/.claude/cc-dashboard/reviews/<session id>.json`, written
+  by `bin/review-session`. Files older than 7 days are deleted on the next run.
+- **Failures.** A failed review is retried after an hour while the session's
+  snapshot is still there, which is 24 hours.
+- **Cost.** Haiku calls made by the mod write no transcript line, so the dashboard's
+  totals leave out their cost.
+
 ### Without the mod
 
 The scripts also work on their own. Use this path or the mod, not both.
@@ -310,7 +332,7 @@ boundary back.
 ## File layout
 
 ```
-server.js              Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records, /api/sessions/live and the price routes (/api/prices, /api/prices/check, /api/prices/apply)
+server.js              Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records, /api/sessions/live, /api/reviews and the price routes (/api/prices, /api/prices/check, /api/prices/apply)
 lib/scan.js            Walks ~/.claude/projects, parses JSONL, aggregates by day and model
 lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window
@@ -321,14 +343,16 @@ lib/price-store.js     Applied price history in prices.json
 lib/price-fetch.js     Fetch and parse Anthropic's pricing page
 lib/net-guard.js       Host-header check + security headers
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
+lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, review files
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
 bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
 bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
+bin/review-session     Lists ended sessions to review and records Haiku's suggestions in cc-dashboard/reviews/
 mod/                   Claude Code mod that runs the recorders and judges new Claude Code releases
 public/index.html      Page shell
 public/style.css       All styling
-public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
+public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/reviews, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
 public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
 public/chart-geometry.js  X-axis label spacing and tooltip placement for the charts
 public/fonts/          Oxanium, Saira Condensed and JetBrains Mono (SIL OFL), with their licence files

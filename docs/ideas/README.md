@@ -13,4 +13,3 @@ then on.
 | [Before and after: chart on the right, one chart per row](before-after-chart-per-row.md) | Open: needs a daily series per row; default row and selection style open |
 | [Hide panels](hide-panels.md) | Open: "x" per panel, hamburger menu to restore, skip requests for hidden panels; panel ids and storage open |
 | [Roll up cleared and ended sessions per project](roll-up-ended-sessions.md) | Open: one row per project in Live sessions, expand on click; sums, model column and grouping key open |
-| [Review each session for suggested improvements](session-review.md) | Open: run on session end or /clear, "no suggestions" allowed; trigger timing, model and output location open |
