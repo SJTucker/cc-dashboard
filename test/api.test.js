@@ -750,7 +750,7 @@ test(
   }
 );
 
-test('GET /api/reviews lists finished reviews without session ids', async (t) => {
+test('GET /api/reviews lists finished reviews with the home directory', async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
@@ -769,9 +769,9 @@ test('GET /api/reviews lists finished reviews without session ids', async (t) =>
   assert.strictEqual(res.status, 200);
   const body = await res.json();
   assert.deepStrictEqual(body, {
-    reviews: [{ project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done', suggestions: [{ kind: 'token-waste', text: 'Read the file once.' }] }],
+    home: os.homedir(),
+    reviews: [{ sessionId: 'sess-a', title: null, transcript: null, project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done', suggestions: [{ kind: 'token-waste', text: 'Read the file once.' }] }],
   });
-  assert.ok(!JSON.stringify(body).includes('sess-a'));
 });
 
 test('GET /api/reviews answers an empty list before any review exists', async (t) => {
@@ -780,5 +780,5 @@ test('GET /api/reviews answers an empty list before any review exists', async (t
   await new Promise((resolve) => server.once('listening', resolve));
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`);
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(await res.json(), { reviews: [] });
+  assert.deepStrictEqual(await res.json(), { home: os.homedir(), reviews: [] });
 });

@@ -2,6 +2,7 @@
 'use strict';
 
 const express = require('express');
+const os = require('os');
 const path = require('path');
 const { scanUsage, getProjectsDir, localDateStr } = require('./lib/scan');
 const { windowStart } = require('./lib/window');
@@ -251,10 +252,12 @@ app.get('/api/sessions/live', async (req, res) => {
 
 // Reviews of ended sessions from cc-dashboard/reviews/ (lib/review.js), from the
 // last 7 days. Read-only: bin/review-session writes them, run by the mod in mod/.
-// Session ids stay on the server.
+// Each review includes its session id and transcript path, because the user pastes
+// them into a prompt for another model. Only this machine can reach the API: the
+// server listens on HOST (127.0.0.1). home lets the page shorten the transcript path.
 app.get('/api/reviews', (req, res) => {
   try {
-    res.json({ reviews: readReviews() });
+    res.json({ home: os.homedir(), reviews: readReviews() });
   } catch (err) {
     console.error('[API] /api/reviews failed:', err);
     res.status(500).json({ error: 'Failed to read session reviews', detail: err.message });

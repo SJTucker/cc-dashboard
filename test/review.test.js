@@ -290,8 +290,8 @@ test('recordReview throws on a bad session id, a missing outcome, or no claim', 
   assert.throws(() => review.recordReview({ sessionId: 'never', reply: '{"suggestions":[]}' }, dir, NOW), /no claimed review/);
 });
 
-test('readReviews lists done and failed reviews from the last 7 days without session ids', () => {
-  const { review, dir } = fixture();
+test('readReviews lists done and failed reviews from the last 7 days', () => {
+  const { review, dir, base } = fixture();
   const write = (id, fields) => {
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify({ sessionId: id, project: 'demo', ...fields }));
@@ -301,9 +301,9 @@ test('readReviews lists done and failed reviews from the last 7 days without ses
   write('skipped', { endedAt: NOW - HOUR, reviewedAt: NOW - HOUR, status: 'skipped', reason: 'under 3 prompts' });
   write('pending', { endedAt: NOW - HOUR, status: 'pending', claimedAt: NOW });
   write('old', { endedAt: NOW - 8 * DAY, reviewedAt: NOW - 8 * DAY, status: 'done', suggestions: [] });
-  assert.deepStrictEqual(review.readReviews(dir, NOW), [
-    { project: 'demo', endedAt: NOW - HOUR, reviewedAt: NOW - HOUR, status: 'failed', suggestions: [], error: 'Haiku call failed (Error)' },
-    { project: 'demo', endedAt: NOW - 2 * HOUR, reviewedAt: NOW - HOUR, status: 'done', suggestions: [{ kind: 'workflow', text: 'x' }] },
+  assert.deepStrictEqual(review.readReviews(dir, NOW, path.join(base, 'projects')), [
+    { sessionId: 'failed', title: null, transcript: null, project: 'demo', endedAt: NOW - HOUR, reviewedAt: NOW - HOUR, status: 'failed', suggestions: [], error: 'Haiku call failed (Error)' },
+    { sessionId: 'done', title: null, transcript: null, project: 'demo', endedAt: NOW - 2 * HOUR, reviewedAt: NOW - HOUR, status: 'done', suggestions: [{ kind: 'workflow', text: 'x' }] },
   ]);
 });
 
@@ -322,4 +322,44 @@ test('pruneReviews deletes review files older than 7 days', () => {
   fs.utimesSync(path.join(dir, 'new.json'), NOW / 1000, NOW / 1000);
   review.pruneReviews(dir, NOW);
   assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['new.json', 'notes.txt']);
+});
+
+test('readReviews returns the saved title and transcript, and finds the transcript of an older record', () => {
+  const { review, dir, projects } = fixture();
+  fs.mkdirSync(dir, { recursive: true });
+  const write = (id, fields) => fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify({
+    sessionId: id, project: 'demo', endedAt: NOW - HOUR, reviewedAt: NOW, status: 'done', suggestions: [], ...fields,
+  }));
+  write('saved', { title: 'Fix the chart', transcript: '/x/saved.jsonl' });
+  write('older', {});
+  write('bad', { title: 5, transcript: 7 });
+  writeSessionTranscript(projects, 'older', 1);
+  const byId = Object.fromEntries(review.readReviews(dir, NOW, projects).map((r) => [r.sessionId, r]));
+  assert.deepStrictEqual([byId.saved.title, byId.saved.transcript], ['Fix the chart', '/x/saved.jsonl']);
+  assert.deepStrictEqual([byId.older.title, byId.older.transcript], [null, path.join(projects, '-work-demo', 'older.jsonl')]);
+  assert.deepStrictEqual([byId.bad.title, byId.bad.transcript], [null, null]);
+});
+
+test('readTitle returns the last non-empty ai-title and null when there is none', async () => {
+  const { review, base } = fixture();
+  const file = path.join(base, 't.jsonl');
+  const lines = [{ type: 'ai-title', aiTitle: 'First' }, typed('hi'), { type: 'ai-title', aiTitle: '  Second  ' }, { type: 'ai-title', aiTitle: '   ' }, { type: 'ai-title', aiTitle: 4 }];
+  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\nnot json "ai-title"\n');
+  assert.strictEqual(await review.readTitle(file), 'Second');
+  fs.writeFileSync(file, JSON.stringify(typed('hi')));
+  assert.strictEqual(await review.readTitle(file), null);
+  assert.strictEqual(await review.readTitle(path.join(base, 'missing.jsonl')), null);
+});
+
+test('pendingReviews saves the transcript path and title in the claim, and finishReview keeps them', async () => {
+  const { review, sessionsDir, dir, projects } = fixture();
+  writeSnapshot(sessionsDir, { sessionId: 'big', project: 'demo', endedAt: NOW - 1 });
+  writeSessionTranscript(projects, 'big', 3);
+  const file = path.join(projects, '-work-demo', 'big.jsonl');
+  fs.appendFileSync(file, '\n' + JSON.stringify({ type: 'ai-title', aiTitle: 'Big one', sessionId: 'big' }) + '\n');
+  await review.pendingReviews({ sessionsDir, dir, projects, now: NOW });
+  const saved = () => JSON.parse(fs.readFileSync(path.join(dir, 'big.json'), 'utf8'));
+  assert.deepStrictEqual([saved().transcript, saved().title], [file, 'Big one']);
+  review.recordReview({ sessionId: 'big', reply: '{"suggestions":[]}' }, dir, NOW);
+  assert.deepStrictEqual([saved().transcript, saved().title, saved().status], [file, 'Big one', 'done']);
 });
