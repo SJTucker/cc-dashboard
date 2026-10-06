@@ -85,7 +85,7 @@ test('buildPrompt puts the topics in the system prompt and every entry in the pr
   assert.match(prompt, /## 2\.1\.287\n- IDE fix/);
 });
 
-test('parseReply reads plain and fenced JSON, keeps only asked versions, and skips relevant without a summary', () => {
+test('parseReply reads plain and fenced JSON, keeps only asked versions, and keeps relevant without a summary as relevant only', () => {
   const { updates } = setup();
   const reply = [
     { version: '2.1.286', relevant: true, summary: ' Subagents share the parent cache ' },
@@ -98,6 +98,7 @@ test('parseReply reads plain and fenced JSON, keeps only asked versions, and ski
   const expected = {
     '2.1.286': { relevant: true, summary: 'Subagents share the parent cache' },
     '2.1.287': { relevant: false },
+    '2.1.288': { relevant: true },
   };
   assert.deepStrictEqual(updates.parseReply(JSON.stringify(reply), asked), expected);
   assert.deepStrictEqual(updates.parseReply('```json\n' + JSON.stringify(reply) + '\n```', asked), expected);
