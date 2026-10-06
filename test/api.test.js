@@ -515,6 +515,43 @@ test('GET /api/sessions/live marks a session that ended', async (t) => {
   assert.strictEqual('sessionId' in body.sessions[0], false);
 });
 
+test('GET /api/sessions/live joins the activity file of a session', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const base = process.env.CLAUDE_CONFIG_DIR;
+  writeSnapshot(base, {
+    sessionId: 'sess-c', lastActiveAt: Date.now() - 30_000, project: 'demo', model: 'Sonnet 4.6',
+    costUsd: 0.1, durationMs: 60_000, apiDurationMs: 5_000, linesAdded: 0, linesRemoved: 0,
+  });
+  const dir = path.join(base, 'cc-dashboard', 'activity');
+  fs.mkdirSync(dir, { recursive: true });
+  const now = Date.now();
+  fs.writeFileSync(path.join(dir, 'sess-c.json'), JSON.stringify({
+    sessionId: 'sess-c', state: 'working', since: now - 5000,
+    tool: { name: 'Bash', detail: 'npm test', startedAt: now - 3000 }, subagents: 2, updatedAt: now - 1000,
+  }));
+
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  const [row] = (await res.json()).sessions;
+  assert.strictEqual(row.activity.state, 'working');
+  assert.strictEqual(row.activity.tool.detail, 'npm test');
+  assert.strictEqual(row.activity.subagents, 2);
+  assert.strictEqual('sessionId' in row.activity, false);
+});
+
+test('GET /api/sessions/live gives null activity when there is no activity directory', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  writeSnapshot(process.env.CLAUDE_CONFIG_DIR, {
+    sessionId: 'sess-d', lastActiveAt: Date.now() - 30_000, project: 'demo', model: 'Sonnet 4.6',
+    costUsd: 0.1, durationMs: 60_000, apiDurationMs: 5_000, linesAdded: 0, linesRemoved: 0,
+  });
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  assert.strictEqual((await res.json()).sessions[0].activity, null);
+});
+
 test('GET /api/sessions/live is empty with no snapshot directory', async (t) => {
   const server = startServer();
   t.after(() => server.close());

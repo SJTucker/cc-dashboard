@@ -12,6 +12,7 @@ const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits, readDailyShare } = require('./lib/limits');
 const { readSessions, buildLiveSessions } = require('./lib/sessions');
+const { readActivity } = require('./lib/activity');
 const { readReviews } = require('./lib/review');
 const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
@@ -239,11 +240,12 @@ app.get('/api/records', async (req, res) => {
 // Today's sessions from the snapshots in cc-dashboard/sessions/ (lib/sessions.js),
 // each with its tokens, cost today and lines changed from the Today scan. Read-only:
 // bin/record-statusline writes the snapshots, run by the mod in mod/ or by a
-// statusline script. Session ids stay on the server.
+// statusline script. Each session's `activity` comes from cc-dashboard/activity/
+// (lib/activity.js), written by the mod. Session ids stay on the server.
 app.get('/api/sessions/live', async (req, res) => {
   try {
     const data = await getTodayScan();
-    res.json(buildLiveSessions(readSessions(), data.efficiency.calls, Date.now(), data.efficiency.linesBySession, data.efficiency.titleBySession, data.efficiency.prompts));
+    res.json(buildLiveSessions(readSessions(), data.efficiency.calls, Date.now(), data.efficiency.linesBySession, data.efficiency.titleBySession, data.efficiency.prompts, readActivity()));
   } catch (err) {
     console.error('[API] /api/sessions/live failed:', err);
     res.status(500).json({ error: 'Failed to read live sessions', detail: err.message });

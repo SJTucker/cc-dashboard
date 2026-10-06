@@ -491,3 +491,50 @@ test('buildLiveSessions counts the session\'s typed prompts from the prompts arg
   assert.deepStrictEqual(sessions.map((s) => s.prompts).sort(), [0, 2]);
   assert.strictEqual(buildLiveSessions([snapshot()], [], NOW).sessions[0].prompts, 0);
 });
+
+function activityEntry(overrides = {}) {
+  return { sessionId: 's1', state: 'working', since: NOW - 30_000, tool: { name: 'Bash', detail: 'npm test', startedAt: NOW - 20_000 }, subagents: 1, updatedAt: NOW - 10_000, ...overrides };
+}
+
+test('buildLiveSessions joins activity by session id and drops the session id from it', () => {
+  const map = new Map([['s1', activityEntry()]]);
+  const { sessions } = buildLiveSessions([snapshot()], [], NOW, {}, {}, [], map);
+  assert.deepStrictEqual(sessions[0].activity, {
+    state: 'working', since: NOW - 30_000, tool: { name: 'Bash', detail: 'npm test', startedAt: NOW - 20_000 }, subagents: 1,
+  });
+});
+
+test('buildLiveSessions gives null activity when the map has no entry or is left out', () => {
+  assert.strictEqual(buildLiveSessions([snapshot()], [], NOW).sessions[0].activity, null);
+  assert.strictEqual(buildLiveSessions([snapshot()], [], NOW, {}, {}, [], new Map([['other', activityEntry({ sessionId: 'other' })]])).sessions[0].activity, null);
+});
+
+test('buildLiveSessions does not create a session from activity that has no snapshot', () => {
+  const map = new Map([['other', activityEntry({ sessionId: 'other' })]]);
+  const { sessions } = buildLiveSessions([snapshot()], [], NOW, {}, {}, [], map);
+  assert.strictEqual(sessions.length, 1);
+});
+
+test('buildLiveSessions ignores the activity of an ended session', () => {
+  const map = new Map([['s1', activityEntry()]]);
+  const snap = snapshot({ endedAt: NOW - 1000, endReason: 'clear' });
+  assert.strictEqual(buildLiveSessions([snap], [], NOW, {}, {}, [], map).sessions[0].activity, null);
+});
+
+test('buildLiveSessions drops stale working activity but keeps waiting', () => {
+  const stale = NOW - 11 * 60_000;
+  const working = new Map([['s1', activityEntry({ updatedAt: stale })]]);
+  const waiting = new Map([['s1', activityEntry({ state: 'waiting', tool: null, subagents: 0, updatedAt: stale })]]);
+  assert.strictEqual(buildLiveSessions([snapshot()], [], NOW, {}, {}, [], working).sessions[0].activity, null);
+  assert.strictEqual(buildLiveSessions([snapshot()], [], NOW, {}, {}, [], waiting).sessions[0].activity.state, 'waiting');
+});
+
+test('buildLiveSessions keeps waiting activity on a session that is no longer live', () => {
+  // runningSessions (Task 3.6) lists a session waiting on you even after it stops
+  // being live, so the API must keep its activity. This pins what the API sends.
+  const old = snapshot({ lastActiveAt: NOW - 3 * 60 * 60 * 1000 });
+  const map = new Map([['s1', activityEntry({ state: 'waiting', tool: null, subagents: 0, updatedAt: NOW - 3 * 60 * 60 * 1000 })]]);
+  const [row] = buildLiveSessions([old], [], NOW, {}, {}, [], map).sessions;
+  assert.strictEqual(row.live, false);
+  assert.strictEqual(row.activity.state, 'waiting');
+});
