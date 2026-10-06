@@ -848,6 +848,14 @@ html, body {
 .sessions-table .is-live { color: var(--text-primary); }
 .sessions-table .session-child td:first-child { padding-left: 24px; }
 .sessions-table .session-group .row-toggle { padding-right: 4px; }
+
+/* Session timeline (renderTimeline in app.js). */
+.timeline-label {
+  font-family: var(--font-data);
+  font-size: 11px;
+  fill: var(--text-primary);
+}
+.timeline-bar:hover { stroke: var(--text-primary); stroke-width: 1; }
 .reviews-list { list-style: none; margin: 0; padding: 0; }
 .review { padding: 8px 0; border-top: 1px solid var(--border); }
 .review:first-child { border-top: none; }
