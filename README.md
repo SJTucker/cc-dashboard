@@ -111,7 +111,8 @@ ln -s ~/code/cc-dashboard/mod ~/.claude/skills/cc-dashboard
 ```
 
 After each main turn, and whenever a rate-limit window moves by 1%, the mod runs
-`bin/record-statusline`. When a session ends, it runs `bin/record-session-end`.
+`bin/record-statusline`. When a session ends, it runs `bin/record-session-end`. It writes each session's
+live state itself (see "Live state").
 The mod needs nothing in your statusline script or in `settings.json`. It uses
 Claude Code's function hooks, which are early access and may change between
 releases. If an update breaks it, the transcript shows one line starting
@@ -172,6 +173,38 @@ transcript path was saved shows the path found by session id, and no title.
   snapshot is still there, which is 24 hours.
 - **Cost.** Haiku calls made by the mod write no transcript line, so the dashboard's
   totals leave out their cost.
+
+### Live state
+
+The mod also records what each session is doing, so the Running now table can show
+it. It listens to the main loop's events and keeps one small state per session:
+
+- **working** from the start of a turn (`turn.start`).
+- **waiting on you** from the end of a turn (`turn.complete`), whatever the reason.
+- **needs approval** when a tool's permission check answers `ask` (`tool.check`),
+  until that tool returns. The check answers `ask` before the permission mode is
+  applied, so a tool that the mode then allows without a prompt can show "needs
+  approval" for a moment.
+- **The running tool**, set on `tool.call` and cleared when the tool returns. For
+  Bash the text is the first 60 characters of the command, for Read, Edit and
+  Write it is the file's name, and for any other tool the tool's name alone.
+- **Subagents**, counted from the session's pending, running and waiting agents
+  (`agent.spawn` and `$.agent.list()`).
+
+The mod writes the state to `~/.claude/cc-dashboard/activity/<session id>.json`
+(or under `$CLAUDE_CONFIG_DIR`) with `$.fs.write`, at most every 250 ms per
+session. It writes the files itself, one write chain per session, so a session's
+states land in order. `readActivity` in `lib/activity.js` reads the files and
+deletes the ones older than a day. `session.end` stops the mod's writes for that
+session, and the dashboard shows no state for a session it marks ended.
+`resolveActivity` drops a working or needs approval state whose file has not
+changed for 10 minutes, because a crash sends no event. "Waiting on you" does not
+expire. The one exception is waiting while subagents are still running: that is
+shown as working, and it expires after 10 minutes like any working state. Without
+the mod, no file exists and the State and Doing now columns show "—". Subagent
+tool calls do not change the state of the main loop. A Bash command's first 60
+characters are stored in the activity file and shown on the page, so the text can
+contain what you typed in that command.
 
 ### Without the mod
 
@@ -244,11 +277,14 @@ npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.jso
 npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 
 The Live sessions panel holds two tables. Running now lists the live sessions,
-meaning those that wrote to a transcript in the last 10 minutes. Its columns are
+meaning those that wrote to a transcript in the last 10 minutes, and also any
+session waiting on you or needing approval, after those 10 minutes too. Its columns are
 Session, State, Doing now, Cost today and Last active. Prompts, Length and Lines
 are only in Today. Running now is ordered by the start of each session's first span
 today (`runningSessions` in `public/session-groups.js`), so rows do not move while
-they run. Its State and Doing now columns show "—" for now. Today lists every
+they run. State shows ▶ working, ⏸ waiting on you or ⚠ needs approval. Doing now shows the
+running tool, such as `Bash: npm test`, and the subagent count. Both show "—"
+without the mod (see "Live state"). Today lists every
 session of the day, live ones included, sorted by Cost today with the highest
 first. Ended sessions of one project collapse
 into a single expandable row when the project has two or more of them. The bar
@@ -322,12 +358,15 @@ boundary back.
 
 - **Read-only, except for two write paths.** The dashboard server only ever reads
   your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
-  `changes.json`, and `rate-limits.json`, and opens rtk's `history.db` with
+  `changes.json`, `rate-limits.json` and the activity files in
+  `cc-dashboard/activity/`, and opens rtk's `history.db` with
   sqlite's `readOnly` flag. One write path is `bin/record-statusline`,
   `bin/record-session-end` and `bin/judge-updates`, separate scripts the
   dashboard's Claude Code mod runs (see "Plan usage" above); they write only
   `rate-limits.json`, the per-session snapshots in `cc-dashboard/sessions/`, and,
-  through `bin/judge-updates`, `cc-dashboard/updates.json`. The other is the Apply
+  through `bin/judge-updates`, `cc-dashboard/updates.json`. The mod itself writes the
+  activity files (see "Live state"), and `lib/activity.js` deletes those older than
+  a day. The other write path is the Apply
   button in the Cost by model panel: clicking it is the only thing that writes
   `prices.json` (`PRICES_JSON` moves it), and nothing else under `server.js` or
   `public/` writes anything.
@@ -375,13 +414,14 @@ lib/price-store.js     Applied price history in prices.json
 lib/price-fetch.js     Fetch and parse Anthropic's pricing page
 lib/net-guard.js       Host-header check + security headers
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
+lib/activity.js        Live state of each session, read from the activity files the mod writes, and old files pruned
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, review files
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
 bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
 bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
 bin/review-session     Lists ended sessions to review and records Haiku's suggestions in cc-dashboard/reviews/
-mod/                   Claude Code mod that runs the recorders and judges new Claude Code releases
+mod/                   Claude Code mod that runs the recorders, records live session state and judges new Claude Code releases
 public/index.html      Page shell
 public/style.css       All styling
 public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/reviews, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
