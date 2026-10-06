@@ -24,13 +24,14 @@ Spotting a session that is going badly was not picked as a goal.
 
 ## Chosen direction
 
-The user liked two of the three directions offered, together:
+The user liked two of the three directions offered. The two can be built together in
+one panel, or as two separate panels, each built on its own:
 
-- **A day timeline strip on top.** One lane per session, with a bar from its first
+- **A day timeline strip.** One lane per session, with a bar from its first
   call to its last activity, similar to Grafana's state timeline. A running session's
   bar stays open at "now". It shows when each session ran and which ones overlapped.
-  Hovering a bar highlights its row in the list.
-- **A title-first list below it.** Two groups:
+  When it shares a panel with the list, hovering a bar highlights its row.
+- **A title-first list.** Two groups:
   - **Running now**, pinned on top. Each row shows the title, a small project tag,
     what the session is doing now, the count of open subagents, and cost.
   - **Today**, sorted by cost. Each row shows the title, project tag, length, lines
@@ -77,6 +78,10 @@ screenshots.
 
 ## Open questions
 
+- **One panel or two.** Separate panels let each be built, hidden and moved on its
+  own, and the timeline could then show on ranges other than Today. One panel lets a
+  hover link a bar to its row. Both depend on session titles, so titles come first
+  either way.
 - **"Waiting on me".** Every tool above leads with whether a session is waiting for
   the user. The mod only receives Claude Code's engine events. `Notification` and
   `Stop` are classic hook events, which an installed mod cannot see. Check which
