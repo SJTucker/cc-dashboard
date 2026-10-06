@@ -285,6 +285,7 @@ test('buildLiveSessions joins tokens and lines by sessionId and totals the rows'
   assert.deepStrictEqual(result.sessions.map((s) => [s.linesAdded, s.linesRemoved]), [[10, 2], [1, 0]]);
   assert.deepStrictEqual(result.sessions.map((s) => round6(s.costTodayUsd)), [0.25, 0.01]);
   assert.strictEqual('sessionId' in result.sessions[0], false);
+  assert.strictEqual('model' in result.sessions[0], false);
   assert.strictEqual('apiDurationMs' in result.sessions[0], false);
   assert.deepStrictEqual({ ...result.total, costTodayUsd: round6(result.total.costTodayUsd) }, {
     costUsd: 2, costTodayUsd: 0.26, linesAdded: 11, linesRemoved: 2, tokens: 1765,
