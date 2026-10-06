@@ -2,7 +2,8 @@ import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit }
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/ that a statusline script used to run, and judges new Claude Code releases
-// for the setup changes markers through bin/judge-updates. The scripts stay the only
+// for the setup changes markers through bin/judge-updates, and reviews ended sessions
+// for setup suggestions through bin/review-session. The scripts stay the only
 // writers, so the file formats, the atomic writes and the freshness checks are theirs.
 //
 // Only engine events are hooked. Claude Code's cc-plugin-sec-default skips every
@@ -17,6 +18,8 @@ const RELEASE = /^\d+\.\d+\.\d+$/
 // prompt reads every transcript to list versions, so it gets longer than record.
 const PROMPT_TIMEOUT_MS = 120_000
 const RECORD_TIMEOUT_MS = 10_000
+// review-session prompt reads up to three transcripts in full.
+const REVIEW_PROMPT_TIMEOUT_MS = 60_000
 const MODEL_TIMEOUT_MS = 60_000
 const RETRY_MS = 60 * 60 * 1000
 
@@ -165,6 +168,7 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
 
 type Batch = { versions: string[]; system: string; prompt: string }
 type Judged = { asked: number; recorded: number; relevant: number; failed: string[] }
+type Review = { sessionId: string; system: string; prompt: string }
 
 const errorName = (err: unknown) => (err instanceof Error ? err.name : 'error')
 
@@ -174,9 +178,11 @@ function note($: EngineInterface, text: string) {
   $.ui.log(text)
 }
 
-async function judgeScript($: EngineInterface, args: string[], stdin: string, timeoutMs: number): Promise<unknown> {
-  const { exitCode, stdout, stderr } = await $.process.run([await scriptPath($, 'judge-updates'), ...args], { stdin, timeoutMs })
-  if (exitCode !== 0) throw new Error(`judge-updates ${args[0]} failed (exit ${exitCode}): ${stderr.trim().split('\n')[0] ?? ''}`)
+// Runs a bin/ script that prints one JSON object, and throws with the first line of
+// its stderr when it exits non-zero.
+async function callScript($: EngineInterface, name: string, args: string[], stdin: string, timeoutMs: number): Promise<unknown> {
+  const { exitCode, stdout, stderr } = await $.process.run([await scriptPath($, name), ...args], { stdin, timeoutMs })
+  if (exitCode !== 0) throw new Error(`${name} ${args[0]} failed (exit ${exitCode}): ${stderr.trim().split('\n')[0] ?? ''}`)
   return JSON.parse(stdout)
 }
 
@@ -206,7 +212,7 @@ async function judgeBatch($: EngineInterface, batch: Batch, judged: Judged) {
   }
   try {
     const input = JSON.stringify({ versions: batch.versions, reply: reply.text })
-    const out = (await judgeScript($, ['record'], input, RECORD_TIMEOUT_MS)) as { recorded: number; relevant: number }
+    const out = (await callScript($, 'judge-updates', ['record'], input, RECORD_TIMEOUT_MS)) as { recorded: number; relevant: number }
     judged.recorded += out.recorded
     judged.relevant += out.relevant
   } catch (err) {
@@ -234,7 +240,7 @@ async function judgeUpdates($: EngineInterface, current?: string): Promise<Judge
   let batches: Batch[]
   try {
     const args = current ? ['prompt', '--current', current] : ['prompt']
-    batches = ((await judgeScript($, args, changelog, PROMPT_TIMEOUT_MS)) as { batches: Batch[] }).batches
+    batches = ((await callScript($, 'judge-updates', args, changelog, PROMPT_TIMEOUT_MS)) as { batches: Batch[] }).batches
     if (!Array.isArray(batches)) {
       judged.failed.push('judge-updates prompt printed no batches')
       return judged
@@ -245,6 +251,46 @@ async function judgeUpdates($: EngineInterface, current?: string): Promise<Judge
   }
   for (const batch of batches) await judgeBatch($, batch, judged)
   return judged
+}
+
+const failure = (err: unknown) => (err instanceof Error ? err.message : 'error')
+
+// Asks Haiku to review one ended session and has bin/review-session record the
+// answer. A call with no answer is recorded as failed, so the session is tried
+// again after an hour.
+async function reviewSession($: EngineInterface, review: Review) {
+  let outcome: { reply: string } | { error: string }
+  try {
+    const reply = await $.model.complete({
+      model: 'haiku',
+      system: review.system,
+      prompt: review.prompt,
+      maxTokens: 1024,
+      effort: 'low',
+      timeoutMs: MODEL_TIMEOUT_MS,
+    })
+    outcome = reply.isAnswered ? { reply: reply.text } : { error: `Haiku gave no answer (${reply.reason})` }
+  } catch (err) {
+    outcome = { error: `Haiku call failed (${errorName(err)})` }
+  }
+  await callScript($, 'review-session', ['record'], JSON.stringify({ sessionId: review.sessionId, ...outcome }), RECORD_TIMEOUT_MS)
+}
+
+// Reviews each ended session bin/review-session hands back. A failed review is
+// logged and the rest still run.
+async function reviewSessions($: EngineInterface) {
+  const { reviews } = (await callScript($, 'review-session', ['prompt'], '', REVIEW_PROMPT_TIMEOUT_MS)) as { reviews?: unknown }
+  if (!Array.isArray(reviews)) throw new Error('review-session prompt printed no reviews')
+  for (const review of reviews as Review[]) {
+    await reviewSession($, review).catch((err) => note($, `session review failed (${failure(err)})`))
+  }
+}
+
+// From a timer, so the hook that calls it returns first.
+function startReviews($: EngineInterface) {
+  $.clock.after(0, () => {
+    reviewSessions($).catch((err) => note($, `session review failed (${failure(err)})`))
+  })
 }
 
 // Where the verdicts live, as lib/updates.js getUpdatesPath finds them:
@@ -300,9 +346,9 @@ function backfillText(judged: Judged) {
 }
 
 export const register: Register = (on) => {
-  // Registers /backfill-updates and checks whether the running Claude Code version
-  // has a verdict. The check runs from a timer, after session start returns, because
-  // session.start is awaited before the first prompt.
+  // Registers /backfill-updates, checks whether the running Claude Code version has a
+  // verdict, and reviews sessions that have ended. Both run from timers, after session
+  // start returns, because session.start is awaited before the first prompt.
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'backfill-updates',
@@ -312,6 +358,7 @@ export const register: Register = (on) => {
     $.clock.after(0, () => {
       checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
     })
+    startReviews($)
     return result
   })
 
@@ -332,13 +379,16 @@ export const register: Register = (on) => {
 
   // Marks the session's snapshot as ended, so the Live sessions panel shows it as
   // cleared or ended at once instead of live for 10 minutes. A /clear arrives here
-  // with reason 'clear'.
+  // with reason 'clear'. The process goes on after a /clear and no session.start
+  // follows, so the review of the cleared session starts here. After any other
+  // end, the next session.start reviews it.
   on('session.end', async ($, e, next) => {
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
     const result = await next(e)
     await running
+    if (e.reason === 'clear') startReviews($)
     return result
   })
 }

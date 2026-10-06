@@ -22,6 +22,9 @@ type World = {
     | { throws: true }
   >
   scripts: Record<string, { exitCode: number; stdout: string; stderr?: string }>
+  // Answers bin/review-session by subcommand. Its runs go to reviewRan, so the
+  // update tests' exact run lists in `ran` stay as they are.
+  reviews: Record<string, { exitCode: number; stdout: string; stderr?: string }>
   // The plugin's key-value store, which $.store.get and $.store.set read and write.
   store: Record<string, unknown>
 }
@@ -47,10 +50,12 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     replies: [],
     registerFails: false,
     scripts: {},
+    reviews: { prompt: { exitCode: 0, stdout: '{"reviews":[]}' } },
     store: {},
     ...w,
   }
   const ran: Ran[] = []
+  const reviewRan: Ran[] = []
   const endSawRan: number[] = []
   const listed: string[] = []
   const clock = mock.clock(on, { now: 61_000 })
@@ -109,6 +114,18 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     return { sessionId: e.sessionId }
   })
   on('process.run', (_$, e) => {
+    if (e.argv[0]?.endsWith('/review-session')) {
+      const stdin = e.init?.stdin
+      let parsed: unknown = stdin
+      try {
+        parsed = stdin ? JSON.parse(stdin) : stdin
+      } catch {
+        // left as text
+      }
+      reviewRan.push({ argv: e.argv, stdin: parsed, timeoutMs: e.init?.timeoutMs })
+      const out = state.reviews[e.argv[1] ?? ''] ?? { exitCode: 1, stdout: '', stderr: 'review-session: no answer set' }
+      return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     if (runThrows) throw new Error('spawn failed')
     const stdin = e.init?.stdin
     let parsed: unknown = stdin
@@ -122,7 +139,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     const out = script ?? { exitCode, stdout: '', stderr: '' }
     return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  return { ran, state, listed, endSawRan, clock, fetched, asked, registered, logged }
+  return { ran, reviewRan, state, listed, endSawRan, clock, fetched, asked, registered, logged }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -511,4 +528,98 @@ test('/backfill-updates carries on after one Haiku call rejects', async ($, on) 
   const result = await $.command.run(backfill)
   expect(ran.filter((r) => r.argv[1] === 'record').length).toBe(1)
   expect(result.text).toBe('Judged 1 of 2 versions, 1 relevant. Failed: Haiku call failed for 2.1.290 (HooksError)')
+})
+
+// updates.json already has a verdict for the running version, so these tests make
+// no update request and `asked` holds only review calls.
+const judged = { [UPDATES]: '{"2.1.290":{"relevant":false}}' }
+const REVIEW = { sessionId: 'old', system: 'REVIEW SYSTEM', prompt: 'USER: fix it' }
+type Answer = { exitCode: number; stdout: string; stderr?: string }
+const reviewing = (reviews = [REVIEW], record: Answer = { exitCode: 0, stdout: '{"status":"done","suggestions":0}' }) => ({
+  prompt: { exitCode: 0, stdout: JSON.stringify({ reviews }) },
+  record,
+})
+
+test('session.start reviews ended sessions after it returns', async ($, on) => {
+  const { reviewRan, asked, clock } = world(on, {
+    files: judged,
+    reviews: reviewing(),
+    replies: [{ isAnswered: true, text: '{"suggestions":[]}' }],
+  })
+  await $.session.start(start)
+  expect(reviewRan).toEqual([])
+  await clock.settle()
+  expect(reviewRan.map((r) => r.argv)).toEqual([
+    ['/repo/bin/review-session', 'prompt'],
+    ['/repo/bin/review-session', 'record'],
+  ])
+  expect(reviewRan[0]?.timeoutMs).toBe(60000)
+  expect(asked).toEqual([{ model: 'haiku', system: 'REVIEW SYSTEM', prompt: 'USER: fix it', maxTokens: 1024, effort: 'low', timeoutMs: 60000 }])
+  expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', reply: '{"suggestions":[]}' })
+})
+
+test('no ended session means no Haiku call', async ($, on) => {
+  const { reviewRan, asked, logged, clock } = world(on, { files: judged })
+  await $.session.start(start)
+  await clock.settle()
+  expect(reviewRan.map((r) => r.argv[1])).toEqual(['prompt'])
+  expect(asked).toEqual([])
+  expect(logged).toEqual([])
+})
+
+test('a Haiku call with no answer is recorded as an error', async ($, on) => {
+  const { reviewRan, clock } = world(on, {
+    files: judged,
+    reviews: reviewing(),
+    replies: [{ isAnswered: false, reason: 'empty-reply' }],
+  })
+  await $.session.start(start)
+  await clock.settle()
+  expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', error: 'Haiku gave no answer (empty-reply)' })
+})
+
+test('a refused Haiku call is recorded as an error', async ($, on) => {
+  const { reviewRan, clock } = world(on, { files: judged, reviews: reviewing(), replies: [{ throws: true }] })
+  await $.session.start(start)
+  await clock.settle()
+  expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', error: 'Haiku call failed (HooksError)' })
+})
+
+test('a failed prompt step is logged and asks Haiku nothing', async ($, on) => {
+  const { asked, logged, clock } = world(on, {
+    files: judged,
+    reviews: { prompt: { exitCode: 1, stdout: '', stderr: 'review-session: disk full\n' } },
+  })
+  await $.session.start(start)
+  await clock.settle()
+  expect(asked).toEqual([])
+  expect(logged).toEqual(['session review failed (review-session prompt failed (exit 1): review-session: disk full)'])
+})
+
+test('a failed record is logged and the next review still runs', async ($, on) => {
+  const { reviewRan, logged, clock } = world(on, {
+    files: judged,
+    reviews: reviewing([REVIEW, { ...REVIEW, sessionId: 'older' }], { exitCode: 1, stdout: '', stderr: 'review-session: no claimed review for old\n' }),
+    replies: [{ isAnswered: true, text: '{"suggestions":[]}' }, { isAnswered: true, text: '{"suggestions":[]}' }],
+  })
+  await $.session.start(start)
+  await clock.settle()
+  expect(reviewRan.map((r) => r.argv[1])).toEqual(['prompt', 'record', 'record'])
+  expect(logged.length).toBe(2)
+})
+
+test('a /clear starts a review once record-session-end has run', async ($, on) => {
+  const { ran, reviewRan, clock } = world(on, { files: judged })
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  expect(ran.map((r) => r.argv[0])).toEqual(['/repo/bin/record-session-end'])
+  expect(reviewRan).toEqual([])
+  await clock.settle()
+  expect(reviewRan.map((r) => r.argv[1])).toEqual(['prompt'])
+})
+
+test('an exit leaves the review to the next session start', async ($, on) => {
+  const { reviewRan, clock } = world(on, { files: judged })
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  expect(reviewRan).toEqual([])
 })
