@@ -1018,3 +1018,38 @@ test('after session.end the same id starts over: the next change writes at once,
   await clock.settle()
   expect(writeLog.map((w) => w.text)).toEqual([writeLog[0]?.text, writeLog[0]?.text])
 })
+
+test('a subagent whose turn ended is left out of the count while agent.list still reports it running', async ($, on) => {
+  const running = (id: string): AgentInfo => ({ id, description: 'd', type: 'Explore', status: 'running' })
+  const { writes, state, clock } = world(on, { agents: [running('a1'), running('a2')] })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  expect(activityOf(writes).subagents).toBe(2)
+  await clock.advance(300)
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await clock.settle()
+  expect(activityOf(writes).subagents).toBe(1)
+  // The engine catches up and a2 ends too. a1 resumes under its id and counts again.
+  state.agents = [{ ...running('a1'), status: 'completed' }, { ...running('a2'), status: 'completed' }]
+  await clock.advance(300)
+  await $.agent.spawn({ prompt: 'p' })
+  await clock.settle()
+  expect(activityOf(writes).subagents).toBe(0)
+  state.agents = [running('a1')]
+  await clock.advance(300)
+  await $.agent.spawn({ prompt: 'p' })
+  await clock.settle()
+  expect(activityOf(writes).subagents).toBe(1)
+})
+
+test('session.end drops the cached transcript path, so a later measure for that id searches again', async ($, on) => {
+  const found = '/home/u/.claude/projects/-work-start-dir/s1.jsonl'
+  const { listed } = world(on, {
+    exists: (path) => path === found,
+    dirs: { '/home/u/.claude/projects': ['-work-start-dir'] },
+  })
+  await $.session.measure(measure([FIVE]))
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(2)
+})

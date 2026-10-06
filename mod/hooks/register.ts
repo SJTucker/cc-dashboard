@@ -65,7 +65,8 @@ async function run($: EngineInterface, name: string, input: object, timeoutMs: n
 }
 
 // Transcript paths found so far, by session id. A transcript does not move, so a
-// cached path is not checked again.
+// cached path is not checked again. session.end drops the ended session's path:
+// only session.measure reads this map, for the current session id.
 const transcripts = new Map<string, string>()
 
 // <config dir> is CLAUDE_CONFIG_DIR with a leading ~ expanded, else ~/.claude.
@@ -386,6 +387,10 @@ const runningTools = new Map<string, Map<string, ToolRun>>()
 // Main-loop tools whose tool.check answered ask, by session id and tool_use_id. The
 // state is approval while any of them runs.
 const asking = new Map<string, Set<string>>()
+// Subagents whose turn.complete has fired, by session id. The count leaves them out
+// until $.agent.list() stops reporting them as pending, running or waiting, because
+// the engine may not have updated the status yet when the turn.complete hook runs.
+const endedAgents = new Map<string, Set<string>>()
 const lastWriteAt = new Map<string, number>()
 // The throttle timer of a session with a write waiting on it.
 const writeTimers = new Map<string, Timer>()
@@ -429,11 +434,18 @@ function toolDetail(tool: string, args: Record<string, unknown>) {
 
 // An agent counts while it is pending, running or waiting: all three are work that
 // has not ended. idle is a teammate between turns, and completed, failed and killed
-// have ended.
-async function subagentCount($: EngineInterface) {
+// have ended. An agent in the session's endedAgents does not count. It leaves
+// endedAgents once the list no longer reports it in progress, so an agent resumed
+// later under the same id counts again.
+async function subagentCount($: EngineInterface, id: string) {
   try {
     const live = ['pending', 'running', 'waiting']
-    return (await $.agent.list()).filter((agent) => live.includes(agent.status)).length
+    const inProgress = (await $.agent.list()).filter((agent) => live.includes(agent.status))
+    const ended = endedAgents.get(id)
+    for (const agentId of ended ?? []) {
+      if (!inProgress.some((agent) => agent.id === agentId)) ended?.delete(agentId)
+    }
+    return inProgress.filter((agent) => !ended?.has(agent.id)).length
   } catch {
     return 0
   }
@@ -444,7 +456,7 @@ async function subagentCount($: EngineInterface) {
 async function writeActivity($: EngineInterface, id: string) {
   const dir = await configDir($)
   if (!dir) return
-  const subagents = await subagentCount($)
+  const subagents = await subagentCount($, id)
   const a = activities.get(id)
   if (!a) return
   const text = JSON.stringify({ ...a, subagents })
@@ -504,6 +516,8 @@ function forgetSession(id: string) {
   activities.delete(id)
   runningTools.delete(id)
   asking.delete(id)
+  endedAgents.delete(id)
+  transcripts.delete(id)
   lastWriteAt.delete(id)
   writeTimers.get(id)?.cancel()
   writeTimers.delete(id)
@@ -578,13 +592,21 @@ export const register: Register = (on) => {
   })
 
   // A turn that ends leaves the session waiting on the user, whatever the reason.
-  // A subagent's turn that ends changes the subagent count, so the file is rewritten.
-  // The rewrite starts after next(e), so $.agent.list() is read after the engine has
-  // handled the end of that turn.
+  // A subagent's turn that ends changes the subagent count. Its agentId goes into
+  // endedAgents, so the count leaves it out even while $.agent.list() still reports
+  // it running, and the file is rewritten.
   on('turn.complete', async ($, e, next) => {
     if (e.agentId) {
+      const agentId = e.agentId
       const result = await next(e)
-      await track($, () => {})
+      await track($, (a) => {
+        let ended = endedAgents.get(a.sessionId)
+        if (!ended) {
+          ended = new Set()
+          endedAgents.set(a.sessionId, ended)
+        }
+        ended.add(agentId)
+      })
       return result
     }
     await track($, (a, now) => {
