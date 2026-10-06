@@ -23,3 +23,15 @@ test('shortPath replaces a leading home directory with ~', () => {
   assert.strictEqual(shortPath('/other/x', '/Users/a'), '/other/x');
   assert.strictEqual(shortPath('/other/x', undefined), '/other/x');
 });
+
+test('reviewPrompt words a review with no suggestions or a failed review', () => {
+  const ask = 'What would you suggest, and why might Haiku have missed it?';
+  assert.strictEqual(
+    reviewPrompt({ transcript: '/h/a.jsonl', status: 'done', suggestions: [] }),
+    `Review the Claude Code session transcript at /h/a.jsonl. A Haiku review of it made no suggestions.\n${ask}`,
+  );
+  assert.strictEqual(
+    reviewPrompt({ transcript: '/h/a.jsonl', status: 'failed', suggestions: [] }),
+    `Review the Claude Code session transcript at /h/a.jsonl. A Haiku review of it failed.\n${ask}`,
+  );
+});

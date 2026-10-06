@@ -5,11 +5,17 @@
 
 // The prompt the Copy prompt button puts on the clipboard, for a stronger model to
 // check Haiku's suggestions against the transcript. Null when the review has no
-// transcript path.
+// transcript path. A failed review or one with no suggestions gets a prompt that
+// asks for suggestions instead of a check.
 function reviewPrompt(review) {
   if (!review.transcript) return null;
+  const intro = `Review the Claude Code session transcript at ${review.transcript}.`;
+  if (review.status === 'failed' || !review.suggestions.length) {
+    const what = review.status === 'failed' ? 'failed' : 'made no suggestions';
+    return `${intro} A Haiku review of it ${what}.\nWhat would you suggest, and why might Haiku have missed it?`;
+  }
   const lines = review.suggestions.map((s) => `- ${s.text}`).join('\n');
-  return `Review the Claude Code session transcript at ${review.transcript}. A Haiku review of it suggested:\n${lines}\nWhich of these are right, which are wrong, and what did it miss?`;
+  return `${intro} A Haiku review of it suggested:\n${lines}\nWhich of these are right, which are wrong, and what did it miss?`;
 }
 
 // Replaces a leading home directory with ~. The folder name must end at the home
