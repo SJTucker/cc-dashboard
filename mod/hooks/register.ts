@@ -18,6 +18,7 @@ const RELEASE = /^\d+\.\d+\.\d+$/
 const PROMPT_TIMEOUT_MS = 120_000
 const RECORD_TIMEOUT_MS = 10_000
 const MODEL_TIMEOUT_MS = 60_000
+const RETRY_MS = 60 * 60 * 1000
 
 type Frozen<T> = { readonly [K in keyof T]: T[K] }
 type Window = { used_percentage: number; resets_at?: number }
@@ -265,14 +266,27 @@ async function checkVersion($: EngineInterface) {
   const text = await $.fs.read(file).then(String, () => undefined)
   let verdicts: Record<string, unknown> = {}
   if (text !== undefined) {
+    let parsed: unknown
     try {
-      verdicts = JSON.parse(text) as Record<string, unknown>
+      parsed = JSON.parse(text)
     } catch {
       note($, `${file} is not valid JSON; fix or delete it`)
       return
     }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+      note($, `${file} is not a JSON object; fix or delete it`)
+      return
+    }
+    verdicts = parsed as Record<string, unknown>
   }
   if (Object.hasOwn(verdicts, base)) return
+  // On release day the changelog has no entry for the running version yet, so each
+  // session start would download the whole changelog again. One attempt per version
+  // per hour is enough. /backfill-updates does not apply this limit.
+  const now = await $.clock.now()
+  const last = (await $.store.get('updateCheck')) as { version?: unknown; at?: unknown } | undefined
+  if (last?.version === base && typeof last.at === 'number' && now - last.at < RETRY_MS) return
+  await $.store.set('updateCheck', { version: base, at: now })
   const judged = await judgeUpdates($, base)
   for (const failure of judged.failed) note($, failure)
 }

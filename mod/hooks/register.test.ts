@@ -22,6 +22,8 @@ type World = {
     | { throws: true }
   >
   scripts: Record<string, { exitCode: number; stdout: string; stderr?: string }>
+  // The plugin's key-value store, which $.store.get and $.store.set read and write.
+  store: Record<string, unknown>
 }
 
 const entry = (name: string): Entry => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -45,6 +47,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     replies: [],
     registerFails: false,
     scripts: {},
+    store: {},
     ...w,
   }
   const ran: Ran[] = []
@@ -77,6 +80,11 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     const reply = state.replies.shift() ?? { isAnswered: false as const, reason: 'empty-reply' as const }
     if ('throws' in reply) throw new Error('refused')
     return { value: { ...reply, usage } }
+  })
+  on('store.get', (_$, e) => ({ value: state.store[e.key] }))
+  on('store.set', (_$, e) => {
+    state.store[e.key] = e.value
+    return { value: undefined }
   })
   on('session.version', () => ({ value: state.version }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
@@ -385,6 +393,56 @@ test('a malformed updates.json logs and fetches nothing', async ($, on) => {
   await clock.settle()
   expect(fetched).toEqual([])
   expect(logged).toEqual([`cc-dashboard: ${UPDATES} is not valid JSON; fix or delete it`])
+})
+
+test('an updates.json holding an array or null logs and fetches nothing', async ($, on) => {
+  for (const content of ['[]', 'null']) {
+    const { fetched, asked, logged, clock } = world(on, { files: { [UPDATES]: content } })
+    await $.session.start(start)
+    await clock.settle()
+    expect(fetched).toEqual([])
+    expect(asked).toEqual([])
+    expect(logged).toEqual([`cc-dashboard: ${UPDATES} is not a JSON object; fix or delete it`])
+  }
+})
+
+const HOUR = 60 * 60 * 1000
+
+test('a second session start within the hour does not fetch again', async ($, on) => {
+  const { fetched, clock } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  await $.session.start(start)
+  await clock.settle()
+  expect(fetched.length).toBe(1)
+})
+
+test('a session start an hour later fetches again', async ($, on) => {
+  const { fetched, clock } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  clock.advance(HOUR)
+  await $.session.start(start)
+  await clock.settle()
+  expect(fetched.length).toBe(2)
+})
+
+test('a different running version is not held back by the last check', async ($, on) => {
+  const { fetched, clock, state } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  state.version = { version: '2.1.291', base: '2.1.291' }
+  await $.session.start(start)
+  await clock.settle()
+  expect(fetched.length).toBe(2)
+})
+
+test('/backfill-updates fetches inside the hour', async ($, on) => {
+  const { fetched, clock } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  await $.command.run(backfill)
+  expect(fetched.length).toBe(2)
 })
 
 test('/backfill-updates judges every batch and reports the counts', async ($, on) => {

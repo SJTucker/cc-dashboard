@@ -129,11 +129,14 @@ compaction, tool output, subagents, or default model or effort. `bin/judge-updat
 writes the verdict. A relevant version gets a star marker at the first call made on
 it.
 
+A running version whose changelog entry is not out yet, as on release day, is
+retried at most once an hour from session start. `/backfill-updates` judges it
+whenever you run it.
+
 Run `/backfill-updates` to judge every version in your transcripts. It reports how
 many versions it judged and how many are relevant. Run it again whenever a version
 missed its check: session start judges only the running version, so an update you
-moved past before a later session, or a release-day changelog without the entry,
-waits for the next `/backfill-updates`.
+moved past before a later session waits for the next `/backfill-updates`.
 
 Each version is judged once. To change a verdict, edit `relevant` or `summary` in
 `updates.json`. To show a marker for a version Haiku rejected, set `relevant` to
