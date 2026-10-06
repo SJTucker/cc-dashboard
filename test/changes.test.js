@@ -147,6 +147,46 @@ test('updateMarkers labels a relevant verdict without a summary with the version
   ]);
 });
 
+test('updateMarkers skips a version first used after a newer one', () => {
+  const { changes } = setup({
+    updates: { '2.1.290': { relevant: true, summary: 'Newer' }, '2.1.280': { relevant: true, summary: 'Older' } },
+  });
+  const t0 = new Date(2026, 8, 1).getTime();
+  const calls = [
+    { t: t0, version: '2.1.270' },
+    { t: t0 + 8 * DAY, version: '2.1.290' },
+    { t: t0 + 10 * DAY, version: '2.1.280' },
+  ];
+  assert.deepStrictEqual(changes.updateMarkers(calls).map((m) => m.label), ['Claude Code 2.1.290: Newer']);
+});
+
+test('updateMarkers marks consecutive releases first used in version order', () => {
+  const { changes } = setup({
+    updates: { '2.1.286': { relevant: true, summary: 'A' }, '2.1.287': { relevant: true, summary: 'B' } },
+  });
+  const t0 = new Date(2026, 8, 1).getTime();
+  const calls = [
+    { t: t0, version: '2.1.270' },
+    { t: t0 + 8 * DAY, version: '2.1.286' },
+    { t: t0 + 9 * DAY, version: '2.1.287' },
+  ];
+  assert.deepStrictEqual(changes.updateMarkers(calls).map((m) => m.label), ['Claude Code 2.1.286: A', 'Claude Code 2.1.287: B']);
+});
+
+test('updateMarkers lets a not-relevant newer release block an older relevant one', () => {
+  const { changes } = setup({
+    updates: { '2.1.291': { relevant: false }, '2.1.288': { relevant: true, summary: 'Older' } },
+  });
+  const t0 = new Date(2026, 8, 1).getTime();
+  const calls = [
+    { t: t0, version: '2.1.270' },
+    { t: t0 + 8 * DAY, version: '2.1.291' },
+    { t: t0 + 9 * DAY, version: '2.1.288' },
+    { t: t0 + 10 * DAY, version: '2.1.292-dev.1' },
+  ];
+  assert.deepStrictEqual(changes.updateMarkers(calls), []);
+});
+
 test('updateMarkers returns [] without updates.json', () => {
   const { changes } = setup();
   assert.deepStrictEqual(changes.updateMarkers([{ t: 0, version: '2.1.280' }, { t: 30 * DAY, version: '2.1.286' }]), []);
