@@ -284,31 +284,6 @@ out. Read the usage cache from another file with `CLAUDE_JSON=~/path/.claude.jso
 npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.json
 npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 
-### Hiding panels
-
-Each panel and summary card has an "x" button, shown when the pointer is over it or
-it has keyboard focus. The button hides the panel or card. The ☰ button at the top
-right lists everything hidden, and choosing an entry shows it again. The list is
-kept in the browser's localStorage under `cc-dashboard:hidden`, so it is per
-browser. Reset layout restores the panel order only and leaves hidden panels hidden.
-
-A hidden panel is not drawn. A request is skipped when every panel and card it feeds
-is hidden:
-
-- `/api/changes`: both Setup changes panels
-- `/api/rtk`: both rtk panels
-- `/api/sessions/live`: Live sessions and Session timeline
-- `/api/reviews`: Session reviews
-- `/api/records`: the Record day card, plus on Today the Total cost and Total tokens cards
-- `/api/prices`: Cost by model
-
-`/api/summary` and `/api/limits` are always requested.
-
-The Record day card's all-time value is cached in `~/.claude/cc-dashboard/records.json`
-for 3 days, so the page does not scan all history on every load. The Today range
-updates the file when today overtakes the record. Refresh and applying new prices
-delete it.
-
 The Live sessions panel holds two tables. Running now lists the live sessions,
 meaning those that wrote to a transcript in the last 10 minutes, and any session
 waiting on you, however long ago it last wrote. Its columns are Session, State, Doing
@@ -344,6 +319,31 @@ a dashed line marks now. A live session has solid bars, and its last bar ends in
 arrowhead at now if its last call was within the last 10 minutes. Every other session
 has striped bars. Hover a bar for the session's title, project, the bar's time range,
 cost today and prompt count. The panel hides when no session has a call today.
+
+### Hiding panels
+
+Each panel and summary card has an "x" button, shown when the pointer is over it or
+it has keyboard focus. The button hides the panel or card. The ☰ button at the top
+right lists everything hidden, and choosing an entry shows it again. The list is
+kept in the browser's localStorage under `cc-dashboard:hidden`, so it is per
+browser. Reset layout restores the panel order only and leaves hidden panels hidden.
+
+A hidden panel is not drawn. A request is skipped when every panel and card it feeds
+is hidden:
+
+- `/api/changes`: both Setup changes panels
+- `/api/rtk`: both rtk panels
+- `/api/sessions/live`: Live sessions and Session timeline
+- `/api/reviews`: Session reviews
+- `/api/records`: the Record day card, plus on Today the Total cost and Total tokens cards
+- `/api/prices`: Cost by model
+
+`/api/summary` and `/api/limits` are always requested.
+
+The Record day card's all-time value is cached in `~/.claude/cc-dashboard/records.json`
+for 3 days, so the page does not scan all history on every load. The Today range
+updates the file when today overtakes the record. Refresh and applying new prices
+delete it.
 
 ## Setup changes
 
