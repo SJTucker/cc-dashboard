@@ -1,4 +1,4 @@
-import type { On, SessionRateLimit, UsageUnit } from 'claude-code'
+import type { AgentInfo, On, SessionRateLimit, UsageUnit } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 
 type Ran = { argv: readonly string[]; stdin: unknown; timeoutMs: number | undefined }
@@ -27,6 +27,13 @@ type World = {
   reviews: Record<string, { exitCode: number; stdout: string; stderr?: string }>
   // The plugin's key-value store, which $.store.get and $.store.set read and write.
   store: Record<string, unknown>
+  // The session's agents, which $.agent.list returns.
+  agents: AgentInfo[]
+  // How long a tool.call lasts on the mock clock, and what tool.check answers.
+  toolMs: number
+  verdict: 'allow' | 'ask' | 'deny'
+  // Makes fs.write reject.
+  writeFails: boolean
 }
 
 const entry = (name: string): Entry => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -52,6 +59,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     scripts: {},
     reviews: { prompt: { exitCode: 0, stdout: '{"reviews":[]}' } },
     store: {},
+    agents: [],
+    toolMs: 0,
+    verdict: 'allow',
+    writeFails: false,
     ...w,
   }
   const ran: Ran[] = []
@@ -139,7 +150,24 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     const out = script ?? { exitCode, stdout: '', stderr: '' }
     return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
   })
-  return { ran, reviewRan, state, listed, endSawRan, clock, fetched, asked, registered, logged }
+  const writes: Record<string, string> = {}
+  const writeLog: Array<{ path: string; text: string }> = []
+  on('fs.write', (_$, e) => {
+    if (state.writeFails) throw new Error('disk full')
+    writes[e.path] = e.text
+    writeLog.push({ path: e.path, text: e.text })
+    return { value: undefined }
+  })
+  on('agent.list', () => ({ value: state.agents }))
+  on('turn.start', (_$, e) => ({ turnId: e.turnId }))
+  on('turn.complete', () => ({ text: '' }))
+  on('tool.call', async () => {
+    if (state.toolMs > 0) await clock.sleep(state.toolMs)
+    return { result: 'ok', text: 'ok' }
+  })
+  on('tool.check', () => ({ decision: state.verdict }))
+  on('agent.spawn', () => ({ model: 'claude-haiku-4-5', agentId: 'a1' }))
+  return { ran, reviewRan, state, listed, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -657,4 +685,120 @@ test('invalid JSON from review-session is logged without its text', async ($, on
   await $.session.start(start)
   await clock.settle()
   expect(logged).toEqual(['session review failed (review-session prompt printed invalid JSON)'])
+})
+
+const ACTIVITY = '/home/u/.claude/cc-dashboard/activity/s1.json'
+const activityOf = (writes: Record<string, string>) => JSON.parse(writes[ACTIVITY] ?? 'null')
+const turnEnd = (extra: object = {}) => ({ answer: '', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' as const, ...extra })
+const idle = { sessionId: 's1', state: 'working', tool: null, subagents: 0 }
+
+test('turn.start records the session as working', async ($, on) => {
+  const { writes, ran } = world(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  expect(activityOf(writes)).toEqual({ ...idle, since: 61_000, updatedAt: 61_000 })
+  expect(ran).toEqual([])
+})
+
+for (const reason of ['answer', 'aborted', 'error'] as const) {
+  test(`turn.complete with reason ${reason} records waiting`, async ($, on) => {
+    const { writes, clock } = world(on)
+    await $.turn.start({ text: 'hi', turnId: 't1' })
+    await clock.advance(300)
+    await $.turn.complete(turnEnd({ reason, isAborted: reason === 'aborted' }))
+    expect(activityOf(writes)).toEqual({ ...idle, state: 'waiting', since: 61_300, updatedAt: 61_300 })
+  })
+}
+
+test('a turn.complete from a subagent leaves the state alone', async ($, on) => {
+  const { writes, clock } = world(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.advance(300)
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  expect(activityOf(writes).state).toBe('working')
+})
+
+test('tool.call records the running tool and clears it when the tool returns', async ($, on) => {
+  const { writes, clock, ran } = world(on, { toolMs: 1000 })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.advance(300)
+  const call = $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+  await clock.settle()
+  expect(activityOf(writes)).toEqual({
+    ...idle, since: 61_000, updatedAt: 61_300, tool: { name: 'Bash', detail: 'npm test', startedAt: 61_300 },
+  })
+  await clock.advance(1000)
+  await call
+  expect(activityOf(writes)).toEqual({ ...idle, since: 61_000, updatedAt: 62_300 })
+  expect(ran).toEqual([])
+})
+
+test('the tool detail is the command, the file name, or empty', async ($, on) => {
+  const { writes, clock } = world(on, { toolMs: 1000 })
+  const cases: Array<[Record<string, unknown>, string]> = [
+    [{ tool: 'Bash', command: '  npm   test\n  --silent' }, 'npm test --silent'],
+    [{ tool: 'Bash', command: 'x'.repeat(100) }, 'x'.repeat(60)],
+    [{ tool: 'Read', file_path: '/work/src/app.ts' }, 'app.ts'],
+    [{ tool: 'Edit', file_path: '/work/src/a.css', old_string: 'a', new_string: 'b' }, 'a.css'],
+    [{ tool: 'Write', file_path: '/work/new.md', content: 'x' }, 'new.md'],
+    [{ tool: 'Grep', pattern: 'secret' }, ''],
+  ]
+  for (const [input, detail] of cases) {
+    await clock.advance(300)
+    const call = $.tool.call(input as never)
+    await clock.settle()
+    expect(activityOf(writes).tool.detail).toBe(detail)
+    await clock.advance(1000)
+    await call
+  }
+})
+
+test('with two tools running, the newer one shows, and the older one shows again when the newer ends', async ($, on) => {
+  const { writes, clock } = world(on, { toolMs: 1000 })
+  const first = $.tool.call({ tool: 'Bash', command: 'one' } as never)
+  await clock.settle()
+  await clock.advance(300)
+  const second = $.tool.call({ tool: 'Bash', command: 'two' } as never)
+  await clock.settle()
+  expect(activityOf(writes).tool.detail).toBe('two')
+  // The first ends at 62_000, 700 ms later. The second runs until 62_300.
+  await clock.advance(700)
+  await first
+  expect(activityOf(writes).tool.detail).toBe('two')
+  await clock.advance(300)
+  await second
+  expect(activityOf(writes).tool).toBe(null)
+})
+
+test('a burst of changes is written once at once and once more, with the latest state, after 250 ms', async ($, on) => {
+  const { writes, writeLog, clock } = world(on)
+  await $.turn.start({ text: 'a', turnId: 't1' })
+  await $.turn.complete(turnEnd())
+  await $.turn.start({ text: 'b', turnId: 't2' })
+  expect(writeLog.length).toBe(1)
+  await clock.advance(250)
+  expect(writeLog.length).toBe(2)
+  expect(activityOf(writes).state).toBe('working')
+  await clock.advance(1000)
+  expect(writeLog.length).toBe(2)
+})
+
+test('CLAUDE_CONFIG_DIR moves the activity file', async ($, on) => {
+  const { writes } = world(on, { env: { HOME: '/home/u', CLAUDE_CONFIG_DIR: '/cfg' } })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  expect(Object.keys(writes)).toEqual(['/cfg/cc-dashboard/activity/s1.json'])
+})
+
+test('with neither HOME nor CLAUDE_CONFIG_DIR nothing is written and nothing is logged', async ($, on) => {
+  const { writeLog, logged } = world(on, { env: {} })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  expect(writeLog).toEqual([])
+  expect(logged).toEqual([])
+})
+
+test('a failing fs.write does not change the event result, and logs once', async ($, on) => {
+  const { logged, clock } = world(on, { writeFails: true })
+  expect(await $.turn.start({ text: 'hi', turnId: 't1' })).toEqual({ turnId: 't1' })
+  await clock.advance(300)
+  expect(await $.turn.start({ text: 'again', turnId: 't2' })).toEqual({ turnId: 't2' })
+  expect(logged).toEqual(['activity failed (HooksError)'])
 })

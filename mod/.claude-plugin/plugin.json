@@ -1,5 +1,5 @@
 {
   "name": "cc-dashboard",
   "version": "0.1.0",
-  "description": "Records rate limits and session snapshots for cc-dashboard"
+  "description": "Records rate limits, session snapshots and live session state for cc-dashboard"
 }

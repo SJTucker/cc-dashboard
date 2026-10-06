@@ -3,8 +3,12 @@ import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit }
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/ that a statusline script used to run, and judges new Claude Code releases
 // for the setup changes markers through bin/judge-updates, and reviews ended sessions
-// for setup suggestions through bin/review-session. The scripts stay the only
-// writers, so the file formats, the atomic writes and the freshness checks are theirs.
+// for setup suggestions through bin/review-session.
+// The scripts are the only writers of those files, so the file formats, the atomic
+// writes and the freshness checks are theirs. The activity files are the one
+// exception: the mod writes them itself with $.fs.write, because one writer per
+// session keeps a session's states in order, where a script started per event can
+// finish out of order.
 //
 // Only engine events are hooked. Claude Code's cc-plugin-sec-default skips every
 // classic.* hook of an installed plugin, so classic SessionStart and SessionEnd
@@ -356,6 +360,116 @@ function backfillText(judged: Judged) {
   return judged.failed.length ? `${counts} Failed: ${judged.failed.join('; ')}` : counts
 }
 
+// What the Live sessions panel shows as State and Doing now. One state object per
+// session lives in memory and is written to <config dir>/cc-dashboard/activity/
+// <session id>.json when it changes, at most every ACTIVITY_WRITE_MS. Only the main
+// loop counts: events with an agentId come from a subagent.
+const ACTIVITY_WRITE_MS = 250
+const DETAIL_MAX = 60
+// The same characters lib/activity.js accepts, because the id becomes a file name.
+const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/
+
+type ToolRun = { name: string; detail: string; startedAt: number }
+type Activity = {
+  sessionId: string
+  state: 'working' | 'waiting' | 'approval'
+  since: number
+  tool: ToolRun | null
+  subagents: number
+  updatedAt: number
+}
+
+const activities = new Map<string, Activity>()
+// Main-loop tools that have started and not returned, by session id and tool_use_id,
+// oldest first. Tools can run in parallel, and the newest one is the one shown.
+const runningTools = new Map<string, Map<string, ToolRun>>()
+const lastWriteAt = new Map<string, number>()
+const writeScheduled = new Set<string>()
+
+function toolsOf(id: string) {
+  let tools = runningTools.get(id)
+  if (!tools) {
+    tools = new Map()
+    runningTools.set(id, tools)
+  }
+  return tools
+}
+
+const newestTool = (tools: Map<string, ToolRun>) => [...tools.values()].pop() ?? null
+
+// A new activity starts as working: the first event seen mid-turn, after a reload,
+// is a tool call or a check, and the turn is running.
+function setState(a: Activity, state: Activity['state'], now: number) {
+  if (a.state === state) return
+  a.state = state
+  a.since = now
+}
+
+// The command cut to DETAIL_MAX characters for Bash, the file's name for Read, Edit
+// and Write, and nothing for any other tool. Whitespace runs become one space, so a
+// multi-line command stays on one line.
+function toolDetail(tool: string, args: Record<string, unknown>) {
+  if (tool === 'Bash') {
+    return typeof args.command === 'string' ? args.command.replace(/\s+/g, ' ').trim().slice(0, DETAIL_MAX) : ''
+  }
+  if (tool === 'Read' || tool === 'Edit' || tool === 'Write') {
+    return typeof args.file_path === 'string' ? (args.file_path.split(/[\\/]/).pop() ?? '') : ''
+  }
+  return ''
+}
+
+async function subagentCount($: EngineInterface) {
+  try {
+    const live = ['pending', 'running', 'waiting']
+    return (await $.agent.list()).filter((agent) => live.includes(agent.status)).length
+  } catch {
+    return 0
+  }
+}
+
+async function writeActivity($: EngineInterface, a: Activity) {
+  const dir = await configDir($)
+  if (!dir) return
+  const body = { ...a, subagents: await subagentCount($) }
+  await $.fs.write(`${dir}/cc-dashboard/activity/${a.sessionId}.json`, JSON.stringify(body))
+}
+
+// Applies change to the session's state, then writes it. A write within
+// ACTIVITY_WRITE_MS of the last one waits for a timer and writes the newest state
+// once. A change that returns false means nothing changed, and nothing is written.
+// Never throws, so a hook that calls it still returns next(e)'s result.
+async function track($: EngineInterface, change: (a: Activity, now: number) => void | false) {
+  try {
+    const id = await $.session.id()
+    if (!SESSION_ID.test(id)) return
+    const now = await $.clock.now()
+    const a = activities.get(id) ?? { sessionId: id, state: 'working' as const, since: now, tool: null, subagents: 0, updatedAt: now }
+    activities.set(id, a)
+    if (change(a, now) === false) return
+    a.updatedAt = now
+    const last = lastWriteAt.get(id)
+    if (last === undefined || now - last >= ACTIVITY_WRITE_MS) {
+      lastWriteAt.set(id, now)
+      await writeActivity($, a)
+    } else if (!writeScheduled.has(id)) {
+      writeScheduled.add(id)
+      $.clock.after(ACTIVITY_WRITE_MS - (now - last), () => {
+        writeScheduled.delete(id)
+        const latest = activities.get(id)
+        if (!latest) return
+        $.clock.now()
+          .then((at) => {
+            lastWriteAt.set(id, at)
+            return writeActivity($, latest)
+          })
+          .catch((err) => fail($, `activity failed (${errorName(err)})`))
+      })
+    }
+  } catch (err) {
+    fail($, `activity failed (${errorName(err)})`)
+  }
+}
+
 export const register: Register = (on) => {
   // Registers /backfill-updates, checks whether the running Claude Code version has a
   // verdict, and reviews sessions that have ended. Both run from timers, after session
@@ -404,5 +518,45 @@ export const register: Register = (on) => {
     await running
     if (e.reason === 'clear' || e.reason === 'resume') startReviews($)
     return result
+  })
+
+  // A turn that begins is working. turn.start has no agentId: a subagent's run raises
+  // none.
+  on('turn.start', async ($, e, next) => {
+    await track($, (a, now) => setState(a, 'working', now))
+    return next(e)
+  })
+
+  // A turn that ends leaves the session waiting on the user, whatever the reason.
+  on('turn.complete', async ($, e, next) => {
+    if (!e.agentId) {
+      await track($, (a, now) => {
+        toolsOf(a.sessionId).clear()
+        a.tool = null
+        setState(a, 'waiting', now)
+      })
+    }
+    return next(e)
+  })
+
+  // The tool is set before next(e) and cleared after it, even when the call throws.
+  on('tool.call', async ($, e, next) => {
+    if (e.agentId) return next(e)
+    const id = e.tool_use_id
+    const args = e as unknown as Record<string, unknown>
+    await track($, (a, now) => {
+      const run = { name: e.tool, detail: toolDetail(e.tool, args), startedAt: now }
+      toolsOf(a.sessionId).set(id, run)
+      a.tool = run
+    })
+    try {
+      return await next(e)
+    } finally {
+      await track($, (a) => {
+        const tools = toolsOf(a.sessionId)
+        tools.delete(id)
+        a.tool = newestTool(tools)
+      })
+    }
   })
 }
