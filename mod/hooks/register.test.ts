@@ -867,3 +867,154 @@ test('a failing write from the throttle timer is logged and does not throw', asy
   expect(writeLog.length).toBe(1)
   expect(logged).toEqual(['activity failed (HooksError)'])
 })
+
+test('an ask verdict for the running tool records approval, and the tool returning goes back to working', async ($, on) => {
+  const { writes, clock } = world(on, { toolMs: 1000, verdict: 'ask' })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.advance(300)
+  const call = $.tool.call({ tool: 'Bash', command: 'rm x' } as never)
+  await clock.settle()
+  await $.tool.check({ tool: 'Bash', input: { command: 'rm x' } })
+  await clock.advance(300)
+  expect(activityOf(writes)).toEqual({
+    ...idle, state: 'approval', since: 61_300, updatedAt: 61_300,
+    tool: { name: 'Bash', detail: 'rm x', startedAt: 61_300 },
+  })
+  await clock.advance(1000)
+  await call
+  expect(activityOf(writes).state).toBe('working')
+  expect(activityOf(writes).tool).toBe(null)
+})
+
+test('an allow verdict leaves the state at working', async ($, on) => {
+  const { writes, clock } = world(on, { toolMs: 1000, verdict: 'allow' })
+  const call = $.tool.call({ tool: 'Read', file_path: '/a/b.ts' } as never)
+  await clock.settle()
+  await $.tool.check({ tool: 'Read', input: { file_path: '/a/b.ts' } })
+  await clock.advance(300)
+  expect(activityOf(writes).state).toBe('working')
+  await clock.advance(1000)
+  await call
+})
+
+test('an ask for a tool that is not the running one, or with no tool running, records nothing', async ($, on) => {
+  const { writes, writeLog, clock } = world(on, { toolMs: 1000, verdict: 'ask' })
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })
+  await clock.advance(300)
+  expect(writeLog.length).toBe(0)
+  const call = $.tool.call({ tool: 'Read', file_path: '/a/b.ts' } as never)
+  await clock.settle()
+  const before = writeLog.length
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' } })
+  await clock.advance(300)
+  expect(writeLog.length).toBe(before)
+  expect(activityOf(writes).state).toBe('working')
+  await clock.advance(1000)
+  await call
+})
+
+test('an ask from a subagent records nothing', async ($, on) => {
+  const { writes, clock } = world(on, { toolMs: 1000, verdict: 'ask' })
+  const call = $.tool.call({ tool: 'Bash', command: 'rm x' } as never)
+  await clock.settle()
+  await $.tool.check({ tool: 'Bash', input: { command: 'rm x' }, agentId: 'a1' } as never)
+  await clock.advance(300)
+  expect(activityOf(writes).state).toBe('working')
+  await clock.advance(1000)
+  await call
+})
+
+test('an ask with a tool_use_id matches that tool, not the newest tool of the same name', async ($, on) => {
+  const { writes, clock } = world(on, { toolMs: 1000, verdict: 'ask' })
+  const first = $.tool.call({ tool: 'Bash', command: 'one', tool_use_id: 'tu1' } as never)
+  await clock.advance(300)
+  const second = $.tool.call({ tool: 'Bash', command: 'two', tool_use_id: 'tu2' } as never)
+  await clock.settle()
+  await $.tool.check({ tool: 'Bash', input: { command: 'one' }, tool_use_id: 'tu1' } as never)
+  await clock.advance(300)
+  expect(activityOf(writes).state).toBe('approval')
+  // The second ends at 62_300 and the first, which asked, at 62_000.
+  await clock.advance(400)
+  await first
+  await clock.advance(300)
+  expect(activityOf(writes).state).toBe('working')
+  await clock.advance(300)
+  await second
+})
+
+test('approval stays while the asking tool runs, though another tool returns', async ($, on) => {
+  const { writes, clock } = world(on, { toolMs: 1000, verdict: 'ask' })
+  const first = $.tool.call({ tool: 'Read', file_path: '/a/b.ts', tool_use_id: 'tu1' } as never)
+  await clock.advance(300)
+  const second = $.tool.call({ tool: 'Bash', command: 'rm x', tool_use_id: 'tu2' } as never)
+  await clock.settle()
+  await $.tool.check({ tool: 'Bash', input: { command: 'rm x' }, tool_use_id: 'tu2' } as never)
+  await clock.advance(700)
+  await first
+  await clock.advance(250)
+  expect(activityOf(writes).state).toBe('approval')
+  await clock.advance(300)
+  await second
+  await clock.advance(250)
+  expect(activityOf(writes).state).toBe('working')
+})
+
+test('an ask with a tool_use_id that is not running records nothing, though the name matches', async ($, on) => {
+  const { writes, writeLog, clock } = world(on, { toolMs: 1000, verdict: 'ask' })
+  const call = $.tool.call({ tool: 'Bash', command: 'ls', tool_use_id: 'tu1' } as never)
+  await clock.settle()
+  const before = writeLog.length
+  await $.tool.check({ tool: 'Bash', input: { command: 'ls' }, tool_use_id: 'other' } as never)
+  await clock.advance(300)
+  expect(writeLog.length).toBe(before)
+  expect(activityOf(writes).state).toBe('working')
+  await clock.advance(1000)
+  await call
+})
+
+test('subagents counts pending, running and waiting agents at each write', async ($, on) => {
+  const agent = (id: string, status: AgentInfo['status']): AgentInfo => ({ id, description: 'd', type: 'Explore', status })
+  const { writes, clock } = world(on, { agents: [agent('a1', 'running'), agent('a2', 'completed'), agent('a3', 'waiting'), agent('a4', 'idle')] })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  expect(activityOf(writes).subagents).toBe(2)
+})
+
+test('subagents is recounted when an agent spawns and when a subagent turn ends', async ($, on) => {
+  const { writes, state, clock } = world(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  expect(activityOf(writes).subagents).toBe(0)
+  state.agents = [{ id: 'a1', description: 'd', type: 'Explore', status: 'running' }]
+  await clock.advance(300)
+  await $.agent.spawn({ prompt: 'p' })
+  await clock.settle()
+  expect(activityOf(writes).subagents).toBe(1)
+  state.agents = []
+  await clock.advance(300)
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await clock.settle()
+  expect(activityOf(writes).subagents).toBe(0)
+  expect(activityOf(writes).state).toBe('working')
+})
+
+test('session.end drops the session state, so a pending write never lands', async ($, on) => {
+  const { writeLog, clock } = world(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await $.turn.complete(turnEnd())
+  await clock.settle()
+  expect(writeLog.length).toBe(1)
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(1000)
+  expect(writeLog.length).toBe(1)
+})
+
+test('after session.end the same id starts over: the next change writes at once, even with the same text', async ($, on) => {
+  const { writeLog, clock } = world(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  await $.session.end({ reason: 'resume', sessionId: 's1', resume: { id: 's1' } })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  expect(writeLog.map((w) => w.text)).toEqual([writeLog[0]?.text, writeLog[0]?.text])
+})

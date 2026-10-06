@@ -1,4 +1,4 @@
-import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit } from 'claude-code'
+import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/ that a statusline script used to run, and judges new Claude Code releases
@@ -383,8 +383,12 @@ const activities = new Map<string, Activity>()
 // Main-loop tools that have started and not returned, by session id and tool_use_id,
 // oldest first. Tools can run in parallel, and the newest one is the one shown.
 const runningTools = new Map<string, Map<string, ToolRun>>()
+// Main-loop tools whose tool.check answered ask, by session id and tool_use_id. The
+// state is approval while any of them runs.
+const asking = new Map<string, Set<string>>()
 const lastWriteAt = new Map<string, number>()
-const writeScheduled = new Set<string>()
+// The throttle timer of a session with a write waiting on it.
+const writeTimers = new Map<string, Timer>()
 // Each session's writes run one after another on one promise chain, so the last
 // write to finish is the last one started. The text last written, by session id,
 // lets a write with nothing new be skipped.
@@ -423,6 +427,9 @@ function toolDetail(tool: string, args: Record<string, unknown>) {
   return ''
 }
 
+// An agent counts while it is pending, running or waiting: all three are work that
+// has not ended. idle is a teammate between turns, and completed, failed and killed
+// have ended.
 async function subagentCount($: EngineInterface) {
   try {
     const live = ['pending', 'running', 'waiting']
@@ -443,7 +450,8 @@ async function writeActivity($: EngineInterface, id: string) {
   const text = JSON.stringify({ ...a, subagents })
   if (lastWritten.get(id) === text) return
   await $.fs.write(`${dir}/cc-dashboard/activity/${id}.json`, text)
-  lastWritten.set(id, text)
+  // A session.end during the write released the session, and this keeps it released.
+  if (activities.get(id) === a) lastWritten.set(id, text)
 }
 
 // Adds a write to the end of the session's chain and returns at once. A failed
@@ -471,10 +479,9 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
     if (last === undefined || now - last >= ACTIVITY_WRITE_MS) {
       lastWriteAt.set(id, now)
       queueWrite($, id)
-    } else if (!writeScheduled.has(id)) {
-      writeScheduled.add(id)
-      $.clock.after(ACTIVITY_WRITE_MS - (now - last), () => {
-        writeScheduled.delete(id)
+    } else if (!writeTimers.has(id)) {
+      const timer = $.clock.after(ACTIVITY_WRITE_MS - (now - last), () => {
+        writeTimers.delete(id)
         $.clock.now()
           .then((at) => {
             lastWriteAt.set(id, at)
@@ -482,10 +489,34 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
           })
           .catch((err) => fail($, `activity failed (${errorName(err)})`))
       })
+      writeTimers.set(id, timer)
     }
   } catch (err) {
     fail($, `activity failed (${errorName(err)})`)
   }
+}
+
+// Releases everything held for a session that ended. Its throttle timer is
+// cancelled, so a write waiting on it never lands. A write already queued finds no
+// state and writes nothing. A write already inside fs.write finishes, and
+// writeActivity does not record its text.
+function forgetSession(id: string) {
+  activities.delete(id)
+  runningTools.delete(id)
+  asking.delete(id)
+  lastWriteAt.delete(id)
+  writeTimers.get(id)?.cancel()
+  writeTimers.delete(id)
+  writing.delete(id)
+  lastWritten.delete(id)
+}
+
+// The running tool a main-loop tool.check is about: the one with its tool_use_id, or,
+// when the check has none, the newest running tool of that name. Undefined when no
+// running tool matches, as for a plugin's $.tool.check query about another tool.
+function askedTool(tools: Map<string, ToolRun>, tool: string, toolUseId: string | undefined) {
+  if (toolUseId !== undefined) return tools.has(toolUseId) ? toolUseId : undefined
+  return [...tools].reverse().find(([, run]) => run.name === tool)?.[0]
 }
 
 export const register: Register = (on) => {
@@ -529,6 +560,7 @@ export const register: Register = (on) => {
   // of the ended session starts here. After any other end, the next session.start
   // reviews it.
   on('session.end', async ($, e, next) => {
+    forgetSession(e.sessionId)
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
@@ -546,14 +578,21 @@ export const register: Register = (on) => {
   })
 
   // A turn that ends leaves the session waiting on the user, whatever the reason.
+  // A subagent's turn that ends changes the subagent count, so the file is rewritten.
+  // The rewrite starts after next(e), so $.agent.list() is read after the engine has
+  // handled the end of that turn.
   on('turn.complete', async ($, e, next) => {
-    if (!e.agentId) {
-      await track($, (a, now) => {
-        toolsOf(a.sessionId).clear()
-        a.tool = null
-        setState(a, 'waiting', now)
-      })
+    if (e.agentId) {
+      const result = await next(e)
+      await track($, () => {})
+      return result
     }
+    await track($, (a, now) => {
+      toolsOf(a.sessionId).clear()
+      asking.delete(a.sessionId)
+      a.tool = null
+      setState(a, 'waiting', now)
+    })
     return next(e)
   })
 
@@ -570,11 +609,42 @@ export const register: Register = (on) => {
     try {
       return await next(e)
     } finally {
-      await track($, (a) => {
+      await track($, (a, now) => {
         const tools = toolsOf(a.sessionId)
         tools.delete(id)
         a.tool = newestTool(tools)
+        const asks = asking.get(a.sessionId)
+        if (asks?.delete(id) && asks.size === 0 && a.state === 'approval') setState(a, 'working', now)
       })
     }
+  })
+
+  // An ask verdict on a main-loop call means a permission prompt is about to open.
+  // tool.check fires inside tool.call's next(e), so the asking tool is already
+  // running. The state goes back to working when that tool's tool.call returns.
+  on('tool.check', async ($, e, next) => {
+    const verdict = await next(e)
+    if (verdict.decision === 'ask' && !e.agentId) {
+      await track($, (a, now) => {
+        const id = askedTool(toolsOf(a.sessionId), e.tool, e.tool_use_id)
+        if (id === undefined) return false
+        let asks = asking.get(a.sessionId)
+        if (!asks) {
+          asks = new Set()
+          asking.set(a.sessionId, asks)
+        }
+        asks.add(id)
+        setState(a, 'approval', now)
+      })
+    }
+    return verdict
+  })
+
+  // While subagents work, the main loop raises no event, so a spawn rewrites the
+  // file with the new subagent count.
+  on('agent.spawn', async ($, e, next) => {
+    const result = await next(e)
+    await track($, () => {})
+    return result
   })
 }
