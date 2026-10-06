@@ -1082,3 +1082,42 @@ test("lines from before the range and Bash edit diffs count nothing", async () =
   const { efficiency } = await scanUsage({ days: 'today' });
   assert.deepStrictEqual(efficiency.linesBySession, {});
 });
+
+function titleLine(sessionId, aiTitle) {
+  return JSON.stringify({ type: 'ai-title', aiTitle, sessionId });
+}
+
+test('efficiency.titleBySession keeps the last ai-title per session', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'titled', [titleLine('s1', 'First'), usageLine(iso, { id: 'a' }), titleLine('s1', 'Second'), titleLine('s2', 'Other')]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.titleBySession, { s1: 'Second', s2: 'Other' });
+});
+
+test('an ai-title before older-than-cutoff lines is still read from a file in range', async () => {
+  const base = makeFixture();
+  const old = new Date(atHourToday(9).getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'titled', [titleLine('s1', 'Early'), usageLine(old, { id: 'old' }), usageLine(iso, { id: 'new' })]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.titleBySession, { s1: 'Early' });
+});
+
+test('an ai-title that is not a non-empty string is ignored', async () => {
+  const base = makeFixture();
+  writeSession(base, 'bad', [titleLine('s1', 'Kept'), titleLine('s1', ''), titleLine('s1', '   '), titleLine('s1', 42), titleLine('s1', null)]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.titleBySession, { s1: 'Kept' });
+});
+
+test('efficiency.titleBySession is empty when no session has a title', async () => {
+  const base = makeFixture();
+  writeSession(base, 'plain', [usageLine(atHourToday(9).toISOString(), { id: 'a' })]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.titleBySession, {});
+});
