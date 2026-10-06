@@ -1,0 +1,39 @@
+#!/usr/bin/env node
+'use strict';
+
+// Run by the dashboard's Claude Code mod (mod/hooks/register.ts), which calls Haiku
+// because only the mod can. Two subcommands:
+//   prompt   claims ended sessions not reviewed yet and prints
+//            {"reviews": [{"sessionId", "system", "prompt"}]}
+//   record   {"sessionId", "reply"} or {"sessionId", "error"} on stdin; writes
+//            the review
+// Prints one JSON object on success. On failure it prints the reason on stderr
+// and exits 1, and the mod logs it.
+
+const { pendingReviews, recordReview } = require('../lib/review');
+
+function readStdin() {
+  return new Promise((resolve, reject) => {
+    let input = '';
+    process.stdin.setEncoding('utf8');
+    process.stdin.on('data', (chunk) => {
+      input += chunk;
+    });
+    process.stdin.on('end', () => resolve(input));
+    process.stdin.on('error', reject);
+  });
+}
+
+const [command] = process.argv.slice(2);
+const work =
+  command === 'prompt' ? pendingReviews().then((reviews) => ({ reviews }))
+  : command === 'record' ? readStdin().then((input) => recordReview(JSON.parse(input)))
+  : Promise.reject(new Error('usage: review-session prompt | record'));
+
+work.then(
+  (out) => process.stdout.write(JSON.stringify(out) + '\n'),
+  (err) => {
+    process.stderr.write(`review-session: ${err.message}\n`);
+    process.exitCode = 1;
+  },
+);
