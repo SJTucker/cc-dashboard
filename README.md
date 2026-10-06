@@ -201,12 +201,14 @@ states land in order. `readActivity` in `lib/activity.js` reads the files and
 deletes the ones older than a day. `session.end` stops the mod's writes for that
 session, and the dashboard shows no state for a session it marks ended.
 `resolveActivity` drops a working state whose file has not changed for 10 minutes,
-because a crash sends no event. "Waiting on you" does not expire. The one exception is waiting while subagents are still running: that is
-shown as working, and it expires after 10 minutes like any working state. Without
-the mod, no file exists and the State and Doing now columns show "—". Subagent
-tool calls do not change the state of the main loop. A Bash command's first 60
-characters are stored in the activity file and shown on the page, so the text can
-contain what you typed in that command.
+because a crash sends no event. "Waiting on you" does not expire. Waiting while
+subagents still run is shown as working. Each subagent tool call rewrites the file,
+so a running subagent keeps it fresh. A killed subagent can leave its count in the
+file, so after 10 minutes without updates that state is shown as waiting on you with
+no subagents. Without the mod, no file exists and the State and Doing now columns
+show "—". Subagent tool calls do not change the state of the main loop. A Bash
+command's first 60 characters are stored in the activity file and shown on the page,
+so the text can contain what you typed in that command.
 
 ### Without the mod
 

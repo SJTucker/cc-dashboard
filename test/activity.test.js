@@ -113,10 +113,12 @@ test('resolveActivity reports waiting with running subagents as working', () => 
   assert.deepStrictEqual(resolveActivity(a, NOW), { state: 'working', since: a.since, tool: null, subagents: 2 });
 });
 
-test('resolveActivity drops waiting with subagents that was last updated over 10 minutes ago, like working', () => {
+test('resolveActivity reports stale waiting with subagents as waiting with no subagents', () => {
+  // A killed subagent leaves its count in the file, and the main loop still waits on the user.
   const old = activity({ state: 'waiting', tool: null, subagents: 2, updatedAt: NOW - 3 * 60 * 60 * 1000 });
-  assert.strictEqual(resolveActivity(old, NOW), null);
-  assert.strictEqual(resolveActivity(activity({ state: 'waiting', tool: null, subagents: 2, updatedAt: NOW - STALE_AFTER_MS - 1 }), NOW), null);
+  assert.deepStrictEqual(resolveActivity(old, NOW), { state: 'waiting', since: old.since, tool: null, subagents: 0 });
+  const justStale = activity({ state: 'waiting', tool: null, subagents: 2, updatedAt: NOW - STALE_AFTER_MS - 1 });
+  assert.deepStrictEqual(resolveActivity(justStale, NOW), { state: 'waiting', since: justStale.since, tool: null, subagents: 0 });
   const fresh = activity({ state: 'waiting', tool: null, subagents: 2, updatedAt: NOW - STALE_AFTER_MS });
   assert.deepStrictEqual(resolveActivity(fresh, NOW), { state: 'working', since: fresh.since, tool: null, subagents: 2 });
 });

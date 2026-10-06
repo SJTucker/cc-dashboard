@@ -538,3 +538,10 @@ test('buildLiveSessions keeps waiting activity on a session that is no longer li
   assert.strictEqual(row.live, false);
   assert.strictEqual(row.activity.state, 'waiting');
 });
+
+test('buildLiveSessions keeps a stale waiting session with subagents as waiting with no subagents', () => {
+  const old = snapshot({ lastActiveAt: NOW - 3 * 60 * 60 * 1000 });
+  const map = new Map([['s1', activityEntry({ state: 'waiting', tool: null, subagents: 2, updatedAt: NOW - 3 * 60 * 60 * 1000 })]]);
+  const [row] = buildLiveSessions([old], [], NOW, {}, {}, [], map).sessions;
+  assert.deepStrictEqual(row.activity, { state: 'waiting', since: NOW - 30_000, tool: null, subagents: 0 });
+});
