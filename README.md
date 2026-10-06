@@ -284,6 +284,31 @@ out. Read the usage cache from another file with `CLAUDE_JSON=~/path/.claude.jso
 npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.json
 npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 
+### Hiding panels
+
+Each panel and summary card has an "x" button, shown when the pointer is over it or
+it has keyboard focus. The button hides the panel or card. The ☰ button at the top
+right lists everything hidden, and choosing an entry shows it again. The list is
+kept in the browser's localStorage under `cc-dashboard:hidden`, so it is per
+browser. Reset layout restores the panel order only and leaves hidden panels hidden.
+
+A hidden panel is not drawn. A request is skipped when every panel and card it feeds
+is hidden:
+
+- `/api/changes`: both Setup changes panels
+- `/api/rtk`: both rtk panels
+- `/api/sessions/live`: Live sessions and Session timeline
+- `/api/reviews`: Session reviews
+- `/api/records`: the Record day card, plus on Today the Total cost and Total tokens cards
+- `/api/prices`: Cost by model
+
+`/api/summary` and `/api/limits` are always requested.
+
+The Record day card's all-time value is cached in `~/.claude/cc-dashboard/records.json`
+for 3 days, so the page does not scan all history on every load. The Today range
+updates the file when today overtakes the record. Refresh and applying new prices
+delete it.
+
 The Live sessions panel holds two tables. Running now lists the live sessions,
 meaning those that wrote to a transcript in the last 10 minutes, and any session
 waiting on you, however long ago it last wrote. Its columns are Session, State, Doing
@@ -423,6 +448,7 @@ lib/net-guard.js       Host-header check + security headers
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
 lib/activity.js        Live state of each session, read from the activity files the mod writes, and old files pruned
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, review files
+lib/records.js         The Record day cache in records.json
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
 bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
@@ -434,6 +460,7 @@ public/style.css       All styling
 public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/reviews, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
 public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
 public/chart-geometry.js  X-axis label spacing, tooltip placement, donut slices and the Session timeline's hour ticks and lane layout
+public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
 public/fonts/          Oxanium, Saira Condensed and JetBrains Mono (SIL OFL), with their licence files
 ```
 
