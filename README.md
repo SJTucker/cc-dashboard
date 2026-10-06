@@ -254,6 +254,16 @@ When a project has two or more cleared or ended sessions, the panel shows them a
 one row with the summed figures and a count of each state. Click the row's arrow to
 list the sessions one by one. Live and idle open sessions always keep their own rows.
 
+The Session timeline panel, above Live sessions, shows the same sessions by time on
+the Today range. Each session has one lane, ordered by when it started working today.
+A bar covers a stretch of activity: it is built from the times of the session's calls
+today, subagent calls included, and a gap of more than 10 minutes starts a new bar.
+The axis runs from the hour of the earliest call to the next whole hour after now, and
+a dashed line marks now. A live session has solid bars, and its last bar ends in an
+arrowhead at now if its last call was within the last 10 minutes. Every other session
+has striped bars. Hover a bar for the session's title, project, the bar's time range,
+cost today and prompt count. The panel hides when no session has a call today.
+
 ## Setup changes
 
 Two panels at the bottom show whether a change to your setup moved the numbers. Both
@@ -363,7 +373,7 @@ public/index.html      Page shell
 public/style.css       All styling
 public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/reviews, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
 public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
-public/chart-geometry.js  X-axis label spacing and tooltip placement for the charts
+public/chart-geometry.js  X-axis label spacing, tooltip placement, donut slices and the Session timeline's hour ticks and lane layout
 public/fonts/          Oxanium, Saira Condensed and JetBrains Mono (SIL OFL), with their licence files
 ```
 
