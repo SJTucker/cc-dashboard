@@ -431,3 +431,14 @@ test('buildLiveSessions orders rows by last activity, counting subagent calls', 
     [NOW - 1_000, NOW - 60_000]
   );
 });
+
+test('buildLiveSessions adds the title from titleBySession', () => {
+  const { sessions } = buildLiveSessions([snapshot()], [], NOW, {}, { s1: 'Ideas and planning' });
+  assert.strictEqual(sessions[0].title, 'Ideas and planning');
+});
+
+test('buildLiveSessions gives a null title to a session without one', () => {
+  const { sessions } = buildLiveSessions([snapshot()], [], NOW, {}, { other: 'Elsewhere' });
+  assert.strictEqual(sessions[0].title, null);
+  assert.strictEqual(buildLiveSessions([snapshot()], [], NOW).sessions[0].title, null);
+});

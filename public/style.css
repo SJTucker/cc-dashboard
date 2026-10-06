@@ -511,6 +511,23 @@ html, body {
 
 .session-hex { color: var(--accent-cyan); margin-right: 6px; }
 
+/* The title is the row's main text. The project name follows it in small muted
+   type, so two sessions of one project can be told apart. */
+.session-title {
+  display: inline-block;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.session-project {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  margin-left: 8px;
+}
+
 .axis-label {
   font-family: var(--font-data);
   font-size: 10px;

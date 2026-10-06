@@ -1295,7 +1295,12 @@ function renderSessions(live) {
     // ⬢ for a live session, ⬡ for any other. The Last active cell still says the state in words.
     el('td', {}, [
       el('span', { class: 'session-hex', 'aria-hidden': 'true', text: s.live ? '⬢' : '⬡' }),
-      document.createTextNode(s.project || '—'),
+      ...(s.title
+        ? [
+          el('span', { class: 'session-title', title: s.title, text: s.title }),
+          el('span', { class: 'session-project', text: s.project || '—' }),
+        ]
+        : [document.createTextNode(s.project || '—')]),
     ]),
     cell(formatCost(s.costUsd), 'num cost'),
     cell(formatDuration(s.durationMs), 'num'),
