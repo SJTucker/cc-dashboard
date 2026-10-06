@@ -12,5 +12,4 @@ then on.
 | [Record setup changes automatically](auto-setup-changes.md) | Open: mostly in the mod; ConfigChange, InstructionsLoaded and PostModelSwitch need a settings hook. Labels, noise and paths still open |
 | [Before and after: chart on the right, one chart per row](before-after-chart-per-row.md) | Open: needs a daily series per row; default row and selection style open |
 | [Hide panels](hide-panels.md) | Open: "x" per panel, hamburger menu to restore, skip requests for hidden panels; panel ids and storage open |
-| [Prompts per session](session-prompt-count.md) | Open: prompts are already recorded per session; today vs whole session, column placement and roll-up sums open |
-| [Rethink the Live sessions panel](live-sessions-rethink.md) | Open: day timeline strip and a title-first list with running sessions pinned, together or as two panels; titles done (from ai-title), "waiting on me" detection open |
+| [Rethink the Live sessions panel](live-sessions-rethink.md) | Open: session timeline, Running now and Today tables are done. Live state (working, waiting on you, needs approval) from the mod is open |

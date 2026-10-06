@@ -88,18 +88,18 @@ recently. It makes no network request of its own.
   session's cost and duration, in
   `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`,
   or `LIVE_SESSIONS_DIR`). The Live sessions panel reads them. Snapshots older than
-  a day are deleted on the next write. The panel's Session cost and Session length
-  columns come from that snapshot, so they cover the whole session from whenever it
-  started. Its Cost today, Tokens today and Lines columns come from today's
-  transcripts instead, so a session that started yesterday shows more session cost
-  than cost today. Lines counts the lines added and removed by Edit and Write
-  calls, subagents included. Edits made through Bash, such as `sed -i`, are not
-  counted. The two costs differ for a session that started today, too. Session
-  cost is Claude Code's own counter. That counter includes calls that write no
-  transcript line, such as session titles. So Session cost is usually the higher
-  of the two. Cost today can be higher while subagents run. Subagent calls reach
-  the transcripts right away. Session cost updates after the main session's next
-  turn, or on the next statusline render without the mod.
+  a day are deleted on the next write. The panel's Length column comes from that
+  snapshot, so it covers the whole session from whenever it started. Its Prompts,
+  Cost today and Lines columns come from today's transcripts instead. A session that
+  started yesterday shows fewer prompts, less cost and fewer lines than over its
+  whole life. Lines counts the lines added and removed by Edit and Write calls,
+  subagents included. Edits made through Bash, such as `sed -i`, are not counted.
+  Hover a Cost today value to see the snapshot's own counter, "Session total since
+  it started". That counter is Claude Code's own and includes calls that write no
+  transcript line, such as session titles. So it is usually the higher of the two.
+  Cost today can be higher while subagents run. Subagent calls reach the
+  transcripts right away. The counter updates after the main session's next turn,
+  or on the next statusline render without the mod.
 
 ### Setting up the recorder
 
@@ -242,6 +242,18 @@ so the panel shows the time of the last update. Per-model weekly limits are left
 out. Read the usage cache from another file with `CLAUDE_JSON=~/path/.claude.json
 npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.json
 npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
+
+The Live sessions panel holds two tables. Running now lists the live sessions,
+meaning those that wrote to a transcript in the last 10 minutes. They are ordered by
+the start of each session's first span today (`runningSessions` in
+`public/session-groups.js`), so rows do not move while they run. Its State and Doing
+now columns show "—" until the mod records live state (see "Live state" under
+"Setting up the recorder"). Today lists every session of the day, live ones included,
+sorted by Cost today with the highest first. Ended sessions of one project collapse
+into a single expandable row when the project has two or more of them. The bar
+behind each Cost today value in Today is that session's share of the day's highest
+single-session Cost today. Prompts counts the prompts typed in the session today.
+The Total row sums Prompts, Lines and Cost today.
 
 The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
 any other end, such as quitting or `/resume`. It reads this from

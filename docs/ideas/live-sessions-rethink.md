@@ -127,7 +127,6 @@ was run.
   rows distinct, so decide whether the roll-up stays.
 - **Rows moving.** Sorting Today by cost reorders rows as costs grow on every 5 s
   poll. Decide whether to sort only when a session ends.
-- **Prompt count.** [Prompts per session](session-prompt-count.md) adds a figure to
-  each row. Fold it into this design or keep it separate.
+- **Prompt count.** The prompt count is now a column in the Today table (phase 2).
 - **Other ranges.** The panel shows on Today only. Decide whether the timeline should
   show on other ranges, one day at a time.
