@@ -849,6 +849,34 @@ html, body {
 .sessions-table .session-child td:first-child { padding-left: 24px; }
 .sessions-table .session-group .row-toggle { padding-right: 4px; }
 
+/* A table wider than a narrow screen scrolls inside the panel, not the page. */
+.table-scroll { overflow-x: auto; }
+
+.sessions-subhead {
+  margin: 14px 0 6px;
+  font-family: var(--font-label);
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--text-secondary);
+}
+.panel-head + #runningSessions .sessions-subhead,
+.panel-head + .sessions-subhead { margin-top: 4px; }
+
+/* The Cost today bar: one series in one colour, behind the number. */
+.sessions-table .cost-cell { position: relative; }
+.sessions-table .cost-bar {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  background: var(--accent-dim);
+  border-radius: 2px;
+}
+.sessions-table .cost-value { position: relative; }
+```
+
 /* Session timeline (renderTimeline in app.js). */
 .timeline-label {
   font-family: var(--font-data);

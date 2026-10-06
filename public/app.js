@@ -1279,7 +1279,8 @@ let sessionToggles = new Map();
 
 // Runs on every loadAndRender, like renderLimits, because "Last active" moves
 // with the clock even when the payload does not. Hidden off Today and when no
-// session has a snapshot, for example with no statusline hook set up.
+// session has a snapshot, for example with no statusline hook set up. The Running now
+// table hides when no session is live.
 function renderSessions(live) {
   const panel = document.getElementById('sessionsPanel');
   panel.hidden = !live || !live.sessions.length || currentDays !== 'today';
@@ -1291,22 +1292,39 @@ function renderSessions(live) {
   const now = Date.now();
   const cell = (text, cls) => el('td', cls ? { class: cls, text } : { text });
   const lines = (added, removed) => `+${added} −${removed}`;
+  // ⬢ for a live session, ⬡ for any other. The Last active cell still says the state in words.
+  const sessionCell = (s) => el('td', {}, [
+    el('span', { class: 'session-hex', 'aria-hidden': 'true', text: s.live ? '⬢' : '⬡' }),
+    ...(s.title
+      ? [
+        el('span', { class: 'session-title', title: s.title, text: s.title }),
+        el('span', { class: 'session-project', text: s.project || '—' }),
+      ]
+      : [document.createTextNode(s.project || '—')]),
+  ]);
+  // The number is text. The bar behind it is one series in one colour, its width the
+  // row's share of the day's highest cost (costShare), so it needs no texture. The
+  // tooltip carries the whole-session counter, which includes earlier days.
+  const costCell = (usd, title, share) => {
+    const td = el('td', { class: 'num cost cost-cell', title });
+    if (share !== null) {
+      const bar = el('span', { class: 'cost-bar', 'aria-hidden': 'true' });
+      bar.style.width = `${Math.round(share * 100)}%`;
+      td.appendChild(bar);
+    }
+    td.appendChild(el('span', { class: 'cost-value', text: formatCost(usd) }));
+    return td;
+  };
+
+  const items = groupSessions(live.sessions);
+  const maxCost = Math.max(0, ...live.sessions.map((s) => s.costTodayUsd));
+
   const sessionRow = (s, cls) => el('tr', cls ? { class: cls } : {}, [
-    // ⬢ for a live session, ⬡ for any other. The Last active cell still says the state in words.
-    el('td', {}, [
-      el('span', { class: 'session-hex', 'aria-hidden': 'true', text: s.live ? '⬢' : '⬡' }),
-      ...(s.title
-        ? [
-          el('span', { class: 'session-title', title: s.title, text: s.title }),
-          el('span', { class: 'session-project', text: s.project || '—' }),
-        ]
-        : [document.createTextNode(s.project || '—')]),
-    ]),
-    cell(formatCost(s.costUsd), 'num cost'),
+    sessionCell(s),
+    cell(String(s.prompts), 'num'),
     cell(formatDuration(s.durationMs), 'num'),
     cell(lines(s.linesAdded, s.linesRemoved), 'num'),
-    cell(formatCost(s.costTodayUsd), 'num cost'),
-    cell(formatTokens(s.tokens), 'num'),
+    costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, costShare(s.costTodayUsd, maxCost)),
     cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
   ]);
   const groupRow = (g) => {
@@ -1334,16 +1352,15 @@ function renderSessions(live) {
         el('span', { class: 'session-hex', 'aria-hidden': 'true', text: '⬡' }),
         document.createTextNode(name),
       ]),
-      cell(formatCost(g.costUsd), 'num cost'),
+      cell(String(g.prompts), 'num'),
       cell(formatDuration(g.durationMs), 'num'),
       cell(lines(g.linesAdded, g.linesRemoved), 'num'),
-      cell(formatCost(g.costTodayUsd), 'num cost'),
-      cell(formatTokens(g.tokens), 'num'),
+      costCell(g.costTodayUsd, `Session totals since they started: ${formatCost(g.costUsd)}`, costShare(g.costTodayUsd, maxCost)),
       cell(formatAgo(g.lastActiveAt, now) + counts),
     ]);
   };
   const rows = [];
-  for (const item of groupSessions(live.sessions)) {
+  for (const item of items) {
     if (item.type === 'session') {
       rows.push(sessionRow(item.session));
       continue;
@@ -1356,17 +1373,28 @@ function renderSessions(live) {
   const t = live.total;
   rows.push(el('tr', { class: 'sessions-total' }, [
     cell('Total'),
-    cell(formatCost(t.costUsd), 'num cost'),
+    cell(String(live.sessions.reduce((sum, s) => sum + s.prompts, 0)), 'num'),
     // Concurrent sessions overlap, so wall durations do not add up.
     cell('—', 'num'),
     cell(lines(t.linesAdded, t.linesRemoved), 'num'),
-    cell(formatCost(t.costTodayUsd), 'num cost'),
-    cell(formatTokens(t.tokens), 'num'),
+    el('td', { class: 'num cost', text: formatCost(t.costTodayUsd) }),
     cell(''),
   ]));
   document.getElementById('sessionsTable').replaceChildren(...rows);
   sessionToggles = toggles;
   if (focused) toggles.get(focused[0])?.focus();
+
+  // Running now: live sessions in a fixed order. State and Doing now come from the
+  // mod's activity files (phase 3) and show "—" until then.
+  const running = runningSessions(live.sessions);
+  document.getElementById('runningSessions').hidden = !running.length;
+  document.getElementById('runningTable').replaceChildren(...running.map((s) => el('tr', {}, [
+    sessionCell(s),
+    cell('—'),
+    cell('—'),
+    costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, null),
+    cell(formatAgo(s.lastActiveAt, now) + sessionState(s), 'is-live'),
+  ])));
 
   const liveCount = live.sessions.filter((s) => s.live).length;
   const endedCount = live.sessions.filter((s) => s.ended).length;

@@ -148,20 +148,39 @@
           <h2>Live sessions</h2>
           <span class="panel-note" id="sessionsNote"></span>
         </div>
-        <table class="sessions-table">
-          <thead>
-            <tr>
-              <th scope="col">Session</th>
-              <th scope="col" class="num" title="Claude Code's own cost counter for the whole session, as of the recorder's last reading. It includes calls that write no transcript line, such as session titles.">Session cost</th>
-              <th scope="col" class="num">Session length</th>
-              <th scope="col" class="num" title="Lines added and removed by today's Edit and Write calls in this session, subagents included. Edits made through Bash are not counted.">Lines</th>
-              <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. Subagent calls can appear here before Session cost updates.">Cost today</th>
-              <th scope="col" class="num">Tokens today</th>
-              <th scope="col">Last active</th>
-            </tr>
-          </thead>
-          <tbody id="sessionsTable"></tbody>
-        </table>
+        <div id="runningSessions" hidden>
+          <h3 class="sessions-subhead">Running now</h3>
+          <div class="table-scroll">
+            <table class="sessions-table">
+              <thead>
+                <tr>
+                  <th scope="col">Session</th>
+                  <th scope="col">State</th>
+                  <th scope="col">Doing now</th>
+                  <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. Hover a value for the session's own cost counter.">Cost today</th>
+                  <th scope="col">Last active</th>
+                </tr>
+              </thead>
+              <tbody id="runningTable"></tbody>
+            </table>
+          </div>
+        </div>
+        <h3 class="sessions-subhead">Today</h3>
+        <div class="table-scroll">
+          <table class="sessions-table">
+            <thead>
+              <tr>
+                <th scope="col">Session</th>
+                <th scope="col" class="num" title="Prompts typed in this session today.">Prompts</th>
+                <th scope="col" class="num">Length</th>
+                <th scope="col" class="num" title="Lines added and removed by today's Edit and Write calls in this session, subagents included. Edits made through Bash are not counted.">Lines</th>
+                <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. The bar is the share of the day's highest session cost. Hover a value for the session's own cost counter, which covers the whole session.">Cost today</th>
+                <th scope="col">Last active</th>
+              </tr>
+            </thead>
+            <tbody id="sessionsTable"></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="panel" id="reviewsPanel" hidden>
