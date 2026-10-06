@@ -2693,7 +2693,7 @@ async function loadAndRender({ busy = false } = {}) {
   drawModelMix(document.getElementById('modelMixChart'), data.models);
 
   // An hourly model split is noise, so the over-time view is multi-day only. The mix
-  // bar and the Cost by model panel stay on every range, Today included.
+  // donut and the Cost by model panel stay on every range, Today included.
   const multiDay = currentDays !== 'today';
   document.getElementById('modelDailyPanel').hidden = !multiDay;
   document.getElementById('modelCostDailyPanel').hidden = !multiDay;
