@@ -100,6 +100,13 @@ test('runningSessions puts a session with no span last, and breaks ties by newes
   assert.deepStrictEqual(runningSessions([none, tieOld, tieNew]).map((s) => s.project), ['tie-new', 'tie-old', 'none']);
 });
 
+test('runningSessions sorts a live session without a spans array last and does not throw', () => {
+  const noSpans = session('no-spans', 100, { ended: null, live: true });
+  delete noSpans.spans;
+  const withSpan = session('with-span', 10, { ended: null, live: true, spans: [[100, 100]] });
+  assert.deepStrictEqual(runningSessions([noSpans, withSpan]).map((s) => s.project), ['with-span', 'no-spans']);
+});
+
 test('runningSessions returns [] when no session is live', () => {
   assert.deepStrictEqual(runningSessions([session('a', 1)]), []);
 });

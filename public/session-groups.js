@@ -57,7 +57,7 @@ function costShare(value, max) {
 // so the order does not change while they run. A session with no span today goes
 // last. Equal starts fall back to the newest lastActiveAt.
 function runningSessions(sessions) {
-  const start = (s) => (s.spans.length ? s.spans[0][0] : Infinity);
+  const start = (s) => (s.spans?.length ? s.spans[0][0] : Infinity);
   return sessions
     .filter((s) => s.live)
     .sort((a, b) => {

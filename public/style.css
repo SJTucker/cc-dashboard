@@ -862,7 +862,7 @@ html, body {
   color: var(--text-secondary);
 }
 .panel-head + #runningSessions .sessions-subhead,
-.panel-head + .sessions-subhead { margin-top: 4px; }
+#runningSessions[hidden] + .sessions-subhead { margin-top: 4px; }
 
 /* The Cost today bar: one series in one colour, behind the number. */
 .sessions-table .cost-cell { position: relative; }

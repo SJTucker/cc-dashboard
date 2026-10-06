@@ -149,9 +149,9 @@
           <span class="panel-note" id="sessionsNote"></span>
         </div>
         <div id="runningSessions" hidden>
-          <h3 class="sessions-subhead">Running now</h3>
+          <h3 class="sessions-subhead" id="runningHeading">Running now</h3>
           <div class="table-scroll">
-            <table class="sessions-table">
+            <table class="sessions-table" aria-labelledby="runningHeading">
               <thead>
                 <tr>
                   <th scope="col">Session</th>
@@ -165,9 +165,9 @@
             </table>
           </div>
         </div>
-        <h3 class="sessions-subhead">Today</h3>
+        <h3 class="sessions-subhead" id="todayHeading">Today</h3>
         <div class="table-scroll">
-          <table class="sessions-table">
+          <table class="sessions-table" aria-labelledby="todayHeading">
             <thead>
               <tr>
                 <th scope="col">Session</th>
