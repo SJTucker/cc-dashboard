@@ -111,8 +111,8 @@ ln -s ~/code/cc-dashboard/mod ~/.claude/skills/cc-dashboard
 ```
 
 After each main turn, and whenever a rate-limit window moves by 1%, the mod runs
-`bin/record-statusline`. When a session ends, it runs `bin/record-session-end`. It writes each session's
-live state itself (see "Live state").
+`bin/record-statusline`. When a session ends, it runs `bin/record-session-end`. It
+writes each session's live state itself (see "Live state").
 The mod needs nothing in your statusline script or in `settings.json`. It uses
 Claude Code's function hooks, which are early access and may change between
 releases. If an update breaks it, the transcript shows one line starting
@@ -184,15 +184,19 @@ it. It listens to the main loop's events and keeps one small state per session:
 - **The running tool**, set on `tool.call` and cleared when the tool returns. For
   Bash the text is the first 60 characters of the command, for Read, Edit and
   Write it is the file's name, and for any other tool the tool's name alone.
-- **Subagents**, counted from the session's pending, running and waiting agents
-  (`agent.spawn` and `$.agent.list()`).
+- **Subagents**, the number of the session's agents whose turn has not ended:
+  pending, running and waiting agents in `$.agent.list()`, minus any whose
+  `turn.complete` has fired. The count is taken at each write, and `agent.spawn`
+  rewrites the file.
 
 No state marks a permission prompt. The mod's one signal would be a `tool.check`
 that answers `ask`, but that answer comes before the permission mode settles the
 call, and a mod cannot read the mode. In auto mode the classifier settles the ask
 without a dialog, so the session would show a prompt that never opened. A session
 held at a permission prompt shows working, and after 10 minutes without updates, no
-state.
+state. A session whose subagent waits on a permission prompt also shows working.
+After 10 minutes without updates it shows no state, or waiting on you when the main
+loop's turn has already ended.
 
 The mod writes the state to `~/.claude/cc-dashboard/activity/<session id>.json`
 (or under `$CLAUDE_CONFIG_DIR`) with `$.fs.write`, at most every 250 ms per
@@ -281,20 +285,19 @@ npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.jso
 npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 
 The Live sessions panel holds two tables. Running now lists the live sessions,
-meaning those that wrote to a transcript in the last 10 minutes, and also any
-session waiting on you, after those 10 minutes too. Its columns are
-Session, State, Doing now, Cost today and Last active. Prompts, Length and Lines
-are only in Today. Running now is ordered by the start of each session's first span
-today (`runningSessions` in `public/session-groups.js`), so rows do not move while
-they run. State shows ▶ working or ⏸ waiting on you. Doing now shows the
-running tool, such as `Bash: npm test`, and the subagent count. Both show "—"
-without the mod (see "Live state"). Today lists every
-session of the day, live ones included, sorted by Cost today with the highest
-first. Ended sessions of one project collapse
-into a single expandable row when the project has two or more of them. The bar
-behind each Cost today value in Today is that session's share of the day's highest
-single-session Cost today. Prompts counts the prompts typed in the session today.
-The Total row sums Prompts, Lines and Cost today.
+meaning those that wrote to a transcript in the last 10 minutes, and any session
+waiting on you, however long ago it last wrote. Its columns are Session, State, Doing
+now, Cost today and Last active. Prompts, Length and Lines are only in Today. Running
+now is ordered by the start of each session's first span today (`runningSessions` in
+`public/session-groups.js`), so rows do not move while they run. State shows
+▶ working or ⏸ waiting on you. Doing now shows the running tool, such as
+`Bash: npm test`, and the subagent count. Both show "—" without the mod (see "Live
+state"). Today lists every session of the day, live ones included, sorted by Cost
+today with the highest first. Ended sessions of one project collapse into a single
+expandable row when the project has two or more of them. The bar behind each Cost
+today value in Today is that session's share of the day's highest single-session
+Cost today. Prompts counts the prompts typed in the session today. The Total row sums
+Prompts, Lines and Cost today.
 
 The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
 any other end, such as quitting or `/resume`. It reads this from
