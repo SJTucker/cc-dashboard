@@ -1664,10 +1664,11 @@ let recordsData = null;
 let recordsDay = null;
 
 function refreshRecords() {
+  if (!neededRequests(hiddenKeys, currentDays).has('records')) return;
   recordsDay = localDateStr(new Date());
   requestRecords().then((data) => {
     recordsData = data;
-    if (lastRecordDaily) renderRecord(lastRecordDaily);
+    if (lastRecordDaily && shown('card-record')) renderRecord(lastRecordDaily);
     if (lastSummary) renderWeekTotals(lastSummary);
   });
 }
@@ -1735,7 +1736,7 @@ function renderRtk(rtk) {
   const dailyPanel = document.getElementById('rtkDailyPanel');
   const hasDaily = live && rtk.daily.some((d) => d.saved > 0);
   dailyPanel.hidden = !hasDaily;
-  if (hasDaily) {
+  if (hasDaily && shown('rtkDaily')) {
     drawBarChart(document.getElementById('rtkDailyChart'), rtk.daily, {
       // Single series, so no legend and no new hue: this borrows the token palette's
       // blue the way the daily-tokens chart borrows cache-read purple.
@@ -1750,7 +1751,7 @@ function renderRtk(rtk) {
   const cmdPanel = document.getElementById('rtkCommandPanel');
   const hasCommands = live && rtk.commands.some((c) => c.saved > 0);
   cmdPanel.hidden = !hasCommands;
-  if (hasCommands) renderRtkCommands(rtk.commands.filter((c) => c.saved > 0));
+  if (hasCommands && shown('rtkCommands')) renderRtkCommands(rtk.commands.filter((c) => c.saved > 0));
 }
 
 // A table rather than a list, because $/MTok is the number that explains why a
@@ -1813,6 +1814,7 @@ async function postJson(url, body) {
 let lastAppliedDate = null;
 
 async function loadPricesSource() {
+  if (!neededRequests(hiddenKeys, currentDays).has('prices')) return;
   const note = document.getElementById('pricesSource');
   const source = await fetch('/api/prices').then((r) => r.json()).catch(() => null);
   if (!source) {
@@ -2322,7 +2324,9 @@ function renderChanges(report) {
   document.getElementById('sessionStartPanel').hidden = false;
   document.getElementById('beforeAfterPanel').hidden = false;
   renderChangesFileNote(report.changesFile);
-  drawSessionStartChart(document.getElementById('sessionStartChart'), report);
+  if (shown('sessionStart')) drawSessionStartChart(document.getElementById('sessionStartChart'), report);
+  // The marker list, the Bash chart and the table all belong to the before/after panel.
+  if (!shown('beforeAfter')) return;
 
   const list = document.getElementById('markerList');
   list.replaceChildren();
@@ -2363,6 +2367,7 @@ function showChangesLoading() {
 // Independent of the range picker, so it loads once and again on Refresh, not on
 // every range change.
 async function loadChanges() {
+  if (!neededRequests(hiddenKeys, currentDays).has('changes')) return;
   showChangesLoading();
   try {
     const res = await fetch('/api/changes');
@@ -2696,15 +2701,26 @@ function hideKey(key) {
   hiddenKeys.add(key);
   saveHidden();
   applyHidden();
+  const element = document.querySelector(`[data-hide-key="${key}"]`);
+  // The other panel of a pair widens to the full row, so its SVG needs a redraw at the new width.
+  if (element && element.closest('.panel-row')) redrawCharts({ changes: false });
 }
 
-// A hidden panel was not drawn, or was drawn at the 200px fallback width, so
-// showing one redraws the page.
+// A hidden panel was not drawn, so showing one redraws the page. A request that
+// was skipped because all its panels were hidden runs again here. rtk, sessions
+// and reviews are made by loadAndRender, which redrawCharts calls.
 function showKeys(keys) {
+  const before = neededRequests(hiddenKeys, currentDays);
   for (const key of keys) hiddenKeys.delete(key);
   saveHidden();
   applyHidden();
-  redrawCharts();
+  const after = neededRequests(hiddenKeys, currentDays);
+  const resumed = (request) => after.has(request) && !before.has(request);
+  if (resumed('records')) refreshRecords();
+  if (resumed('prices')) loadPricesSource();
+  // loadChanges renders both changes panels itself when it finishes.
+  if (resumed('changes')) loadChanges();
+  redrawCharts({ changes: !resumed('changes') });
 }
 
 // One button per hidden element, in page order, then Show all when two or more
@@ -2874,17 +2890,21 @@ async function loadAndRender({ busy = false } = {}) {
   const summaryRequest = fetch(`/api/summary?days=${currentDays}`)
     .then((res) => res.json())
     .catch((err) => ({ error: err.message }));
-  const rtkRequest = fetch(`/api/rtk?days=${currentDays}`)
-    .then((res) => res.json())
-    .then((payload) => (payload && payload.error ? null : payload))
-    .catch(() => null);
+  // A request whose every panel is hidden is skipped (see neededRequests in
+  // visibility.js), and its panels render from null, as on a failed request.
+  const needed = neededRequests(hiddenKeys, currentDays);
+  const rtkRequest = needed.has('rtk')
+    ? fetch(`/api/rtk?days=${currentDays}`)
+      .then((res) => res.json())
+      .then((payload) => (payload && payload.error ? null : payload))
+      .catch(() => null)
+    : Promise.resolve(null);
 
   const limitsRequest = requestLimits();
-  // Only Today shows the panel, so other ranges skip the request and its Today scan.
-  const sessionsRequest = currentDays === 'today' ? requestSessions() : Promise.resolve(null);
-
-  // Every range shows the panel, so the request is made on every load.
-  const reviewsRequest = requestReviews();
+  // Only Today shows the sessions panels, so other ranges skip the request and
+  // its Today scan.
+  const sessionsRequest = needed.has('sessions') ? requestSessions() : Promise.resolve(null);
+  const reviewsRequest = needed.has('reviews') ? requestReviews() : Promise.resolve(null);
 
   const [data, rtk, limits, sessions, reviews] = await Promise.all([summaryRequest, rtkRequest, limitsRequest, sessionsRequest, reviewsRequest]);
   if (seq !== requestSeq) return; // a newer request superseded this response
@@ -2894,10 +2914,10 @@ async function loadAndRender({ busy = false } = {}) {
   // (today vs. a dated form) depend on the clock, not on the fetched numbers, so
   // this has to run on every settled response. That includes one whose summary
   // failed, and one the signature below would otherwise treat as unchanged.
-  renderLimits(limits);
-  renderSessions(sessions);
-  renderTimeline(sessions);
-  renderReviews(reviews);
+  if (shown('limits')) renderLimits(limits);
+  if (shown('sessions')) renderSessions(sessions);
+  if (shown('timeline')) renderTimeline(sessions);
+  if (shown('reviews')) renderReviews(reviews);
   renderLimitsBanner(limits);
 
   if (data.error) {
@@ -2924,21 +2944,23 @@ async function loadAndRender({ busy = false } = {}) {
   }
 
   const s = data.summary;
-  document.getElementById('cardCost').textContent = formatCost(s.totalCost);
-  // The compact header card on Today has room for a short note only, so there
-  // the full sentence moves to the note's tooltip.
-  const unpricedNote = s.unpricedTokens
-    ? `${formatTokens(s.unpricedTokens)} tokens from unrecognized models not priced`
-    : '';
-  const costNote = document.getElementById('cardCostNote');
-  const compact = currentDays === 'today';
-  costNote.textContent = compact && s.unpricedTokens
-    ? `${formatTokens(s.unpricedTokens)} unpriced`
-    : unpricedNote;
-  costNote.title = compact ? unpricedNote : '';
-  document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
+  if (shown('card-cost')) {
+    document.getElementById('cardCost').textContent = formatCost(s.totalCost);
+    // The compact header card on Today has room for a short note only, so there
+    // the full sentence moves to the note's tooltip.
+    const unpricedNote = s.unpricedTokens
+      ? `${formatTokens(s.unpricedTokens)} tokens from unrecognized models not priced`
+      : '';
+    const costNote = document.getElementById('cardCostNote');
+    const compact = currentDays === 'today';
+    costNote.textContent = compact && s.unpricedTokens
+      ? `${formatTokens(s.unpricedTokens)} unpriced`
+      : unpricedNote;
+    costNote.title = compact ? unpricedNote : '';
+  }
+  if (shown('card-tokens')) document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
   renderWeekTotals(s);
-  document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
+  if (shown('card-cache')) document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
 
   // Claude Code's own per-session counters, shown as a separate card rather than
   // folded into Total cost. Only present on the all-time range, and only for the
@@ -2946,53 +2968,57 @@ async function loadAndRender({ busy = false } = {}) {
   // per-request scan misses, not a replacement total.
   const reportedCard = document.getElementById('reportedCard');
   reportedCard.hidden = s.reportedCost == null;
-  if (s.reportedCost != null) {
+  if (s.reportedCost != null && shown('card-reported')) {
     document.getElementById('cardReported').textContent = formatCost(s.reportedCost);
     document.getElementById('cardReportedNote').textContent =
       `over ${s.reportedSessions} of ${s.reportedSessionsOf} sessions \u2014 includes calls with no transcript line`;
   }
-  document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
-  document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');
-  renderRecord(data.daily);
+  if (shown('card-files')) document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
+  if (shown('card-tools')) document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');
+  if (shown('card-record')) renderRecord(data.daily);
 
-  drawBarChart(document.getElementById('costChart'), data.daily, {
-    color: 'var(--accent-cost)',
-    valueKey: 'cost',
-    tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatCost(d.cost)}`,
-  });
+  if (shown('dailyCost')) {
+    drawBarChart(document.getElementById('costChart'), data.daily, {
+      color: 'var(--accent-cost)',
+      valueKey: 'cost',
+      tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatCost(d.cost)}`,
+    });
+  }
 
-  // The payload carries the four token types per bucket but not their sum, so the
-  // total is derived here rather than widening the wire format for one chart.
-  const dailyTokens = data.daily.map((d) => ({
-    ...d,
-    tokens: d.input + d.output + d.cacheCreate + d.cacheRead,
-  }));
-  drawBarChart(document.getElementById('tokenChart'), dailyTokens, {
-    // Cache reads are ~97% of every total, so this borrows their colour rather
-    // than adding a sixth hue to a palette validated as a set.
-    color: '#9085e9',
-    valueKey: 'tokens',
-    tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatTokens(d.tokens)} tokens`,
-  });
+  if (shown('dailyTokens')) {
+    // The payload carries the four token types per bucket but not their sum, so the
+    // total is derived here rather than widening the wire format for one chart.
+    const dailyTokens = data.daily.map((d) => ({
+      ...d,
+      tokens: d.input + d.output + d.cacheCreate + d.cacheRead,
+    }));
+    drawBarChart(document.getElementById('tokenChart'), dailyTokens, {
+      // Cache reads are ~97% of every total, so this borrows their colour rather
+      // than adding a sixth hue to a palette validated as a set.
+      color: '#9085e9',
+      valueKey: 'tokens',
+      tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatTokens(d.tokens)} tokens`,
+    });
+  }
 
-  drawCumulativeChart(document.getElementById('cumulativeChart'), data.daily);
+  if (shown('cumulativeCost')) drawCumulativeChart(document.getElementById('cumulativeChart'), data.daily);
 
   // Hourly buckets on the Today range, where a daily rate has no meaning.
   const perDay = currentDays === 'today' ? null : costPerDay(data.daily);
   document.getElementById('burnCard').hidden = perDay == null;
   document.getElementById('projectionCard').hidden = perDay == null;
-  if (perDay != null) {
-    document.getElementById('cardBurn').textContent = formatCost(perDay);
-    document.getElementById('cardProjection').textContent = formatCost(perDay * 30);
+  if (perDay != null && shown('card-burn')) document.getElementById('cardBurn').textContent = formatCost(perDay);
+  if (perDay != null && shown('card-projection')) document.getElementById('cardProjection').textContent = formatCost(perDay * 30);
+
+  if (shown('tokenTypes')) {
+    // Reversed so the legend reads in the order the lines actually appear, cache read
+    // at the top down to input at the bottom. TOKEN_SERIES is copied, not reversed in
+    // place: the stacked charts rely on its order.
+    drawTokenLegend(document.getElementById('tokenTypeLegend'), data.daily, [...TOKEN_SERIES].reverse(), true);
+    drawLogLineChart(document.getElementById('tokenTypeChart'), data.daily, TOKEN_SERIES);
   }
 
-  // Reversed so the legend reads in the order the lines actually appear, cache read
-  // at the top down to input at the bottom. TOKEN_SERIES is copied, not reversed in
-  // place: the stacked charts rely on its order.
-  drawTokenLegend(document.getElementById('tokenTypeLegend'), data.daily, [...TOKEN_SERIES].reverse(), true);
-  drawLogLineChart(document.getElementById('tokenTypeChart'), data.daily, TOKEN_SERIES);
-
-  drawModelList(document.getElementById('modelList'), data.models);
+  if (shown('costByModel')) drawModelList(document.getElementById('modelList'), data.models);
 
   // Every bar in the panel shares one scale. Groups on separate scales made a
   // 30.8% subagent bar draw longer than a 68.2% thread bar.
@@ -3009,14 +3035,16 @@ async function loadAndRender({ busy = false } = {}) {
   const attributionScale = [...data.skills, ...data.subagents].reduce((max, r) => Math.max(max, r.cost), 0);
   const totalCost = data.summary.totalCost;
   document.getElementById('attributionPanel').hidden = totalCost <= 0;
-  drawSplitBar(document.getElementById('threadBars'), threadRows);
-  drawSplitBar(document.getElementById('contextBars'), contextRows);
-  drawUsageBars(document.getElementById('skillBars'), data.skills.slice(0, 8), totalCost, attributionScale);
-  drawUsageBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), totalCost, attributionScale);
+  if (shown('attribution')) {
+    drawSplitBar(document.getElementById('threadBars'), threadRows);
+    drawSplitBar(document.getElementById('contextBars'), contextRows);
+    drawUsageBars(document.getElementById('skillBars'), data.skills.slice(0, 8), totalCost, attributionScale);
+    drawUsageBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), totalCost, attributionScale);
+  }
 
-  renderTools(data.tools || []);
+  if (shown('tools')) renderTools(data.tools || []);
 
-  drawModelMix(document.getElementById('modelMixChart'), data.models);
+  if (shown('modelMix')) drawModelMix(document.getElementById('modelMixChart'), data.models);
 
   // An hourly model split is noise, so the over-time view is multi-day only. The mix
   // donut and the Cost by model panel stay on every range, Today included.
@@ -3025,9 +3053,9 @@ async function loadAndRender({ busy = false } = {}) {
   document.getElementById('modelCostDailyPanel').hidden = !multiDay;
   document.getElementById('activityPanel').hidden = !multiDay;
   if (multiDay) {
-    drawModelDailyChart(document.getElementById('modelDailyChart'), data.daily, data.models);
-    drawModelDailyChart(document.getElementById('modelCostDailyChart'), data.daily, data.models, 'cost');
-    drawActivityHeatmap(document.getElementById('activityHeatmap'), data.activity);
+    if (shown('modelDaily')) drawModelDailyChart(document.getElementById('modelDailyChart'), data.daily, data.models);
+    if (shown('modelCostDaily')) drawModelDailyChart(document.getElementById('modelCostDailyChart'), data.daily, data.models, 'cost');
+    if (shown('activity')) drawActivityHeatmap(document.getElementById('activityHeatmap'), data.activity);
   }
 
   renderRtk(rtk);
