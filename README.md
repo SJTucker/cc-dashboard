@@ -245,6 +245,9 @@ the `SessionEnd` hook under "Without the mod" runs it. With neither, a session s
 as live for 10 minutes after its last response. So after a `/clear`, the old session
 and the new one both show as live for up to 10 minutes. A resumed session keeps its
 session id, so its row shows as live again after its next response.
+When a project has two or more cleared or ended sessions, the panel shows them as
+one row with the summed figures and a count of each state. Click the row's arrow to
+list the sessions one by one. Live and idle open sessions always keep their own rows.
 
 ## Setup changes
 
