@@ -1476,7 +1476,7 @@ function renderTimeline(live) {
 
   const liveCount = lanes.filter((l) => l.session.live).length;
   document.getElementById('timelineNote').textContent =
-    `${lanes.length} ${lanes.length === 1 ? 'session' : 'sessions'} today · ${liveCount} live · solid bar: live session · arrowhead: live session whose last call was within the last 10 minutes · striped bar: not live · dashed line: now`;
+    `${lanes.length} ${lanes.length === 1 ? 'session' : 'sessions'} today · ${liveCount} live`;
 }
 
 // Reviews of ended sessions from the last 7 days (see lib/review.js). A failure
