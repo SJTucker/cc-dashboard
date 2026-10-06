@@ -413,16 +413,16 @@ test('a malformed updates.json logs and fetches nothing', async ($, on) => {
   expect(logged).toEqual([`${UPDATES} is not valid JSON; fix or delete it`])
 })
 
-test('an updates.json holding an array or null logs and fetches nothing', async ($, on) => {
-  for (const content of ['[]', 'null']) {
+for (const [name, content] of [['an array', '[]'], ['null', 'null']] as const) {
+  test(`an updates.json holding ${name} logs and fetches nothing`, async ($, on) => {
     const { fetched, asked, logged, clock } = world(on, { files: { [UPDATES]: content } })
     await $.session.start(start)
     await clock.settle()
     expect(fetched).toEqual([])
     expect(asked).toEqual([])
     expect(logged).toEqual([`${UPDATES} is not a JSON object; fix or delete it`])
-  }
-})
+  })
+}
 
 const HOUR = 60 * 60 * 1000
 
@@ -439,7 +439,7 @@ test('a session start an hour later fetches again', async ($, on) => {
   const { fetched, clock } = world(on)
   await $.session.start(start)
   await clock.settle()
-  clock.advance(HOUR)
+  await clock.advance(HOUR)
   await $.session.start(start)
   await clock.settle()
   expect(fetched.length).toBe(2)
