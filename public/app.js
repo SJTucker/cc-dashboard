@@ -1379,8 +1379,8 @@ function renderSessions(live) {
 // public/chart-geometry.js), with a bar per span. A live session's bars are solid
 // and, when its last call was within the last 10 minutes, its last bar ends in an
 // arrowhead at now. Every other session's bars carry the
-// diagonal texture. The note under the title says so in words, so the two kinds
-// never depend on colour. SVG fills need a literal colour for the texture pattern,
+// diagonal texture. The key in the p.panel-note under the chart (public/index.html)
+// says so in words, so the two kinds never depend on colour. SVG fills need a literal colour for the texture pattern,
 // so TIMELINE_COLOR repeats --accent-cyan from public/style.css.
 const TIMELINE_COLOR = '#3fe0ff';
 const TIMELINE_LANE_HEIGHT = 22;
@@ -1419,7 +1419,11 @@ function renderTimeline(live) {
   const container = document.getElementById('timelineChart');
   const width = chartWidth(container);
   const now = Date.now();
-  const signature = JSON.stringify([width, Math.floor(now / 60_000), live.sessions]);
+  const signature = JSON.stringify([
+    width,
+    Math.floor(now / 60_000),
+    live.sessions.map((s) => [s.spans, s.live, s.title, s.project, s.costTodayUsd, s.prompts]),
+  ]);
   if (signature === timelineSignature) return;
   timelineSignature = signature;
   hideTooltip();
@@ -1433,7 +1437,13 @@ function renderTimeline(live) {
   const plotHeight = lanes.length * TIMELINE_LANE_HEIGHT;
   const height = plotHeight + TIMELINE_AXIS_HEIGHT;
 
-  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${height}`, height });
+  const liveLanes = lanes.filter((l) => l.session.live).length;
+  const svg = svgEl('svg', {
+    viewBox: `0 0 ${width} ${height}`,
+    height,
+    role: 'img',
+    'aria-label': `Session timeline: ${lanes.length} ${lanes.length === 1 ? 'session' : 'sessions'} today, ${liveLanes} live`,
+  });
   appendPatternDefs(svg, 'timeline', [{ texture: 'diag', color: TIMELINE_COLOR }]);
 
   const step = labelStep(ticks.length, width - gutter);
@@ -1450,11 +1460,18 @@ function renderTimeline(live) {
     const top = lane * TIMELINE_LANE_HEIGHT;
     const mid = top + TIMELINE_LANE_HEIGHT / 2;
     const label = svgEl('text', { class: 'timeline-label', x: 0, y: mid + 4 });
-    label.textContent = `${s.live ? '⬢' : '⬡'} ${cutLabel(s.title || s.project || '—', maxChars)}`;
+    const fullName = s.title || s.project || '—';
+    const glyph = svgEl('tspan', { 'aria-hidden': 'true' });
+    glyph.textContent = s.live ? '⬢' : '⬡';
+    const name = svgEl('title', {});
+    name.textContent = fullName;
+    label.append(glyph, ` ${cutLabel(fullName, maxChars)}`, name);
     svg.appendChild(label);
 
     const fill = fillFor('timeline', s.live ? 'solid' : 'diag', TIMELINE_COLOR);
     for (const bar of bars) {
+      // laneLayout's 3px minimum shows half of the 6px diagonal texture tile.
+      if (!s.live) bar.width = Math.max(6, bar.width);
       const y = mid - TIMELINE_BAR_HEIGHT / 2;
       svg.appendChild(withTooltip(svgEl('rect', {
         class: 'timeline-bar', x: bar.x, y, width: bar.width, height: TIMELINE_BAR_HEIGHT, rx: 3, fill,
@@ -1474,9 +1491,8 @@ function renderTimeline(live) {
   }));
   container.replaceChildren(svg);
 
-  const liveCount = lanes.filter((l) => l.session.live).length;
   document.getElementById('timelineNote').textContent =
-    `${lanes.length} ${lanes.length === 1 ? 'session' : 'sessions'} today · ${liveCount} live`;
+    `${lanes.length} ${lanes.length === 1 ? 'session' : 'sessions'} today · ${liveLanes} live`;
 }
 
 // Reviews of ended sessions from the last 7 days (see lib/review.js). A failure

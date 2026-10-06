@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout } =require('../public/chart-geometry');
+const { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout } = require('../public/chart-geometry');
 
 test('labelStep keeps at most 12 labels on a wide chart', () => {
   assert.strictEqual(labelStep(24, 800), 2);
