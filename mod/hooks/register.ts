@@ -385,6 +385,11 @@ const activities = new Map<string, Activity>()
 const runningTools = new Map<string, Map<string, ToolRun>>()
 const lastWriteAt = new Map<string, number>()
 const writeScheduled = new Set<string>()
+// Each session's writes run one after another on one promise chain, so the last
+// write to finish is the last one started. The text last written, by session id,
+// lets a write with nothing new be skipped.
+const writing = new Map<string, Promise<void>>()
+const lastWritten = new Map<string, string>()
 
 function toolsOf(id: string) {
   let tools = runningTools.get(id)
@@ -427,17 +432,32 @@ async function subagentCount($: EngineInterface) {
   }
 }
 
-async function writeActivity($: EngineInterface, a: Activity) {
+// Reads the session's state after its own awaits, so the text written is the state
+// at the moment of writing, not the state when the write was queued.
+async function writeActivity($: EngineInterface, id: string) {
   const dir = await configDir($)
   if (!dir) return
-  const body = { ...a, subagents: await subagentCount($) }
-  await $.fs.write(`${dir}/cc-dashboard/activity/${a.sessionId}.json`, JSON.stringify(body))
+  const subagents = await subagentCount($)
+  const a = activities.get(id)
+  if (!a) return
+  const text = JSON.stringify({ ...a, subagents })
+  if (lastWritten.get(id) === text) return
+  await $.fs.write(`${dir}/cc-dashboard/activity/${id}.json`, text)
+  lastWritten.set(id, text)
 }
 
-// Applies change to the session's state, then writes it. A write within
-// ACTIVITY_WRITE_MS of the last one waits for a timer and writes the newest state
+// Adds a write to the end of the session's chain and returns at once. A failed
+// write is logged, and the chain goes on with the next one.
+function queueWrite($: EngineInterface, id: string) {
+  const previous = writing.get(id) ?? Promise.resolve()
+  writing.set(id, previous.then(() => writeActivity($, id)).catch((err) => fail($, `activity failed (${errorName(err)})`)))
+}
+
+// Applies change to the session's state, then queues a write of it. A change within
+// ACTIVITY_WRITE_MS of the last write waits for a timer and writes the newest state
 // once. A change that returns false means nothing changed, and nothing is written.
-// Never throws, so a hook that calls it still returns next(e)'s result.
+// Never throws and never waits for a write, so a hook that calls it reaches next(e)
+// without disk I/O and still returns next(e)'s result.
 async function track($: EngineInterface, change: (a: Activity, now: number) => void | false) {
   try {
     const id = await $.session.id()
@@ -450,17 +470,15 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
     const last = lastWriteAt.get(id)
     if (last === undefined || now - last >= ACTIVITY_WRITE_MS) {
       lastWriteAt.set(id, now)
-      await writeActivity($, a)
+      queueWrite($, id)
     } else if (!writeScheduled.has(id)) {
       writeScheduled.add(id)
       $.clock.after(ACTIVITY_WRITE_MS - (now - last), () => {
         writeScheduled.delete(id)
-        const latest = activities.get(id)
-        if (!latest) return
         $.clock.now()
           .then((at) => {
             lastWriteAt.set(id, at)
-            return writeActivity($, latest)
+            queueWrite($, id)
           })
           .catch((err) => fail($, `activity failed (${errorName(err)})`))
       })

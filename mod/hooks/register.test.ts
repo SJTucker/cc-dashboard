@@ -34,6 +34,9 @@ type World = {
   verdict: 'allow' | 'ask' | 'deny'
   // Makes fs.write reject.
   writeFails: boolean
+  // How long each fs.write takes on the mock clock, in call order. A write past the
+  // end of the list takes no time.
+  writeMs: number[]
 }
 
 const entry = (name: string): Entry => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -63,6 +66,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     toolMs: 0,
     verdict: 'allow',
     writeFails: false,
+    writeMs: [],
     ...w,
   }
   const ran: Ran[] = []
@@ -152,8 +156,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   const writes: Record<string, string> = {}
   const writeLog: Array<{ path: string; text: string }> = []
-  on('fs.write', (_$, e) => {
+  on('fs.write', async (_$, e) => {
     if (state.writeFails) throw new Error('disk full')
+    const ms = state.writeMs.shift() ?? 0
+    if (ms > 0) await clock.sleep(ms)
     writes[e.path] = e.text
     writeLog.push({ path: e.path, text: e.text })
     return { value: undefined }
@@ -692,9 +698,13 @@ const activityOf = (writes: Record<string, string>) => JSON.parse(writes[ACTIVIT
 const turnEnd = (extra: object = {}) => ({ answer: '', durationMs: 5, isAborted: false, turnId: 't1', reason: 'answer' as const, ...extra })
 const idle = { sessionId: 's1', state: 'working', tool: null, subagents: 0 }
 
+// Hooks queue activity writes and return without waiting for them, so each test
+// settles the clock before it reads what was written.
+
 test('turn.start records the session as working', async ($, on) => {
-  const { writes, ran } = world(on)
+  const { writes, ran, clock } = world(on)
   await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
   expect(activityOf(writes)).toEqual({ ...idle, since: 61_000, updatedAt: 61_000 })
   expect(ran).toEqual([])
 })
@@ -705,6 +715,7 @@ for (const reason of ['answer', 'aborted', 'error'] as const) {
     await $.turn.start({ text: 'hi', turnId: 't1' })
     await clock.advance(300)
     await $.turn.complete(turnEnd({ reason, isAborted: reason === 'aborted' }))
+    await clock.settle()
     expect(activityOf(writes)).toEqual({ ...idle, state: 'waiting', since: 61_300, updatedAt: 61_300 })
   })
 }
@@ -714,6 +725,7 @@ test('a turn.complete from a subagent leaves the state alone', async ($, on) => 
   await $.turn.start({ text: 'hi', turnId: 't1' })
   await clock.advance(300)
   await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await clock.settle()
   expect(activityOf(writes).state).toBe('working')
 })
 
@@ -728,8 +740,21 @@ test('tool.call records the running tool and clears it when the tool returns', a
   })
   await clock.advance(1000)
   await call
+  await clock.settle()
   expect(activityOf(writes)).toEqual({ ...idle, since: 61_000, updatedAt: 62_300 })
   expect(ran).toEqual([])
+})
+
+test('a tool.call from a subagent leaves the recorded tool alone', async ($, on) => {
+  const { writes, writeLog, clock } = world(on, { toolMs: 1000 })
+  const main = $.tool.call({ tool: 'Bash', command: 'main' } as never)
+  await clock.advance(300)
+  const sub = $.tool.call({ tool: 'Bash', command: 'sub', agentId: 'a1' } as never)
+  await clock.settle()
+  expect(activityOf(writes).tool.detail).toBe('main')
+  expect(writeLog.length).toBe(1)
+  await clock.advance(1000)
+  await Promise.all([main, sub])
 })
 
 test('the tool detail is the command, the file name, or empty', async ($, on) => {
@@ -763,34 +788,60 @@ test('with two tools running, the newer one shows, and the older one shows again
   // The first ends at 62_000, 700 ms later. The second runs until 62_300.
   await clock.advance(700)
   await first
+  await clock.settle()
   expect(activityOf(writes).tool.detail).toBe('two')
   await clock.advance(300)
   await second
+  await clock.settle()
   expect(activityOf(writes).tool).toBe(null)
 })
 
 test('a burst of changes is written once at once and once more, with the latest state, after 250 ms', async ($, on) => {
   const { writes, writeLog, clock } = world(on)
   await $.turn.start({ text: 'a', turnId: 't1' })
+  await clock.settle()
   await $.turn.complete(turnEnd())
   await $.turn.start({ text: 'b', turnId: 't2' })
+  await $.turn.complete(turnEnd({ turnId: 't2' }))
+  await clock.settle()
   expect(writeLog.length).toBe(1)
+  expect(activityOf(writes).state).toBe('working')
   await clock.advance(250)
   expect(writeLog.length).toBe(2)
-  expect(activityOf(writes).state).toBe('working')
+  expect(activityOf(writes).state).toBe('waiting')
   await clock.advance(1000)
   expect(writeLog.length).toBe(2)
 })
 
+test('a slow write does not delay the hook, and the newer state is the last one written', async ($, on) => {
+  const { writeLog, clock } = world(on, { writeMs: [500] })
+  let returned = false
+  void $.turn.start({ text: 'hi', turnId: 't1' }).then(() => {
+    returned = true
+  })
+  await clock.settle()
+  // The first write is still inside fs.write until 61_500.
+  expect(returned).toBe(true)
+  expect(writeLog).toEqual([])
+  await clock.advance(300)
+  await $.turn.complete(turnEnd())
+  await clock.settle()
+  expect(writeLog).toEqual([])
+  await clock.advance(300)
+  expect(writeLog.map((w) => JSON.parse(w.text).state)).toEqual(['working', 'waiting'])
+})
+
 test('CLAUDE_CONFIG_DIR moves the activity file', async ($, on) => {
-  const { writes } = world(on, { env: { HOME: '/home/u', CLAUDE_CONFIG_DIR: '/cfg' } })
+  const { writes, clock } = world(on, { env: { HOME: '/home/u', CLAUDE_CONFIG_DIR: '/cfg' } })
   await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
   expect(Object.keys(writes)).toEqual(['/cfg/cc-dashboard/activity/s1.json'])
 })
 
 test('with neither HOME nor CLAUDE_CONFIG_DIR nothing is written and nothing is logged', async ($, on) => {
-  const { writeLog, logged } = world(on, { env: {} })
+  const { writeLog, logged, clock } = world(on, { env: {} })
   await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
   expect(writeLog).toEqual([])
   expect(logged).toEqual([])
 })
@@ -800,5 +851,19 @@ test('a failing fs.write does not change the event result, and logs once', async
   expect(await $.turn.start({ text: 'hi', turnId: 't1' })).toEqual({ turnId: 't1' })
   await clock.advance(300)
   expect(await $.turn.start({ text: 'again', turnId: 't2' })).toEqual({ turnId: 't2' })
+  await clock.settle()
+  expect(logged).toEqual(['activity failed (HooksError)'])
+})
+
+test('a failing write from the throttle timer is logged and does not throw', async ($, on) => {
+  const { logged, writeLog, state, clock } = world(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  state.writeFails = true
+  expect(await $.turn.complete(turnEnd())).toEqual({ text: '' })
+  await clock.settle()
+  expect(logged).toEqual([])
+  await clock.advance(250)
+  expect(writeLog.length).toBe(1)
   expect(logged).toEqual(['activity failed (HooksError)'])
 })
