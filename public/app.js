@@ -1288,6 +1288,58 @@ function renderSessions(live) {
     `${live.sessions.length} today · ${liveCount} live in the last 10 min${ended} · session figures include earlier days`;
 }
 
+// Reviews of ended sessions from the last 7 days (see lib/review.js). A failure
+// resolves to null, same as requestSessions.
+function requestReviews() {
+  return fetch('/api/reviews')
+    .then((res) => res.json())
+    .then((payload) => (payload && payload.error ? null : payload))
+    .catch(() => null);
+}
+
+const REVIEW_KINDS = {
+  'claude-md': 'CLAUDE.md',
+  'skill-or-hook': 'Skill or hook',
+  'token-waste': 'Token waste',
+  workflow: 'Workflow',
+};
+
+// "5m ago" or a time for today, and a weekday with a time for earlier days.
+function reviewTime(ms, now) {
+  if (localDateStr(new Date(ms)) === localDateStr(new Date(now))) return formatAgo(ms, now);
+  return new Date(ms).toLocaleString([], { weekday: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
+// Shown on every range, because a review belongs to a session, not to a day.
+// Hidden when the request failed or no session was reviewed in the last 7 days.
+function renderReviews(data) {
+  const panel = document.getElementById('reviewsPanel');
+  panel.hidden = !data || !data.reviews.length;
+  if (panel.hidden) return;
+
+  const now = Date.now();
+  const items = data.reviews.map((r) => {
+    const head = el('div', { class: 'review-head', text: `${r.project || '—'} · ended ${reviewTime(r.endedAt ?? r.reviewedAt, now)}` });
+    let body;
+    if (r.status === 'failed') {
+      body = el('p', { class: 'review-empty', text: `Review failed: ${r.error || 'no reason recorded'}` });
+    } else if (!r.suggestions.length) {
+      body = el('p', { class: 'review-empty', text: 'No suggestions' });
+    } else {
+      body = el('ul', { class: 'review-suggestions' }, r.suggestions.map((s) => el('li', {}, [
+        el('span', { class: 'review-kind', text: REVIEW_KINDS[s.kind] || s.kind }),
+        document.createTextNode(` ${s.text}`),
+      ])));
+    }
+    return el('li', { class: 'review' }, [head, body]);
+  });
+  document.getElementById('reviewsList').replaceChildren(...items);
+
+  const withSuggestions = data.reviews.filter((r) => r.suggestions.length).length;
+  document.getElementById('reviewsNote').textContent =
+    `${data.reviews.length} reviewed in the last 7 days · ${withSuggestions} with suggestions · by Haiku`;
+}
+
 // Warn once either window reaches 75%, on every range. Within a window the percent
 // only rises, and readLimits() drops a window past its reset, so a stale cache
 // understates usage and never raises a false warning. The rounded percent is
@@ -2404,8 +2456,8 @@ async function loadAndRender({ busy = false } = {}) {
   // response is dropped below and would never clear it.
   if (busy) setBusy(true);
 
-  // All three requests are issued before any is awaited, so the summary never
-  // waits on rtk or limits. None of the three promises rejects. rtk and limits
+  // Every request is issued before any is awaited, so the summary never
+  // waits on the others. None of the promises rejects. rtk and limits
   // are optional and resolve to null on failure, so an absent or unreadable source
   // hides its panel. A failed summary resolves to an error payload, which becomes
   // the error banner below after limits have rendered.
@@ -2421,7 +2473,10 @@ async function loadAndRender({ busy = false } = {}) {
   // Only Today shows the panel, so other ranges skip the request and its Today scan.
   const sessionsRequest = currentDays === 'today' ? requestSessions() : Promise.resolve(null);
 
-  const [data, rtk, limits, sessions] = await Promise.all([summaryRequest, rtkRequest, limitsRequest, sessionsRequest]);
+  // Every range shows the panel, so the request is made on every load.
+  const reviewsRequest = requestReviews();
+
+  const [data, rtk, limits, sessions, reviews] = await Promise.all([summaryRequest, rtkRequest, limitsRequest, sessionsRequest, reviewsRequest]);
   if (seq !== requestSeq) return; // a newer request superseded this response
   setBusy(false);
 
@@ -2431,6 +2486,7 @@ async function loadAndRender({ busy = false } = {}) {
   // failed, and one the signature below would otherwise treat as unchanged.
   renderLimits(limits);
   renderSessions(sessions);
+  renderReviews(reviews);
   renderLimitsBanner(limits);
 
   if (data.error) {

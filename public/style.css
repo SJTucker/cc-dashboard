@@ -791,6 +791,14 @@ html, body {
 .sessions-table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .sessions-table .cost { color: var(--accent-cost); }
 .sessions-table .is-live { color: var(--text-primary); }
+.reviews-list { list-style: none; margin: 0; padding: 0; }
+.review { padding: 8px 0; border-top: 1px solid var(--border); }
+.review:first-child { border-top: none; }
+.review-head { color: var(--text-secondary); font-size: 0.85em; }
+.review-suggestions { margin: 4px 0 0; padding-left: 18px; }
+.review-suggestions li { margin: 2px 0; }
+.review-kind { font-weight: 600; color: var(--text-primary); }
+.review-empty { margin: 4px 0 0; color: var(--text-tertiary); }
 .sessions-total td { font-weight: 600; }
 
 /* Eight columns do not fit a narrow window, so the table scrolls inside its panel. */
