@@ -10,7 +10,7 @@ const { localDateStr } = require('../lib/scan');
 // Boot the real Express app on an ephemeral port against a fixture log directory.
 // CLAUDE_CONFIG_DIR has to be set before server.js is required, because
 // getProjectsDir() reads it when lib/scan.js is loaded into the module cache.
-function startServer() {
+function startServer({ onScan } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-api-'));
   const dir = path.join(base, 'projects', 'demo');
   fs.mkdirSync(dir, { recursive: true });
@@ -35,15 +35,34 @@ function startServer() {
   delete process.env.LIVE_SESSIONS_DIR; // snapshots resolve under CLAUDE_CONFIG_DIR
   delete process.env.PRICES_JSON; // prices.json resolves under CLAUDE_CONFIG_DIR
   delete process.env.REVIEWS_DIR; // reviews resolve under CLAUDE_CONFIG_DIR
+  delete process.env.RECORDS_FILE; // records.json resolves under CLAUDE_CONFIG_DIR
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.PORT = '0'; // let the OS pick a free port
   delete require.cache[require.resolve('../lib/scan')];
+  // onScan sees each scanUsage call's options before the real scan runs. server.js
+  // destructures scanUsage when it is required, so the spy goes in first.
+  if (onScan) {
+    const scanModule = require('../lib/scan');
+    const realScanUsage = scanModule.scanUsage;
+    scanModule.scanUsage = (opts) => {
+      onScan(opts);
+      return realScanUsage(opts);
+    };
+  }
   delete require.cache[require.resolve('../lib/sessions')];
   delete require.cache[require.resolve('../lib/updates')];
   delete require.cache[require.resolve('../lib/review')];
   delete require.cache[require.resolve('../server')];
   const server = require('../server');
   return server;
+}
+
+// The records cache file for the server startServer just booted.
+const recordsFile = () => path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'records.json');
+
+function writeRecordsFile(allTime, computedAt = Date.now()) {
+  fs.mkdirSync(path.dirname(recordsFile()), { recursive: true });
+  fs.writeFileSync(recordsFile(), JSON.stringify({ allTime, computedAt }));
 }
 
 const PAGE = fs.readFileSync(path.join(__dirname, 'fixtures', 'pricing-page.md'), 'utf8');
@@ -422,6 +441,100 @@ test('GET /api/records returns recentDays: the 6 days before today, not today', 
   assert.deepStrictEqual(byDate[dateBack(6)], { date: dateBack(6), tokens: 1200, cost: 0.006 });
   assert.deepStrictEqual(byDate[dateBack(1)], { date: dateBack(1), tokens: 1200, cost: 0.006 });
   assert.deepStrictEqual(byDate[dateBack(3)], { date: dateBack(3), tokens: 0, cost: 0 });
+});
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+const TODAY_RECORD = () => ({ date: localDateStr(new Date()), tokens: 1200, cost: 0.006 });
+
+test('GET /api/records with no records file scans all history and writes the file', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  const data = await (await fetch(`http://127.0.0.1:${server.address().port}/api/records`)).json();
+
+  assert.deepStrictEqual(data.allTime, TODAY_RECORD());
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime, TODAY_RECORD());
+});
+
+test('GET /api/records serves a fresh records file without the all-history scan', async (t) => {
+  const scans = [];
+  const server = startServer({ onScan: (opts) => scans.push(opts.days) });
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const cached = { date: '2026-01-02', tokens: 999999, cost: 12.5 };
+  writeRecordsFile(cached);
+
+  const data = await (await fetch(`http://127.0.0.1:${server.address().port}/api/records`)).json();
+
+  assert.deepStrictEqual(data.allTime, cached);
+  assert.ok(!scans.includes(null), 'the all-history scan did not run');
+  assert.ok(scans.includes(7), 'recentDays came from the 7-day scan');
+});
+
+test('GET /api/records rescans when the records file is 3 days old', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  writeRecordsFile({ date: '2026-01-02', tokens: 999999, cost: 12.5 }, Date.now() - 3 * DAY_MS);
+
+  const data = await (await fetch(`http://127.0.0.1:${server.address().port}/api/records`)).json();
+
+  assert.deepStrictEqual(data.allTime, TODAY_RECORD());
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime, TODAY_RECORD());
+});
+
+test('GET /api/summary?days=today writes today as the record when it has more tokens', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  writeRecordsFile({ date: '2026-01-02', tokens: 500, cost: 0.1 });
+
+  await fetch(`http://127.0.0.1:${server.address().port}/api/summary?days=today`);
+
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime, TODAY_RECORD());
+});
+
+test('GET /api/summary?days=today keeps a record that today has not beaten', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const cached = { date: '2026-01-02', tokens: 999999, cost: 12.5 };
+  writeRecordsFile(cached);
+
+  await fetch(`http://127.0.0.1:${server.address().port}/api/summary?days=today`);
+
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime, cached);
+});
+
+test('GET /api/summary?days=today writes no records file when there is none', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+
+  await fetch(`http://127.0.0.1:${server.address().port}/api/summary?days=today`);
+
+  assert.strictEqual(fs.existsSync(recordsFile()), false);
+});
+
+test('POST /api/refresh deletes the records file', async (t) => {
+  const base = await listen(t);
+  writeRecordsFile({ date: '2026-01-02', tokens: 999999, cost: 12.5 });
+
+  assert.strictEqual((await post(`${base}/api/refresh`)).status, 200);
+
+  assert.strictEqual(fs.existsSync(recordsFile()), false);
+});
+
+test('POST /api/prices/apply deletes the records file', async (t) => {
+  stubPricingPage(t, PAGE);
+  const base = await listen(t);
+  writeRecordsFile({ date: '2026-01-02', tokens: 999999, cost: 12.5 });
+
+  await post(`${base}/api/prices/check`);
+  assert.strictEqual((await post(`${base}/api/prices/apply`, { effectiveFrom: localDateStr(new Date()) })).status, 200);
+
+  assert.strictEqual(fs.existsSync(recordsFile()), false);
 });
 
 test('GET /stats.js serves the shared statistics helpers', async (t) => {

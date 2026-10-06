@@ -1647,10 +1647,9 @@ function renderLimitsBanner(limits) {
 }
 
 // The Record day card's all-time value. Fetched once on load and once on
-// Refresh, not on the 5s live poll or a range switch: /api/records shares the
-// days=all cache with /api/summary and /api/changes, so polling it on every
-// tick would buy nothing while the cache is warm and force a scan when it
-// isn't. A failure resolves to null, same as requestLimits.
+// Refresh, not on the 5s live poll or a range switch: /api/records reads records.json
+// and the 7-day scan, so polling it on every tick would buy nothing. A failure resolves
+// to null, same as requestLimits.
 function requestRecords() {
   return fetch('/api/records').then((res) => res.json()).catch(() => null);
 }

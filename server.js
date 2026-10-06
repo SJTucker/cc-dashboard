@@ -18,6 +18,7 @@ const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
 const { PRICING_URL, PriceParseError, fetchPricingPage, parsePricingPage, diffPrices } = require('./lib/price-fetch');
+const { readRecord, writeRecord, clearRecord } = require('./lib/records');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -136,7 +137,9 @@ app.get('/api/summary', async (req, res) => {
       // A today-scan reads only files written since local midnight, which is fast
       // enough that caching it past getTodayScan's 2s share would only make the
       // live poll show stale numbers.
-      res.json(publicSummary(await getTodayScan()));
+      const data = await getTodayScan();
+      noteTodayRecord(data);
+      res.json(publicSummary(data));
       return;
     }
     // Only the range picker's values are accepted. Number(raw) || 30 once turned
@@ -219,18 +222,38 @@ app.get('/api/changes', async (req, res) => {
   }
 });
 
+// Past days' totals never change, so only today can overtake the cached record.
+// The Today scan has already run, so the check costs one small file read per poll.
+// With no cached record nothing is written, so /api/records still computes the
+// real all-time value on its next request.
+function noteTodayRecord(data) {
+  const cached = readRecord();
+  const today = busiestDay(data.daily);
+  if (cached && today && today.tokens > cached.tokens) writeRecord(today);
+}
+
+// The cached all-time record, or the all-history scan's busiest day, which is
+// then cached.
+async function allTimeRecord() {
+  const cached = readRecord();
+  if (cached) return cached;
+  const allTime = busiestDay((await getCached(null)).daily);
+  if (allTime) writeRecord(allTime);
+  return allTime;
+}
+
 // The Record day card's all-time value: the day with the most tokens, with its
-// token total and cost. recentDays is the per-day totals for the 6 days before
-// today (not today), which the Today range adds to its live totals for the
-// rolling 7-day lines. It uses the days=all cache entry that /api/summary and
-// /api/changes also use, so the three share one scan.
+// token total and cost, from records.json (lib/records.js) or the all-history scan.
+// recentDays is the per-day totals for the 6 days before today (not today), which
+// the Today range adds to its live totals for the rolling 7-day lines. It reads the
+// 7-day scan, the cache entry the 7d range also uses.
 app.get('/api/records', async (req, res) => {
   try {
-    const data = await getCached(null);
     const todayStr = localDateStr(new Date());
     const weekStart = localDateStr(new Date(windowStart(7)));
-    const recentDays = dayTotals(data.daily).filter((d) => d.date >= weekStart && d.date < todayStr);
-    res.json({ allTime: busiestDay(data.daily), recentDays });
+    const [allTime, week] = await Promise.all([allTimeRecord(), getCached(7)]);
+    const recentDays = dayTotals(week.daily).filter((d) => d.date >= weekStart && d.date < todayStr);
+    res.json({ allTime, recentDays });
   } catch (err) {
     console.error('[API] /api/records failed:', err);
     res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
@@ -284,6 +307,7 @@ function sameOriginOnly(req, res, next) {
 
 app.post('/api/refresh', (req, res) => {
   clearScans();
+  clearRecord(); // Refresh means re-scan logs, so the record is recomputed too.
   res.json({ ok: true });
 });
 
@@ -333,6 +357,7 @@ app.post('/api/prices/apply', express.json({ limit: '1kb' }), (req, res) => {
   }
   pendingCheck = null;
   clearScans();
+  clearRecord(); // the cached record's cost was computed at the old prices
   res.json(result.source);
 });
 
