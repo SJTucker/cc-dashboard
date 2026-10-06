@@ -875,7 +875,6 @@ html, body {
   border-radius: 2px;
 }
 .sessions-table .cost-value { position: relative; }
-```
 
 /* Session timeline (renderTimeline in app.js). */
 .timeline-label {
