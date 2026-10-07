@@ -11,6 +11,11 @@ history. Asked for on 2026-10-07.
 - **Both panels.** Context at session start (`#sessionStartChart`) and Before and after
   (`#beforeAfterPanel`).
 
+- **Cap each stack of change glyphs at 5.** Below the Context at session start chart,
+  each setup change is a glyph on a rail. Glyphs closer than 12px stack one row lower,
+  and the stack has no limit. On 2026-09-28, sixteen changes made one column taller
+  than the chart. A stack shows its first 5 glyphs, then `+n` for the rest.
+
 ## Why the panels show all history today
 
 The 2026-09-24 setup changes spec chose all history on purpose: "A before/after
@@ -47,6 +52,13 @@ history.
   the full 7 days. It should, so the numbers do not change with the range.
 - **The weekly median line.** The step line on Context at session start is a weekly
   median. On a 14-day axis it has two or three steps. Decide whether it stays weekly.
+- **What `+n` shows.** Its tooltip could list the hidden changes, one per line, as
+  `markerTooltip` does for one change. A keyboard user needs a way to reach it too.
+- **Where a stack ends.** The stacking loop in `drawSessionStartChart`'s rail code
+  (`public/app.js`, "A glyph closer than 12px to the one before it stacks one row
+  lower") chains: each glyph is compared with the one before it, so a run of changes
+  a few hours apart forms one long stack. Decide whether the cap counts per chain or
+  per day. A shorter range spreads the glyphs out, which shortens the stacks too.
 - **Overlap with the per-row chart work.** The spec
   `docs/superpowers/specs/2026-10-07-before-after-chart-per-row-design.md` also
   changes `timeDomain`. Build the per-row chart first, or fold this idea into it.
