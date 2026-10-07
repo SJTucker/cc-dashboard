@@ -1,4 +1,5 @@
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
+import { LABEL_MAX } from './setup'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/ that a statusline script used to run, and judges new Claude Code releases
