@@ -12,3 +12,4 @@ then on.
 | [SETUP.md for new users](setup-md.md) | Open: inventory of outside-the-repo setup done; SETUP.md versus README, and platforms, open |
 | [Better session titles](better-session-titles.md) | Open: needs a reason the current titles fall short, a title source, and a branch read from the transcript |
 | [Subagent permission prompts](subagent-permission-prompts.md) | Open: a subagent waiting on a permission prompt shows as working; needs a way to read the permission mode first |
+| [Before and after chart polish](before-after-chart-polish.md) | Open: empty space under the chart, a change on the last day, axis labels and a legend; chart height and legend form open |
