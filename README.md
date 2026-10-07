@@ -384,7 +384,10 @@ delete it.
 ## Setup changes
 
 Two panels at the bottom show whether a change to your setup moved the numbers. Both
-cover all history, whatever range is picked.
+follow the range picker. Today and 7d show the last 14 days, 30d and 90d their own
+span, and All shows everything. A stack of more than 5 change glyphs shows 5 and a
+`+n` for the rest. Hover or focus the `+n` to list them. The before/after table
+always uses the full 7-day windows, so its numbers do not change with the range.
 
 - **Context at session start**: the tokens in each session's first call (system
   prompt, tool definitions, CLAUDE.md, skill list, hook output), with your changes

@@ -979,6 +979,7 @@ html, body {
 .session-dot.hollow { fill: var(--surface); }
 .step-line { fill: none; stroke: var(--accent-cost); stroke-width: 2.5; }
 .step-swatch { width: 16px; height: 0; border-top: 2.5px solid var(--accent-cost); }
+.marker-overflow { font-family: var(--font-data); font-size: 10px; fill: var(--text-secondary); cursor: default; }
 .step-label { font-family: var(--font-data); font-size: 10px; fill: var(--accent-cost); }
 
 .day-bar { fill: var(--border); }

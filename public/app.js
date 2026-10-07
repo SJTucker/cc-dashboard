@@ -1973,7 +1973,8 @@ function dayNoon(dateKey) {
   return new Date(`${dateKey}T12:00`).getTime();
 }
 
-// Both charts share one time axis so a marker sits at the same x in each. Built
+// Both charts share one time axis so a marker sits at the same x in each. This is
+// the all-history axis; chartDomain narrows it to the range picker. Built
 // from sessions and the transcript rows' daily series only. Markers and rtk days
 // are left out. Claude Code deletes transcripts after cleanupPeriodDays (30 by
 // default), so history has a sliding start, while rtk keeps every row. A marker or
@@ -1987,6 +1988,18 @@ function timeDomain(report) {
     ...BA_ROWS.flatMap((row) => report.daily[row.key].map((d) => dayNoon(d.date))),
   ];
   return [Math.min(...times) - DAY_MS / 2, Math.max(...times) + DAY_MS / 2];
+}
+
+// Days of history the setup charts show for each range picker value. Today and 7d
+// show 14 days, since a day or a week holds too few sessions to read a trend.
+// null is all history.
+function visibleDays() {
+  if (currentDays === 'all') return null;
+  return currentDays === 'today' || currentDays === 7 ? 14 : currentDays;
+}
+
+function chartDomain(report) {
+  return rangeDomain(timeDomain(report), visibleDays());
 }
 
 // True when a marker falls inside the time axis both charts share. A marker just
@@ -2010,6 +2023,17 @@ function drawTimeAxis(svg, domain, xOf) {
     label.textContent = shortDate(localDateStr(d));
     svg.appendChild(label);
   }
+}
+
+// Keyboard focus has no mouse position, so the tooltip is placed at the focused
+// element's bounding box.
+function withFocusTooltip(node, html) {
+  node.addEventListener('focus', () => {
+    const rect = node.getBoundingClientRect();
+    showTooltip({ clientX: rect.left + rect.width / 2, clientY: rect.bottom }, html);
+  });
+  node.addEventListener('blur', hideTooltip);
+  return node;
 }
 
 function withTooltip(node, html) {
@@ -2047,6 +2071,8 @@ function drawWeeklyMedian(svg, sessions, domain, xOf, yOf) {
   }
   let d = '';
   for (const [w, values] of [...weeks].sort((a, b) => a[0] - b[0])) {
+    // The median uses every session of the week, so it does not change with the range.
+    if (w + WEEK_MS <= domain[0]) continue;
     const x1 = xOf(Math.max(w, domain[0]));
     const x2 = xOf(Math.min(w + WEEK_MS, domain[1]));
     const y = yOf(median(values));
@@ -2075,21 +2101,15 @@ function drawSessionStartChart(container, report) {
   }
   const width = chartWidth(container);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
-  const domain = timeDomain(report);
+  const domain = chartDomain(report);
   const xOf = timeScale(domain, width);
+  const inView = sessions.filter((s) => s.t >= domain[0] && s.t <= domain[1]);
   const visibleMarkers = markers.filter((m) => markerInDomain(m, domain));
 
-  // A glyph closer than 12px to the one before it stacks one row lower.
-  let lastX = -Infinity;
-  let row = 0;
-  let rows = 1;
-  const placed = visibleMarkers.map((m) => {
-    const x = xOf(m.t);
-    row = x - lastX < 12 ? row + 1 : 0;
-    lastX = x;
-    rows = Math.max(rows, row + 1);
-    return { m, x, row };
-  });
+  // A glyph closer than 12px to the one before it stacks one row lower. A stack of
+  // more than 5 shows 5 glyphs and a +n for the rest.
+  const stack = stackGlyphs(visibleMarkers.map((m) => xOf(m.t)));
+  const rows = Math.max(stack.rows, 1);
   const railTop = CHART_HEIGHT + 12;
   const height = railTop + rows * 13;
 
@@ -2098,18 +2118,29 @@ function drawSessionStartChart(container, report) {
   // measured against a typical 38k-52k) otherwise sets the axis top and squashes
   // every ordinary session into the bottom slice of the plot. A dot above the
   // percentile still draws, clamped to the top edge by yOf below.
-  const max = drawYAxis(svg, percentile(sessions.map((s) => s.context), 95), width, axisTokens);
+  const max = drawYAxis(svg, percentile((inView.length ? inView : sessions).map((s) => s.context), 95), width, axisTokens);
   const yOf = (v) => plotHeight - (Math.min(v, max) / max) * plotHeight;
   svg.appendChild(svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)' }));
   drawTimeAxis(svg, domain, xOf);
 
-  for (const { m, x, row: r } of placed) {
+  visibleMarkers.forEach((m, i) => {
+    const x = xOf(m.t);
     svg.appendChild(svgEl('line', { class: 'marker-guide', x1: x, x2: x, y1: 0, y2: plotHeight }));
-    svg.appendChild(withTooltip(markerGlyph(m.kind, x, railTop + r * 13), markerTooltip(m)));
+    const { row, hidden } = stack.glyphs[i];
+    if (!hidden) svg.appendChild(withTooltip(markerGlyph(m.kind, x, railTop + row * 13), markerTooltip(m)));
+  });
+  for (const o of stack.overflows) {
+    const hiddenMarkers = o.indices.map((i) => visibleMarkers[i]);
+    const label = svgEl('text', { class: 'marker-overflow', x: o.x, y: railTop + o.row * 13 + 4, 'text-anchor': 'middle', tabindex: 0 });
+    label.textContent = `+${hiddenMarkers.length}`;
+    const lines = hiddenMarkers.map((m) => `${markerDate(m.t)} · ${m.label} · ${MARKER_SOURCES[m.source] || 'detected from transcripts'}`);
+    label.setAttribute('aria-label', `${hiddenMarkers.length} more changes: ${lines.join('; ')}`);
+    const html = lines.map(escapeHtml).join('<br>');
+    svg.appendChild(withFocusTooltip(withTooltip(label, html), html));
   }
 
-  const shapes = modelShapes(sessions);
-  for (const s of sessions) {
+  const shapes = modelShapes(sessions); // shapes stay the same on every range
+  for (const s of inView) {
     const dot = sessionDot(shapes.get(s.model), xOf(s.t), yOf(s.context));
     svg.appendChild(withTooltip(dot, sessionTooltip(s, max)));
   }
@@ -2135,7 +2166,7 @@ function drawSessionStartChart(container, report) {
 function drawMetricChart(container, report, marker, row) {
   hideTooltip();
   container.innerHTML = '';
-  const domain = timeDomain(report);
+  const domain = chartDomain(report);
   const days = (report.daily[row.key] || []).filter((d) => {
     const t = dayNoon(d.date);
     return t >= domain[0] && t <= domain[1];
@@ -2419,8 +2450,8 @@ function showChangesLoading() {
   }
 }
 
-// Independent of the range picker, so it loads once and again on Refresh, not on
-// every range change.
+// The fetch does not depend on the range picker, so it loads once and again on
+// Refresh. A range change only redraws from the loaded report.
 async function loadChanges() {
   if (!neededRequests(hiddenKeys, currentDays).has('changes')) return;
   showChangesLoading();
@@ -3131,6 +3162,7 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   placeSummaryCards();
   lastSignature = null; // the bucket keys change, so force a redraw
   setLive(currentDays === 'today');
+  if (changesReport) renderChanges(changesReport);
   loadAndRender({ busy: true });
 });
 

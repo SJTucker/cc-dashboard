@@ -99,4 +99,40 @@ function laneLayout(sessions, xOf, now, minWidth = 3, liveWindowMs = 10 * 60 * 1
     });
 }
 
-if (typeof module === 'object') module.exports = { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout };
+// The time axis for a range of the picker. days is a number of days or null (all
+// history). The end stays at the full domain's end. The start never goes before
+// the full domain's start, so a range longer than the data shows the data only.
+function rangeDomain(fullDomain, days) {
+  if (days == null) return fullDomain;
+  return [Math.max(fullDomain[0], fullDomain[1] - days * 24 * 60 * 60 * 1000), fullDomain[1]];
+}
+
+// Rows for glyphs drawn in order at the given x positions. A glyph closer than gap
+// px to the one before it continues a chain and sits one row lower. A chain shows
+// at most cap glyphs; the rest are hidden and collected in one overflow per chain.
+// Returns { glyphs: [{ row, hidden }] per input x, overflows: [{ x, row, indices }],
+// rows }. An overflow's x is the x of the chain's first hidden glyph, and its row is
+// cap, the row after the last shown glyph. rows is the row count the rail needs.
+function stackGlyphs(xs, gap = 12, cap = 5) {
+  const glyphs = [];
+  const overflows = [];
+  let rows = xs.length ? 1 : 0;
+  let lastX = -Infinity;
+  let row = 0;
+  xs.forEach((x, i) => {
+    row = x - lastX < gap ? row + 1 : 0;
+    lastX = x;
+    const hidden = row >= cap;
+    glyphs.push({ row: hidden ? cap : row, hidden });
+    if (!hidden) {
+      rows = Math.max(rows, row + 1);
+      return;
+    }
+    if (row === cap) overflows.push({ x, row: cap, indices: [] });
+    overflows[overflows.length - 1].indices.push(i);
+    rows = Math.max(rows, cap + 1);
+  });
+  return { glyphs, overflows, rows };
+}
+
+if (typeof module === 'object') module.exports = { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs };

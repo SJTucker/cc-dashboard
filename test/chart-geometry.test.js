@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout } = require('../public/chart-geometry');
+const { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs } = require('../public/chart-geometry');
 
 test('labelStep keeps at most 12 labels on a wide chart', () => {
   assert.strictEqual(labelStep(24, 800), 2);
@@ -131,4 +131,65 @@ test('laneLayout does not stretch a live session whose last call is older than t
 test('laneLayout never opens the bar of a session that is not live', () => {
   const [{ bars }] = laneLayout([lane([[at(11, 55), at(11, 58)]], false)], xOf, NOW_T);
   assert.strictEqual(bars[0].open, false);
+});
+
+test('rangeDomain keeps the end and moves the start back by the given days', () => {
+  const day = 24 * 60 * 60 * 1000;
+  const full = [0, 100 * day];
+  assert.deepStrictEqual(rangeDomain(full, 14), [86 * day, 100 * day]);
+  assert.deepStrictEqual(rangeDomain(full, 30), [70 * day, 100 * day]);
+  assert.deepStrictEqual(rangeDomain(full, 90), [10 * day, 100 * day]);
+});
+
+test('rangeDomain starts at the data start when the range is longer than the data', () => {
+  const day = 24 * 60 * 60 * 1000;
+  assert.deepStrictEqual(rangeDomain([40 * day, 50 * day], 90), [40 * day, 50 * day]);
+});
+
+test('rangeDomain returns the full domain for null', () => {
+  const full = [5, 500];
+  assert.strictEqual(rangeDomain(full, null), full);
+});
+
+test('stackGlyphs puts glyphs that are far apart on row 0', () => {
+  const r = stackGlyphs([0, 20, 40]);
+  assert.deepStrictEqual(r.glyphs, [{ row: 0, hidden: false }, { row: 0, hidden: false }, { row: 0, hidden: false }]);
+  assert.deepStrictEqual(r.overflows, []);
+  assert.strictEqual(r.rows, 1);
+});
+
+test('stackGlyphs stacks a chain of 3 one row lower each', () => {
+  const r = stackGlyphs([0, 5, 10]);
+  assert.deepStrictEqual(r.glyphs.map((g) => g.row), [0, 1, 2]);
+  assert.strictEqual(r.rows, 3);
+});
+
+test('stackGlyphs hides the 6th and later glyphs of a chain and reports one overflow', () => {
+  const r = stackGlyphs(Array.from({ length: 16 }, (_, i) => i));
+  assert.strictEqual(r.glyphs.filter((g) => !g.hidden).length, 5);
+  assert.strictEqual(r.glyphs.filter((g) => g.hidden).length, 11);
+  assert.deepStrictEqual(r.glyphs.slice(0, 5).map((g) => g.row), [0, 1, 2, 3, 4]);
+  assert.strictEqual(r.overflows.length, 1);
+  assert.deepStrictEqual(r.overflows[0], { x: 5, row: 5, indices: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] });
+  assert.strictEqual(r.rows, 6);
+});
+
+test('stackGlyphs shows a chain of exactly 5 with no overflow', () => {
+  const r = stackGlyphs([0, 1, 2, 3, 4]);
+  assert.deepStrictEqual(r.overflows, []);
+  assert.ok(r.glyphs.every((g) => !g.hidden));
+  assert.strictEqual(r.rows, 5);
+});
+
+test('stackGlyphs starts a new chain after a gap', () => {
+  const r = stackGlyphs([0, 5, 100, 105, 110]);
+  assert.deepStrictEqual(r.glyphs.map((g) => g.row), [0, 1, 0, 1, 2]);
+  assert.strictEqual(r.rows, 3);
+});
+
+test('stackGlyphs reports an overflow for each long chain', () => {
+  const xs = [...Array.from({ length: 7 }, (_, i) => i), ...Array.from({ length: 6 }, (_, i) => 100 + i)];
+  const r = stackGlyphs(xs);
+  assert.deepStrictEqual(r.overflows.map((o) => o.indices), [[5, 6], [12]]);
+  assert.deepStrictEqual(r.overflows.map((o) => o.x), [5, 105]);
 });
