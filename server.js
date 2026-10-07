@@ -209,7 +209,9 @@ app.get('/api/limits', (req, res) => {
 // All history, whatever range the page shows: a before/after needs data on both
 // sides of a change. It reads the days=all cache entry, so it shares a scan with
 // the "all" range. The marker files are read on every request, so an edit to
-// changes.json shows on the next refresh instead of up to 60s later.
+// changes.json shows on the next refresh instead of up to 60s later. `daily` holds
+// one series per before/after row; the two rtk series are added here because they
+// come from rtk's database, not the scan.
 app.get('/api/changes', async (req, res) => {
   try {
     const data = await getCached(null);

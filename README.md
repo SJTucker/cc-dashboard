@@ -391,8 +391,10 @@ cover all history, whatever range is picked.
   marked under the time axis. The task barely affects this number, so a step up or
   down points to a setup change or a Claude Code release.
 - **Before and after**: pick a change to compare the 7 days before it with the 7
-  days after. The chart shows the median Bash result size on the main thread per
-  day, which is what rtk acts on.
+  days after. Click a row of the table, or tab to it and press Enter, to chart that
+  number per day beside the table. The panel opens on Session start context. Each
+  day's value is computed the same way as the 7-day value in the table. The rtk rows
+  show only the days the transcripts cover.
 
 Plugin installs, the first use of a new model, Claude Code releases that could
 change usage, and edits to your setup files are marked automatically. The releases

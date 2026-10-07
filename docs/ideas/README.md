@@ -10,7 +10,6 @@ then on.
 | Idea | Status |
 |---|---|
 | [SETUP.md for new users](setup-md.md) | Open: inventory of outside-the-repo setup done; SETUP.md versus README, and platforms, open |
-| [Before and after: chart on the right, one chart per row](before-after-chart-per-row.md) | Specced on 2026-10-07: first row by default, left bar and bold for the selected row, table on top when narrow |
 | [Better session titles](better-session-titles.md) | Open: needs a reason the current titles fall short, a title source, and a branch read from the transcript |
 | [Setup changes follow the range picker](setup-changes-follow-range.md) | Open: Today shows 14 days, other ranges their own span, and change glyph stacks capped at 5 with +n; client or server cut, and markers near the edge, open |
 | [Subagent permission prompts](subagent-permission-prompts.md) | Open: a subagent waiting on a permission prompt shows as working; needs a way to read the permission mode first |
