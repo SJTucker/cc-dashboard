@@ -188,12 +188,14 @@ When a session ends or `/clear` runs, the mod asks Haiku to review it and sugges
 to three changes. The kinds are a CLAUDE.md rule that would have prevented a
 correction, a skill or hook for repeated steps, token waste such as large tool output
 or repeated reads, and a change to how the session was run. "No suggestions" is a
-normal result. The Session reviews panel lists the reviews from the last 7 days.
-Each review shows the session's title (Claude Code's last `ai-title` line, when the
-transcript has one), the project and the git branch the session ended on, and the path of the transcript file. The Copy prompt
-button copies a prompt that names the transcript and lists Haiku's suggestions, so
-you can paste it into a stronger model to check them. A review made before the
-transcript path was saved shows the path found by session id, and no title. A review made before branches were saved shows no branch.
+normal result. The Session reviews panel lists the reviews from the last 7 days. Each
+review shows the session's title (Claude Code's last `ai-title` line, when the
+transcript has one), the project and the git branch the session ended on, and the
+path of the transcript file. The Copy prompt button copies a prompt that names the
+transcript and lists Haiku's suggestions, so you can paste it into a stronger model
+to check them. A review made before the transcript path was saved shows the path
+found by session id, and no title. A review made before branches were saved shows no
+branch.
 
 - **When it runs.** After a `/clear` or an in-process `/resume`, at once, because the
   process goes on. After an exit, at the next session start in any project. `-p` and
@@ -323,22 +325,21 @@ npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 The Live sessions panel holds two tables. Running now lists the live sessions,
 meaning those that wrote to a transcript in the last 10 minutes, and any session
 waiting on you, however long ago it last wrote. Its columns are Session, State, Doing
-now, Cost today and Last active.
-The Session column shows the session's title, with its project and git branch on a
-line under it. The title is Claude Code's last `ai-title` line. A session without one
-shows the first prompt typed in it, in dimmer italic type. Hover the branch for its
-full name and, when the session switched branch, every branch it used.
-Prompts, Length and Lines are only in Today. Running
+now, Cost today and Last active. The Session column shows the session's title, with
+its project and git branch on a line under it. The title is Claude Code's last
+`ai-title` line. A session without one shows the first prompt typed in it, in dimmer
+italic type. Hover the branch for its full name and, when the session switched
+branch, every branch it used. Prompts, Length and Lines are only in Today. Running
 now is ordered by the start of each session's first span today (`runningSessions` in
-`public/session-groups.js`), so rows do not move while they run. State shows
-▶ working or ⏸ waiting on you. Doing now shows the running tool, such as
-`Bash: npm test`, and the subagent count. Both show "—" without the mod (see "Live
-state"). Today lists every session of the day, live ones included, sorted by Cost
-today with the highest first. Ended sessions of one project collapse into a single
-expandable row when the project has two or more of them. The bar behind each Cost
-today value in Today is that session's share of the day's highest single-session
-Cost today. Prompts counts the prompts typed in the session today. The Total row sums
-Prompts, Lines and Cost today.
+`public/session-groups.js`), so rows do not move while they run. State shows ▶
+working or ⏸ waiting on you. Doing now shows the running tool, such as `Bash: npm
+test`, and the subagent count. Both show "—" without the mod (see "Live state").
+Today lists every session of the day, live ones included, sorted by Cost today with
+the highest first. Ended sessions of one project collapse into a single expandable
+row when the project has two or more of them. The bar behind each Cost today value in
+Today is that session's share of the day's highest single-session Cost today. Prompts
+counts the prompts typed in the session today. The Total row sums Prompts, Lines and
+Cost today.
 
 The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
 any other end, such as quitting or `/resume`. It reads this from
@@ -355,11 +356,12 @@ The Session timeline panel, above Live sessions, shows the same sessions by time
 the Today range. Each session has one lane, ordered by when it started working today.
 A bar covers a stretch of activity: it is built from the times of the session's calls
 today, subagent calls included, and a gap of more than 10 minutes starts a new bar.
-The axis runs from the hour of the earliest call to the next whole hour after now, and
-a dashed line marks now. A live session has solid bars, and its last bar ends in an
-arrowhead at now if its last call was within the last 10 minutes. Every other session
-has striped bars. Hover a bar for the session's title, project and branch, the bar's time range,
-cost today and prompt count. The panel hides when no session has a call today.
+The axis runs from the hour of the earliest call to the next whole hour after now,
+and a dashed line marks now. A live session has solid bars, and its last bar ends in
+an arrowhead at now if its last call was within the last 10 minutes. Every other
+session has striped bars. Hover a bar for the session's title, project and branch,
+the bar's time range, cost today and prompt count. The panel hides when no session
+has a call today.
 
 ### Hiding panels
 
