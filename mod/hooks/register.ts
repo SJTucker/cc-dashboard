@@ -743,7 +743,9 @@ async function checkSetup($: EngineInterface) {
     if (c.snapshot) await $.fs.write(`${dir}/cc-dashboard/setup/${snapshotName(c.path)}`, JSON.stringify(c.snapshot))
     state.mtimes[c.path] = c.mtime
   }
-  state.folders = [...new Set([...state.folders, ...files.map((w) => w.folder)])]
+  // The three listed folders count as checked even when empty, so their first file is marked added.
+  const listedFolders = ['skills', 'agents', 'rules'].map((name) => `${dir}/${name}`)
+  state.folders = [...new Set([...state.folders, ...files.map((w) => w.folder), ...listedFolders])]
   await $.store.set(SETUP_KEY, state)
 }
 

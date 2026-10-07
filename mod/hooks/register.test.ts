@@ -1226,3 +1226,13 @@ test('a non-interactive session runs no setup check', async ($, on) => {
   await clock.settle()
   expect(state.store.setup).toBe(undefined)
 })
+test('the first rule in a folder that was empty at the first check is marked added', async ($, on) => {
+  const rule = `${CFG}/rules/x.md`
+  const { writes, state, clock } = world(on, { files: { ...judged } })
+  await startAndSettle($, clock)
+  state.files[rule] = 'a'
+  state.stats[rule] = 5000
+  state.dirs[`${CFG}/rules`] = ['x.md']
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 5000, kind: 'claude-md', name: 'rules/x.md', label: 'added', file: rule }])
+})
