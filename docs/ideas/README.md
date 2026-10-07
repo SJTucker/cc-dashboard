@@ -10,4 +10,5 @@ then on.
 | Idea | Status |
 |---|---|
 | [Before and after: chart on the right, one chart per row](before-after-chart-per-row.md) | Open: needs a daily series per row; default row and selection style open |
+| [Better session titles](better-session-titles.md) | Open: needs a reason the current titles fall short, a title source, and a branch read from the transcript |
 | [Subagent permission prompts](subagent-permission-prompts.md) | Open: a subagent waiting on a permission prompt shows as working; needs a way to read the permission mode first |
