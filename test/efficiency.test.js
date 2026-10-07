@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  WEEK_MS, median, percentile, sessionStarts, bashDeltas, bashDaily, promptStats, windowStats, windowRanges, buildReport,
+  WEEK_MS, median, percentile, sessionStarts, bashDeltas, bashDaily, promptStats, stats, windowStats, dailySeries, windowRanges, buildReport,
 } = require('../lib/efficiency');
 
 const H = 60 * 60 * 1000;
@@ -97,12 +97,54 @@ test('windowStats includes from and excludes to', () => {
   assert.strictEqual(w.callN, 1);
 });
 
+// Sep 10 has a session, two Bash results and one call. Sep 11 has one Bash result,
+// one prompt and one call. Sep 10 has no prompt, so it is absent from the two
+// per-prompt series instead of appearing with a null value.
+const TWO_DAYS = {
+  starts: [{ t: T0, context: 40000 }],
+  deltas: [{ t: T0, delta: 100 }, { t: T0 + H, delta: 300 }, { t: T0 + 24 * H, delta: 50 }],
+  prompts: [{ t: T0 + 24 * H, cost: 0.5, calls: 4 }],
+  calls: [call(T0, { context: 1000, cacheRead: 900 }), call(T0 + 24 * H, { context: 2000, cacheRead: 1000 })],
+};
+
+test('dailySeries gives each row its value and count per local day', () => {
+  assert.deepStrictEqual(dailySeries(TWO_DAYS), {
+    sessionStart: [{ date: '2026-09-10', n: 1, value: 40000 }],
+    bashMedian: [{ date: '2026-09-10', n: 2, value: 200 }, { date: '2026-09-11', n: 1, value: 50 }],
+    bashP90: [{ date: '2026-09-10', n: 2, value: 300 }, { date: '2026-09-11', n: 1, value: 50 }],
+    costPerPrompt: [{ date: '2026-09-11', n: 1, value: 0.5 }],
+    callsPerPrompt: [{ date: '2026-09-11', n: 1, value: 4 }],
+    cacheHit: [{ date: '2026-09-10', n: 1, value: 0.9 }, { date: '2026-09-11', n: 1, value: 0.5 }],
+  });
+});
+
+test('dailySeries on no records gives every row an empty series', () => {
+  const empty = dailySeries({ starts: [], deltas: [], prompts: [], calls: [] });
+  assert.deepStrictEqual(Object.keys(empty).sort(), ['bashMedian', 'bashP90', 'cacheHit', 'callsPerPrompt', 'costPerPrompt', 'sessionStart']);
+  for (const series of Object.values(empty)) assert.deepStrictEqual(series, []);
+});
+
+test('a day of dailySeries matches windowStats over that day', () => {
+  const from = new Date('2026-09-10T00:00:00').getTime();
+  const to = new Date('2026-09-11T00:00:00').getTime();
+  const w = windowStats(TWO_DAYS, from, to);
+  for (const [key, series] of Object.entries(dailySeries(TWO_DAYS))) {
+    const day = series.find((d) => d.date === '2026-09-10');
+    assert.strictEqual(day ? day.value : null, w[key], key);
+  }
+});
+
+test('stats takes lists that are already cut to a span', () => {
+  assert.deepStrictEqual(stats(TWO_DAYS), windowStats(TWO_DAYS, 0, Infinity));
+});
+
 test('buildReport attaches before/after windows and rtk entries in range order', () => {
   const markers = [{ t: T0, kind: 'plugin', label: 'x', source: 'plugin' }];
   assert.deepStrictEqual(windowRanges(markers), [[T0 - WEEK_MS, T0], [T0, T0 + WEEK_MS]]);
   const rtk = [{ commands: 1, keptPerCommand: 300, filteredShare: 0.6 }, { commands: 2, keptPerCommand: 100, filteredShare: 0.8 }];
   const report = buildReport({ calls: [call(T0 + 1)], prompts: [] }, markers, rtk, { path: '/x', status: 'missing' });
   assert.strictEqual(report.sessions.length, 1);
+  assert.deepStrictEqual(report.daily.sessionStart, [{ date: '2026-09-10', n: 1, value: 1000 }]);
   assert.strictEqual(report.markers[0].before.rtk.keptPerCommand, 300);
   assert.strictEqual(report.markers[0].after.rtk.keptPerCommand, 100);
   assert.strictEqual(report.markers[0].after.sessions, 1);
