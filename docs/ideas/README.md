@@ -9,6 +9,5 @@ then on.
 
 | Idea | Status |
 |---|---|
-| [Record setup changes automatically](auto-setup-changes.md) | Open: mostly in the mod; ConfigChange, InstructionsLoaded and PostModelSwitch need a settings hook. Labels, noise and paths still open |
 | [Before and after: chart on the right, one chart per row](before-after-chart-per-row.md) | Open: needs a daily series per row; default row and selection style open |
 | [Subagent permission prompts](subagent-permission-prompts.md) | Open: a subagent waiting on a permission prompt shows as working; needs a way to read the permission mode first |

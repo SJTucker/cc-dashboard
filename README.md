@@ -146,6 +146,36 @@ version judged again, delete its entry. Failures show as a transcript line start
 `cc-dashboard:`. The Haiku calls write no transcript line, so the dashboard's totals
 leave out their cost.
 
+### Setup changes recorded automatically
+
+At each interactive session start the mod compares your setup files with the copies
+it stored at the last check, and records a marker for each change. It watches:
+
+- `~/.claude/CLAUDE.md`, the files it pulls in with an `@path` line, and
+  `~/.claude/rules/`
+- `~/.claude/settings.json` and `settings.local.json`
+- `~/.claude/skills/*/SKILL.md` and `~/.claude/agents/*.md`
+- the scripts named by hook commands and by `statusLine` in `settings.json`
+- rtk's `config.toml` and `filters.toml` in `~/Library/Application Support/rtk/`
+- the session's project: `CLAUDE.md`, `CLAUDE.local.md` and `.claude/settings.json`
+
+A marker is dated to the file's modification time, so a change found sessions later
+still lands on the day it was made. Changes to one file of one kind on the same day
+become one marker. A settings change is split by key: `hooks` is a hook marker,
+`effortLevel` an effort marker, `model` a model marker, and anything else a config
+marker. `enabledPlugins` is left out, because plugin installs are marked already.
+
+Haiku labels a change to `CLAUDE.md`, a rule, a skill or an agent from the added and
+removed lines. When Haiku fails, the label is the first added line. A settings label
+lists the changed keys, for example `effortLevel high → medium`.
+
+The first check stores copies and records nothing. A project's files are stored the
+first time a session runs there, so its existing `CLAUDE.md` does not show as added.
+
+Each session writes its markers to `~/.claude/cc-dashboard/changes/<session id>.json`.
+To fix a label, edit it there. To drop a marker, delete its entry. The stored copies
+are in `~/.claude/cc-dashboard/setup/`.
+
 ### Session reviews
 
 When a session ends or `/clear` runs, the mod asks Haiku to review it and suggest up
@@ -358,9 +388,10 @@ cover all history, whatever range is picked.
   days after. The chart shows the median Bash result size on the main thread per
   day, which is what rtk acts on.
 
-Plugin installs, the first use of a new model, and Claude Code releases that
-could change usage are marked automatically. The releases come from the mod (see
-"Claude Code updates" above). Add anything else to `changes.json` in this folder.
+Plugin installs, the first use of a new model, Claude Code releases that could
+change usage, and edits to your setup files are marked automatically. The releases
+and the setup edits come from the mod (see "Claude Code updates" and "Setup changes
+recorded automatically" above). Add anything else to `changes.json` in this folder.
 It is gitignored, and the dashboard only reads it:
 
 ```json
@@ -390,15 +421,17 @@ boundary back.
 
 - **Read-only, except for three write paths.** The dashboard server only ever reads
   your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
-  `changes.json`, `rate-limits.json` and the activity files in
+  `changes.json`, the setup change markers in `cc-dashboard/changes/`, `rate-limits.json` and the activity files in
   `cc-dashboard/activity/`, and opens rtk's `history.db` with
   sqlite's `readOnly` flag. One write path is `bin/record-statusline`,
   `bin/record-session-end` and `bin/judge-updates`, separate scripts the
   dashboard's Claude Code mod runs (see "Plan usage" above); they write only
   `rate-limits.json`, the per-session snapshots in `cc-dashboard/sessions/`, and,
   through `bin/judge-updates`, `cc-dashboard/updates.json`. The mod itself writes the
-  activity files (see "Live state"), and `lib/activity.js` deletes those older than
-  a day. The other write path is the Apply
+  activity files (see "Live state"), and `lib/activity.js`
+  deletes those older than a day. It also writes the setup change markers in
+  `cc-dashboard/changes/` and the stored setup copies in `cc-dashboard/setup/` (see
+  "Setup changes recorded automatically"). The other write path is the Apply
   button in the Cost by model panel: clicking it is the only thing that writes
   `prices.json` (`PRICES_JSON` moves it). The third write path is the Record day
   cache. `server.js` writes `~/.claude/cc-dashboard/records.json` (or
@@ -443,7 +476,7 @@ server.js              Express app: binds to localhost, serves /api/summary, /ap
 lib/scan.js            Walks ~/.claude/projects, parses JSONL, aggregates by day and model
 lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window
-lib/changes.js         Setup change markers: plugin installs, new models, changes.json
+lib/changes.js         Setup change markers: plugin installs, new models, Claude Code releases, the mod's setup changes, changes.json
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
 lib/pricing.js         Built-in price table, dated price versions, cost calculation
 lib/price-store.js     Applied price history in prices.json
@@ -458,7 +491,7 @@ bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
 bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
 bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
 bin/review-session     Lists ended sessions to review and records Haiku's suggestions in cc-dashboard/reviews/
-mod/                   Claude Code mod that runs the recorders, records live session state and judges new Claude Code releases
+mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/index.html      Page shell
 public/style.css       All styling
 public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/reviews, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
@@ -498,6 +531,3 @@ A few obvious next steps if you want to keep going, roughly in order of effort:
   session's `cwd`, counted once per repository because worktrees share history) or by
   Edit/Write calls. It trends, but day-to-day values swing by a coefficient of
   variation near 0.7, so label it as noisy.
-- **A hook that appends to `changes.json`**: a Claude Code hook on edits to
-  `~/.claude/settings.json`, `CLAUDE.md` or skills could add an entry, so the file
-  keeps itself current. That write would belong to the hook, not the dashboard.
