@@ -1471,7 +1471,7 @@ function renderTimeline(live) {
   const signature = JSON.stringify([
     width,
     Math.floor(now / 60_000),
-    live.sessions.map((s) => [s.spans, s.live, s.title, s.project, s.branch, s.costTodayUsd, s.prompts]),
+    live.sessions.map((s) => [s.spans, s.live, s.title, s.titleSource, s.project, s.branch, s.costTodayUsd, s.prompts]),
   ]);
   if (signature === timelineSignature) return;
   timelineSignature = signature;
@@ -1509,6 +1509,7 @@ function renderTimeline(live) {
     const top = lane * TIMELINE_LANE_HEIGHT;
     const mid = top + TIMELINE_LANE_HEIGHT / 2;
     const label = svgEl('text', { class: 'timeline-label', x: 0, y: mid + 4 });
+    if (s.titleSource === 'prompt') label.classList.add('prompt-title');
     const fullName = s.title || s.project || '—';
     const glyph = svgEl('tspan', { 'aria-hidden': 'true' });
     glyph.textContent = s.live ? '⬢' : '⬡';

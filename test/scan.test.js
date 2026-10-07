@@ -1158,6 +1158,26 @@ test('efficiency.branchBySession is the branch of the newest line, whatever the 
   assert.deepStrictEqual(efficiency.branchBySession, { s1: 'main' });
 });
 
+test('a subagent line on another branch does not change the session branch', async () => {
+  const base = makeFixture();
+  const sidechain = JSON.stringify({
+    type: 'system',
+    timestamp: atHourToday(11).toISOString(),
+    sessionId: 's1',
+    gitBranch: 'HEAD',
+    isSidechain: true,
+  });
+  writeSession(base, 'sidechain', [
+    branchLine(atHourToday(9).toISOString(), 's1', 'feat/x'),
+    sidechain,
+    usageLine(atHourToday(9).toISOString(), { id: 'a' }),
+  ]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.branchBySession, { s1: 'feat/x' });
+  assert.deepStrictEqual(efficiency.branchesBySession, { s1: ['feat/x'] });
+});
+
 test('a branch on older-than-cutoff lines is still read from a file in range', async () => {
   const base = makeFixture();
   const old = new Date(atHourToday(9).getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
@@ -1181,6 +1201,15 @@ test('efficiency.firstPromptBySession keeps the first typed prompt on one line, 
   const { scanUsage } = loadScan(base);
   const { efficiency } = await scanUsage({ days: 'today' });
   assert.deepStrictEqual(efficiency.firstPromptBySession, { s1: 'look at ideas and plan', s2: 'other session' });
+});
+
+test('a first prompt drops pasted_content tags and shows the pasted text', async () => {
+  const base = makeFixture();
+  const content = '<pasted_content id="x">\nhello there\n</pasted_content> please fix';
+  writeSession(base, 'pasted', [promptLine(atHourToday(9).toISOString(), { uuid: 'p1', content })]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.strictEqual(efficiency.firstPromptBySession.s1, 'hello there please fix');
 });
 
 test('a first prompt over 80 characters is cut to 80, ending in an ellipsis', async () => {

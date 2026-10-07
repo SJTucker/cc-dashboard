@@ -906,6 +906,7 @@ html, body {
   font-size: 11px;
   fill: var(--text-primary);
 }
+.timeline-label.prompt-title { font-style: italic; }
 .timeline-bar:hover { stroke: var(--text-primary); stroke-width: 1; }
 .reviews-list { list-style: none; margin: 0; padding: 0; }
 .review { padding: 8px 0; border-top: 1px solid var(--border); }
