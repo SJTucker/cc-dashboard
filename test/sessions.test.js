@@ -443,6 +443,28 @@ test('buildLiveSessions gives a null title to a session without one', () => {
   assert.strictEqual(buildLiveSessions([snapshot()], [], NOW).sessions[0].title, null);
 });
 
+test('buildLiveSessions adds the last branch and the branch list', () => {
+  const meta = { branchesBySession: { s1: ['main', 'feat/x'] } };
+  const [s] = buildLiveSessions([snapshot()], [], NOW, {}, {}, [], new Map(), meta).sessions;
+  assert.deepStrictEqual([s.branch, s.branches], ['feat/x', ['main', 'feat/x']]);
+});
+
+test('buildLiveSessions gives a null branch and an empty list to a session without one', () => {
+  const [s] = buildLiveSessions([snapshot()], [], NOW).sessions;
+  assert.deepStrictEqual([s.branch, s.branches], [null, []]);
+});
+
+test('buildLiveSessions takes the title from the ai-title, else the first prompt, and says which', () => {
+  const meta = { firstPromptBySession: { s1: 'look at ideas' } };
+  const fromPrompt = buildLiveSessions([snapshot()], [], NOW, {}, {}, [], new Map(), meta).sessions[0];
+  assert.deepStrictEqual([fromPrompt.title, fromPrompt.titleSource], ['look at ideas', 'prompt']);
+  // Claude Code writes its ai-title after the first few turns. Once it exists, it wins.
+  const fromAi = buildLiveSessions([snapshot()], [], NOW, {}, { s1: 'Ideas' }, [], new Map(), meta).sessions[0];
+  assert.deepStrictEqual([fromAi.title, fromAi.titleSource], ['Ideas', 'ai']);
+  const none = buildLiveSessions([snapshot()], [], NOW).sessions[0];
+  assert.deepStrictEqual([none.title, none.titleSource], [null, null]);
+});
+
 test('buildLiveSessions turns a session\'s call times into spans, splitting at a gap over LIVE_WINDOW_MS', () => {
   const t0 = NOW - 3 * 60 * 60 * 1000;
   const calls = [
