@@ -1121,3 +1121,61 @@ test('efficiency.titleBySession is empty when no session has a title', async () 
   const { efficiency } = await scanUsage({ days: 'today' });
   assert.deepStrictEqual(efficiency.titleBySession, {});
 });
+
+// A line with only the fields the branch read needs. The scan has nothing else to
+// count on a system line.
+function branchLine(iso, sessionId, gitBranch) {
+  return JSON.stringify({ type: 'system', timestamp: iso, sessionId, gitBranch });
+}
+
+test('efficiency.branchesBySession lists each branch once, in first-seen order', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'branches', [
+    branchLine(iso, 's1', 'main'),
+    branchLine(iso, 's1', 'feat/x'),
+    branchLine(iso, 's1', 'main'),
+    branchLine(iso, 's1', ''),
+    branchLine(iso, 's2', 'HEAD'),
+    usageLine(iso, { id: 'a' }),
+  ]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.branchesBySession, { s1: ['main', 'feat/x'], s2: ['HEAD'] });
+});
+
+test('a branch on older-than-cutoff lines is still read from a file in range', async () => {
+  const base = makeFixture();
+  const old = new Date(atHourToday(9).getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  writeSession(base, 'old', [branchLine(old, 's1', 'old-branch'), usageLine(atHourToday(9).toISOString(), { id: 'a' })]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.branchesBySession, { s1: ['old-branch'] });
+});
+
+test('efficiency.firstPromptBySession keeps the first typed prompt on one line, even before the cutoff', async () => {
+  const base = makeFixture();
+  const old = new Date(atHourToday(9).getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
+  const iso = atHourToday(9).toISOString();
+  writeSession(base, 'prompts', [
+    promptLine(old, { uuid: 'p0', content: '   ' }),
+    promptLine(old, { uuid: 'p1', content: '  look at\n\n ideas   and plan  ' }),
+    promptLine(iso, { uuid: 'p2', content: 'second prompt' }),
+    promptLine(iso, { uuid: 'p3', content: [{ type: 'tool_result', tool_use_id: 't', content: 'ok' }] }),
+    promptLine(iso, { uuid: 'p4', sessionId: 's2', content: 'other session' }),
+  ]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.firstPromptBySession, { s1: 'look at ideas and plan', s2: 'other session' });
+});
+
+test('a first prompt over 80 characters is cut to 80, ending in an ellipsis', async () => {
+  const base = makeFixture();
+  const content = 'a'.repeat(50) + ' ' + 'b'.repeat(50);
+  writeSession(base, 'long', [promptLine(atHourToday(9).toISOString(), { uuid: 'p1', content })]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  const expected = 'a'.repeat(50) + ' ' + 'b'.repeat(28) + '…';
+  assert.strictEqual(efficiency.firstPromptBySession.s1, expected);
+  assert.strictEqual(expected.length, 80);
+});
