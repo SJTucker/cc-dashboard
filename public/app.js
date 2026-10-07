@@ -1125,7 +1125,7 @@ function renderTools(tools) {
   );
   document.getElementById('toolDetailNote').textContent = details.length
     ? ''
-    : 'No breakdown for this tool - its input has no field that groups calls.';
+    : 'No breakdown for this tool.';
   renderToolErrors(current);
 }
 
@@ -1246,10 +1246,9 @@ function renderLimits(limits) {
   const asOf = new Date(limits.fetchedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const stale = Date.now() - limits.fetchedAt > LIMITS_STALE_MS
-    ? ' — may be stale: Claude Code updates it while a session runs'
+    ? ' · may be stale'
     : '';
-  const sourceLabel = limits.source === 'statusline' ? 'the cc-dashboard recorder' : "Claude Code's usage cache";
-  document.getElementById('limitsNote').textContent = `from ${sourceLabel}, as of ${asOf} (${zone})${stale}`;
+  document.getElementById('limitsNote').textContent = `as of ${asOf} (${zone})${stale}`;
 }
 
 // Today's sessions from the statusline snapshots (see lib/sessions.js). A
@@ -1406,7 +1405,7 @@ function renderSessions(live) {
   const endedCount = live.sessions.filter((s) => s.ended).length;
   const ended = endedCount ? ` · ${endedCount} ended` : '';
   document.getElementById('sessionsNote').textContent =
-    `${live.sessions.length} today · ${liveCount} live in the last 10 min${ended} · session figures include earlier days`;
+    `${live.sessions.length} today · ${liveCount} live${ended}`;
 }
 
 // Session timeline: one lane per session that has activity today (laneLayout in
@@ -1620,7 +1619,7 @@ function renderReviews(data) {
 
   const withSuggestions = data.reviews.filter((r) => r.suggestions.length).length;
   document.getElementById('reviewsNote').textContent =
-    `${data.reviews.length} reviewed in the last 7 days · ${withSuggestions} with suggestions · by Haiku`;
+    `${data.reviews.length} in the last 7 days · ${withSuggestions} with suggestions`;
 }
 
 // Warn once either window reaches 75%, on every range. Within a window the percent
@@ -2303,12 +2302,11 @@ function renderBeforeAfter(report, marker) {
   const releases = near.filter((o) => o.kind === 'claude-code');
   const lines = [
     own.length
-      ? `${own.length} other change${own.length > 1 ? 's' : ''} in this window: ${own.map((o) => `${markerDate(o.t)} ${o.label}`).join('; ')}. The numbers above cover all of them together.`
-      : 'No other change of yours in this window.',
+      ? `Also in this window: ${own.map((o) => `${markerDate(o.t)} ${o.label}`).join('; ')}`
+      : 'No other change in this window.',
   ];
   if (releases.length) {
-    const named = releases.map((o) => (o.summary ? `${o.version} (${o.summary})` : o.version));
-    lines.push(`Claude Code updates in this window: ${named.join('; ')}. The numbers above include them.`);
+    lines.push(`Claude Code releases in this window: ${releases.map((o) => o.version).join(', ')}`);
   }
   note.replaceChildren(...lines.flatMap((text, i) => (i ? [el('br'), text] : [text])));
 }
@@ -2363,7 +2361,7 @@ function renderChangesFileNote(file) {
   note.hidden = false;
   note.classList.toggle('changes-error', file.status === 'error');
   if (file.status === 'error') note.textContent = `Couldn't read all of ${file.path}: ${file.error}`;
-  else if (file.status === 'missing') note.textContent = `Plugin installs, new models, Claude Code releases and edits to setup files (CLAUDE.md, rules, settings, skills, agents, hook scripts, rtk config) are marked automatically. Add any other change to ${file.path}. The README shows the format.`;
+  else if (file.status === 'missing') note.textContent = `Add other changes to ${file.path} (format in the README).`;
   else note.hidden = true;
 }
 
@@ -3062,7 +3060,7 @@ async function loadAndRender({ busy = false } = {}) {
   if (s.reportedCost != null && shown('card-reported')) {
     document.getElementById('cardReported').textContent = formatCost(s.reportedCost);
     document.getElementById('cardReportedNote').textContent =
-      `over ${s.reportedSessions} of ${s.reportedSessionsOf} sessions \u2014 includes calls with no transcript line`;
+      `${s.reportedSessions} of ${s.reportedSessionsOf} sessions`;
   }
   if (shown('card-files')) document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
   if (shown('card-tools')) document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');

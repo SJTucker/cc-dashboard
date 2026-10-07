@@ -142,7 +142,7 @@
         </div>
         <div class="chart" id="timelineChart"></div>
         <!-- The key sits under the chart: in the panel head it pushed the heading onto two lines. -->
-        <p class="panel-note">Solid bar: live session. Striped bar: not live. Arrowhead: a live session whose last call was within the last 10 minutes. Dashed line: now.</p>
+        <p class="panel-note">Solid: live · Striped: not live · Arrowhead: call in the last 10 min · Dashed: now</p>
       </section>
 
       <section class="panel" id="sessionsPanel" data-hide-key="sessions" hidden>
@@ -225,7 +225,7 @@
             <div id="tokenTypeChart" class="chart" aria-label="Line chart of daily input, output, cache-write and cache-read tokens on a logarithmic scale"></div>
             <div class="chart-side">
               <div class="legend side-legend" id="tokenTypeLegend"></div>
-              <p class="panel-note side-note">Log scale &mdash; each gridline is ten times the one below.</p>
+              <p class="panel-note side-note">Log scale: ×10 per gridline</p>
             </div>
           </div>
         </section>
@@ -257,7 +257,7 @@
       <section class="panel" id="toolPanel" data-hide-key="tools" hidden>
         <div class="panel-head">
           <h2>Tool calls</h2>
-          <span class="panel-note">pick a tool on the left to break it down</span>
+          <span class="panel-note">pick a tool to break it down</span>
         </div>
         <div class="usage-grid">
           <div class="usage-group">
@@ -278,7 +278,7 @@
       <section class="panel" id="rtkDailyPanel" data-hide-key="rtkDaily" hidden>
         <div class="panel-head">
           <h2>Output rtk filtered out</h2>
-          <span class="panel-note">estimated tokens rtk stripped from command output before it reached the model &mdash; not billed tokens, and not part of the cost figures above</span>
+          <span class="panel-note">estimated tokens rtk cut from command output, not in cost</span>
         </div>
         <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk filtered out per day"></div>
       </section>
@@ -286,7 +286,7 @@
       <section class="panel" id="rtkCommandPanel" data-hide-key="rtkCommands" hidden>
         <div class="panel-head">
           <h2>What rtk filtered</h2>
-          <span class="panel-note">pick a command on the left to see the invocations behind it</span>
+          <span class="panel-note">pick a command to see its calls</span>
         </div>
         <div class="usage-grid">
           <div class="usage-group">
@@ -322,7 +322,7 @@
       <section class="panel" id="sessionStartPanel" data-hide-key="sessionStart" hidden>
         <div class="panel-head">
           <h2>Setup changes &middot; context at session start</h2>
-          <span class="panel-note">today and 7d show the last 14 days, 30d and 90d their own span, All everything &mdash; tokens in each session's first call: system prompt, tools, CLAUDE.md, skill list, hook output</span>
+          <span class="panel-note">tokens in each session's first call</span>
         </div>
         <p id="changesFileNote" class="panel-note changes-file-note" hidden></p>
         <div id="sessionStartChart" class="chart" aria-label="Context at the first call of each session, with setup changes marked below the axis"></div>
@@ -332,7 +332,7 @@
       <section class="panel" id="beforeAfterPanel" data-hide-key="beforeAfter" hidden>
         <div class="panel-head">
           <h2>Setup changes &middot; before and after</h2>
-          <span class="panel-note">7 days either side of the change you pick &mdash; trust it only when no other change falls in the same 14 days</span>
+          <span class="panel-note">7 days before and after the picked change</span>
         </div>
         <div id="markerList" class="marker-list" role="group" aria-label="Choose a change"></div>
         <div class="ba-grid">
