@@ -132,34 +132,34 @@ export function includedPaths(text: string, base: string, home: string) {
   return paths
 }
 
-// The script each hook command and the statusline command run, when the command's
-// first word is an absolute path once ~ and $HOME are expanded. A command such as
+// The script a hook or statusline command runs, when the command's first word is an
+// absolute path once ~ and $HOME are expanded. Null for any other command.
+function scriptOf(command: unknown, home: string) {
+  if (typeof command !== 'string') return null
+  const first = expandHome(command.trim().split(/\s+/)[0] ?? '', home)
+  return first.startsWith('/') ? first : null
+}
+
+function groupScripts(group: unknown, home: string) {
+  const list = isObject(group) && Array.isArray(group.hooks) ? group.hooks : []
+  return list.map((hook) => (isObject(hook) ? scriptOf(hook.command, home) : null)).filter((script) => script !== null)
+}
+
+function hookScripts(hooks: unknown, home: string) {
+  const groups = Object.values(isObject(hooks) ? hooks : {}).flatMap((g) => (Array.isArray(g) ? g : []))
+  return [...new Set(groups.flatMap((group) => groupScripts(group, home)))]
+}
+
+// The script each hook command and the statusline command run. A command such as
 // `jq .` names no file of the setup.
 export function commandPaths(settingsText: string, home: string) {
-  const out = { hooks: [] as string[], statusline: null as string | null }
   let settings: unknown
   try {
     settings = JSON.parse(settingsText)
   } catch {
-    return out
+    return { hooks: [] as string[], statusline: null as string | null }
   }
-  if (!isObject(settings)) return out
-  const scriptOf = (command: unknown) => {
-    if (typeof command !== 'string') return null
-    const first = expandHome(command.trim().split(/\s+/)[0] ?? '', home)
-    return first.startsWith('/') ? first : null
-  }
-  const hooks = isObject(settings.hooks) ? settings.hooks : {}
-  for (const groups of Object.values(hooks)) {
-    if (!Array.isArray(groups)) continue
-    for (const group of groups) {
-      const list = isObject(group) && Array.isArray(group.hooks) ? group.hooks : []
-      for (const hook of list) {
-        const script = isObject(hook) ? scriptOf(hook.command) : null
-        if (script && !out.hooks.includes(script)) out.hooks.push(script)
-      }
-    }
-  }
-  out.statusline = isObject(settings.statusLine) ? scriptOf(settings.statusLine.command) : null
-  return out
+  if (!isObject(settings)) return { hooks: [] as string[], statusline: null as string | null }
+  const statusline = isObject(settings.statusLine) ? scriptOf(settings.statusLine.command, home) : null
+  return { hooks: hookScripts(settings.hooks, home), statusline }
 }

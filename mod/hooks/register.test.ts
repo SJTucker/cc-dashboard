@@ -1,5 +1,6 @@
-import type { AgentInfo, On, SessionRateLimit, UsageUnit } from 'claude-code'
+import type { AgentInfo, EngineInterface, On, SessionRateLimit, UsageUnit } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
+import { snapshotName } from './setup'
 
 type Ran = { argv: readonly string[]; stdin: unknown; timeoutMs: number | undefined }
 type Entry = { name: string; kind: 'file' | 'dir' | 'other'; size: number; mtimeMs: number; isLink: boolean }
@@ -39,9 +40,11 @@ type World = {
   // How long each fs.write takes on the mock clock, in call order. A write past the
   // end of the list takes no time.
   writeMs: number[]
+  // Files that fs.stat finds, by path, with their mtimeMs. Other paths stat as the plugin's folder.
+  stats: Record<string, number>
 }
 
-const entry = (name: string): Entry => ({ name, kind: 'dir', size: 0, mtimeMs: 0, isLink: false })
+const entry = (name: string): Entry => ({ name, kind: name.endsWith('.md') ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false })
 
 const FIVE: SessionRateLimit = { kind: 'five_hour', percentUsed: 23.5, resetsAt: '2026-10-01T15:00:00.000Z' }
 const WEEK: SessionRateLimit = { kind: 'seven_day', percentUsed: 41, resetsAt: '2026-10-05T09:30:00.000Z' }
@@ -70,14 +73,20 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     toolFails: false,
     writeFails: false,
     writeMs: [],
+    stats: {},
     ...w,
   }
   const ran: Ran[] = []
   const reviewRan: Ran[] = []
   const endSawRan: number[] = []
   const listed: string[] = []
+  const readLog: string[] = []
   const clock = mock.clock(on, { now: 61_000 })
-  on('fs.stat', () => ({ value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: true, realPath: '/repo/mod' } }))
+  on('fs.stat', (_$, e) => {
+    const mtimeMs = state.stats[e.path]
+    if (mtimeMs !== undefined) return { value: { kind: 'file' as const, size: 1, mtimeMs, isLink: false } }
+    return { value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: true, realPath: '/repo/mod' } }
+  })
   on('fs.exists', (_$, e) => ({ value: state.exists(e.path) }))
   on('fs.list', (_$, e) => {
     listed.push(e.path)
@@ -89,6 +98,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const registered: string[] = []
   const logged: string[] = []
   on('fs.read', (_$, e) => {
+    readLog.push(e.path)
     const text = state.files[e.path]
     if (text === undefined) throw new Error(`ENOENT ${e.path}`)
     return { value: text }
@@ -177,7 +187,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('tool.check', () => ({ decision: state.verdict }))
   on('agent.spawn', () => ({ model: 'claude-haiku-4-5', agentId: 'a1' }))
-  return { ran, reviewRan, state, listed, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog }
+  return { ran, reviewRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -1039,4 +1049,180 @@ test('a throttle timer that fires as the session ends leaves nothing behind for 
   await $.turn.start({ text: 'b', turnId: 't2' })
   await clock.settle()
   expect(writeLog.length).toBe(before + 1)
+})
+
+const CFG = '/home/u/.claude'
+const CLAUDE_MD = `${CFG}/CLAUDE.md`
+const SETTINGS = `${CFG}/settings.json`
+const CHANGES = `${CFG}/cc-dashboard/changes/s1.json`
+const snap = (path: string) => `${CFG}/cc-dashboard/setup/${snapshotName(path)}`
+const snapText = (path: string, mtimeMs: number, text: string | null) => JSON.stringify({ path, mtimeMs, text })
+
+async function startAndSettle($: EngineInterface, clock: { settle: () => Promise<void> }) {
+  await $.session.start(start)
+  await clock.settle()
+}
+
+test('the first setup check stores snapshots and writes no marker', async ($, on) => {
+  const { writes, state, clock } = world(on, { files: { ...judged, [CLAUDE_MD]: 'a' }, stats: { [CLAUDE_MD]: 1000 } })
+  await startAndSettle($, clock)
+  expect(writes[CHANGES]).toBe(undefined)
+  expect(JSON.parse(writes[snap(CLAUDE_MD)] ?? 'null')).toEqual({ path: CLAUDE_MD, mtimeMs: 1000, text: 'a' })
+  const setup = state.store.setup as { folders: string[]; mtimes: Record<string, number | null> }
+  expect(setup.mtimes[CLAUDE_MD]).toBe(1000)
+  expect(setup.folders).toContain(CFG)
+  expect(setup.folders).toContain('/work/my.demo')
+})
+
+test('an edited CLAUDE.md gets a Haiku label dated to its mtime', async ($, on) => {
+  const { writes, asked, clock } = world(on, {
+    files: { ...judged, [CLAUDE_MD]: 'a\nb', [snap(CLAUDE_MD)]: snapText(CLAUDE_MD, 1000, 'a') },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+    replies: [{ isAnswered: true, text: 'add rule b' }],
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([
+    { t: 2000, kind: 'claude-md', name: 'CLAUDE.md', label: 'add rule b', file: CLAUDE_MD },
+  ])
+  expect(asked.length).toBe(1)
+  expect(asked[0]?.model).toBe('haiku')
+  expect(asked[0]?.effort).toBe('medium')
+  expect(asked[0]?.timeoutMs).toBe(15_000)
+  expect(asked[0]?.prompt).toContain('Added lines:\nb')
+  expect(JSON.parse(writes[snap(CLAUDE_MD)] ?? 'null')).toEqual({ path: CLAUDE_MD, mtimeMs: 2000, text: 'a\nb' })
+})
+
+test('a failing Haiku call falls back to the first added line', async ($, on) => {
+  const { writes, clock } = world(on, {
+    files: { ...judged, [CLAUDE_MD]: 'a\n- use cx', [snap(CLAUDE_MD)]: snapText(CLAUDE_MD, 1000, 'a') },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+    replies: [{ throws: true }],
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')[0]?.label).toBe('use cx')
+})
+
+test('a settings.json edit is split by kind with no Haiku call', async ($, on) => {
+  const before = JSON.stringify({ theme: 'dark', modelSettings: { m: { effortLevel: 'high' } } })
+  const after = JSON.stringify({ theme: 'light', modelSettings: { m: { effortLevel: 'medium' } }, enabledPlugins: { p: true } })
+  const { writes, asked, clock } = world(on, {
+    files: { ...judged, [SETTINGS]: after, [snap(SETTINGS)]: snapText(SETTINGS, 1000, before) },
+    stats: { [SETTINGS]: 3000 },
+    store: { setup: { folders: [CFG], mtimes: { [SETTINGS]: 1000 } } },
+  })
+  await startAndSettle($, clock)
+  expect(asked.length).toBe(0)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([
+    { t: 3000, kind: 'config', name: 'settings.json', label: 'theme dark → light', file: SETTINGS },
+    { t: 3000, kind: 'effort', name: 'settings.json', label: 'modelSettings.m.effortLevel high → medium', file: SETTINGS },
+  ])
+})
+
+test('a new skill in a folder seen before is marked added', async ($, on) => {
+  const skill = `${CFG}/skills/dataviz/SKILL.md`
+  const { writes, asked, clock } = world(on, {
+    files: { ...judged, [skill]: 'x' },
+    stats: { [skill]: 4000 },
+    dirs: { [`${CFG}/skills`]: ['dataviz'] },
+    store: { setup: { folders: [CFG, `${CFG}/skills`], mtimes: {} } },
+  })
+  await startAndSettle($, clock)
+  expect(asked.length).toBe(0)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 4000, kind: 'skill', name: 'skill dataviz', label: 'added', file: skill }])
+})
+
+test('a deleted skill folder is marked removed', async ($, on) => {
+  const skill = `${CFG}/skills/dataviz/SKILL.md`
+  const { writes, clock } = world(on, {
+    files: { ...judged, [snap(skill)]: snapText(skill, 4000, 'x') },
+    store: { setup: { folders: [CFG, `${CFG}/skills`], mtimes: { [skill]: 4000 } } },
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 61_000, kind: 'skill', name: 'skill dataviz', label: 'removed', file: skill }])
+  expect(JSON.parse(writes[snap(skill)] ?? 'null')).toEqual({ path: skill, mtimeMs: 0, text: null })
+})
+
+test('a hook script named in settings.json is watched', async ($, on) => {
+  const script = '/home/u/bin/guard.sh'
+  const settings = JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: '~/bin/guard.sh --x' }] }] } })
+  const { writes, clock } = world(on, {
+    files: { ...judged, [SETTINGS]: settings, [snap(SETTINGS)]: snapText(SETTINGS, 1000, settings), [script]: 'new', [snap(script)]: snapText(script, 4000, 'old') },
+    stats: { [SETTINGS]: 1000, [script]: 5000 },
+    store: { setup: { folders: [CFG], mtimes: { [SETTINGS]: 1000, [script]: 4000 } } },
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 5000, kind: 'hook', name: 'hook script', label: 'guard.sh changed', file: script }])
+})
+
+test("the project's CLAUDE.md is watched with the project's name", async ($, on) => {
+  const file = '/work/my.demo/CLAUDE.md'
+  const { writes, clock } = world(on, {
+    files: { ...judged, [file]: 'a\nb', [snap(file)]: snapText(file, 1000, 'a') },
+    stats: { [file]: 2000 },
+    store: { setup: { folders: [CFG, '/work/my.demo'], mtimes: { [file]: 1000 } } },
+    replies: [{ isAnswered: true, text: 'add b' }],
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 2000, kind: 'claude-md', name: 'my.demo/CLAUDE.md', label: 'add b', file }])
+})
+
+test('a project seen for the first time is a baseline', async ($, on) => {
+  const file = '/work/my.demo/CLAUDE.md'
+  const { writes, clock } = world(on, {
+    files: { ...judged, [file]: 'a' },
+    stats: { [file]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: {} } },
+  })
+  await startAndSettle($, clock)
+  expect(writes[CHANGES]).toBe(undefined)
+  expect(JSON.parse(writes[snap(file)] ?? 'null')?.text).toBe('a')
+})
+
+test('an unchanged mtime reads neither the file nor its snapshot', async ($, on) => {
+  const rule = `${CFG}/rules/style.md`
+  const { readLog, writes, clock } = world(on, {
+    files: { ...judged, [rule]: 'a', [snap(rule)]: snapText(rule, 1000, 'a') },
+    stats: { [rule]: 1000 },
+    dirs: { [`${CFG}/rules`]: ['style.md'] },
+    store: { setup: { folders: [CFG, `${CFG}/rules`], mtimes: { [rule]: 1000 } } },
+  })
+  await startAndSettle($, clock)
+  expect(readLog).not.toContain(rule)
+  expect(readLog).not.toContain(snap(rule))
+  expect(writes[CHANGES]).toBe(undefined)
+})
+
+test('a resumed session appends to its marker file', async ($, on) => {
+  const earlier = { t: 500, kind: 'rtk', name: 'rtk config.toml', label: 'x', file: '/f' }
+  const { writes, clock } = world(on, {
+    files: { ...judged, [CHANGES]: JSON.stringify([earlier]), [CLAUDE_MD]: 'a\nb', [snap(CLAUDE_MD)]: snapText(CLAUDE_MD, 1000, 'a') },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+    replies: [{ isAnswered: true, text: 'add b' }],
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? '[]').map((e: { label: string }) => e.label)).toEqual(['x', 'add b'])
+})
+
+test('a failed marker write leaves the snapshots and the index as they were', async ($, on) => {
+  const { writes, state, logged, clock } = world(on, {
+    files: { ...judged, [CLAUDE_MD]: 'a\nb', [snap(CLAUDE_MD)]: snapText(CLAUDE_MD, 1000, 'a') },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+    replies: [{ isAnswered: true, text: 'add b' }],
+    writeFails: true,
+  })
+  await startAndSettle($, clock)
+  expect(writes[snap(CLAUDE_MD)]).toBe(undefined)
+  expect((state.store.setup as { mtimes: Record<string, number> }).mtimes[CLAUDE_MD]).toBe(1000)
+  expect(logged.some((line) => line.startsWith('setup check failed'))).toBe(true)
+})
+
+test('a non-interactive session runs no setup check', async ($, on) => {
+  const { state, clock } = world(on, { files: { ...judged, [CLAUDE_MD]: 'a' }, stats: { [CLAUDE_MD]: 1000 } })
+  await $.session.start({ ...start, isInteractive: false })
+  await clock.settle()
+  expect(state.store.setup).toBe(undefined)
 })

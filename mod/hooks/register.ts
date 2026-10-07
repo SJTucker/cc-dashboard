@@ -1,10 +1,13 @@
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
-import { LABEL_MAX } from './setup'
+import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, settingsChanges, snapshotName } from './setup'
+import type { Kind, SetupEntry, Snapshot } from './setup'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/ that a statusline script used to run, and judges new Claude Code releases
 // for the setup changes markers through bin/judge-updates, and reviews ended sessions
-// for setup suggestions through bin/review-session.
+// for setup suggestions through bin/review-session. At each interactive session start it
+// also compares the setup files with stored copies and writes a marker for each change
+// (checkSetup).
 // The scripts are the only writers of those files, so the file formats, the atomic
 // writes and the freshness checks are theirs. The activity files are the one
 // exception: the mod writes them itself with $.fs.write, because one writer per
@@ -533,9 +536,221 @@ function forgetSession(id: string) {
   lastWritten.delete(id)
 }
 
+// Setup change markers. At each interactive session start, checkSetup compares the
+// setup files with the copies stored at the last check and writes one entry per
+// change to <config dir>/cc-dashboard/changes/<session id>.json, which
+// lib/changes.js reads. An entry is dated to the file's mtime, so a change found
+// sessions later still lands on the day it was made.
+
+const SETUP_KEY = 'setup'
+const LABEL_TIMEOUT_MS = 15_000
+const LABEL_PROMPT_MAX = 4096
+const LABEL_SYSTEM =
+  'You name edits to a Claude Code setup file for a dashboard of setup changes. Reply with one line of at most 60 characters ' +
+  "that says what the edit changes, in lower case, without the file name and without quotes. Examples: don't commit docs; " +
+  'use cx for complexity; run playwright-cli before claiming a UI works.'
+
+// prose files get a Haiku label, settings files a key diff, scripts their name, rtk
+// files their first added line.
+type Mode = 'prose' | 'settings' | 'script' | 'rtk'
+// `folder` decides whether a file with no snapshot is new (its folder was checked
+// before) or seen for the first time (no marker).
+type Watched = { path: string; kind: Kind; name: string; folder: string; mode: Mode }
+type SetupState = { folders: string[]; mtimes: Record<string, number | null> }
+type Change = { w: Watched; t: number; before: string | null; after: string | null }
+type Checked = { path: string; mtime: number | null; snapshot?: Snapshot; change?: Change }
+
+const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p
+
+// A file in skills/, agents/ or rules/, from its path. Used for the folder listings
+// and for paths the index holds that a listing no longer returns, so a deleted
+// skill folder is still checked and found removed.
+function folderFile(dir: string, path: string): Watched | null {
+  const skill = new RegExp(`^${escapeRegExp(dir)}/skills/([^/]+)/SKILL\\.md$`).exec(path)
+  if (skill?.[1]) return { path, kind: 'skill', name: `skill ${skill[1]}`, folder: `${dir}/skills`, mode: 'prose' }
+  const agent = new RegExp(`^${escapeRegExp(dir)}/agents/([^/]+)\\.md$`).exec(path)
+  if (agent?.[1]) return { path, kind: 'skill', name: `agent ${agent[1]}`, folder: `${dir}/agents`, mode: 'prose' }
+  if (path.startsWith(`${dir}/rules/`) && path.endsWith('.md')) {
+    return { path, kind: 'claude-md', name: `rules/${path.slice(dir.length + 7)}`, folder: `${dir}/rules`, mode: 'prose' }
+  }
+  return null
+}
+
+const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+async function ruleFiles($: EngineInterface, folder: string, depth: number): Promise<string[]> {
+  const out: string[] = []
+  for (const e of await $.fs.list(folder).catch(() => [])) {
+    const path = `${folder}/${e.name}`
+    if (e.kind === 'dir' && depth > 0) out.push(...(await ruleFiles($, path, depth - 1)))
+    else if (e.kind === 'file' && e.name.endsWith('.md')) out.push(path)
+  }
+  return out
+}
+
+// Every file the check covers, without duplicates.
+async function watchedFiles($: EngineInterface, dir: string, home: string, root: string | null, state: SetupState) {
+  const files: Watched[] = [
+    { path: `${dir}/CLAUDE.md`, kind: 'claude-md', name: 'CLAUDE.md', folder: dir, mode: 'prose' },
+    { path: `${dir}/settings.json`, kind: 'config', name: 'settings.json', folder: dir, mode: 'settings' },
+    { path: `${dir}/settings.local.json`, kind: 'config', name: 'settings.local.json', folder: dir, mode: 'settings' },
+  ]
+  const rtk = `${home}/Library/Application Support/rtk`
+  for (const name of ['config.toml', 'filters.toml']) {
+    files.push({ path: `${rtk}/${name}`, kind: 'rtk', name: `rtk ${name}`, folder: dir, mode: 'rtk' })
+  }
+  const claudeText = await $.fs.read(`${dir}/CLAUDE.md`).then(String, () => '')
+  for (const path of includedPaths(claudeText, dir, home)) {
+    files.push({ path, kind: 'claude-md', name: baseName(path), folder: dir, mode: 'prose' })
+  }
+  const settingsText = await $.fs.read(`${dir}/settings.json`).then(String, () => '')
+  const scripts = commandPaths(settingsText, home)
+  for (const path of scripts.hooks) files.push({ path, kind: 'hook', name: 'hook script', folder: dir, mode: 'script' })
+  if (scripts.statusline) {
+    files.push({ path: scripts.statusline, kind: 'config', name: 'statusline', folder: dir, mode: 'script' })
+  }
+  const listed: string[] = [...(await ruleFiles($, `${dir}/rules`, 3))]
+  for (const e of await $.fs.list(`${dir}/skills`).catch(() => [])) listed.push(`${dir}/skills/${e.name}/SKILL.md`)
+  for (const e of await $.fs.list(`${dir}/agents`).catch(() => [])) {
+    if (e.name.endsWith('.md')) listed.push(`${dir}/agents/${e.name}`)
+  }
+  const known = Object.entries(state.mtimes).filter(([, mtime]) => mtime !== null).map(([path]) => path)
+  for (const path of [...listed, ...known]) {
+    const w = folderFile(dir, path)
+    if (w) files.push(w)
+  }
+  if (root) {
+    const project = baseName(root)
+    files.push(
+      { path: `${root}/CLAUDE.md`, kind: 'claude-md', name: `${project}/CLAUDE.md`, folder: root, mode: 'prose' },
+      { path: `${root}/CLAUDE.local.md`, kind: 'claude-md', name: `${project}/CLAUDE.local.md`, folder: root, mode: 'prose' },
+      { path: `${root}/.claude/settings.json`, kind: 'config', name: `${project}/settings.json`, folder: root, mode: 'settings' },
+    )
+  }
+  const seen = new Set<string>()
+  return files.filter((w) => !seen.has(w.path) && seen.add(w.path))
+}
+
+async function fileMtime($: EngineInterface, path: string) {
+  const stat = await $.fs.stat(path).catch(() => null)
+  return stat?.kind === 'file' ? stat.mtimeMs : null
+}
+
+async function readSnapshot($: EngineInterface, dir: string, path: string): Promise<Snapshot | null> {
+  const text = await $.fs.read(`${dir}/cc-dashboard/setup/${snapshotName(path)}`).then(String, () => undefined)
+  if (text === undefined) return null
+  try {
+    const s = JSON.parse(text) as Partial<Snapshot>
+    const isValid = s.path === path && typeof s.mtimeMs === 'number' && (typeof s.text === 'string' || s.text === null)
+    return isValid ? (s as Snapshot) : null
+  } catch {
+    return null
+  }
+}
+
+// One file: null when its mtime matches the index, so nothing is read. Otherwise
+// the snapshot to store and, when the text differs from the last check, the change.
+async function checkFile($: EngineInterface, dir: string, w: Watched, state: SetupState, now: number): Promise<Checked | null> {
+  const mtime = await fileMtime($, w.path)
+  const known = Object.hasOwn(state.mtimes, w.path) ? state.mtimes[w.path] : undefined
+  if (known === mtime) return null
+  const snapshot = await readSnapshot($, dir, w.path)
+  const before = snapshot?.text ?? null
+  if (mtime === null) {
+    // Gone. Only a file that had text at the last check is reported, once.
+    if (before === null) return { path: w.path, mtime }
+    return { path: w.path, mtime, snapshot: { path: w.path, mtimeMs: 0, text: null }, change: { w, t: now, before, after: null } }
+  }
+  const after = await $.fs.read(w.path).then(String, () => null)
+  if (after === null) return null // unreadable now: left for the next session
+  const stored = { path: w.path, mtimeMs: mtime, text: after }
+  if (before === null) {
+    // No text stored: new if it was missing before or its folder was checked before.
+    const isNew = known === null || snapshot?.text === null || state.folders.includes(w.folder)
+    return { path: w.path, mtime, snapshot: stored, ...(isNew && { change: { w, t: mtime, before: null, after } }) }
+  }
+  return { path: w.path, mtime, snapshot: stored, ...(before !== after && { change: { w, t: mtime, before, after } }) }
+}
+
+async function haikuLabel($: EngineInterface, name: string, added: string[], removed: string[]) {
+  const prompt = `File: ${name}\n\nAdded lines:\n${added.join('\n')}\n\nRemoved lines:\n${removed.join('\n')}`.slice(0, LABEL_PROMPT_MAX)
+  try {
+    const reply = await $.model.complete({
+      model: 'haiku',
+      system: LABEL_SYSTEM,
+      prompt,
+      maxTokens: 2048,
+      effort: 'medium',
+      timeoutMs: LABEL_TIMEOUT_MS,
+    })
+    return reply.isAnswered ? cleanLabel(reply.text) : null
+  } catch {
+    return null
+  }
+}
+
+async function entriesFor($: EngineInterface, c: Change): Promise<SetupEntry[]> {
+  const base = { t: c.t, name: c.w.name, file: c.w.path }
+  if (c.before === null) return [{ ...base, kind: c.w.kind, label: 'added' }]
+  if (c.after === null) return [{ ...base, kind: c.w.kind, label: 'removed' }]
+  if (c.w.mode === 'settings') {
+    const changes = settingsChanges(c.before, c.after)
+    if (changes === null) return [{ ...base, kind: 'config', label: 'changed' }]
+    return changes.map(({ kind, label }) => ({ ...base, kind, label }))
+  }
+  if (c.w.mode === 'script') return [{ ...base, kind: c.w.kind, label: `${baseName(c.w.path)} changed` }]
+  const { added, removed } = lineDiff(c.before, c.after)
+  if (c.w.mode === 'rtk') return [{ ...base, kind: c.w.kind, label: fallbackLabel(added, []) }]
+  if (!added.length && !removed.length) return [{ ...base, kind: c.w.kind, label: 'changed' }]
+  const label = (await haikuLabel($, c.w.name, added, removed)) ?? fallbackLabel(added, removed)
+  return [{ ...base, kind: c.w.kind, label }]
+}
+
+function readSetupState(saved: unknown): SetupState {
+  const s = (typeof saved === 'object' && saved !== null ? saved : {}) as Partial<SetupState>
+  const folders = Array.isArray(s.folders) ? s.folders.filter((f): f is string => typeof f === 'string') : []
+  // A copy: checkSetup changes it, and the stored value must change only through store.set.
+  const mtimes = typeof s.mtimes === 'object' && s.mtimes !== null ? { ...s.mtimes } : {}
+  return { folders, mtimes }
+}
+
+// The marker file is written first, then the snapshots, then the index. A failed
+// marker write throws before the rest, so the next session finds the change again.
+async function checkSetup($: EngineInterface) {
+  const dir = await configDir($)
+  const home = await $.env.get('HOME')
+  const id = await $.session.id()
+  if (!dir || !home || !SESSION_ID.test(id)) return
+  const root = await $.session.root().catch(() => null)
+  const now = await $.clock.now()
+  const state = readSetupState(await $.store.get(SETUP_KEY))
+  const files = await watchedFiles($, dir, home, root, state)
+  const checked: Checked[] = []
+  for (const w of files) {
+    const c = await checkFile($, dir, w, state, now)
+    if (c) checked.push(c)
+  }
+  const entries: SetupEntry[] = []
+  for (const c of checked) if (c.change) entries.push(...(await entriesFor($, c.change)))
+  if (entries.length) {
+    const file = `${dir}/cc-dashboard/changes/${id}.json`
+    // A resumed session starts again with the same id: keep what it wrote before.
+    const earlier = await $.fs.read(file).then((text) => JSON.parse(String(text)) as unknown, () => [])
+    const kept = Array.isArray(earlier) ? earlier : []
+    await $.fs.write(file, `${JSON.stringify([...kept, ...entries], null, 2)}\n`)
+  }
+  for (const c of checked) {
+    if (c.snapshot) await $.fs.write(`${dir}/cc-dashboard/setup/${snapshotName(c.path)}`, JSON.stringify(c.snapshot))
+    state.mtimes[c.path] = c.mtime
+  }
+  state.folders = [...new Set([...state.folders, ...files.map((w) => w.folder)])]
+  await $.store.set(SETUP_KEY, state)
+}
+
 export const register: Register = (on) => {
   // Registers /backfill-updates, checks whether the running Claude Code version has a
-  // verdict, and reviews sessions that have ended. Both run from timers, after session
+  // verdict, reviews sessions that have ended, and checks the setup files for changes.
+  // All three run from timers, after session
   // start returns, because session.start is awaited before the first prompt. A -p or
   // Agent SDK run starts no reviews: it can exit mid-call and leave claimed sessions
   // pending for an hour.
@@ -548,7 +763,12 @@ export const register: Register = (on) => {
     $.clock.after(0, () => {
       checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
     })
-    if (e.isInteractive) startReviews($)
+    if (e.isInteractive) {
+      startReviews($)
+      $.clock.after(0, () => {
+        checkSetup($).catch((err) => note($, `setup check failed (${errorName(err)})`))
+      })
+    }
     return result
   })
 
