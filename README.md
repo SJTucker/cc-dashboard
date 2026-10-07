@@ -149,23 +149,29 @@ leave out their cost.
 ### Setup changes recorded automatically
 
 At each interactive session start the mod compares your setup files with the copies
-it stored at the last check, and records a marker for each change. It watches:
+it stored at the last check, and records a marker for each change. The mod watches:
 
 - `~/.claude/CLAUDE.md`, the files it pulls in with an `@path` line, and
   `~/.claude/rules/`
 - `~/.claude/settings.json` and `settings.local.json`
 - `~/.claude/skills/*/SKILL.md` and `~/.claude/agents/*.md`
-- the scripts named by hook commands and by `statusLine` in `settings.json`
+- the scripts named by hook commands and by `statusLine` in `settings.json`. A
+  command is watched only when its first word is a path to a script (with `~` or
+  `$HOME` expanded). A command such as `node ~/x.js` or `rtk hook claude` names no
+  watched file.
 - rtk's `config.toml` and `filters.toml` in `~/Library/Application Support/rtk/`
 - the session's project: `CLAUDE.md`, `CLAUDE.local.md` and `.claude/settings.json`
 
-A marker is dated to the file's modification time, so a change found sessions later
-still lands on the day it was made. Changes to one file of one kind on the same day
+A marker is dated to the file's modification time, so an edit found sessions later
+still lands on the day it was made. An added file is dated no earlier than the
+previous check of its folder, so a skill linked or copied in with an old modification
+time does not land on an old day. Changes to one file of one kind on the same day
 become one marker. A settings change is split by key: `hooks` is a hook marker,
 `effortLevel` an effort marker, `model` a model marker, and anything else a config
 marker. `enabledPlugins` is left out, because plugin installs are marked already.
 
-Haiku labels a change to `CLAUDE.md`, a rule, a skill or an agent from the added and
+Haiku labels a change to `CLAUDE.md` and the files it pulls in with `@`, a rule, a
+skill, an agent, or the project's `CLAUDE.md` or `CLAUDE.local.md` from the added and
 removed lines. When Haiku fails, the label is the first added line. A settings label
 lists the changed keys, for example `effortLevel high → medium`.
 
@@ -421,15 +427,15 @@ boundary back.
 
 - **Read-only, except for three write paths.** The dashboard server only ever reads
   your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
-  `changes.json`, the setup change markers in `cc-dashboard/changes/`, `rate-limits.json` and the activity files in
-  `cc-dashboard/activity/`, and opens rtk's `history.db` with
+  `changes.json`, the setup change markers in `cc-dashboard/changes/`,
+  `rate-limits.json` and the activity files in `cc-dashboard/activity/`, and opens rtk's `history.db` with
   sqlite's `readOnly` flag. One write path is `bin/record-statusline`,
   `bin/record-session-end` and `bin/judge-updates`, separate scripts the
   dashboard's Claude Code mod runs (see "Plan usage" above); they write only
   `rate-limits.json`, the per-session snapshots in `cc-dashboard/sessions/`, and,
   through `bin/judge-updates`, `cc-dashboard/updates.json`. The mod itself writes the
   activity files (see "Live state"), and `lib/activity.js`
-  deletes those older than a day. It also writes the setup change markers in
+  deletes those older than a day. The mod also writes the setup change markers in
   `cc-dashboard/changes/` and the stored setup copies in `cc-dashboard/setup/` (see
   "Setup changes recorded automatically"). The other write path is the Apply
   button in the Cost by model panel: clicking it is the only thing that writes

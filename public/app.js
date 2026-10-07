@@ -2280,7 +2280,7 @@ function renderChangesFileNote(file) {
   note.hidden = false;
   note.classList.toggle('changes-error', file.status === 'error');
   if (file.status === 'error') note.textContent = `Couldn't read all of ${file.path}: ${file.error}`;
-  else if (file.status === 'missing') note.textContent = `Plugin installs and new models are marked on their own. Add anything else (CLAUDE.md edits, hooks, rtk config) to ${file.path} — the README shows the format.`;
+  else if (file.status === 'missing') note.textContent = `Plugin installs, new models, Claude Code releases and edits to setup files (CLAUDE.md, rules, settings, skills, agents, hook scripts, rtk config) are marked automatically. Add any other change to ${file.path}. The README shows the format.`;
   else note.hidden = true;
 }
 
