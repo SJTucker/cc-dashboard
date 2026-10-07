@@ -337,6 +337,7 @@ test('GET /api/changes returns sessions and before/after windows per marker', as
     'no rtk database in the fixture, so no rtk series'
   );
   assert.deepStrictEqual(data.daily.sessionStart.map((d) => d.value), [40000, 50000]);
+  assert.strictEqual(data.bashDaily, undefined, 'daily.bashMedian replaced it');
   assert.strictEqual(data.changesFile.status, 'ok');
 });
 

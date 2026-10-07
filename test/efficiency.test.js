@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  WEEK_MS, median, percentile, sessionStarts, bashDeltas, bashDaily, promptStats, stats, windowStats, dailySeries, windowRanges, buildReport,
+  WEEK_MS, median, percentile, sessionStarts, bashDeltas, promptStats, stats, windowStats, dailySeries, windowRanges, buildReport,
 } = require('../lib/efficiency');
 
 const H = 60 * 60 * 1000;
@@ -48,14 +48,6 @@ test('bashDeltas: context growth after an all-Bash response, negatives dropped',
     call(T0 + 4000, { main: false, context: 1, tools: ['Bash'] }), // subagent: other thread
   ];
   assert.deepStrictEqual(bashDeltas(calls), [{ t: T0 + 1000, delta: 350 }]);
-});
-
-test('bashDaily buckets by local date', () => {
-  const deltas = [{ t: T0, delta: 100 }, { t: T0 + H, delta: 300 }, { t: T0 + 24 * H, delta: 50 }];
-  assert.deepStrictEqual(bashDaily(deltas), [
-    { date: '2026-09-10', n: 2, median: 200 },
-    { date: '2026-09-11', n: 1, median: 50 },
-  ]);
 });
 
 test('promptStats sums main and subagent calls up to the next prompt, dropping empty prompts', () => {

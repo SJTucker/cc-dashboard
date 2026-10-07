@@ -1974,15 +1974,17 @@ function dayNoon(dateKey) {
 }
 
 // Both charts share one time axis so a marker sits at the same x in each. Built
-// from sessions and bashDaily only, not markers: Claude Code deletes transcripts
-// after cleanupPeriodDays (30 by default), so history has a sliding start, and a
-// plugin or model marker from before the earliest surviving transcript would
-// stretch the axis with an empty strip on one side. Markers outside the resulting
-// domain are filtered out where each chart draws them (see markerInDomain below).
+// from sessions and the transcript rows' daily series only. Markers and rtk days
+// are left out. Claude Code deletes transcripts after cleanupPeriodDays (30 by
+// default), so history has a sliding start, while rtk keeps every row. A marker or
+// an rtk day from before the earliest surviving transcript would stretch the axis
+// with an empty strip on one side. Markers outside the resulting domain are
+// filtered out where each chart draws them (see markerInDomain below), and rtk
+// days in drawMetricChart.
 function timeDomain(report) {
   const times = [
     ...report.sessions.map((s) => s.t),
-    ...report.bashDaily.map((d) => dayNoon(d.date)),
+    ...BA_ROWS.flatMap((row) => report.daily[row.key].map((d) => dayNoon(d.date))),
   ];
   return [Math.min(...times) - DAY_MS / 2, Math.max(...times) + DAY_MS / 2];
 }
@@ -2127,21 +2129,27 @@ function drawSessionStartChart(container, report) {
   }
 }
 
-function drawBashChart(container, report, marker) {
+// The daily chart beside the before/after table, for the row the reader picked.
+// A day outside the shared time axis is skipped: rtk keeps days the transcripts
+// have lost (see timeDomain).
+function drawMetricChart(container, report, marker, row) {
   hideTooltip();
   container.innerHTML = '';
-  const days = report.bashDaily;
+  const domain = timeDomain(report);
+  const days = (report.daily[row.key] || []).filter((d) => {
+    const t = dayNoon(d.date);
+    return t >= domain[0] && t <= domain[1];
+  });
   if (!days.length) {
-    container.appendChild(el('div', { class: 'bar-empty', text: 'No Bash calls on the main thread yet.' }));
+    container.appendChild(el('div', { class: 'bar-empty', text: `No data for ${row.name} yet.` }));
     return;
   }
   const width = chartWidth(container);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
-  const domain = timeDomain(report);
   const xOf = timeScale(domain, width);
   const clampX = (x) => Math.min(width, Math.max(CHART_PAD_LEFT, x));
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT, class: 'changes-chart' });
-  const max = drawYAxis(svg, Math.max(...days.map((d) => d.median)), width, axisTokens);
+  const max = drawYAxis(svg, Math.max(...days.map((d) => d.value)), width, row.axis);
   const yOf = (v) => plotHeight - (v / max) * plotHeight;
   const barWidth = Math.max(((width - CHART_PAD_LEFT) * DAY_MS) / (domain[1] - domain[0]) * 0.7, 2);
 
@@ -2159,20 +2167,23 @@ function drawBashChart(container, report, marker) {
 
   for (const d of days) {
     const t = dayNoon(d.date);
-    let cls = 'bash-bar';
+    let cls = 'day-bar';
     if (showMarker && t >= marker.t - WEEK_MS && t < marker.t + WEEK_MS) cls += t >= marker.t ? ' after' : ' before';
-    const h = (d.median / max) * plotHeight;
+    const h = (d.value / max) * plotHeight;
     const rect = svgEl('rect', { class: cls, x: xOf(t) - barWidth / 2, y: plotHeight - h, width: barWidth, height: Math.max(h, 1), rx: 1 });
-    svg.appendChild(withTooltip(rect, `<strong>${shortDate(d.date)}</strong><br>median ${formatTokens(Math.round(d.median))} tokens<br>${d.n} Bash calls`));
+    svg.appendChild(withTooltip(rect, `<strong>${shortDate(d.date)}</strong><br>${escapeHtml(row.fmt(d.value))}<br>${d.n} ${row.unit}`));
   }
 
   if (showMarker) {
+    // The rtk rows' 7-day values sit under .rtk, which is null when rtk is missing.
+    const before = row.rtk ? marker.before.rtk : marker.before;
+    const after = row.rtk ? marker.after.rtk : marker.after;
     const line = (from, to, value, cls) => {
       if (value == null) return;
       svg.appendChild(svgEl('line', { class: `window-median ${cls}`, x1: clampX(xOf(from)), x2: clampX(xOf(to)), y1: yOf(value), y2: yOf(value) }));
     };
-    line(marker.t - WEEK_MS, marker.t, marker.before.bashMedian, 'before');
-    line(marker.t, marker.t + WEEK_MS, marker.after.bashMedian, 'after');
+    line(marker.t - WEEK_MS, marker.t, before && before[row.key], 'before');
+    line(marker.t, marker.t + WEEK_MS, after && after[row.key], 'after');
     svg.appendChild(svgEl('line', { class: 'marker-line', x1: xOf(marker.t), x2: xOf(marker.t), y1: 0, y2: plotHeight }));
   }
   svg.appendChild(svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)' }));
@@ -2181,17 +2192,23 @@ function drawBashChart(container, report, marker) {
 }
 
 const tokensCell = (v) => formatTokens(Math.round(v));
+// One decimal place: the API-call medians are often a half.
+const axisCount = (v) => String(Math.round(v * 10) / 10);
+const axisPercent = (x) => `${Math.round(x * 100)}%`;
+
+// Each row of the before/after table, and the daily chart it shows when picked:
+// title names the chart, axis formats its y-axis, unit follows n in a bar's tooltip.
 const BA_ROWS = [
-  { name: 'Session start context', key: 'sessionStart', n: 'sessions', fmt: tokensCell },
-  { name: 'Bash result, median', key: 'bashMedian', n: 'bashN', fmt: tokensCell },
-  { name: 'Bash result, p90', key: 'bashP90', n: 'bashN', fmt: tokensCell },
-  { name: 'Cost per prompt, median', key: 'costPerPrompt', n: 'prompts', fmt: formatCost },
-  { name: 'API calls per prompt, median', key: 'callsPerPrompt', n: 'prompts', fmt: (v) => String(Math.round(v * 10) / 10) },
-  { name: 'Cache hit rate', key: 'cacheHit', n: 'callN', fmt: formatPercent, points: true },
+  { name: 'Session start context', key: 'sessionStart', n: 'sessions', unit: 'sessions', fmt: tokensCell, axis: axisTokens, title: 'Median context at session start, tokens per day' },
+  { name: 'Bash result, median', key: 'bashMedian', n: 'bashN', unit: 'Bash calls', fmt: tokensCell, axis: axisTokens, title: 'Median Bash result on the main thread, tokens per day' },
+  { name: 'Bash result, p90', key: 'bashP90', n: 'bashN', unit: 'Bash calls', fmt: tokensCell, axis: axisTokens, title: '90th percentile Bash result on the main thread, tokens per day' },
+  { name: 'Cost per prompt, median', key: 'costPerPrompt', n: 'prompts', unit: 'prompts', fmt: formatCost, axis: axisCost, title: 'Median cost per prompt, per day' },
+  { name: 'API calls per prompt, median', key: 'callsPerPrompt', n: 'prompts', unit: 'prompts', fmt: axisCount, axis: axisCount, title: 'Median API calls per prompt, per day' },
+  { name: 'Cache hit rate', key: 'cacheHit', n: 'callN', unit: 'API calls', fmt: formatPercent, axis: axisPercent, points: true, title: 'Cache hit rate, per day' },
 ];
 const RTK_ROWS = [
-  { name: 'Tokens kept per command', key: 'keptPerCommand', n: 'commands', fmt: tokensCell },
-  { name: 'Share of output filtered', key: 'filteredShare', n: 'commands', fmt: formatPercent, points: true },
+  { name: 'Tokens kept per command', key: 'keptPerCommand', n: 'commands', unit: 'commands', fmt: tokensCell, axis: axisTokens, rtk: true, title: 'Tokens rtk kept per command, per day' },
+  { name: 'Share of output filtered', key: 'filteredShare', n: 'commands', unit: 'commands', fmt: formatPercent, axis: axisPercent, points: true, rtk: true, title: 'Share of output rtk filtered, per day' },
 ];
 
 // A share (cache hit, filtered) changes in percentage points; everything else as a
@@ -2213,17 +2230,21 @@ function changeCell(a, b, points) {
   return td;
 }
 
-function baRow(row, before, after) {
+// The label is a button so a keyboard user can pick the row. A click anywhere on
+// the row picks it too.
+function baRow(row, before, after, onSelect) {
   const a = before ? before[row.key] : null;
   const b = after ? after[row.key] : null;
-  const name = el('td', { text: row.name });
+  const name = el('td', {}, [el('button', { type: 'button', class: 'ba-row-btn', 'aria-pressed': 'false', text: row.name })]);
   if (row.n) name.appendChild(el('span', { class: 'n', text: `n ${before ? before[row.n] : 0}→${after ? after[row.n] : 0}` }));
-  return el('tr', {}, [
+  const tr = el('tr', { 'data-key': row.key }, [
     name,
     el('td', { class: 'num', text: a == null ? '—' : row.fmt(a) }),
     el('td', { class: 'num', text: b == null ? '—' : row.fmt(b) }),
     changeCell(a, b, row.points),
   ]);
+  tr.addEventListener('click', onSelect);
+  return tr;
 }
 
 function renderBeforeAfter(report, marker) {
@@ -2233,10 +2254,11 @@ function renderBeforeAfter(report, marker) {
   note.textContent = '';
   if (!marker) return;
   const head = el('tr', {}, ['7 days', 'before', 'after', 'change'].map((text, i) => el('th', { text, class: i ? 'num' : '' })));
-  const body = el('tbody', {}, BA_ROWS.map((row) => baRow(row, marker.before, marker.after)));
+  const pick = (row) => () => selectRow(report, marker, row.key);
+  const body = el('tbody', {}, BA_ROWS.map((row) => baRow(row, marker.before, marker.after, pick(row))));
   if (marker.before.rtk || marker.after.rtk) {
     body.appendChild(el('tr', { class: 'group' }, [el('td', { text: "From rtk's own history", colspan: '4' })]));
-    for (const row of RTK_ROWS) body.appendChild(baRow(row, marker.before.rtk, marker.after.rtk));
+    for (const row of RTK_ROWS) body.appendChild(baRow(row, marker.before.rtk, marker.after.rtk, pick(row)));
   }
   table.append(el('thead', {}, [head]), body);
 
@@ -2261,6 +2283,33 @@ const markerKey = (m) => `${m.t}|${m.label}`;
 let changesReport = null;
 let selectedMarkerKey = null;
 
+// The row whose daily chart shows. Kept across marker changes, redraws and
+// refreshes; a page load starts again on the first row.
+let selectedRowKey = 'sessionStart';
+
+// The row the chart shows: the selected one, or the first row when the selected
+// row is an rtk row and the report has no rtk series. selectedRowKey keeps the rtk
+// key, so the rtk row comes back when rtk does.
+function chartRow(report) {
+  return [...BA_ROWS, ...RTK_ROWS].find((row) => row.key === selectedRowKey && report.daily[row.key]) || BA_ROWS[0];
+}
+
+// Moves the selection marks to the picked row and redraws its chart. The table is
+// not rebuilt, so keyboard focus stays on the button that was pressed.
+function selectRow(report, marker, key) {
+  selectedRowKey = key;
+  const row = chartRow(report);
+  for (const tr of document.querySelectorAll('#beforeAfterTable tr[data-key]')) {
+    const on = tr.dataset.key === row.key;
+    tr.classList.toggle('selected', on);
+    tr.querySelector('.ba-row-btn').setAttribute('aria-pressed', String(on));
+  }
+  document.getElementById('baChartTitle').textContent = row.title;
+  const chart = document.getElementById('baDailyChart');
+  chart.setAttribute('aria-label', row.title);
+  drawMetricChart(chart, report, marker, row);
+}
+
 function selectMarker(report, marker) {
   selectedMarkerKey = marker ? markerKey(marker) : null;
   for (const btn of document.querySelectorAll('#markerList .marker-btn')) {
@@ -2271,8 +2320,8 @@ function selectMarker(report, marker) {
   for (const group of document.querySelectorAll('#markerList .marker-day')) {
     group.querySelector('.marker-day-btn').classList.toggle('has-selected', group.dataset.day === day);
   }
-  drawBashChart(document.getElementById('bashDailyChart'), report, marker);
   renderBeforeAfter(report, marker);
+  selectRow(report, marker, selectedRowKey);
 }
 
 function renderChangesFileNote(file) {
@@ -2347,7 +2396,7 @@ function renderChanges(report) {
   selectMarker(report, selected);
 }
 
-const CHANGES_CHARTS = ['sessionStartChart', 'bashDailyChart'];
+const CHANGES_CHARTS = ['sessionStartChart', 'baDailyChart'];
 
 // /api/changes reads the all-history scan, about 2.4s when that cache entry is
 // cold. Both panels show straight away with a placeholder, so the page does not

@@ -337,12 +337,12 @@
         <div id="markerList" class="marker-list" role="group" aria-label="Choose a change"></div>
         <div class="ba-grid">
           <div>
-            <div class="usage-group-title">Median Bash result on the main thread, tokens per day</div>
-            <div id="bashDailyChart" class="chart" aria-label="Median Bash result size per day on the main thread"></div>
-          </div>
-          <div>
             <table class="model-table ba-table" id="beforeAfterTable" aria-live="polite"></table>
             <p id="overlapNote" class="panel-note"></p>
+          </div>
+          <div>
+            <div class="usage-group-title" id="baChartTitle">Median context at session start, tokens per day</div>
+            <div id="baDailyChart" class="chart" aria-label="Median context at session start, tokens per day"></div>
           </div>
         </div>
       </section>
