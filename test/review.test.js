@@ -302,8 +302,8 @@ test('readReviews lists done and failed reviews from the last 7 days', () => {
   write('pending', { endedAt: NOW - HOUR, status: 'pending', claimedAt: NOW });
   write('old', { endedAt: NOW - 8 * DAY, reviewedAt: NOW - 8 * DAY, status: 'done', suggestions: [] });
   assert.deepStrictEqual(review.readReviews(dir, NOW, path.join(base, 'projects')), [
-    { sessionId: 'failed', title: null, transcript: null, project: 'demo', endedAt: NOW - HOUR, reviewedAt: NOW - HOUR, status: 'failed', suggestions: [], error: 'Haiku call failed (Error)' },
-    { sessionId: 'done', title: null, transcript: null, project: 'demo', endedAt: NOW - 2 * HOUR, reviewedAt: NOW - HOUR, status: 'done', suggestions: [{ kind: 'workflow', text: 'x' }] },
+    { sessionId: 'failed', title: null, branch: null, transcript: null, project: 'demo', endedAt: NOW - HOUR, reviewedAt: NOW - HOUR, status: 'failed', suggestions: [], error: 'Haiku call failed (Error)' },
+    { sessionId: 'done', title: null, branch: null, transcript: null, project: 'demo', endedAt: NOW - 2 * HOUR, reviewedAt: NOW - HOUR, status: 'done', suggestions: [{ kind: 'workflow', text: 'x' }] },
   ]);
 });
 
@@ -330,25 +330,34 @@ test('readReviews returns the saved title and transcript, and finds the transcri
   const write = (id, fields) => fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify({
     sessionId: id, project: 'demo', endedAt: NOW - HOUR, reviewedAt: NOW, status: 'done', suggestions: [], ...fields,
   }));
-  write('saved', { title: 'Fix the chart', transcript: '/x/saved.jsonl' });
+  write('saved', { title: 'Fix the chart', transcript: '/x/saved.jsonl', branch: 'feat/chart' });
   write('older', {});
-  write('bad', { title: 5, transcript: 7 });
+  write('bad', { title: 5, transcript: 7, branch: 5 });
   writeSessionTranscript(projects, 'older', 1);
   const byId = Object.fromEntries(review.readReviews(dir, NOW, projects).map((r) => [r.sessionId, r]));
   assert.deepStrictEqual([byId.saved.title, byId.saved.transcript], ['Fix the chart', '/x/saved.jsonl']);
   assert.deepStrictEqual([byId.older.title, byId.older.transcript], [null, path.join(projects, '-work-demo', 'older.jsonl')]);
   assert.deepStrictEqual([byId.bad.title, byId.bad.transcript], [null, null]);
+  assert.deepStrictEqual([byId.saved.branch, byId.older.branch, byId.bad.branch], ['feat/chart', null, null]);
 });
 
-test('readTitle returns the last non-empty ai-title and null when there is none', async () => {
+test('readTitleAndBranch returns the last non-empty ai-title and the last branch, or nulls', async () => {
   const { review, base } = fixture();
   const file = path.join(base, 't.jsonl');
-  const lines = [{ type: 'ai-title', aiTitle: 'First' }, typed('hi'), { type: 'ai-title', aiTitle: '  Second  ' }, { type: 'ai-title', aiTitle: '   ' }, { type: 'ai-title', aiTitle: 4 }];
-  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\nnot json "ai-title"\n');
-  assert.strictEqual(await review.readTitle(file), 'Second');
+  const lines = [
+    { type: 'ai-title', aiTitle: 'First' },
+    { ...typed('hi'), gitBranch: 'main' },
+    { type: 'ai-title', aiTitle: '  Second  ' },
+    { ...typed('more'), gitBranch: 'feat/x' },
+    { ...typed('again'), gitBranch: '' },
+    { type: 'ai-title', aiTitle: '   ' },
+    { type: 'ai-title', aiTitle: 4 },
+  ];
+  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\nnot json "ai-title" "gitBranch"\n');
+  assert.deepStrictEqual(await review.readTitleAndBranch(file), { title: 'Second', branch: 'feat/x' });
   fs.writeFileSync(file, JSON.stringify(typed('hi')));
-  assert.strictEqual(await review.readTitle(file), null);
-  assert.strictEqual(await review.readTitle(path.join(base, 'missing.jsonl')), null);
+  assert.deepStrictEqual(await review.readTitleAndBranch(file), { title: null, branch: null });
+  assert.deepStrictEqual(await review.readTitleAndBranch(path.join(base, 'missing.jsonl')), { title: null, branch: null });
 });
 
 test('pendingReviews saves the transcript path and title in the claim, and finishReview keeps them', async () => {
@@ -356,10 +365,10 @@ test('pendingReviews saves the transcript path and title in the claim, and finis
   writeSnapshot(sessionsDir, { sessionId: 'big', project: 'demo', endedAt: NOW - 1 });
   writeSessionTranscript(projects, 'big', 3);
   const file = path.join(projects, '-work-demo', 'big.jsonl');
-  fs.appendFileSync(file, '\n' + JSON.stringify({ type: 'ai-title', aiTitle: 'Big one', sessionId: 'big' }) + '\n');
+  fs.appendFileSync(file, '\n' + JSON.stringify({ type: 'ai-title', aiTitle: 'Big one', sessionId: 'big' }) + '\n' + JSON.stringify({ type: 'system', sessionId: 'big', gitBranch: 'feat/big' }) + '\n');
   await review.pendingReviews({ sessionsDir, dir, projects, now: NOW });
   const saved = () => JSON.parse(fs.readFileSync(path.join(dir, 'big.json'), 'utf8'));
-  assert.deepStrictEqual([saved().transcript, saved().title], [file, 'Big one']);
+  assert.deepStrictEqual([saved().transcript, saved().title, saved().branch], [file, 'Big one', 'feat/big']);
   review.recordReview({ sessionId: 'big', reply: '{"suggestions":[]}' }, dir, NOW);
-  assert.deepStrictEqual([saved().transcript, saved().title, saved().status], [file, 'Big one', 'done']);
+  assert.deepStrictEqual([saved().transcript, saved().title, saved().branch, saved().status], [file, 'Big one', 'feat/big', 'done']);
 });

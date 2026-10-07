@@ -959,7 +959,7 @@ test('GET /api/reviews lists finished reviews with the home directory', async (t
   const body = await res.json();
   assert.deepStrictEqual(body, {
     home: os.homedir(),
-    reviews: [{ sessionId: 'sess-a', title: null, transcript: null, project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done', suggestions: [{ kind: 'token-waste', text: 'Read the file once.' }] }],
+    reviews: [{ sessionId: 'sess-a', title: null, branch: null, transcript: null, project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done', suggestions: [{ kind: 'token-waste', text: 'Read the file once.' }] }],
   });
 });
 
