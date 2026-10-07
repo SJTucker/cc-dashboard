@@ -2153,8 +2153,8 @@ function drawMetricChart(container, report, marker, row) {
   // chart's x-axis can place, so it draws no shaded window, line or bar coloring.
   const showMarker = markerInDomain(marker, domain);
   // The rtk rows' 7-day values sit under .rtk, which is null when rtk is missing.
-  const before = row.rtk ? marker.before.rtk : marker.before;
-  const after = row.rtk ? marker.after.rtk : marker.after;
+  const before = showMarker ? (row.rtk ? marker.before.rtk : marker.before) : null;
+  const after = showMarker ? (row.rtk ? marker.after.rtk : marker.after) : null;
   const beforeValue = before && before[row.key];
   const afterValue = after && after[row.key];
   // The 7-day lines can sit above every bar, so the y-axis has to reach them too.
