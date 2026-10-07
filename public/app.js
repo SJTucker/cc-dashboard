@@ -1295,11 +1295,9 @@ function renderSessions(live) {
   const sessionCell = (s) => el('td', {}, [
     el('span', { class: 'session-hex', 'aria-hidden': 'true', text: s.live ? '⬢' : '⬡' }),
     ...(s.title
-      ? [
-        el('span', { class: 'session-title', title: s.title, text: s.title }),
-        el('span', { class: 'session-project', text: s.project || '—' }),
-      ]
-      : [document.createTextNode(s.project || '—')]),
+      ? [el('span', { class: s.titleSource === 'prompt' ? 'session-title from-prompt' : 'session-title', title: s.title, text: s.title })]
+      : []),
+    contextLine(s),
   ]);
   // The number is text. The bar behind it is one series in one colour, its width the
   // row's share of the day's highest cost (costShare), so it needs no texture. The
@@ -1435,11 +1433,29 @@ function clockTime(ms) {
   return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+// The line under a session's title: the project, then the git branch. The branch is
+// its own span so CSS can cut a long name. Its tooltip has the full name and, for a
+// session that switched branch, every branch in order. A review has a branch but no
+// branches list. extra is text appended at the end, such as a review's end time.
+function contextLine(item, extra = '') {
+  const parts = [document.createTextNode(item.project || '—')];
+  if (item.branch) {
+    const branches = item.branches || [];
+    const tip = branches.length > 1 ? `${item.branch}\nbranches: ${branches.join(' → ')}` : item.branch;
+    parts.push(document.createTextNode(' · '), el('span', { class: 'session-branch', title: tip, text: item.branch }));
+  }
+  if (extra) parts.push(document.createTextNode(extra));
+  return el('span', { class: 'session-context' }, parts);
+}
+
 function timelineTooltip(s, bar) {
   const name = s.title || s.project || '—';
-  const project = s.title && s.project ? `${escapeHtml(s.project)}<br>` : '';
+  // With a title, the line under it is project · branch. Without one the project is
+  // already the name, so the line is the branch alone.
+  const context = (s.title ? [s.project, s.branch] : [s.branch]).filter(Boolean);
+  const contextHtml = context.length ? `${context.map(escapeHtml).join(' · ')}<br>` : '';
   const range = bar.start === bar.end ? clockTime(bar.start) : `${clockTime(bar.start)} – ${clockTime(bar.end)}`;
-  return `<b>${escapeHtml(name)}</b><br>${project}${range}<br>${formatCost(s.costTodayUsd)} today · ${s.prompts} ${s.prompts === 1 ? 'prompt' : 'prompts'}`;
+  return `<b>${escapeHtml(name)}</b><br>${contextHtml}${range}<br>${formatCost(s.costTodayUsd)} today · ${s.prompts} ${s.prompts === 1 ? 'prompt' : 'prompts'}`;
 }
 
 function renderTimeline(live) {
@@ -1455,7 +1471,7 @@ function renderTimeline(live) {
   const signature = JSON.stringify([
     width,
     Math.floor(now / 60_000),
-    live.sessions.map((s) => [s.spans, s.live, s.title, s.project, s.costTodayUsd, s.prompts]),
+    live.sessions.map((s) => [s.spans, s.live, s.title, s.project, s.branch, s.costTodayUsd, s.prompts]),
   ]);
   if (signature === timelineSignature) return;
   timelineSignature = signature;
@@ -1582,13 +1598,10 @@ function renderReviews(data) {
   const now = Date.now();
   const items = data.reviews.map((r) => {
     const ended = ` · ended ${reviewTime(r.endedAt ?? r.reviewedAt, now)}`;
-    const head = r.title
-      ? el('div', { class: 'review-head' }, [
-        el('span', { class: 'session-title', title: r.title, text: r.title }),
-        el('span', { class: 'session-project', text: r.project || '—' }),
-        document.createTextNode(ended),
-      ])
-      : el('div', { class: 'review-head', text: `${r.project || '—'}${ended}` });
+    const head = el('div', { class: 'review-head' }, [
+      ...(r.title ? [el('span', { class: 'session-title', title: r.title, text: r.title })] : []),
+      contextLine(r, ended),
+    ]);
     const prompt = reviewPrompt(r);
     let source = null;
     if (prompt) {

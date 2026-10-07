@@ -511,8 +511,10 @@ html, body {
 
 .session-hex { color: var(--accent-cyan); margin-right: 6px; }
 
-/* The title is the row's main text. The project name follows it in small muted
-   type, so two sessions of one project can be told apart. */
+/* The title is the row's main text. Under it, in small muted type, the project and
+   git branch (contextLine in app.js), so two sessions of one project can be told
+   apart. A title taken from the first prompt is dimmer and italic, so it reads
+   apart from a title Claude Code wrote without relying on hue. */
 .session-title {
   display: inline-block;
   max-width: 28ch;
@@ -522,10 +524,31 @@ html, body {
   vertical-align: bottom;
 }
 
-.session-project {
+.session-title.from-prompt {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Under a title the context line is a second, smaller line. With no title it is the
+   row's main text and keeps the normal size. */
+.session-title ~ .session-context {
+  display: block;
   font-size: 11px;
   color: var(--text-tertiary);
-  margin-left: 8px;
+}
+
+/* In a table row, line the context up under the title, past the hex glyph. */
+.session-hex ~ .session-title ~ .session-context {
+  padding-left: calc(1ch + 6px);
+}
+
+.session-branch {
+  display: inline-block;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
 }
 
 .axis-label {

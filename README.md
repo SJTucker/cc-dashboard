@@ -190,10 +190,10 @@ correction, a skill or hook for repeated steps, token waste such as large tool o
 or repeated reads, and a change to how the session was run. "No suggestions" is a
 normal result. The Session reviews panel lists the reviews from the last 7 days.
 Each review shows the session's title (Claude Code's last `ai-title` line, when the
-transcript has one), the project, and the path of the transcript file. The Copy prompt
+transcript has one), the project and the git branch the session ended on, and the path of the transcript file. The Copy prompt
 button copies a prompt that names the transcript and lists Haiku's suggestions, so
 you can paste it into a stronger model to check them. A review made before the
-transcript path was saved shows the path found by session id, and no title.
+transcript path was saved shows the path found by session id, and no title. A review made before branches were saved shows no branch.
 
 - **When it runs.** After a `/clear` or an in-process `/resume`, at once, because the
   process goes on. After an exit, at the next session start in any project. `-p` and
@@ -323,7 +323,12 @@ npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
 The Live sessions panel holds two tables. Running now lists the live sessions,
 meaning those that wrote to a transcript in the last 10 minutes, and any session
 waiting on you, however long ago it last wrote. Its columns are Session, State, Doing
-now, Cost today and Last active. Prompts, Length and Lines are only in Today. Running
+now, Cost today and Last active.
+The Session column shows the session's title, with its project and git branch on a
+line under it. The title is Claude Code's last `ai-title` line. A session without one
+shows the first prompt typed in it, in dimmer italic type. Hover the branch for its
+full name and, when the session switched branch, every branch it used.
+Prompts, Length and Lines are only in Today. Running
 now is ordered by the start of each session's first span today (`runningSessions` in
 `public/session-groups.js`), so rows do not move while they run. State shows
 ▶ working or ⏸ waiting on you. Doing now shows the running tool, such as
@@ -353,7 +358,7 @@ today, subagent calls included, and a gap of more than 10 minutes starts a new b
 The axis runs from the hour of the earliest call to the next whole hour after now, and
 a dashed line marks now. A live session has solid bars, and its last bar ends in an
 arrowhead at now if its last call was within the last 10 minutes. Every other session
-has striped bars. Hover a bar for the session's title, project, the bar's time range,
+has striped bars. Hover a bar for the session's title, project and branch, the bar's time range,
 cost today and prompt count. The panel hides when no session has a call today.
 
 ### Hiding panels
