@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 
-const { getRtkDbPath, readRtkUsage, readRtkWindows } = require('../lib/rtk');
+const { getRtkDbPath, readRtkUsage, readRtkWindows, readRtkDaily } = require('../lib/rtk');
 
 // Build a throwaway database with rtk's exact schema. Timestamps are written as
 // UTC ISO strings with an explicit +00:00 offset, matching what rtk stores.
@@ -314,6 +314,44 @@ test('readRtkWindows returns null when the database is missing or not rtk', () =
     fs.writeFileSync(junk, 'not a database');
     process.env.RTK_DB = junk;
     assert.strictEqual(readRtkWindows([[0, 1]]), null);
+  } finally {
+    if (prev === undefined) delete process.env.RTK_DB;
+    else process.env.RTK_DB = prev;
+  }
+});
+
+test('readRtkDaily gives each local day its tokens kept per command and share filtered', () => {
+  const prev = process.env.RTK_DB;
+  const day1 = new Date('2026-09-10T12:00:00'); // local noon
+  const day2 = new Date('2026-09-11T12:00:00');
+  try {
+    process.env.RTK_DB = makeDb([
+      { timestamp: utcStamp(day1), input_tokens: 1000, saved_tokens: 600 },
+      { timestamp: utcStamp(new Date(day1.getTime() + 3_600_000)), input_tokens: 1000, saved_tokens: 800 },
+      { timestamp: utcStamp(day2), input_tokens: 0, saved_tokens: 0 }, // no input: no share to compute
+    ]);
+    assert.deepStrictEqual(readRtkDaily(), {
+      keptPerCommand: [
+        { date: '2026-09-10', n: 2, value: 300 },
+        { date: '2026-09-11', n: 1, value: 0 },
+      ],
+      filteredShare: [{ date: '2026-09-10', n: 2, value: 0.7 }],
+    });
+  } finally {
+    if (prev === undefined) delete process.env.RTK_DB;
+    else process.env.RTK_DB = prev;
+  }
+});
+
+test('readRtkDaily returns null when the database is missing or not rtk', () => {
+  const prev = process.env.RTK_DB;
+  try {
+    process.env.RTK_DB = path.join(os.tmpdir(), 'no-such-rtk.db');
+    assert.strictEqual(readRtkDaily(), null);
+    const junk = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rtk-')), 'junk.db');
+    fs.writeFileSync(junk, 'not a database');
+    process.env.RTK_DB = junk;
+    assert.strictEqual(readRtkDaily(), null);
   } finally {
     if (prev === undefined) delete process.env.RTK_DB;
     else process.env.RTK_DB = prev;

@@ -6,7 +6,7 @@ const os = require('os');
 const path = require('path');
 const { scanUsage, getProjectsDir, localDateStr } = require('./lib/scan');
 const { windowStart } = require('./lib/window');
-const { readRtkUsage, readRtkWindows } = require('./lib/rtk');
+const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
@@ -215,7 +215,11 @@ app.get('/api/changes', async (req, res) => {
     const data = await getCached(null);
     const { markers, changesFile } = collectMarkers(data.efficiency.calls);
     const rtkWindows = readRtkWindows(windowRanges(markers));
-    res.json(buildReport(data.efficiency, markers, rtkWindows, changesFile));
+    const report = buildReport(data.efficiency, markers, rtkWindows, changesFile);
+    // The two rtk rows' daily series come from rtk's own history, not the scan.
+    const rtkDaily = readRtkDaily();
+    if (rtkDaily) Object.assign(report.daily, rtkDaily);
+    res.json(report);
   } catch (err) {
     console.error('[API] /api/changes failed:', err);
     res.status(500).json({ error: 'Failed to build the setup changes report', detail: err.message });
