@@ -443,10 +443,10 @@ test('buildLiveSessions gives a null title to a session without one', () => {
   assert.strictEqual(buildLiveSessions([snapshot()], [], NOW).sessions[0].title, null);
 });
 
-test('buildLiveSessions adds the last branch and the branch list', () => {
-  const meta = { branchesBySession: { s1: ['main', 'feat/x'] } };
+test('buildLiveSessions takes the branch from branchBySession and the list from branchesBySession', () => {
+  const meta = { branchesBySession: { s1: ['main', 'feat/x'] }, branchBySession: { s1: 'main' } };
   const [s] = buildLiveSessions([snapshot()], [], NOW, {}, {}, [], new Map(), meta).sessions;
-  assert.deepStrictEqual([s.branch, s.branches], ['feat/x', ['main', 'feat/x']]);
+  assert.deepStrictEqual([s.branch, s.branches], ['main', ['main', 'feat/x']]);
 });
 
 test('buildLiveSessions gives a null branch and an empty list to a session without one', () => {

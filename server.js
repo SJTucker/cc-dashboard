@@ -286,6 +286,7 @@ app.get('/api/sessions/live', async (req, res) => {
     const { efficiency } = data;
     res.json(buildLiveSessions(readSessions(), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(), {
       branchesBySession: efficiency.branchesBySession,
+      branchBySession: efficiency.branchBySession,
       firstPromptBySession: efficiency.firstPromptBySession,
     }));
   } catch (err) {

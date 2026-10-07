@@ -1144,6 +1144,20 @@ test('efficiency.branchesBySession lists each branch once, in first-seen order',
   assert.deepStrictEqual(efficiency.branchesBySession, { s1: ['main', 'feat/x'], s2: ['HEAD'] });
 });
 
+test('efficiency.branchBySession is the branch of the newest line, whatever the read order', async () => {
+  const base = makeFixture();
+  writeSession(base, 'order', [
+    branchLine(atHourToday(9).toISOString(), 's1', 'main'),
+    branchLine(atHourToday(10).toISOString(), 's1', 'feat/x'),
+    branchLine(atHourToday(11).toISOString(), 's1', 'main'),
+    branchLine(atHourToday(8).toISOString(), 's1', 'feat/old'),
+    usageLine(atHourToday(9).toISOString(), { id: 'a' }),
+  ]);
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.branchBySession, { s1: 'main' });
+});
+
 test('a branch on older-than-cutoff lines is still read from a file in range', async () => {
   const base = makeFixture();
   const old = new Date(atHourToday(9).getTime() - 3 * 24 * 60 * 60 * 1000).toISOString();
