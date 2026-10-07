@@ -392,7 +392,7 @@ cover all history, whatever range is picked.
   down points to a setup change or a Claude Code release.
 - **Before and after**: pick a change to compare the 7 days before it with the 7
   days after. Click a row of the table, or tab to it and press Enter, to chart that
-  number per day beside the table. The panel opens on Session start context. Each
+  row's value per day beside the table. The panel opens on Session start context. Each
   day's value is computed the same way as the 7-day value in the table. The rtk rows
   show only the days the transcripts cover.
 

@@ -2149,13 +2149,19 @@ function drawMetricChart(container, report, marker, row) {
   const xOf = timeScale(domain, width);
   const clampX = (x) => Math.min(width, Math.max(CHART_PAD_LEFT, x));
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT, class: 'changes-chart' });
-  const max = drawYAxis(svg, Math.max(...days.map((d) => d.value)), width, row.axis);
-  const yOf = (v) => plotHeight - (v / max) * plotHeight;
-  const barWidth = Math.max(((width - CHART_PAD_LEFT) * DAY_MS) / (domain[1] - domain[0]) * 0.7, 2);
-
   // A marker outside the shared time axis (see timeDomain) has no "before" this
   // chart's x-axis can place, so it draws no shaded window, line or bar coloring.
   const showMarker = markerInDomain(marker, domain);
+  // The rtk rows' 7-day values sit under .rtk, which is null when rtk is missing.
+  const before = row.rtk ? marker.before.rtk : marker.before;
+  const after = row.rtk ? marker.after.rtk : marker.after;
+  const beforeValue = before && before[row.key];
+  const afterValue = after && after[row.key];
+  // The 7-day lines can sit above every bar, so the y-axis has to reach them too.
+  const peak = Math.max(...days.map((d) => d.value), ...(showMarker ? [beforeValue, afterValue].filter((v) => v != null) : []));
+  const max = drawYAxis(svg, peak, width, row.axis);
+  const yOf = (v) => plotHeight - (v / max) * plotHeight;
+  const barWidth = Math.max(((width - CHART_PAD_LEFT) * DAY_MS) / (domain[1] - domain[0]) * 0.7, 2);
 
   if (showMarker) {
     const b0 = clampX(xOf(marker.t - WEEK_MS));
@@ -2171,19 +2177,16 @@ function drawMetricChart(container, report, marker, row) {
     if (showMarker && t >= marker.t - WEEK_MS && t < marker.t + WEEK_MS) cls += t >= marker.t ? ' after' : ' before';
     const h = (d.value / max) * plotHeight;
     const rect = svgEl('rect', { class: cls, x: xOf(t) - barWidth / 2, y: plotHeight - h, width: barWidth, height: Math.max(h, 1), rx: 1 });
-    svg.appendChild(withTooltip(rect, `<strong>${shortDate(d.date)}</strong><br>${escapeHtml(row.fmt(d.value))}<br>${d.n} ${row.unit}`));
+    svg.appendChild(withTooltip(rect, `<strong>${shortDate(d.date)}</strong><br>${escapeHtml(row.fmt(d.value))}<br>${d.n} ${d.n === 1 ? row.unitOne : row.unit}`));
   }
 
   if (showMarker) {
-    // The rtk rows' 7-day values sit under .rtk, which is null when rtk is missing.
-    const before = row.rtk ? marker.before.rtk : marker.before;
-    const after = row.rtk ? marker.after.rtk : marker.after;
     const line = (from, to, value, cls) => {
       if (value == null) return;
       svg.appendChild(svgEl('line', { class: `window-median ${cls}`, x1: clampX(xOf(from)), x2: clampX(xOf(to)), y1: yOf(value), y2: yOf(value) }));
     };
-    line(marker.t - WEEK_MS, marker.t, before && before[row.key], 'before');
-    line(marker.t, marker.t + WEEK_MS, after && after[row.key], 'after');
+    line(marker.t - WEEK_MS, marker.t, beforeValue, 'before');
+    line(marker.t, marker.t + WEEK_MS, afterValue, 'after');
     svg.appendChild(svgEl('line', { class: 'marker-line', x1: xOf(marker.t), x2: xOf(marker.t), y1: 0, y2: plotHeight }));
   }
   svg.appendChild(svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)' }));
@@ -2197,18 +2200,18 @@ const axisCount = (v) => String(Math.round(v * 10) / 10);
 const axisPercent = (x) => `${Math.round(x * 100)}%`;
 
 // Each row of the before/after table, and the daily chart it shows when picked:
-// title names the chart, axis formats its y-axis, unit follows n in a bar's tooltip.
+// title names the chart, axis formats its y-axis, unit (unitOne when n is 1) follows n in a bar's tooltip.
 const BA_ROWS = [
-  { name: 'Session start context', key: 'sessionStart', n: 'sessions', unit: 'sessions', fmt: tokensCell, axis: axisTokens, title: 'Median context at session start, tokens per day' },
-  { name: 'Bash result, median', key: 'bashMedian', n: 'bashN', unit: 'Bash calls', fmt: tokensCell, axis: axisTokens, title: 'Median Bash result on the main thread, tokens per day' },
-  { name: 'Bash result, p90', key: 'bashP90', n: 'bashN', unit: 'Bash calls', fmt: tokensCell, axis: axisTokens, title: '90th percentile Bash result on the main thread, tokens per day' },
-  { name: 'Cost per prompt, median', key: 'costPerPrompt', n: 'prompts', unit: 'prompts', fmt: formatCost, axis: axisCost, title: 'Median cost per prompt, per day' },
-  { name: 'API calls per prompt, median', key: 'callsPerPrompt', n: 'prompts', unit: 'prompts', fmt: axisCount, axis: axisCount, title: 'Median API calls per prompt, per day' },
-  { name: 'Cache hit rate', key: 'cacheHit', n: 'callN', unit: 'API calls', fmt: formatPercent, axis: axisPercent, points: true, title: 'Cache hit rate, per day' },
+  { name: 'Session start context', key: 'sessionStart', n: 'sessions', unit: 'sessions', unitOne: 'session', fmt: tokensCell, axis: axisTokens, title: 'Median context at session start, tokens per day' },
+  { name: 'Bash result, median', key: 'bashMedian', n: 'bashN', unit: 'Bash calls', unitOne: 'Bash call', fmt: tokensCell, axis: axisTokens, title: 'Median Bash result on the main thread, tokens per day' },
+  { name: 'Bash result, p90', key: 'bashP90', n: 'bashN', unit: 'Bash calls', unitOne: 'Bash call', fmt: tokensCell, axis: axisTokens, title: '90th percentile Bash result on the main thread, tokens per day' },
+  { name: 'Cost per prompt, median', key: 'costPerPrompt', n: 'prompts', unit: 'prompts', unitOne: 'prompt', fmt: formatCost, axis: axisCost, title: 'Median cost per prompt, per day' },
+  { name: 'API calls per prompt, median', key: 'callsPerPrompt', n: 'prompts', unit: 'prompts', unitOne: 'prompt', fmt: axisCount, axis: axisCount, title: 'Median API calls per prompt, per day' },
+  { name: 'Cache hit rate', key: 'cacheHit', n: 'callN', unit: 'API calls', unitOne: 'API call', fmt: formatPercent, axis: axisPercent, points: true, title: 'Cache hit rate, per day' },
 ];
 const RTK_ROWS = [
-  { name: 'Tokens kept per command', key: 'keptPerCommand', n: 'commands', unit: 'commands', fmt: tokensCell, axis: axisTokens, rtk: true, title: 'Tokens rtk kept per command, per day' },
-  { name: 'Share of output filtered', key: 'filteredShare', n: 'commands', unit: 'commands', fmt: formatPercent, axis: axisPercent, points: true, rtk: true, title: 'Share of output rtk filtered, per day' },
+  { name: 'Tokens kept per command', key: 'keptPerCommand', n: 'commands', unit: 'commands', unitOne: 'command', fmt: tokensCell, axis: axisTokens, rtk: true, title: 'Tokens rtk kept per command, per day' },
+  { name: 'Share of output filtered', key: 'filteredShare', n: 'commands', unit: 'commands', unitOne: 'command', fmt: formatPercent, axis: axisPercent, points: true, rtk: true, title: 'Share of output rtk filtered, per day' },
 ];
 
 // A share (cache hit, filtered) changes in percentage points; everything else as a
