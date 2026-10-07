@@ -2021,6 +2021,7 @@ const MARKER_SOURCES = {
   plugin: 'detected from the plugin list',
   model: 'detected from transcripts',
   update: 'from the Claude Code changelog',
+  auto: 'recorded by the mod',
 };
 
 function markerTooltip(m) {

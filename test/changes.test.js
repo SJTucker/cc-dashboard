@@ -10,12 +10,19 @@ const DAY = 24 * 60 * 60 * 1000;
 
 // Both CLAUDE_CONFIG_DIR and CHANGES_FILE are read at call time, so each test sets
 // them and requires a fresh copy.
-function setup({ plugins, changes, updates } = {}) {
+function setup({ plugins, changes, updates, auto } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-changes-'));
   fs.mkdirSync(path.join(base, 'projects'), { recursive: true });
   if (plugins !== undefined) {
     fs.mkdirSync(path.join(base, 'plugins'));
     fs.writeFileSync(path.join(base, 'plugins', 'installed_plugins.json'), typeof plugins === 'string' ? plugins : JSON.stringify(plugins));
+  }
+  if (auto !== undefined) {
+    const dir = path.join(base, 'cc-dashboard', 'changes');
+    fs.mkdirSync(dir, { recursive: true });
+    for (const [name, content] of Object.entries(auto)) {
+      fs.writeFileSync(path.join(dir, name), typeof content === 'string' ? content : JSON.stringify(content));
+    }
   }
   const changesPath = path.join(base, 'changes.json');
   if (changes !== undefined) fs.writeFileSync(changesPath, typeof changes === 'string' ? changes : JSON.stringify(changes));
@@ -190,6 +197,82 @@ test('updateMarkers lets a not-relevant newer release block an older relevant on
 test('updateMarkers returns [] without updates.json', () => {
   const { changes } = setup();
   assert.deepStrictEqual(changes.updateMarkers([{ t: 0, version: '2.1.280' }, { t: 30 * DAY, version: '2.1.286' }]), []);
+});
+
+const at = (day, hour, minute = 0) => new Date(2026, 9, day, hour, minute).getTime();
+const CLAUDE = '/home/u/.claude/CLAUDE.md';
+
+test('autoMarkers merges entries for one file, kind and day into one marker', () => {
+  const { changes } = setup({
+    auto: {
+      's1.json': [{ t: at(6, 10), kind: 'claude-md', name: 'CLAUDE.md', label: "don't commit docs", file: CLAUDE }],
+      's2.json': [{ t: at(6, 15), kind: 'claude-md', name: 'CLAUDE.md', label: 'use cx for complexity', file: CLAUDE }],
+    },
+  });
+  assert.deepStrictEqual(changes.autoMarkers(), [
+    { t: at(6, 15), kind: 'claude-md', label: "CLAUDE.md: don't commit docs; use cx for complexity", source: 'auto' },
+  ]);
+});
+
+test('autoMarkers merges the same entry from two session files', () => {
+  const entry = { t: at(6, 10), kind: 'skill', name: 'skill dataviz', label: 'added', file: '/home/u/.claude/skills/dataviz/SKILL.md' };
+  const { changes } = setup({ auto: { 's1.json': [entry], 's2.json': [entry] } });
+  assert.deepStrictEqual(changes.autoMarkers(), [{ t: at(6, 10), kind: 'skill', label: 'skill dataviz: added', source: 'auto' }]);
+});
+
+test('autoMarkers keeps different days, kinds and files apart', () => {
+  const settings = '/home/u/.claude/settings.json';
+  const { changes } = setup({
+    auto: {
+      's1.json': [
+        { t: at(6, 10), kind: 'claude-md', name: 'CLAUDE.md', label: 'a', file: CLAUDE },
+        { t: at(7, 10), kind: 'claude-md', name: 'CLAUDE.md', label: 'b', file: CLAUDE },
+        { t: at(6, 11), kind: 'hook', name: 'settings.json', label: 'hooks.Stop added', file: settings },
+        { t: at(6, 11), kind: 'effort', name: 'settings.json', label: 'effortLevel high → medium', file: settings },
+      ],
+    },
+  });
+  assert.deepStrictEqual(changes.autoMarkers().map((m) => m.label).sort(), [
+    'CLAUDE.md: a',
+    'CLAUDE.md: b',
+    'settings.json: effortLevel high → medium',
+    'settings.json: hooks.Stop added',
+  ]);
+});
+
+test('autoMarkers skips bad files and bad entries, and maps an unknown kind to other', () => {
+  const { changes } = setup({
+    auto: {
+      'bad.json': '{not json',
+      'object.json': { t: 1 },
+      'notes.txt': 'ignored',
+      's1.json': [
+        { kind: 'claude-md', name: 'CLAUDE.md', label: 'no t', file: CLAUDE },
+        { t: at(6, 10), kind: 'claude-md', name: 'CLAUDE.md', label: 'no file' },
+        { t: at(6, 12), kind: 'agent', name: 'agent x', label: 'changed', file: '/home/u/.claude/agents/x.md' },
+      ],
+    },
+  });
+  assert.deepStrictEqual(changes.autoMarkers(), [{ t: at(6, 12), kind: 'other', label: 'agent x: changed', source: 'auto' }]);
+});
+
+test('autoMarkers returns [] without the changes folder', () => {
+  assert.deepStrictEqual(setup().changes.autoMarkers(), []);
+});
+
+test('collectMarkers drops a settings model marker beside a transcript model marker on the same day', () => {
+  const settings = '/home/u/.claude/settings.json';
+  const { changes } = setup({
+    auto: {
+      's1.json': [
+        { t: at(20, 9), kind: 'model', name: 'settings.json', label: 'model opus → sonnet', file: settings },
+        { t: at(25, 9), kind: 'model', name: 'settings.json', label: 'model sonnet → opus', file: settings },
+      ],
+    },
+  });
+  const calls = [{ t: at(1, 9), model: 'claude-opus-5' }, { t: at(20, 10), model: 'claude-sonnet-5-5' }];
+  const labels = changes.collectMarkers(calls).markers.map((m) => m.label);
+  assert.deepStrictEqual(labels, ['claude-sonnet-5-5 first used', 'settings.json: model sonnet → opus']);
 });
 
 test('collectMarkers merges all sources sorted by time', () => {
