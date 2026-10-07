@@ -1133,6 +1133,42 @@ test('a new skill in a folder seen before is marked added', async ($, on) => {
   expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 4000, kind: 'skill', name: 'skill dataviz', label: 'added', file: skill }])
 })
 
+test('an added skill with an old mtime is dated to the previous check of its folder', async ($, on) => {
+  const skill = `${CFG}/skills/dataviz/SKILL.md`
+  const { writes, state, clock } = world(on, {
+    files: { ...judged, [skill]: 'x' },
+    stats: { [skill]: 4000 },
+    dirs: { [`${CFG}/skills`]: ['dataviz'] },
+    store: { setup: { folders: [CFG, `${CFG}/skills`], mtimes: {}, checked: { [`${CFG}/skills`]: 50_000 } } },
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 50_000, kind: 'skill', name: 'skill dataviz', label: 'added', file: skill }])
+  expect((state.store.setup as { checked: Record<string, number> }).checked[CFG]).toBe(61_000)
+})
+
+test('a file with an index entry and a lost snapshot is a baseline, not added', async ($, on) => {
+  const { writes, clock } = world(on, {
+    files: { ...judged, [CLAUDE_MD]: 'a' },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+  })
+  await startAndSettle($, clock)
+  expect(writes[CHANGES]).toBe(undefined)
+  expect(JSON.parse(writes[snap(CLAUDE_MD)] ?? 'null')).toEqual({ path: CLAUDE_MD, mtimeMs: 2000, text: 'a' })
+})
+
+test('a hook script that was missing at the last check is marked added with its name', async ($, on) => {
+  const script = '/home/u/bin/guard.sh'
+  const settings = JSON.stringify({ hooks: { PreToolUse: [{ hooks: [{ type: 'command', command: '~/bin/guard.sh --x' }] }] } })
+  const { writes, clock } = world(on, {
+    files: { ...judged, [SETTINGS]: settings, [snap(SETTINGS)]: snapText(SETTINGS, 1000, settings), [script]: 'new' },
+    stats: { [SETTINGS]: 1000, [script]: 5000 },
+    store: { setup: { folders: [CFG], mtimes: { [SETTINGS]: 1000, [script]: null } } },
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 5000, kind: 'hook', name: 'hook script', label: 'guard.sh added', file: script }])
+})
+
 test('a deleted skill folder is marked removed', async ($, on) => {
   const skill = `${CFG}/skills/dataviz/SKILL.md`
   const { writes, clock } = world(on, {
@@ -1226,6 +1262,7 @@ test('a non-interactive session runs no setup check', async ($, on) => {
   await clock.settle()
   expect(state.store.setup).toBe(undefined)
 })
+
 test('the first rule in a folder that was empty at the first check is marked added', async ($, on) => {
   const rule = `${CFG}/rules/x.md`
   const { writes, state, clock } = world(on, { files: { ...judged } })
@@ -1234,5 +1271,5 @@ test('the first rule in a folder that was empty at the first check is marked add
   state.stats[rule] = 5000
   state.dirs[`${CFG}/rules`] = ['x.md']
   await startAndSettle($, clock)
-  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 5000, kind: 'claude-md', name: 'rules/x.md', label: 'added', file: rule }])
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 61_000, kind: 'claude-md', name: 'rules/x.md', label: 'added', file: rule }])
 })

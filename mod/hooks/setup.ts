@@ -82,9 +82,13 @@ function settingKind(path: string): Kind {
 const shown = (v: unknown) =>
   (typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean') && String(v).length <= VALUE_MAX ? String(v) : null
 
+// Values under env.* and apiKeyHelper can be secrets, so their labels never show them.
+const isSecretPath = (path: string) => path === 'apiKeyHelper' || path.startsWith('env.')
+
 function leafLabel({ path, before, after }: Leaf) {
   if (before === undefined) return `${path} added`
   if (after === undefined) return `${path} removed`
+  if (isSecretPath(path)) return `${path} changed`
   const b = shown(before)
   const a = shown(after)
   return b !== null && a !== null ? `${path} ${b} → ${a}` : `${path} changed`

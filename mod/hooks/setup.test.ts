@@ -58,6 +58,11 @@ test('settingsChanges ignores plugin keys and names long or object values by pat
   expect(settingsChanges('{"permissions":{}}', '{}')).toEqual([{ kind: 'config', label: 'permissions removed' }])
 })
 
+test('settingsChanges never shows values under env or for apiKeyHelper', async () => {
+  expect(settingsChanges('{"env":{"TOKEN":"abc"}}', '{"env":{"TOKEN":"xyz"}}')).toEqual([{ kind: 'config', label: 'env.TOKEN changed' }])
+  expect(settingsChanges('{"apiKeyHelper":"a"}', '{"apiKeyHelper":"b"}')).toEqual([{ kind: 'config', label: 'apiKeyHelper changed' }])
+})
+
 test('settingsChanges ignores reordered keys', async () => {
   expect(settingsChanges('{"a":1,"b":{"c":1,"d":2}}', '{"b":{"d":2,"c":1},"a":1}')).toEqual([])
 })

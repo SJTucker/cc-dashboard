@@ -556,7 +556,8 @@ type Mode = 'prose' | 'settings' | 'script' | 'rtk'
 // `folder` decides whether a file with no snapshot is new (its folder was checked
 // before) or seen for the first time (no marker).
 type Watched = { path: string; kind: Kind; name: string; folder: string; mode: Mode }
-type SetupState = { folders: string[]; mtimes: Record<string, number | null> }
+// `checked` holds, per folder, the time of the last check that covered it.
+type SetupState = { folders: string[]; mtimes: Record<string, number | null>; checked: Record<string, number> }
 type Change = { w: Watched; t: number; before: string | null; after: string | null }
 type Checked = { path: string; mtime: number | null; snapshot?: Snapshot; change?: Change }
 
@@ -664,10 +665,14 @@ async function checkFile($: EngineInterface, dir: string, w: Watched, state: Set
   const after = await $.fs.read(w.path).then(String, () => null)
   if (after === null) return null // unreadable now: left for the next session
   const stored = { path: w.path, mtimeMs: mtime, text: after }
+  // An added file can keep an old mtime (a symlink, an unzip, mv, cp -p): date it no
+  // earlier than the last check of its folder.
+  const when = Math.max(mtime, state.checked[w.folder] ?? 0)
   if (before === null) {
-    // No text stored: new if it was missing before or its folder was checked before.
-    const isNew = known === null || snapshot?.text === null || state.folders.includes(w.folder)
-    return { path: w.path, mtime, snapshot: stored, ...(isNew && { change: { w, t: mtime, before: null, after } }) }
+    // No text stored: new if it was missing before, or never indexed in a folder that
+    // was checked before. A file indexed with a lost snapshot is a baseline.
+    const isNew = known === null || snapshot?.text === null || (known === undefined && state.folders.includes(w.folder))
+    return { path: w.path, mtime, snapshot: stored, ...(isNew && { change: { w, t: when, before: null, after } }) }
   }
   return { path: w.path, mtime, snapshot: stored, ...(before !== after && { change: { w, t: mtime, before, after } }) }
 }
@@ -691,8 +696,9 @@ async function haikuLabel($: EngineInterface, name: string, added: string[], rem
 
 async function entriesFor($: EngineInterface, c: Change): Promise<SetupEntry[]> {
   const base = { t: c.t, name: c.w.name, file: c.w.path }
-  if (c.before === null) return [{ ...base, kind: c.w.kind, label: 'added' }]
-  if (c.after === null) return [{ ...base, kind: c.w.kind, label: 'removed' }]
+  const who = c.w.mode === 'script' ? `${baseName(c.w.path)} ` : ''
+  if (c.before === null) return [{ ...base, kind: c.w.kind, label: `${who}added` }]
+  if (c.after === null) return [{ ...base, kind: c.w.kind, label: `${who}removed` }]
   if (c.w.mode === 'settings') {
     const changes = settingsChanges(c.before, c.after)
     if (changes === null) return [{ ...base, kind: 'config', label: 'changed' }]
@@ -711,7 +717,11 @@ function readSetupState(saved: unknown): SetupState {
   const folders = Array.isArray(s.folders) ? s.folders.filter((f): f is string => typeof f === 'string') : []
   // A copy: checkSetup changes it, and the stored value must change only through store.set.
   const mtimes = typeof s.mtimes === 'object' && s.mtimes !== null ? { ...s.mtimes } : {}
-  return { folders, mtimes }
+  const checked: Record<string, number> = {}
+  if (typeof s.checked === 'object' && s.checked !== null) {
+    for (const [k, v] of Object.entries(s.checked)) if (typeof v === 'number') checked[k] = v
+  }
+  return { folders, mtimes, checked }
 }
 
 // The marker file is written first, then the snapshots, then the index. A failed
@@ -745,17 +755,18 @@ async function checkSetup($: EngineInterface) {
   }
   // The three listed folders count as checked even when empty, so their first file is marked added.
   const listedFolders = ['skills', 'agents', 'rules'].map((name) => `${dir}/${name}`)
-  state.folders = [...new Set([...state.folders, ...files.map((w) => w.folder), ...listedFolders])]
+  const thisRun = [...new Set([...files.map((w) => w.folder), ...listedFolders])]
+  state.folders = [...new Set([...state.folders, ...thisRun])]
+  for (const folder of thisRun) state.checked[folder] = now
   await $.store.set(SETUP_KEY, state)
 }
 
 export const register: Register = (on) => {
-  // Registers /backfill-updates, checks whether the running Claude Code version has a
-  // verdict, reviews sessions that have ended, and checks the setup files for changes.
-  // All three run from timers, after session
-  // start returns, because session.start is awaited before the first prompt. A -p or
-  // Agent SDK run starts no reviews: it can exit mid-call and leave claimed sessions
-  // pending for an hour.
+  // Registers /backfill-updates inline. The version check runs in every session. The
+  // reviews and the setup check run in interactive sessions only. All three run from
+  // timers after session.start returns, because session.start is awaited before the
+  // first prompt. A -p or Agent SDK run starts no reviews: it can exit mid-call and
+  // leave claimed sessions pending for an hour.
   on('session.start', async ($, e, next) => {
     await $.command.register({
       name: 'backfill-updates',
