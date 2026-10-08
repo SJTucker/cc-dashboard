@@ -110,7 +110,7 @@ test('GET /api/summary?days=today returns one bucket per local hour', async (t) 
   assert.strictEqual(ten.input, 1000, 'the 10:00 slot holds the fixture usage');
 });
 
-test('GET /api/summary?days=today is not served from the 60s cache', async (t) => {
+test('GET /api/summary?days=today is not served from the memo', async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
@@ -240,6 +240,7 @@ test('two concurrent cold requests for the same range aggregate once', async (t)
 
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
   process.env.CLAUDE_CONFIG_DIR = base;
+  delete process.env.TRANSCRIPTS_DB;
   process.env.PORT = '0';
   for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
   const aggregateModule = require('../lib/aggregate');
@@ -295,6 +296,7 @@ function startChangesServer({ changes, plugins } = {}) {
   process.env.UPDATES_FILE = path.join(base, 'updates-nonexistent.json');
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
   process.env.CLAUDE_CONFIG_DIR = base;
+  delete process.env.TRANSCRIPTS_DB;
   process.env.PORT = '0';
   for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/changes', '../lib/efficiency', '../server']) delete require.cache[require.resolve(mod)];
   return { server: require('../server'), changesPath };
@@ -446,37 +448,74 @@ test('GET /api/records writes no records.json, and nothing in cc-dashboard/ but 
   assert.ok(fs.readdirSync(dir).every((name) => name.startsWith('transcripts.db')), fs.readdirSync(dir).join(', '));
 });
 
-test('a transcript that is deleted after it was stored still counts in the All range and the record day', async (t) => {
+// A three-day-old transcript, old by content and by mtime so the row store persists it
+// on the first refresh. It is an assistant line with a session id, so /api/changes lists
+// it as a session too.
+function writeStoredTranscript() {
+  const when = new Date();
+  when.setDate(when.getDate() - 3);
+  when.setHours(10, 0, 0, 0);
+  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo', 'old.jsonl');
+  fs.writeFileSync(file, JSON.stringify({
+    type: 'assistant',
+    sessionId: 'sess-old',
+    timestamp: when.toISOString(),
+    requestId: 'req-old',
+    message: { id: 'msg-old', model: 'claude-sonnet-4-6-20260115', content: [], usage: { input_tokens: 5000, output_tokens: 0 } },
+  }) + '\n');
+  fs.utimesSync(file, when, when);
+  return { file, when };
+}
+
+test('a transcript that is deleted after it was stored still counts in the All range, the record day and /api/changes', async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
-
-  // Three days old by its content and its mtime, so it is stored on the first refresh.
-  const when = new Date();
-  when.setDate(when.getDate() - 3);
-  when.setHours(10, 0, 0, 0);
-  const old = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo', 'old.jsonl');
-  fs.writeFileSync(old, JSON.stringify({
-    timestamp: when.toISOString(),
-    requestId: 'req-old',
-    message: { id: 'msg-old', model: 'claude-sonnet-4-6-20260115', usage: { input_tokens: 5000, output_tokens: 0 } },
-  }) + '\n');
-  fs.utimesSync(old, when, when);
+  const { file, when } = writeStoredTranscript();
 
   const before = await (await fetch(`${base}/api/summary?days=all`)).json();
   assert.strictEqual(before.summary.totalInput, 6000);
+  const changesBefore = await (await fetch(`${base}/api/changes`)).json();
+  assert.ok(changesBefore.sessions.some((s) => s.context === 5000), 'the stored transcript is a session');
 
-  fs.unlinkSync(old);
-  await new Promise((resolve) => setTimeout(resolve, 2100)); // past the 2s refresh share
+  fs.unlinkSync(file);
+  // /api/refresh clears the result memo, so the next request aggregates again
+  // from whatever the row store holds instead of replaying an earlier result.
+  assert.strictEqual((await fetch(`${base}/api/refresh`, { method: 'POST' })).status, 200);
   const after = await (await fetch(`${base}/api/summary?days=all`)).json();
   assert.strictEqual(after.summary.totalInput, 6000, 'the deleted transcript still counts');
+  const changesAfter = await (await fetch(`${base}/api/changes`)).json();
+  assert.deepStrictEqual(changesAfter.sessions, changesBefore.sessions, 'the deleted session is still listed');
 
   const records = await (await fetch(`${base}/api/records`)).json();
   assert.deepStrictEqual(records.allTime, { date: localDateStr(when), tokens: 5000, cost: 0.015 });
 });
 
+test('a transcript that is deleted while the server is stopped still counts after a restart', async (t) => {
+  const first = startServer();
+  await new Promise((resolve) => first.once('listening', resolve));
+  const { file } = writeStoredTranscript();
+  const firstBase = `http://127.0.0.1:${first.address().port}`;
+  assert.strictEqual((await (await fetch(`${firstBase}/api/summary?days=all`)).json()).summary.totalInput, 6000);
+  first.close();
+
+  fs.unlinkSync(file);
+  for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/store', '../server']) delete require.cache[require.resolve(mod)];
+  const second = require('../server');
+  t.after(() => second.close());
+  await new Promise((resolve) => second.once('listening', resolve));
+
+  const after = await (await fetch(`http://127.0.0.1:${second.address().port}/api/summary?days=all`)).json();
+  assert.strictEqual(after.summary.totalInput, 6000, 'the database kept the deleted transcript across the restart');
+});
+
 test('a range is aggregated again after local midnight, although no transcript changed', async (t) => {
+  // 23:59:50 local, so 20 s later the date has changed. The clock is mocked before the
+  // first request, so the first result carries the old date.
+  const late = new Date();
+  late.setHours(23, 59, 50, 0);
+  t.mock.timers.enable({ apis: ['Date'], now: late.getTime() });
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
@@ -486,8 +525,7 @@ test('a range is aggregated again after local midnight, although no transcript c
   assert.strictEqual(first.daily[first.daily.length - 1].date, localDateStr(new Date()));
 
   // Day buckets run to today, so the last bucket moves when the date does.
-  t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
-  t.mock.timers.tick(25 * 60 * 60 * 1000);
+  t.mock.timers.tick(20 * 1000);
   const second = await (await fetch(`${base}/api/summary?days=7`)).json();
   assert.strictEqual(second.daily[second.daily.length - 1].date, localDateStr(new Date()));
   assert.notStrictEqual(second.daily[second.daily.length - 1].date, first.daily[first.daily.length - 1].date);
