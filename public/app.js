@@ -192,8 +192,8 @@ function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
   const width = chartWidth(container);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
   const rawMax = Math.max(...data.map((d) => d[valueKey]), 0.0001);
-  const barGap = 3;
-  const barWidth = Math.max((width - CHART_PAD_LEFT) / data.length - barGap, 2);
+  const slots = barSlots(data.length, width - CHART_PAD_LEFT);
+  const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
   const max = drawYAxis(svg, rawMax, width, valueKey === 'cost' ? axisCost : axisTokens);
@@ -209,12 +209,12 @@ function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
   data.forEach((d, i) => {
     const value = d[valueKey];
     const barHeight = max > 0 ? (value / max) * plotHeight : 0;
-    const x = CHART_PAD_LEFT + i * (barWidth + barGap);
+    const x = CHART_PAD_LEFT + slots.x(i);
     const y = plotHeight - barHeight;
 
     const rect = svgEl('rect', {
       class: 'bar',
-      x, y, width: barWidth, height: Math.max(barHeight, value > 0 ? 1 : 0),
+      x, y, width: slots.barWidth, height: Math.max(barHeight, value > 0 ? 1 : 0),
       rx: 2,
       fill: color,
     });
@@ -222,12 +222,10 @@ function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
     rect.addEventListener('mouseleave', hideTooltip);
     svg.appendChild(rect);
 
-    // Show a date label every Nth bar so labels don't overlap on wide ranges.
-    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
         class: 'axis-label',
-        x: x + barWidth / 2, y: CHART_HEIGHT - 4,
+        x: x + slots.barWidth / 2, y: CHART_HEIGHT - 4,
         'text-anchor': 'middle',
       });
       label.textContent = shortDate(d.date);
@@ -447,8 +445,8 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
   const totals = data.map((d) => series.reduce((s, ser) => s + d[ser.key], 0));
   const rawMax = Math.max(...totals, 1);
-  const barGap = 3;
-  const barWidth = Math.max((width - CHART_PAD_LEFT) / data.length - barGap, 2);
+  const slots = barSlots(data.length, width - CHART_PAD_LEFT);
+  const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
   appendPatternDefs(svg, 'token', series);
@@ -458,7 +456,7 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
   );
 
   data.forEach((d, i) => {
-    const x = CHART_PAD_LEFT + i * (barWidth + barGap);
+    const x = CHART_PAD_LEFT + slots.x(i);
     let cursorY = plotHeight;
 
     for (const ser of series) {
@@ -468,7 +466,7 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
       const y = cursorY - segHeight;
       const rect = svgEl('rect', {
         class: 'bar',
-        x, y, width: barWidth, height: Math.max(segHeight, 0.5),
+        x, y, width: slots.barWidth, height: Math.max(segHeight, 0.5),
         fill: fillFor('token', ser.texture, ser.color),
       });
       rect.addEventListener('mousemove', (evt) =>
@@ -482,10 +480,9 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
       cursorY = y;
     }
 
-    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
-        class: 'axis-label', x: x + barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
+        class: 'axis-label', x: x + slots.barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
       });
       label.textContent = shortDate(d.date);
       svg.appendChild(label);
@@ -642,8 +639,8 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
   const width = chartWidth(container);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
   const rawMax = Math.max(...totals, 1);
-  const barGap = 3;
-  const barWidth = Math.max((width - CHART_PAD_LEFT) / data.length - barGap, 2);
+  const slots = barSlots(data.length, width - CHART_PAD_LEFT);
+  const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
   appendPatternDefs(svg, scope, order.map((f) => ({ texture: modelTexture(f), color: modelColor(f) })));
@@ -653,7 +650,7 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
   );
 
   data.forEach((d, i) => {
-    const x = CHART_PAD_LEFT + i * (barWidth + barGap);
+    const x = CHART_PAD_LEFT + slots.x(i);
     let cursorY = plotHeight;
 
     for (const name of order) {
@@ -663,7 +660,7 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
       const y = cursorY - segHeight;
       const rect = svgEl('rect', {
         class: 'bar',
-        x, y, width: barWidth, height: Math.max(segHeight, 0.5),
+        x, y, width: slots.barWidth, height: Math.max(segHeight, 0.5),
         fill: fillFor(scope, modelTexture(name), modelColor(name)),
       });
       rect.addEventListener('mousemove', (evt) =>
@@ -677,10 +674,9 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
       cursorY = y;
     }
 
-    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
-        class: 'axis-label', x: x + barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
+        class: 'axis-label', x: x + slots.barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
       });
       label.textContent = shortDate(d.date);
       svg.appendChild(label);

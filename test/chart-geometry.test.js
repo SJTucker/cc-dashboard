@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs } = require('../public/chart-geometry');
+const { labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs } = require('../public/chart-geometry');
 
 test('labelStep keeps at most 12 labels on a wide chart', () => {
   assert.strictEqual(labelStep(24, 800), 2);
@@ -192,4 +192,33 @@ test('stackGlyphs reports an overflow for each long chain', () => {
   const r = stackGlyphs(xs);
   assert.deepStrictEqual(r.overflows.map((o) => o.indices), [[5, 6], [12]]);
   assert.deepStrictEqual(r.overflows.map((o) => o.x), [5, 105]);
+});
+
+test('barSlots keeps every bar inside the plot, with no minimum width', () => {
+  for (const n of [1, 7, 30, 190, 400, 2000]) {
+    const { x, barWidth } = barSlots(n, 554);
+    assert.ok(barWidth > 0, `n=${n}: barWidth is ${barWidth}`);
+    assert.ok(x(0) >= 0, `n=${n}: the first bar starts at ${x(0)}`);
+    assert.ok(x(n - 1) + barWidth <= 554, `n=${n}: the last bar ends at ${x(n - 1) + barWidth}`);
+  }
+});
+
+test('barSlots puts bars one step apart with a 3px gap when the step is wide', () => {
+  const { step, barWidth, x } = barSlots(7, 554);
+  close(step, 554 / 7);
+  close(barWidth, 554 / 7 - 3);
+  close(x(0), 1.5);
+  close(x(3) - x(2), step);
+});
+
+test('barSlots keeps three quarters of a narrow step as bar, so a texture shows across a run of bars', () => {
+  for (const n of [190, 400, 2000]) {
+    const { step, barWidth } = barSlots(n, 554);
+    close(barWidth, step * 0.75);
+  }
+});
+
+test('barSlots with no buckets returns finite numbers', () => {
+  const { step, barWidth, x } = barSlots(0, 554);
+  assert.ok([step, barWidth, x(0)].every(Number.isFinite));
 });
