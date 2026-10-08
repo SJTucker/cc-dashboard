@@ -1260,6 +1260,9 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
 .panel-head .refresh-btn { padding: 4px 10px; font-size: 11px; }
 .refresh-btn:disabled { opacity: 0.6; cursor: default; }
 
+/* The prices note and the button that checks those prices share one line under the table. */
+.prices-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+.prices-foot .panel-note { margin: 0; }
 .prices-check { margin-top: 12px; }
 .prices-check .panel-note { margin: 4px 0 0; }
 .prices-error { color: var(--text-primary); }

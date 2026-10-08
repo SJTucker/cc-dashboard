@@ -304,11 +304,13 @@
         <section class="panel" data-hide-key="costByModel">
           <div class="panel-head">
             <h2>Cost by model</h2>
-            <button id="checkPricesBtn" class="refresh-btn" type="button" title="Compare these prices with Anthropic's pricing page">Check prices</button>
           </div>
           <div id="modelList" class="model-list"></div>
+          <div class="prices-foot">
+            <p id="pricesSource" class="panel-note"></p>
+            <button id="checkPricesBtn" class="refresh-btn" type="button" title="Compare these prices with Anthropic's pricing page">Check prices</button>
+          </div>
           <div id="pricesCheck" class="prices-check" hidden></div>
-          <p id="pricesSource" class="panel-note"></p>
         </section>
 
         <section class="panel" id="modelMixPanel" data-hide-key="modelMix">
