@@ -152,3 +152,100 @@ test('upgradeRows runs each migration in order up to EXTRACT_VERSION, and stops 
   const gap = upgradeRows({ ok: true }, 0, {});
   assert.strictEqual(gap.version, 0, 'with no migration the rows stay at their version');
 });
+
+const tableNames = (file) => {
+  const raw = new sqlite.DatabaseSync(file);
+  const names = raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY rowid").all().map((r) => r.name);
+  raw.close();
+  return names;
+};
+
+test('openStore on a newer schema creates no tables and leaves the bytes unchanged', { skip }, (t) => {
+  const file = path.join(tmpDir(), 'v2.db');
+  const raw = new sqlite.DatabaseSync(file);
+  raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); CREATE TABLE files_v2 (path TEXT PRIMARY KEY, data TEXT); INSERT INTO meta VALUES ('schema', '2');");
+  raw.close();
+  const before = fs.readFileSync(file);
+  t.mock.method(console, 'warn', () => {});
+
+  assert.strictEqual(openStore(file), null);
+  assert.deepStrictEqual(tableNames(file), ['meta', 'files_v2']);
+  assert.ok(fs.readFileSync(file).equals(before));
+});
+
+test('a damaged data page: loadAll returns [] with one warning and the store never writes', { skip }, (t) => {
+  const file = path.join(tmpDir(), 'a.db');
+  const store = openStore(file);
+  store.transaction(() => {
+    for (let i = 0; i < 200; i++) store.put(`/p/${i}`, entryOf({ rows: rowsOf({ calls: Array(50).fill({ k: 'x'.repeat(20) }) }) }));
+  });
+  store.close();
+  const buf = fs.readFileSync(file);
+  const pageSize = buf.readUInt16BE(16);
+  const off = pageSize * Math.floor(buf.length / pageSize / 2);
+  buf.fill(0xab, off, off + pageSize);
+  fs.writeFileSync(file, buf);
+  const before = fs.readFileSync(file);
+  const warn = t.mock.method(console, 'warn', () => {});
+
+  const damaged = openStore(file);
+  assert.ok(damaged);
+  assert.deepStrictEqual(damaged.loadAll(), []);
+  assert.strictEqual(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0].arguments[0], /a\.db/);
+  damaged.put('/p/new.jsonl', entryOf());
+  damaged.markGone('/p/1');
+  let ran = false;
+  damaged.transaction(() => { ran = true; damaged.put('/p/new2.jsonl', entryOf()); });
+  assert.strictEqual(ran, true, 'transaction still runs fn');
+  damaged.close();
+  assert.ok(fs.readFileSync(file).equals(before), 'the damaged file was not written');
+});
+
+const insertRaw = (file, sql, ...params) => {
+  const raw = new sqlite.DatabaseSync(file);
+  raw.prepare(sql).run(...params);
+  raw.close();
+};
+const INSERT = 'INSERT INTO files (path, size, mtime_ms, version, min_t, max_t, on_disk, data) VALUES (?, 1, 1, ?, 1, 1, 1, ?)';
+
+for (const [label, version, data] of [
+  ['SQL NULL data', 1, null],
+  ['the text null', 1, 'null'],
+  ['a JSON number', 1, '5'],
+  ['a JSON array', 1, '[]'],
+  ['a version newer than EXTRACT_VERSION', 999, '{"ok":true}'],
+]) {
+  test(`loadAll skips a row with ${label}, warns, and keeps it in the database`, { skip }, (t) => {
+    const file = path.join(tmpDir(), 'a.db');
+    const store = openStore(file);
+    store.put('/p/good.jsonl', entryOf());
+    store.close();
+    insertRaw(file, INSERT, '/p/odd.jsonl', version, data);
+    const warn = t.mock.method(console, 'warn', () => {});
+
+    const reopened = openStore(file);
+    assert.deepStrictEqual(reopened.loadAll().map((e) => e.path), ['/p/good.jsonl']);
+    assert.match(warn.mock.calls[0].arguments[0], /odd\.jsonl/);
+    reopened.close();
+    const check = new sqlite.DatabaseSync(file);
+    assert.strictEqual(check.prepare('SELECT COUNT(*) AS n FROM files').get().n, 2);
+    check.close();
+  });
+}
+
+test('loadAll skips a row whose migration throws and warns', { skip }, (t) => {
+  const { MIGRATIONS } = require('../lib/store');
+  const file = path.join(tmpDir(), 'a.db');
+  const store = openStore(file);
+  store.close();
+  insertRaw(file, INSERT, '/p/old.jsonl', 0, '{"ok":true}');
+  MIGRATIONS[0] = () => { throw new Error('bad migration'); };
+  t.after(() => { delete MIGRATIONS[0]; });
+  const warn = t.mock.method(console, 'warn', () => {});
+
+  const reopened = openStore(file);
+  assert.deepStrictEqual(reopened.loadAll(), []);
+  assert.match(warn.mock.calls[0].arguments[0], /old\.jsonl.*bad migration/);
+  reopened.close();
+});
