@@ -1,0 +1,398 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const { createRowStore, REFRESH_SHARE_MS } = require('../lib/rowstore');
+const { extractFile, EXTRACT_VERSION } = require('../lib/extract');
+const { openStore } = require('../lib/store');
+const { aggregate } = require('../lib/aggregate');
+
+let sqliteAvailable = true;
+try {
+  require('node:sqlite');
+} catch {
+  sqliteAvailable = false;
+}
+const needsSqlite = !sqliteAvailable && 'node:sqlite is not available';
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function makeProjects() {
+  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rowstore-'));
+  const dir = path.join(base, 'projects', 'demo');
+  fs.mkdirSync(dir, { recursive: true });
+  return { base, dir };
+}
+
+const usageLine = (id, ts) => JSON.stringify({
+  timestamp: ts,
+  requestId: `req-${id}`,
+  message: { id: `msg-${id}`, model: 'claude-sonnet-4-6', usage: { input_tokens: 100, output_tokens: 50 } },
+});
+
+// Writes a transcript. `ageMs` sets its mtime that far in the past.
+function writeFile(dir, name, ids, ageMs = 0) {
+  const file = path.join(dir, `${name}.jsonl`);
+  fs.writeFileSync(file, ids.map((id) => usageLine(id, new Date(Date.now() - ageMs).toISOString())).join('\n') + '\n');
+  const seconds = (Date.now() - ageMs) / 1000;
+  fs.utimesSync(file, seconds, seconds);
+  return file;
+}
+
+// A real extract that records which files it read. `clock` is the store's `now`, which
+// the tests advance past REFRESH_SHARE_MS instead of sleeping.
+function harness(dir, { store = null } = {}) {
+  const reads = [];
+  const clock = { now: Date.now() };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    store,
+    now: () => clock.now,
+    extract: (file) => {
+      reads.push(file);
+      return extractFile(file);
+    },
+  });
+  const refresh = async () => {
+    clock.now += REFRESH_SHARE_MS + 1;
+    await rows.refresh();
+  };
+  return { rows, reads, refresh, clock };
+}
+
+const tmpDb = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rowstore-db-')), 'transcripts.db');
+
+test('an unchanged file is read once, however many refreshes run', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1']);
+  const { rows, reads, refresh } = harness(dir);
+
+  await refresh();
+  await refresh();
+  await refresh();
+
+  assert.deepStrictEqual(reads, [file]);
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 1);
+});
+
+test('a size change re-reads the file, and so does an mtime change with the same size', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1']);
+  const { rows, reads, refresh } = harness(dir);
+  await refresh();
+
+  fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+  await refresh();
+  assert.strictEqual(reads.length, 2);
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 2);
+
+  const later = Date.now() / 1000 + 100;
+  fs.utimesSync(file, later, later);
+  await refresh();
+  assert.strictEqual(reads.length, 3);
+});
+
+test('generation moves only when an entry changes', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1']);
+  const { rows, refresh } = harness(dir);
+
+  await refresh();
+  const first = rows.generation;
+  await refresh();
+  assert.strictEqual(rows.generation, first);
+
+  fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+  await refresh();
+  assert.ok(rows.generation > first);
+});
+
+test('refresh calls that overlap share one run, and one that follows within 2 s reuses it', async () => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'a', ['1']);
+  const reads = [];
+  const clock = { now: 1_000_000 };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    now: () => clock.now,
+    extract: (file) => {
+      reads.push(file);
+      return extractFile(file);
+    },
+  });
+
+  await Promise.all([rows.refresh(), rows.refresh()]);
+  assert.strictEqual(reads.length, 1);
+
+  // A file that changes inside the share window is not seen yet.
+  fs.appendFileSync(path.join(dir, 'a.jsonl'), usageLine('2', new Date().toISOString()) + '\n');
+  clock.now += REFRESH_SHARE_MS - 1;
+  await rows.refresh();
+  assert.strictEqual(reads.length, 1);
+
+  clock.now += 2;
+  await rows.refresh();
+  assert.strictEqual(reads.length, 2);
+});
+
+test('only files last modified before local midnight are written to the database', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  writeFile(dir, 'today', ['2'], 0);
+  const store = openStore(tmpDb());
+  const { refresh } = harness(dir, { store });
+
+  await refresh();
+
+  assert.deepStrictEqual(store.loadAll().map((e) => e.path), [old]);
+  store.close();
+});
+
+test('a file written to the database is not written again while it is unchanged', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const store = openStore(tmpDb());
+  let puts = 0;
+  const realPut = store.put.bind(store);
+  store.put = (...args) => {
+    puts += 1;
+    return realPut(...args);
+  };
+  const { refresh } = harness(dir, { store });
+
+  await refresh();
+  await refresh();
+
+  assert.strictEqual(puts, 1);
+  store.close();
+});
+
+test('rows stay after the transcript is deleted, and the database marks the file gone', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const store = openStore(tmpDb());
+  const { rows, refresh } = harness(dir, { store });
+  await refresh();
+
+  fs.unlinkSync(old);
+  await refresh();
+
+  assert.strictEqual(rows.entries().length, 1);
+  assert.strictEqual(rows.entries()[0].path, old);
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 1);
+  assert.strictEqual(store.loadAll()[0].onDisk, false);
+  store.close();
+});
+
+test('a deleted file that was never written to the database is dropped', async () => {
+  const { dir } = makeProjects();
+  const today = writeFile(dir, 'today', ['1']);
+  const { rows, refresh } = harness(dir);
+  await refresh();
+
+  fs.unlinkSync(today);
+  await refresh();
+
+  assert.deepStrictEqual(rows.entries(), []);
+});
+
+test('with no database, rows live in memory only and a deleted file is dropped', async () => {
+  const { dir } = makeProjects();
+  const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const { rows, refresh } = harness(dir, { store: null });
+  await refresh();
+  assert.strictEqual(rows.entries().length, 1);
+
+  fs.unlinkSync(old);
+  await refresh();
+  assert.strictEqual(rows.entries().length, 0);
+});
+
+test('a restart with a populated database reads no file that is unchanged', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'old1', ['1'], 2 * DAY_MS);
+  writeFile(dir, 'old2', ['2'], 3 * DAY_MS);
+  const dbFile = tmpDb();
+  const first = openStore(dbFile);
+  await harness(dir, { store: first }).refresh();
+  first.close();
+
+  const second = openStore(dbFile);
+  const { rows, reads, refresh } = harness(dir, { store: second });
+  await refresh();
+
+  assert.deepStrictEqual(reads, []);
+  assert.strictEqual(rows.entries().length, 2);
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 1);
+  second.close();
+});
+
+test('a stored file with an older extract version is read again when it is on disk', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const seed = openStore(dbFile);
+  const st = fs.statSync(old);
+  seed.put(old, { size: st.size, mtimeMs: st.mtimeMs, version: EXTRACT_VERSION - 1, onDisk: true, rows: { ...(await extractFile(old)), calls: [] } });
+  seed.close();
+
+  const store = openStore(dbFile);
+  const { rows, reads, refresh } = harness(dir, { store });
+  await refresh();
+
+  assert.deepStrictEqual(reads, [old]);
+  assert.strictEqual(rows.entries()[0].version, EXTRACT_VERSION);
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 1);
+  assert.strictEqual(store.loadAll()[0].version, EXTRACT_VERSION, 'the new rows were written back');
+  store.close();
+});
+
+test('a stored file whose transcript is gone keeps its older version and rows', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const gone = path.join(dir, 'gone.jsonl');
+  const dbFile = tmpDb();
+  const seed = openStore(dbFile);
+  seed.put(gone, { size: 1, mtimeMs: 1, version: EXTRACT_VERSION - 1, onDisk: false, rows: { ok: true, calls: [{ key: 'k' }], toolUses: [], errors: [], edits: [], prompts: [], sessions: {}, minT: 1, maxT: 1 } });
+  seed.close();
+
+  const store = openStore(dbFile);
+  const { rows, reads, refresh } = harness(dir, { store });
+  await refresh();
+
+  assert.deepStrictEqual(reads, []);
+  assert.strictEqual(rows.entries()[0].path, gone);
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 1);
+  store.close();
+});
+
+test('entries come back with gone transcripts first, sorted by path, then files on disk', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const b = writeFile(dir, 'b', ['1'], 2 * DAY_MS);
+  const a = writeFile(dir, 'a', ['2'], 3 * DAY_MS);
+  const live = writeFile(dir, 'live', ['3'], 0);
+  const store = openStore(tmpDb());
+  const { rows, refresh } = harness(dir, { store });
+  await refresh();
+
+  fs.unlinkSync(b);
+  fs.unlinkSync(a);
+  await refresh();
+
+  assert.deepStrictEqual(rows.entries().map((e) => e.path), [a, b, live]);
+  store.close();
+});
+
+test(
+  'a file that cannot be read keeps its previous entry, and is read again on the next refresh',
+  { skip: process.getuid?.() === 0 && 'root can read a mode-000 file' },
+  async () => {
+    const { dir } = makeProjects();
+    const file = writeFile(dir, 'a', ['1']);
+    const { rows, reads, refresh } = harness(dir);
+    await refresh();
+
+    fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+    fs.chmodSync(file, 0o000);
+    try {
+      await refresh();
+      assert.strictEqual(rows.entries()[0].rows.calls.length, 1, 'the earlier rows are kept');
+      assert.strictEqual(rows.entries()[0].rows.ok, true);
+    } finally {
+      fs.chmodSync(file, 0o644);
+    }
+    await refresh();
+    assert.strictEqual(reads.length, 3);
+    assert.strictEqual(rows.entries()[0].rows.calls.length, 2);
+  },
+);
+
+test(
+  'a file that has never been read is listed as failed, and a later successful read replaces it',
+  { skip: process.getuid?.() === 0 && 'root can read a mode-000 file' },
+  async () => {
+    const { dir } = makeProjects();
+    const file = writeFile(dir, 'a', ['1']);
+    fs.chmodSync(file, 0o000);
+    const { rows, refresh } = harness(dir);
+    try {
+      await refresh();
+      assert.strictEqual(rows.entries()[0].rows.ok, false);
+    } finally {
+      fs.chmodSync(file, 0o644);
+    }
+
+    await refresh(); // size and mtime are unchanged, so only the failure can trigger this read
+    assert.strictEqual(rows.entries()[0].rows.ok, true);
+    assert.strictEqual(rows.entries()[0].rows.calls.length, 1);
+  },
+);
+
+test('a failed database write is logged and the file is written on the next refresh', async (t) => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const warn = t.mock.method(console, 'warn', () => {});
+  const written = [];
+  let failures = 1;
+  const store = {
+    loadAll: () => [],
+    put: (p) => written.push(p),
+    markGone: () => {},
+    transaction: (fn) => {
+      if (failures-- > 0) throw new Error('disk full');
+      fn();
+    },
+  };
+  const { rows, refresh } = harness(dir, { store });
+
+  await refresh();
+  assert.strictEqual(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0].arguments[0], /disk full/);
+  assert.deepStrictEqual(written, []);
+  assert.strictEqual(rows.entries().length, 1, 'the dashboard keeps serving from memory');
+
+  await refresh();
+  assert.strictEqual(written.length, 1);
+});
+
+test('a stored file that is appended to is read again, and its stored rows are replaced once it is old again', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const store = openStore(tmpDb());
+  const { rows, refresh } = harness(dir, { store });
+  await refresh();
+  assert.strictEqual(store.loadAll()[0].rows.calls.length, 1);
+
+  // A resumed session appends to an ended file. The mtime is set back before
+  // midnight so the file counts as settled again.
+  fs.appendFileSync(file, usageLine('2', new Date(Date.now() - 2 * DAY_MS).toISOString()) + '\n');
+  const seconds = (Date.now() - 2 * DAY_MS) / 1000;
+  fs.utimesSync(file, seconds, seconds);
+  await refresh();
+
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 2);
+  const [stored] = store.loadAll();
+  assert.strictEqual(stored.rows.calls.length, 2);
+  assert.strictEqual(stored.size, fs.statSync(file).size);
+  store.close();
+});
+
+test('a response copied into a live file counts once when its first copy is in a deleted transcript', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const original = writeFile(dir, 'original', ['same'], 2 * DAY_MS);
+  const store = openStore(tmpDb());
+  const { rows, refresh } = harness(dir, { store });
+  await refresh();
+  fs.unlinkSync(original);
+
+  // The resumed session copied the earlier line into its new file.
+  writeFile(dir, 'resumed', ['same', 'new'], 0);
+  await refresh();
+
+  const data = aggregate(rows.entries().map((e) => e.rows), { days: null });
+  assert.strictEqual(data.summary.apiCalls, 2);
+  assert.strictEqual(data.summary.totalInput, 200);
+  store.close();
+});
