@@ -1,6 +1,9 @@
 # Row store growth
 
-The transcript row store keeps every extracted row in memory, and the All range aggregates all of them on each refresh. Memory and the All range time grow with history. The final review of the row store branch measured both on 2026-10-08. At the current rate, two to three years of history fit in Node's default heap and five do not.
+The transcript row store keeps every extracted row in memory. The All range
+aggregates all of them again whenever a transcript changes or the date rolls over
+(`scan()` in `server.js` reuses the result otherwise). Memory and the All range time
+grow with history. The final review of the row store branch measured both on 2026-10-08. At the current rate, two to three years of history fit in Node's default heap and five do not.
 
 ## What was asked for
 
