@@ -492,6 +492,7 @@ public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/session
 public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
 public/chart-geometry.js  X-axis label spacing, tooltip placement, donut slices and the Session timeline's hour ticks and lane layout
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
+public/poll.js         Runs the 5 s live poll so one poll finishes before the next one starts
 public/fonts/          Oxanium, Saira Condensed and JetBrains Mono (SIL OFL), with their licence files
 ```
 

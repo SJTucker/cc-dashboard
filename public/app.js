@@ -1567,9 +1567,9 @@ function reviewTime(ms, now) {
 // The last reviews payload shown. Dismiss and undo change it in place and redraw
 // without a request.
 let lastReviews = null;
-// Counts local dismiss and undo actions. loadAndRender skips a response that was
-// requested before the latest action, so a slow poll cannot put a dismissed
-// suggestion back on screen. The next poll shows the saved state.
+// Counts local dismiss and undo actions. fetchAll swaps a response that was
+// requested before the latest action for lastReviews, so a slow poll cannot put a
+// dismissed suggestion back on screen. The next poll shows the saved state.
 let reviewMutations = 0;
 // Session ids whose "N dismissed" list is showing, and session ids whose collapsed
 // all-dismissed review is expanded. The 5 s redraw reads both.
@@ -2994,7 +2994,10 @@ function setupHiding() {
 let currentDays = 'today';
 
 const LIVE_POLL_MS = 5000;
-let liveTimer = null;
+// While live, runLoad runs LIVE_POLL_MS after the previous run finished
+// (createPoller in public/poll.js), so a slow scan delays the next poll instead of
+// overlapping it.
+const livePoller = createPoller(() => runLoad(), LIVE_POLL_MS);
 // Signature of the last rendered payload. A 5s poll that redraws unconditionally
 // would tear down the SVG under the cursor and kill any open tooltip, so an
 // unchanged payload skips rendering entirely.
@@ -3008,8 +3011,8 @@ let requestSeq = 0;
 let lastLoadedAt = null;
 
 // Fills the status strip under the title. loadAndRender calls it on every
-// successful summary load, before its unchanged-payload check, so Sync moves on a
-// quiet poll too. While live, the ring pulses once per call.
+// successful summary load, before renderPayload's unchanged-payload check, so Sync
+// moves on a quiet poll too. While live, the ring pulses once per call.
 function renderStatusStrip(summary) {
   const active = document.querySelector('#rangePicker button.active');
   const status = formatStatus({
@@ -3022,7 +3025,7 @@ function renderStatusStrip(summary) {
   document.getElementById('stripRange').textContent = status.range;
   document.getElementById('stripSessions').textContent = status.sessions;
   document.getElementById('stripCalls').textContent = status.apiCalls;
-  if (!liveTimer) return;
+  if (!livePoller.running) return;
   const ring = document.querySelector('#liveDot .live-ring');
   ring.classList.remove('ping');
   void ring.offsetWidth; // restarts the animation on the next add
@@ -3058,8 +3061,8 @@ function setBusy(on) {
 }
 
 function setLive(on) {
-  clearInterval(liveTimer);
-  liveTimer = on ? setInterval(() => loadAndRender(), LIVE_POLL_MS) : null;
+  if (on) livePoller.start();
+  else livePoller.stop();
   document.getElementById('liveDot').classList.toggle('is-off', !on);
   document.querySelector('#liveDot .live-text').textContent = on ? 'Link live' : 'Paused';
   // A live range re-scans every 5 seconds, so a manual refresh has nothing to do.
@@ -3069,7 +3072,7 @@ function setLive(on) {
 // On Today the summary cards sit in the sticky header in a compact form, so they
 // stay in view while scrolling. Other ranges show them as full cards in the page.
 // The one #summaryCards element moves between the two slots, so every card id
-// stays unique and loadAndRender fills it the same way wherever it is.
+// stays unique and renderPayload fills it the same way wherever it is.
 function placeSummaryCards() {
   const cards = document.getElementById('summaryCards');
   const today = currentDays === 'today';
@@ -3077,7 +3080,7 @@ function placeSummaryCards() {
   cards.classList.toggle('cards-compact', today);
   // Hidden off Today, so the empty slot cannot wrap onto a line of its own.
   document.getElementById('headerCards').hidden = !today;
-  // loadAndRender hides these two on Today too, but only once the load finishes.
+  // renderPayload hides these two on Today too, but only once the load finishes.
   // Hiding them here keeps the old range's values out of the header meanwhile.
   if (today) {
     document.getElementById('burnCard').hidden = true;
@@ -3085,9 +3088,9 @@ function placeSummaryCards() {
   }
 }
 
-async function loadAndRender({ busy = false } = {}) {
-  const banner = document.getElementById('statusBanner');
-
+// Issues the five requests and waits for all of them. Returns { data, rtk, limits,
+// sessions, reviews }, or null when a newer load started while this one waited.
+async function fetchAll({ busy = false } = {}) {
   const seq = ++requestSeq;
 
   // Only user-started loads show the busy state. Whichever request is newest
@@ -3098,8 +3101,8 @@ async function loadAndRender({ busy = false } = {}) {
   // Every request is issued before any is awaited, so the summary never
   // waits on the others. None of the promises rejects. rtk and limits
   // are optional and resolve to null on failure, so an absent or unreadable source
-  // hides its panel. A failed summary resolves to an error payload, which becomes
-  // the error banner below after limits have rendered.
+  // hides its panel. A failed summary resolves to an error payload, which
+  // renderPayload turns into the error banner after limits have rendered.
   const summaryRequest = fetch(`/api/summary?days=${currentDays}`)
     .then((res) => res.json())
     .catch((err) => ({ error: err.message }));
@@ -3121,8 +3124,22 @@ async function loadAndRender({ busy = false } = {}) {
   const reviewsRequest = needed.has('reviews') ? requestReviews() : Promise.resolve(null);
 
   const [data, rtk, limits, sessions, reviews] = await Promise.all([summaryRequest, rtkRequest, limitsRequest, sessionsRequest, reviewsRequest]);
-  if (seq !== requestSeq) return; // a newer request superseded this response
+  if (seq !== requestSeq) return null; // a newer request superseded this response
   setBusy(false);
+  if (!data.error) lastLoadedAt = Date.now();
+  // A dismiss or undo during the request makes its reviews older than the page.
+  // The payload then carries lastReviews, the reviews on screen, which the action
+  // changed in place, so this load cannot put a dismissed suggestion back. The
+  // next poll shows the saved state.
+  const reviewsNow = reviewMutations === reviewMutationsAtStart ? reviews : lastReviews;
+  return { data, rtk, limits, sessions, reviews: reviewsNow };
+}
+
+// Draws a payload from fetchAll. lastSignature is set on the last line, after every
+// renderer has run. A renderer that throws therefore leaves the previous signature,
+// and reportDrawError clears that one.
+function renderPayload({ data, rtk, limits, sessions, reviews }) {
+  const banner = document.getElementById('statusBanner');
 
   // Plan usage describes right now: its "stale" suffix and its reset wording
   // (today vs. a dated form) depend on the clock, not on the fetched numbers, so
@@ -3136,7 +3153,7 @@ async function loadAndRender({ busy = false } = {}) {
   if (shown('limits')) renderLimits(limits);
   if (shown('sessions')) renderSessions(sessions);
   if (shown('timeline')) renderTimeline(sessions);
-  if (shown('reviews') && reviewMutations === reviewMutationsAtStart) renderReviews(reviews);
+  if (shown('reviews')) renderReviews(reviews);
   renderLimitsBanner(limits);
 
   if (data.error) {
@@ -3146,12 +3163,8 @@ async function loadAndRender({ busy = false } = {}) {
     return;
   }
 
-  lastLoadedAt = Date.now();
-  renderStatusStrip(data.summary);
-
   const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
   if (signature === lastSignature) return;
-  lastSignature = signature;
   banner.hidden = true;
 
   if (!data.meta.dirExists) {
@@ -3278,6 +3291,32 @@ async function loadAndRender({ busy = false } = {}) {
   }
 
   renderRtk(rtk);
+  lastSignature = signature;
+}
+
+async function loadAndRender(options) {
+  const payload = await fetchAll(options);
+  if (!payload) return;
+  // Sync moves on every successful load, a quiet poll included, so the strip is
+  // filled before renderPayload's unchanged-payload check.
+  if (!payload.data.error) renderStatusStrip(payload.data.summary);
+  renderPayload(payload);
+}
+
+// A renderer that throws would otherwise reject loadAndRender with nothing to catch
+// it, and leave the page half drawn with no message. The banner names the error,
+// and clearing lastSignature makes the next poll draw every panel again.
+function reportDrawError(err) {
+  console.error(err);
+  const banner = document.getElementById('statusBanner');
+  banner.hidden = false;
+  banner.textContent = `Couldn't draw the page: ${err.message}`;
+  lastSignature = null;
+}
+
+// Every load goes through runLoad, so no caller leaves a rejection unhandled.
+function runLoad(options) {
+  return loadAndRender(options).catch(reportDrawError);
 }
 
 document.getElementById('rangePicker').addEventListener('click', (evt) => {
@@ -3291,7 +3330,7 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   lastSignature = null; // the bucket keys change, so force a redraw
   setLive(currentDays === 'today');
   if (changesReport) renderChanges(changesReport);
-  loadAndRender({ busy: true });
+  runLoad({ busy: true });
 });
 
 // Everything the Refresh button re-fetches. Applying prices calls it too, because
@@ -3299,13 +3338,13 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
 function reloadAll() {
   lastSignature = null;
   refreshRecords();
-  loadAndRender({ busy: true });
+  runLoad({ busy: true });
   loadChanges();
 }
 
 document.getElementById('refreshBtn').addEventListener('click', async () => {
   setBusy(true);
-  // A rejected refresh (e.g. the server is down) must not skip loadAndRender below:
+  // A rejected refresh (e.g. the server is down) must not skip runLoad in reloadAll:
   // its failed summary request is what clears busy and shows the error banner.
   await fetch('/api/refresh', { method: 'POST' }).catch(() => {});
   reloadAll();
@@ -3314,7 +3353,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 function redrawCharts({ changes = true } = {}) {
   lastSignature = null; // the width changed, so the same data still needs redrawing
   timelineSignature = null;
-  loadAndRender();
+  runLoad();
   if (changes && changesReport) renderChanges(changesReport);
 }
 
@@ -3332,7 +3371,7 @@ setupUsageGroupToggles();
 placeSummaryCards();
 setLive(currentDays === 'today');
 refreshRecords();
-loadAndRender({ busy: true });
+runLoad({ busy: true });
 loadChanges();
 loadPricesSource();
 
