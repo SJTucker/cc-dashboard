@@ -1804,10 +1804,13 @@ function renderLimitsBanner(limits) {
 
 // The Record day card's all-time value. Fetched once on load and once on
 // Refresh, not on the 5s live poll or a range switch: /api/records reads the all-time
-// and 7-day aggregates, so polling it on every tick would buy nothing. A failure resolves
-// to null, same as requestLimits.
+// and 7-day aggregates, so polling it on every tick would buy nothing. A failure,
+// including a 500 whose body is { error }, resolves to null, same as requestSessions.
 function requestRecords() {
-  return fetch('/api/records').then((res) => res.json()).catch(() => null);
+  return fetch('/api/records')
+    .then((res) => res.json())
+    .then((payload) => (payload && payload.error ? null : payload))
+    .catch(() => null);
 }
 
 // Kept so /api/records resolving after the first render can redraw the card
@@ -1818,12 +1821,22 @@ let recordsData = null;
 // The local date the last /api/records request was made on. recentDays holds the
 // 6 days before that date, so after midnight it is missing yesterday.
 let recordsDay = null;
+// Numbers each /api/records request. A response is dropped unless its number is
+// still the newest, so a slow first load cannot overwrite a later Refresh.
+let recordsSeq = 0;
 
+// renderWeekTotals calls this on Today whenever recordsDay is not today's date.
+// The early return below leaves recordsDay unset on purpose: while every consumer
+// of /api/records is hidden nothing is fetched, and the next renderWeekTotals
+// after one shows again tries once more.
 function refreshRecords() {
   if (!neededRequests(hiddenKeys, currentDays).has('records')) return;
   recordsDay = localDateStr(new Date());
+  const seq = ++recordsSeq;
   requestRecords().then((data) => {
-    recordsData = data;
+    if (seq !== recordsSeq) return;
+    // A failed request keeps the last good records, so the card keeps its value.
+    if (data) recordsData = data;
     if (lastRecordDaily && shown('card-record')) renderRecord(lastRecordDaily);
     if (lastSummary) renderWeekTotals(lastSummary);
   });
@@ -2605,17 +2618,25 @@ function showChangesLoading() {
   }
 }
 
+// Numbers each /api/changes request, like recordsSeq.
+let changesSeq = 0;
+
 // The fetch does not depend on the range picker, so it loads once and again on
-// Refresh. A range change only redraws from the loaded report.
+// Refresh. A range change only redraws from the loaded report. A response that is
+// not from the newest request is dropped, whether it succeeded or failed, because
+// the newest request draws both panels when it settles.
 async function loadChanges() {
   if (!neededRequests(hiddenKeys, currentDays).has('changes')) return;
+  const seq = ++changesSeq;
   showChangesLoading();
   try {
     const res = await fetch('/api/changes');
     const report = await res.json();
+    if (seq !== changesSeq) return;
     if (report.error) throw new Error(report.detail || report.error);
     renderChanges(report);
   } catch (err) {
+    if (seq !== changesSeq) return;
     // A spinner that never stops reads as still loading, so it goes, and the
     // before/after panel has nothing to show without a report.
     for (const id of CHANGES_CHARTS) document.getElementById(id).replaceChildren();
