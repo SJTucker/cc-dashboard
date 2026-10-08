@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -8,7 +9,7 @@ const path = require('path');
 const { openStore, upgradeRows, getStorePath, SCHEMA_VERSION } = require('../lib/store');
 const sqlite = require('node:sqlite');
 
-const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-store-'));
+const tmpDir = () => helpers.tmpDir(null, 'store');
 
 const rowsOf = (extra = {}) => ({ ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], sessions: {}, minT: 100, maxT: 200, ...extra });
 const entryOf = (extra = {}) => ({ size: 10, mtimeMs: 1234.5, version: 1, onDisk: true, rows: rowsOf(), ...extra });

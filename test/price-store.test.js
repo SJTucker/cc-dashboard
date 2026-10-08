@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const { priceFor, setSnapshots, BUILT_IN_DATE } = require('../lib/pricing');
 const store = require('../lib/price-store');
+const helpers = require('./helpers');
 
 const ROW = { match: 'sonnet-4-6', family: 'sonnet', label: 'Sonnet', name: 'Claude Sonnet 4.6', input: 6, output: 30 };
 const NOW = new Date(2026, 9, 20, 12, 0);
@@ -24,7 +25,7 @@ function useConfigDir(t, dir) {
 // Each test gets its own config dir, so its own prices file, and starts from it.
 // cc-dashboard/ does not exist yet, so a write has to create it.
 function useTempFile(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-prices-'));
+  const dir = helpers.tmpDir(t, 'prices');
   useConfigDir(t, dir);
   store.loadPriceFile();
   return path.join(dir, 'cc-dashboard', 'prices.json');
@@ -149,13 +150,13 @@ test('appendSnapshot reloads the file first, so a file corrupted after the last 
 });
 
 test('a write that cannot succeed returns an error instead of throwing', (t) => {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-prices-'));
+  const dir = helpers.tmpDir(t, 'prices');
   // Read-only config dir: the file itself is missing (a harmless ENOENT on
   // load), but mkdirSync cannot create cc-dashboard/ to hold it.
+  // removeTree restores the mode before deleting, so no chmod hook is needed.
   const locked = path.join(dir, 'locked');
   fs.mkdirSync(locked, { mode: 0o555 });
   useConfigDir(t, locked);
-  t.after(() => fs.chmodSync(locked, 0o755));
   store.loadPriceFile();
   const result = store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [ROW], source: 'test', now: NOW });
   assert.match(result.error, /Could not write/);

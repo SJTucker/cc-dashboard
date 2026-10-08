@@ -49,6 +49,22 @@ const entry = (name: string): Entry => ({ name, kind: name.endsWith('.md') ? 'fi
 const FIVE: SessionRateLimit = { kind: 'five_hour', percentUsed: 23.5, resetsAt: '2026-10-01T15:00:00.000Z' }
 const WEEK: SessionRateLimit = { kind: 'seven_day', percentUsed: 41, resetsAt: '2026-10-05T09:30:00.000Z' }
 
+// contract:begin
+const CONTRACT = [
+  { "script": "judge-updates", "args": ["prompt", "--current", "2.1.290"], "stdin": "## 2.1.290\n- Compaction keeps fewer tool results" },
+  { "script": "judge-updates", "args": ["prompt"], "stdin": "## 2.1.290\n- Compaction keeps fewer tool results" },
+  { "script": "judge-updates", "args": ["record"], "stdin": { "versions": ["2.1.290"], "reply": "[{\"version\":\"2.1.290\",\"relevant\":false}]" } },
+  { "script": "review-session", "args": ["prompt"], "stdin": "" },
+  { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
+  { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
+  { "script": "record-statusline", "args": [], "stdin": {
+    "session_id": "abc", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
+    "model": { "display_name": "Opus 5.5 (1M context)" }, "cost": { "total_cost_usd": 0.42, "total_duration_ms": 60000 },
+    "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 }, "seven_day": { "used_percentage": 41, "resets_at": 1791192600 } } } },
+]
+// contract:end
+const contract = CONTRACT
+
 // Answers every noun the mod calls, beneath it. `w` is read on each call, so a
 // test can change the session id, the model or the environment between events.
 // Returns what process.run got and the folders fs.list was asked for.
@@ -657,6 +673,30 @@ test('a failed record is logged and the next review still runs', async ($, on) =
     'session review failed (review-session record failed (exit 1): review-session: no claimed review for old)',
     'session review failed (review-session record failed (exit 1): review-session: no claimed review for old)',
   ])
+})
+
+// Every call the mod makes to a bin/ script, as script name, args and the shape of its
+// stdin: the word 'text' for plain text, otherwise the sorted top-level keys.
+// test/mod-contract.test.js runs the same entries against the real scripts.
+const stdinShape = (stdin: unknown) => (typeof stdin === 'string' ? 'text' : Object.keys((stdin ?? {}) as object).sort())
+const callKey = (c: { script: string; args: readonly string[]; stdin: unknown }) => JSON.stringify([c.script, c.args, stdinShape(c.stdin)])
+
+test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) => {
+  const { ran, reviewRan, clock } = world(on, {
+    scripts: judging,
+    reviews: reviewing(),
+    replies: [{ isAnswered: true, text: VERDICT }, { isAnswered: true, text: VERDICT }, { isAnswered: true, text: '{"suggestions":[]}' }, { isAnswered: true, text: '{"suggestions":[]}' }],
+  })
+  await $.command.run(backfill)
+  await $.session.start(start)
+  await clock.settle()
+  await $.session.measure(measure([FIVE, WEEK]))
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  const made = [...ran, ...reviewRan].map((r) =>
+    callKey({ script: r.argv[0]?.split('/').pop() ?? '', args: r.argv.slice(1), stdin: r.stdin }),
+  )
+  expect([...new Set(made)].sort()).toEqual(contract.map(callKey).sort())
 })
 
 test('a /clear starts a review once record-session-end has run', async ($, on) => {

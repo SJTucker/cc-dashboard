@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -11,7 +12,7 @@ const DAY = 24 * 60 * 60 * 1000;
 // Both CLAUDE_CONFIG_DIR and CHANGES_FILE are read at call time, so each test sets
 // them and requires a fresh copy.
 function setup({ plugins, changes, updates, auto } = {}) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-changes-'));
+  const base = helpers.tmpDir(null, 'changes');
   fs.mkdirSync(path.join(base, 'projects'), { recursive: true });
   if (plugins !== undefined) {
     fs.mkdirSync(path.join(base, 'plugins'));

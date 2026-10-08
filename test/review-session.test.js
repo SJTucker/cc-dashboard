@@ -1,10 +1,10 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 
@@ -14,7 +14,7 @@ const typed = (text) => JSON.stringify({ type: 'user', origin: { kind: 'human' }
 
 // A config dir holding one ended session with three typed prompts.
 function fixture() {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-review-bin-'));
+  const base = helpers.tmpDir(null, 'review-bin');
   const sessions = path.join(base, 'cc-dashboard', 'sessions');
   fs.mkdirSync(sessions, { recursive: true });
   fs.writeFileSync(path.join(sessions, 'abc.json'), JSON.stringify({ sessionId: 'abc', project: 'demo', endedAt: Date.now() }));

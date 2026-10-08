@@ -1,27 +1,19 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { createRowStore, REFRESH_SHARE_MS } = require('../lib/rowstore');
 const { extractFile, EXTRACT_VERSION } = require('../lib/extract');
 const { openStore } = require('../lib/store');
 const { aggregate } = require('../lib/aggregate');
 
-let sqliteAvailable = true;
-try {
-  require('node:sqlite');
-} catch {
-  sqliteAvailable = false;
-}
-const needsSqlite = !sqliteAvailable && 'node:sqlite is not available';
-
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function makeProjects() {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rowstore-'));
+  const base = helpers.tmpDir(null, 'rowstore');
   const dir = path.join(base, 'projects', 'demo');
   fs.mkdirSync(dir, { recursive: true });
   return { base, dir };
@@ -63,7 +55,7 @@ function harness(dir, { store = null } = {}) {
   return { rows, reads, refresh, clock };
 }
 
-const tmpDb = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rowstore-db-')), 'transcripts.db');
+const tmpDb = () => path.join(helpers.tmpDir(null, 'rowstore-db'), 'transcripts.db');
 
 test('an unchanged file is read once, however many refreshes run', async () => {
   const { dir } = makeProjects();
@@ -138,7 +130,7 @@ test('refresh calls that overlap share one run, and one that follows within 2 s 
   assert.strictEqual(reads.length, 2);
 });
 
-test('only files last modified before local midnight are written to the database', { skip: needsSqlite }, async () => {
+test('only files last modified before local midnight are written to the database', async () => {
   const { dir } = makeProjects();
   const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
   writeFile(dir, 'today', ['2'], 0);
@@ -151,7 +143,7 @@ test('only files last modified before local midnight are written to the database
   store.close();
 });
 
-test('a file written to the database is not written again while it is unchanged', { skip: needsSqlite }, async () => {
+test('a file written to the database is not written again while it is unchanged', async () => {
   const { dir } = makeProjects();
   writeFile(dir, 'old', ['1'], 2 * DAY_MS);
   const store = openStore(tmpDb());
@@ -170,7 +162,7 @@ test('a file written to the database is not written again while it is unchanged'
   store.close();
 });
 
-test('rows stay after the transcript is deleted, and the database marks the file gone', { skip: needsSqlite }, async () => {
+test('rows stay after the transcript is deleted, and the database marks the file gone', async () => {
   const { dir } = makeProjects();
   const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
   const store = openStore(tmpDb());
@@ -211,7 +203,7 @@ test('with no database, rows live in memory only and a deleted file is dropped',
   assert.strictEqual(rows.entries().length, 0);
 });
 
-test('a restart with a populated database reads no file that is unchanged', { skip: needsSqlite }, async () => {
+test('a restart with a populated database reads no file that is unchanged', async () => {
   const { dir } = makeProjects();
   writeFile(dir, 'old1', ['1'], 2 * DAY_MS);
   writeFile(dir, 'old2', ['2'], 3 * DAY_MS);
@@ -230,7 +222,7 @@ test('a restart with a populated database reads no file that is unchanged', { sk
   second.close();
 });
 
-test('a stored file with an older extract version is read again when it is on disk', { skip: needsSqlite }, async () => {
+test('a stored file with an older extract version is read again when it is on disk', async () => {
   const { dir } = makeProjects();
   const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
   const dbFile = tmpDb();
@@ -250,7 +242,7 @@ test('a stored file with an older extract version is read again when it is on di
   store.close();
 });
 
-test('a stored file whose transcript is gone keeps its older version and rows', { skip: needsSqlite }, async () => {
+test('a stored file whose transcript is gone keeps its older version and rows', async () => {
   const { dir } = makeProjects();
   const gone = path.join(dir, 'gone.jsonl');
   const dbFile = tmpDb();
@@ -268,7 +260,7 @@ test('a stored file whose transcript is gone keeps its older version and rows', 
   store.close();
 });
 
-test('entries come back with gone transcripts first, sorted by path, then files on disk', { skip: needsSqlite }, async () => {
+test('entries come back with gone transcripts first, sorted by path, then files on disk', async () => {
   const { dir } = makeProjects();
   const b = writeFile(dir, 'b', ['1'], 2 * DAY_MS);
   const a = writeFile(dir, 'a', ['2'], 3 * DAY_MS);
@@ -357,7 +349,7 @@ test('a failed database write is logged and the file is written on the next refr
   assert.strictEqual(written.length, 1);
 });
 
-test('a stored file that is appended to is read again, and its stored rows are replaced once it is old again', { skip: needsSqlite }, async () => {
+test('a stored file that is appended to is read again, and its stored rows are replaced once it is old again', async () => {
   const { dir } = makeProjects();
   const file = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
   const store = openStore(tmpDb());
@@ -379,7 +371,7 @@ test('a stored file that is appended to is read again, and its stored rows are r
   store.close();
 });
 
-test('a response copied into a live file counts once when its first copy is in a deleted transcript', { skip: needsSqlite }, async () => {
+test('a response copied into a live file counts once when its first copy is in a deleted transcript', async () => {
   const { dir } = makeProjects();
   const original = writeFile(dir, 'original', ['same'], 2 * DAY_MS);
   const store = openStore(tmpDb());
@@ -430,7 +422,7 @@ function assertStoredAsGone(rows, dbFile, file, calls) {
   assert.strictEqual(stored.rows.calls.length, calls);
 }
 
-test('a stored file appended to today and then deleted keeps its newest rows', { skip: needsSqlite }, async () => {
+test('a stored file appended to today and then deleted keeps its newest rows', async () => {
   const { dir } = makeProjects();
   const file = writeFile(dir, 'a', ['1'], 2 * DAY_MS);
   const dbFile = tmpDb();
@@ -447,7 +439,7 @@ test('a stored file appended to today and then deleted keeps its newest rows', {
   store.close();
 });
 
-test('a gone file that reappears with new content and is deleted again keeps its newest rows', { skip: needsSqlite }, async () => {
+test('a gone file that reappears with new content and is deleted again keeps its newest rows', async () => {
   const { dir } = makeProjects();
   const file = writeFile(dir, 'b', ['1'], 2 * DAY_MS);
   const dbFile = tmpDb();
@@ -468,7 +460,7 @@ test('a gone file that reappears with new content and is deleted again keeps its
   store.close();
 });
 
-test('a stored file whose write failed and which is then deleted is written as gone', { skip: needsSqlite }, async () => {
+test('a stored file whose write failed and which is then deleted is written as gone', async () => {
   const { dir } = makeProjects();
   const file = writeFile(dir, 'e', ['1'], 2 * DAY_MS);
   const dbFile = tmpDb();
@@ -490,7 +482,7 @@ test('a stored file whose write failed and which is then deleted is written as g
   store.close();
 });
 
-test('a gone mark inside a failed transaction is written on the next refresh', { skip: needsSqlite }, async () => {
+test('a gone mark inside a failed transaction is written on the next refresh', async () => {
   const { dir } = makeProjects();
   const file = writeFile(dir, 'c', ['1'], 2 * DAY_MS);
   const dbFile = tmpDb();
@@ -512,7 +504,7 @@ test('a gone mark inside a failed transaction is written on the next refresh', {
 
 test(
   'an unreadable projects root leaves the entries, generation and database untouched',
-  { skip: (process.getuid?.() === 0 && 'root can list a mode-000 directory') || needsSqlite },
+  { skip: process.getuid?.() === 0 && 'root can list a mode-000 directory' },
   async (t) => {
     const { base, dir } = makeProjects();
     writeFile(dir, 'old', ['1'], 2 * DAY_MS);

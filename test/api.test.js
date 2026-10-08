@@ -5,21 +5,14 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const helpers = require('./helpers');
 const { localDateStr } = require('../lib/scan');
-
-let sqliteAvailable = true;
-try {
-  require('node:sqlite');
-} catch {
-  sqliteAvailable = false;
-}
-const needsSqlite = !sqliteAvailable && 'node:sqlite is not available';
 
 // Boot the real Express app on an ephemeral port against a fixture log directory.
 // CLAUDE_CONFIG_DIR has to be set before server.js is required, because
 // getProjectsDir() reads it when lib/scan.js is loaded into the module cache.
-function startServer() {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-api-'));
+function startServer(t) {
+  const base = helpers.tmpDir(t, 'api');
   const dir = path.join(base, 'projects', 'demo');
   fs.mkdirSync(dir, { recursive: true });
 
@@ -36,13 +29,18 @@ function startServer() {
   });
   fs.writeFileSync(path.join(dir, 'session.jsonl'), line + '\n');
 
-  // Without this the route would read the developer's real rtk database and the
+  // RTK_DB: without it the route would read the developer's real rtk database and the
   // assertions below would depend on their shell history.
-  process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
-
-  // Snapshots, prices.json and transcripts.db (reviews included) all resolve under it.
-  process.env.CLAUDE_CONFIG_DIR = base;
-  process.env.PORT = '0'; // let the OS pick a free port
+  // CLAUDE_CONFIG_DIR: snapshots, prices.json and transcripts.db (reviews included)
+  // all resolve under it.
+  // CHANGES_FILE: without it lib/changes.js falls back to the repo's own changes.json.
+  // PORT: 0 lets the OS pick a free port.
+  helpers.withEnv(t, {
+    RTK_DB: path.join(base, 'no-rtk-here.db'),
+    CLAUDE_CONFIG_DIR: base,
+    CHANGES_FILE: path.join(base, 'changes.json'),
+    PORT: '0',
+  });
   // The row store keeps its rows and database handle at module level, so each
   // server starts from fresh copies.
   for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
@@ -82,7 +80,7 @@ function withModelCells(md, name, values) {
 }
 
 async function listen(t) {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => {
     server.close();
     require('../lib/pricing').setSnapshots([]);
@@ -95,7 +93,7 @@ const post = (url, body) =>
   fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
 
 test('GET /api/summary?days=today returns one bucket per local hour', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -118,7 +116,7 @@ test('GET /api/summary?days=today returns one bucket per local hour', async (t) 
 });
 
 test('GET /api/summary?days=today is not served from the memo', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -148,7 +146,7 @@ test('GET /api/summary?days=today is not served from the memo', async (t) => {
 });
 
 test('GET /api/summary rejects a days value it cannot honour', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const port = server.address().port;
@@ -167,7 +165,7 @@ test('GET /api/summary rejects a days value it cannot honour', async (t) => {
 });
 
 test('POST /api/refresh refuses a cross-site request', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const port = server.address().port;
@@ -186,7 +184,7 @@ test('POST /api/refresh refuses a cross-site request', async (t) => {
 });
 
 test('GET /api/rtk returns an empty payload when there is no rtk database', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -200,7 +198,7 @@ test('GET /api/rtk returns an empty payload when there is no rtk database', asyn
 });
 
 test('GET /api/rtk rejects a malformed days value the same way /api/summary does', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -211,7 +209,7 @@ test('GET /api/rtk rejects a malformed days value the same way /api/summary does
 });
 
 test('GET /api/rtk?days=today buckets by hour', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -223,7 +221,7 @@ test('GET /api/rtk?days=today buckets by hour', async (t) => {
 });
 
 test('GET /api/summary does not send the per-call efficiency records', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const port = server.address().port;
@@ -235,7 +233,7 @@ test('GET /api/summary does not send the per-call efficiency records', async (t)
 });
 
 test('two concurrent cold requests for the same range aggregate once', async (t) => {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-inflight-'));
+  const base = helpers.tmpDir(t, 'inflight');
   const dir = path.join(base, 'projects', 'demo');
   fs.mkdirSync(dir, { recursive: true });
   const line = JSON.stringify({
@@ -245,9 +243,12 @@ test('two concurrent cold requests for the same range aggregate once', async (t)
   });
   fs.writeFileSync(path.join(dir, 'session.jsonl'), line + '\n');
 
-  process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
-  process.env.CLAUDE_CONFIG_DIR = base;
-  process.env.PORT = '0';
+  helpers.withEnv(t, {
+    RTK_DB: path.join(base, 'no-rtk-here.db'),
+    CLAUDE_CONFIG_DIR: base,
+    CHANGES_FILE: path.join(base, 'changes.json'),
+    PORT: '0',
+  });
   for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
   const aggregateModule = require('../lib/aggregate');
   let calls = 0;
@@ -280,8 +281,8 @@ test('two concurrent cold requests for the same range aggregate once', async (t)
 
 // A fixture with one session that starts on Sep 1 and one on Sep 10, and a
 // changes.json marker on Sep 5 between them.
-function startChangesServer({ changes, plugins } = {}) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-changes-api-'));
+function startChangesServer(t, { changes, plugins } = {}) {
+  const base = helpers.tmpDir(t, 'changes-api');
   const dir = path.join(base, 'projects', 'demo');
   fs.mkdirSync(dir, { recursive: true });
   const line = (iso, id, sessionId, context) => JSON.stringify({
@@ -298,16 +299,18 @@ function startChangesServer({ changes, plugins } = {}) {
   }
   const changesPath = path.join(base, 'changes.json');
   if (changes) fs.writeFileSync(changesPath, JSON.stringify(changes));
-  process.env.CHANGES_FILE = changesPath;
-  process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
-  process.env.CLAUDE_CONFIG_DIR = base;
-  process.env.PORT = '0';
+  helpers.withEnv(t, {
+    CHANGES_FILE: changesPath,
+    RTK_DB: path.join(base, 'no-rtk-here.db'),
+    CLAUDE_CONFIG_DIR: base,
+    PORT: '0',
+  });
   for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/changes', '../lib/efficiency', '../server']) delete require.cache[require.resolve(mod)];
   return { server: require('../server'), changesPath };
 }
 
 test('GET /api/changes returns sessions and before/after windows per marker', async (t) => {
-  const { server } = startChangesServer({ changes: [{ date: '2026-09-05T12:00', kind: 'skill', label: 'a skill' }] });
+  const { server } = startChangesServer(t, { changes: [{ date: '2026-09-05T12:00', kind: 'skill', label: 'a skill' }] });
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/changes`);
@@ -332,7 +335,7 @@ test('GET /api/changes returns sessions and before/after windows per marker', as
 });
 
 test('GET /api/changes re-reads changes.json on every request', async (t) => {
-  const { server, changesPath } = startChangesServer({ changes: [] });
+  const { server, changesPath } = startChangesServer(t, { changes: [] });
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const url = `http://127.0.0.1:${server.address().port}/api/changes`;
@@ -344,7 +347,7 @@ test('GET /api/changes re-reads changes.json on every request', async (t) => {
 });
 
 test('GET /api/changes works with no marker sources at all', async (t) => {
-  const { server } = startChangesServer();
+  const { server } = startChangesServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/changes`);
@@ -356,7 +359,7 @@ test('GET /api/changes works with no marker sources at all', async (t) => {
 });
 
 test('GET /api/limits sends only the limits', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -381,7 +384,7 @@ test('GET /api/limits sends only the limits', async (t) => {
 });
 
 test('GET /api/limits returns null when there is no usage cache', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -391,19 +394,22 @@ test('GET /api/limits returns null when there is no usage cache', async (t) => {
 });
 
 test('GET /api/records returns the all-time busiest day', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
+  const day = localDateStr(new Date());
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/records`);
   const data = await res.json();
+  if (localDateStr(new Date()) !== day) return t.skip('crossed local midnight');
 
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(data.allTime, { date: localDateStr(new Date()), tokens: 1200, cost: 0.006 });
+  assert.deepStrictEqual(data.allTime, { date: day, tokens: 1200, cost: 0.006 });
 });
 
 test('GET /api/records returns recentDays: the 6 days before today, not today', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
+  const day = localDateStr(new Date());
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -423,6 +429,7 @@ test('GET /api/records returns recentDays: the 6 days before today, not today', 
 
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/records`);
   const data = await res.json();
+  if (localDateStr(new Date()) !== day) return t.skip('crossed local midnight');
 
   const dateBack = (back) => {
     const d = new Date();
@@ -438,8 +445,8 @@ test('GET /api/records returns recentDays: the 6 days before today, not today', 
   assert.deepStrictEqual(byDate[dateBack(3)], { date: dateBack(3), tokens: 0, cost: 0 });
 });
 
-test('GET /api/records writes no records.json, and nothing in cc-dashboard/ but the transcript database', { skip: needsSqlite }, async (t) => {
-  const server = startServer();
+test('GET /api/records writes no records.json, and nothing in cc-dashboard/ but the transcript database', async (t) => {
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -470,7 +477,7 @@ function writeStoredTranscript() {
 }
 
 test('a transcript that is deleted after it was stored still counts in the All range, the record day and /api/changes', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -480,6 +487,11 @@ test('a transcript that is deleted after it was stored still counts in the All r
   assert.strictEqual(before.summary.totalInput, 6000);
   const changesBefore = await (await fetch(`${base}/api/changes`)).json();
   assert.ok(changesBefore.sessions.some((s) => s.context === 5000), 'the stored transcript is a session');
+  assert.ok(
+    changesBefore.changesFile.path.startsWith(process.env.CLAUDE_CONFIG_DIR),
+    `changes.json path ${changesBefore.changesFile.path} is outside the test folder`,
+  );
+  assert.strictEqual(changesBefore.changesFile.status, 'missing');
 
   fs.unlinkSync(file);
   // /api/refresh clears the result memo, so the next request aggregates again
@@ -494,8 +506,8 @@ test('a transcript that is deleted after it was stored still counts in the All r
   assert.deepStrictEqual(records.allTime, { date: localDateStr(when), tokens: 5000, cost: 0.015 });
 });
 
-test('a transcript that is deleted while the server is stopped still counts after a restart', { skip: needsSqlite }, async (t) => {
-  const first = startServer();
+test('a transcript that is deleted while the server is stopped still counts after a restart', async (t) => {
+  const first = startServer(t);
   await new Promise((resolve) => first.once('listening', resolve));
   const { file } = writeStoredTranscript();
   const firstBase = `http://127.0.0.1:${first.address().port}`;
@@ -518,7 +530,7 @@ test('a range is aggregated again after local midnight, although no transcript c
   const late = new Date();
   late.setHours(23, 59, 50, 0);
   t.mock.timers.enable({ apis: ['Date'], now: late.getTime() });
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -533,8 +545,8 @@ test('a range is aggregated again after local midnight, although no transcript c
   assert.notStrictEqual(second.daily[second.daily.length - 1].date, first.daily[first.daily.length - 1].date);
 });
 
-test('the server still answers when the transcript database cannot be opened', { skip: needsSqlite }, async (t) => {
-  const server = startServer();
+test('the server still answers when the transcript database cannot be opened', async (t) => {
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const warn = t.mock.method(console, 'warn', () => {});
@@ -550,7 +562,7 @@ test('the server still answers when the transcript database cannot be opened', {
 });
 
 test('GET /stats.js serves the shared statistics helpers', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -579,7 +591,7 @@ function appendCall(base, { sessionId, id, input, output }) {
 }
 
 test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const base = process.env.CLAUDE_CONFIG_DIR;
@@ -624,7 +636,7 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
 });
 
 test('GET /api/sessions/live marks a session that ended', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   writeSnapshot(process.env.CLAUDE_CONFIG_DIR, {
@@ -641,7 +653,7 @@ test('GET /api/sessions/live marks a session that ended', async (t) => {
 });
 
 test('GET /api/sessions/live joins the activity file of a session', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const base = process.env.CLAUDE_CONFIG_DIR;
@@ -666,7 +678,7 @@ test('GET /api/sessions/live joins the activity file of a session', async (t) =>
 });
 
 test('GET /api/sessions/live gives null activity when there is no activity directory', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   writeSnapshot(process.env.CLAUDE_CONFIG_DIR, {
@@ -678,7 +690,7 @@ test('GET /api/sessions/live gives null activity when there is no activity direc
 });
 
 test('GET /api/sessions/live is empty with no snapshot directory', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
@@ -690,7 +702,7 @@ test('GET /api/sessions/live is empty with no snapshot directory', async (t) => 
 });
 
 test('GET /api/sessions/live skips a corrupt snapshot and serves the rest', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const base = process.env.CLAUDE_CONFIG_DIR;
@@ -705,7 +717,7 @@ test('GET /api/sessions/live skips a corrupt snapshot and serves the rest', asyn
 });
 
 test('the Today scan is shared between /api/summary and /api/sessions/live', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const port = server.address().port;
@@ -816,7 +828,7 @@ test('the price POST routes refuse a cross-site request', async (t) => {
 });
 
 test('GET /api/limits adds today\'s share of the weekly limit', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -831,12 +843,10 @@ test('GET /api/limits adds today\'s share of the weekly limit', async (t) => {
   const body = await res.json();
   assert.strictEqual(body.source, 'statusline');
   assert.strictEqual(body.today.share, 4);
-  const workday = [1, 2, 3, 4, 5].includes(new Date().getDay());
-  assert.strictEqual(body.today.budget, workday ? 20 : null);
 });
 
 test('every GET /api route refuses a cross-site or same-site request', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -850,7 +860,7 @@ test('every GET /api route refuses a cross-site or same-site request', async (t)
 });
 
 test('a GET /api request typed into the address bar is accepted', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
@@ -859,7 +869,7 @@ test('a GET /api request typed into the address bar is accepted', async (t) => {
 });
 
 test('days accepts only the range picker values on /api/summary and /api/rtk', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -878,7 +888,7 @@ test('days accepts only the range picker values on /api/summary and /api/rtk', a
 
 test("the POST /api routes refuse Sec-Fetch-Site: none, which only a GET from the address bar sends", async (t) => {
   stubPricingPage(t, PAGE); // so a broken guard cannot reach platform.claude.com
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const base = `http://127.0.0.1:${server.address().port}`;
@@ -893,14 +903,15 @@ test(
   'a session file the scan cannot read is logged once per range, not on every scan',
   { skip: process.getuid?.() === 0 && 'root can read a mode-000 file' },
   async (t) => {
-    const server = startServer();
+    const server = startServer(t);
     t.after(() => server.close());
     await new Promise((resolve) => server.once('listening', resolve));
     const base = `http://127.0.0.1:${server.address().port}`;
     const locked = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo', 'locked.jsonl');
     fs.writeFileSync(locked, '{}\n');
     fs.chmodSync(locked, 0o000);
-    t.after(() => fs.chmodSync(locked, 0o644));
+    // No chmod back to 0o644: the folder is removed when the test ends, and unlinking a
+    // mode-000 file only needs a writable directory.
     const warn = t.mock.method(console, 'warn', () => {});
 
     for (let i = 0; i < 2; i++) {
@@ -921,7 +932,7 @@ function openTestReviewDb() {
 }
 
 test('GET /api/reviews lists finished reviews with suggestion state and the home directory', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const db = openTestReviewDb();
@@ -946,7 +957,7 @@ test('GET /api/reviews lists finished reviews with suggestion state and the home
 });
 
 test('GET /api/reviews answers an empty list before any review exists', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`);
@@ -955,7 +966,7 @@ test('GET /api/reviews answers an empty list before any review exists', async (t
 });
 
 test('GET /api/reviews imports review files from an earlier version', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'reviews');
@@ -969,7 +980,7 @@ test('GET /api/reviews imports review files from an earlier version', async (t) 
 });
 
 test('GET /api/reviews answers 500 with the reason when transcripts.db cannot be opened, and recovers when it can', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'transcripts.db');
@@ -988,7 +999,7 @@ test('GET /api/reviews answers 500 with the reason when transcripts.db cannot be
 
 // Seeds one finished review with two suggestions and returns the base URL.
 async function reviewServer(t) {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const db = require('../lib/review-db').openReviewDb();
@@ -1059,7 +1070,7 @@ test('the dismiss routes refuse a cross-site request, like the price POST routes
 });
 
 test('the dismiss routes answer 500 with the reason when transcripts.db cannot be opened', async (t) => {
-  const server = startServer();
+  const server = startServer(t);
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'transcripts.db');

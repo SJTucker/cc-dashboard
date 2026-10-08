@@ -1,9 +1,9 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 // lib/scan.js reads CLAUDE_CONFIG_DIR when it loads, so each fixture gets fresh
@@ -16,7 +16,7 @@ function load(base) {
   return { review: require('../lib/review'), scan: require('../lib/scan'), reviewDb: require('../lib/review-db') };
 }
 
-const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-review-'));
+const tmpDir = () => helpers.tmpDir(null, 'review');
 
 const typed = (text) => ({ type: 'user', origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: text } });
 const say = (text) => ({ type: 'assistant', message: { content: [{ type: 'text', text }] } });

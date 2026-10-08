@@ -6,13 +6,16 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
+const helpers = require('./helpers');
 
 const { getRtkDbPath, readRtkUsage, readRtkWindows, readRtkDaily } = require('../lib/rtk');
+
+const useDb = (ctx, file) => helpers.withEnv(ctx, { RTK_DB: file });
 
 // Build a throwaway database with rtk's exact schema. Timestamps are written as
 // UTC ISO strings with an explicit +00:00 offset, matching what rtk stores.
 function makeDb(rows) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rtk-'));
+  const dir = helpers.tmpDir(null, 'rtk');
   const file = path.join(dir, 'history.db');
   const db = new DatabaseSync(file);
   db.exec(`
@@ -57,28 +60,20 @@ function utcStamp(d) {
   return d.toISOString().replace('Z', '000+00:00');
 }
 
-test('getRtkDbPath honours RTK_DB and expands a leading tilde', () => {
-  const prev = process.env.RTK_DB;
-  try {
-    process.env.RTK_DB = '/custom/history.db';
-    assert.strictEqual(getRtkDbPath(), '/custom/history.db');
+test('getRtkDbPath honours RTK_DB and expands a leading tilde', (ctx) => {
+  useDb(ctx, '/custom/history.db');
+  assert.strictEqual(getRtkDbPath(), '/custom/history.db');
 
-    process.env.RTK_DB = '~/rtk/history.db';
-    assert.strictEqual(getRtkDbPath(), os.homedir() + '/rtk/history.db');
-  } finally {
-    if (prev === undefined) delete process.env.RTK_DB;
-    else process.env.RTK_DB = prev;
-  }
+  useDb(ctx, '~/rtk/history.db');
+  assert.strictEqual(getRtkDbPath(), os.homedir() + '/rtk/history.db');
 });
 
-test('daily buckets use LOCAL dates, not the stored UTC date', () => {
+test('daily buckets use LOCAL dates, not the stored UTC date', (ctx) => {
   // 23:30 local today. In any timezone west of UTC this stores as tomorrow's UTC
   // date, so a substr(timestamp,1,10) implementation puts it on the wrong bar.
   const local = new Date();
   local.setHours(23, 30, 0, 0);
-
-  const prev = process.env.RTK_DB;
-  process.env.RTK_DB = makeDb([{ timestamp: utcStamp(local), saved_tokens: 500, input_tokens: 800 }]);
+  useDb(ctx, makeDb([{ timestamp: utcStamp(local), saved_tokens: 500, input_tokens: 800 }]));
 
   const out = readRtkUsage({ days: 7 });
   const expectedDay = `${local.getFullYear()}-${String(local.getMonth() + 1).padStart(2, '0')}-${String(local.getDate()).padStart(2, '0')}`;
@@ -87,20 +82,16 @@ test('daily buckets use LOCAL dates, not the stored UTC date', () => {
   assert.strictEqual(out.daily[0].date, expectedDay, 'bucketed by local date');
   assert.strictEqual(out.daily[0].saved, 500);
   assert.strictEqual(out.daily[0].commands, 1);
-
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });
 
-test('commands are grouped by rtk subcommand with an original_cmd level below', () => {
+test('commands are grouped by rtk subcommand with an original_cmd level below', (ctx) => {
   const now = new Date();
-  const prev = process.env.RTK_DB;
-  process.env.RTK_DB = makeDb([
+  useDb(ctx, makeDb([
     { timestamp: utcStamp(now), rtk_cmd: 'rtk grep alpha', original_cmd: 'grep alpha', saved_tokens: 100, input_tokens: 200 },
     { timestamp: utcStamp(now), rtk_cmd: 'rtk grep beta', original_cmd: 'grep beta', saved_tokens: 50, input_tokens: 100 },
     { timestamp: utcStamp(now), rtk_cmd: 'rtk grep alpha', original_cmd: 'grep alpha', saved_tokens: 25, input_tokens: 75 },
     { timestamp: utcStamp(now), rtk_cmd: 'rtk read', original_cmd: 'cat x', saved_tokens: 900, input_tokens: 1000 },
-  ]);
+  ]));
 
   const out = readRtkUsage({ days: 7 });
 
@@ -122,48 +113,37 @@ test('commands are grouped by rtk subcommand with an original_cmd level below', 
   assert.strictEqual(out.summary.totalInput, 1375);
   // 1075/1375 = 78.18%
   assert.ok(Math.abs(out.summary.savingsPct - 78.18) < 0.01);
-
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });
 
-test('a subcommand with no arguments still groups correctly', () => {
-  const prev = process.env.RTK_DB;
-  process.env.RTK_DB = makeDb([
+test('a subcommand with no arguments still groups correctly', (ctx) => {
+  useDb(ctx, makeDb([
     { timestamp: utcStamp(new Date()), rtk_cmd: 'rtk read', original_cmd: 'cat a', saved_tokens: 10 },
-  ]);
+  ]));
   const out = readRtkUsage({ days: 7 });
   assert.strictEqual(out.commands[0].name, 'read', 'no trailing space to trip the substr');
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });
 
-test('a missing database returns an empty payload, not a throw', () => {
-  const prev = process.env.RTK_DB;
-  process.env.RTK_DB = path.join(os.tmpdir(), 'definitely-not-here', 'history.db');
+test('a missing database returns an empty payload, not a throw', (ctx) => {
+  useDb(ctx, path.join(os.tmpdir(), 'definitely-not-here', 'history.db'));
   const out = readRtkUsage({ days: 7 });
   assert.strictEqual(out.meta.dbExists, false);
   assert.deepStrictEqual(out.daily, []);
   assert.deepStrictEqual(out.commands, []);
   assert.strictEqual(out.summary.totalCommands, 0);
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });
 
-test('a range cutoff excludes older rows at either fractional-second width', () => {
+test('a range cutoff excludes older rows at either fractional-second width', (ctx) => {
   const now = Date.now();
   const recent = new Date(now - 2 * 86400000); // inside a 7-day window
   const old = new Date(now - 30 * 86400000); // outside it
-
-  const prev = process.env.RTK_DB;
-  process.env.RTK_DB = makeDb([
+  useDb(ctx, makeDb([
     // 6-digit fraction, the common case
     { timestamp: recent.toISOString().replace('Z', '000+00:00'), saved_tokens: 7 },
     { timestamp: old.toISOString().replace('Z', '000+00:00'), saved_tokens: 999 },
     // 3-digit fraction, the 17-row minority on the reference database
     { timestamp: recent.toISOString().replace('Z', '+00:00'), saved_tokens: 3 },
     { timestamp: old.toISOString().replace('Z', '+00:00'), saved_tokens: 999 },
-  ]);
+  ]));
 
   const windowed = readRtkUsage({ days: 7 });
   assert.strictEqual(windowed.summary.totalCommands, 2, 'both recent rows, neither old one');
@@ -171,35 +151,27 @@ test('a range cutoff excludes older rows at either fractional-second width', () 
 
   const all = readRtkUsage({ days: null });
   assert.strictEqual(all.summary.totalCommands, 4, 'days:null reads the whole table');
-
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });
 
-test('hour bucketing produces the same key shape lib/scan.js uses', () => {
+test('hour bucketing produces the same key shape lib/scan.js uses', (ctx) => {
   const at14 = new Date();
   at14.setHours(14, 5, 0, 0);
-  const prev = process.env.RTK_DB;
-  process.env.RTK_DB = makeDb([{ timestamp: utcStamp(at14), saved_tokens: 42 }]);
+  useDb(ctx, makeDb([{ timestamp: utcStamp(at14), saved_tokens: 42 }]));
 
   const out = readRtkUsage({ days: 'today', bucket: 'hour' });
   // Length is the full-day axis, asserted by its own test; this one is about the
   // key shape, which has to match lib/scan.js so shortDate()/fullDate() parse it.
   const at14Bucket = out.daily.find((d) => d.saved === 42);
   assert.match(at14Bucket.date, /^\d{4}-\d{2}-\d{2}T14$/);
-
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });
 
-test('a file that exists but is not an rtk database degrades to an empty payload', () => {
-  const prev = process.env.RTK_DB;
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rtk-bad-'));
+test('a file that exists but is not an rtk database degrades to an empty payload', (ctx) => {
+  const dir = helpers.tmpDir(null, 'rtk-bad');
 
   // Junk bytes: sqlite rejects this at the first statement, not at open.
   const junk = path.join(dir, 'junk.db');
   fs.writeFileSync(junk, 'this is definitely not a sqlite file\n');
-  process.env.RTK_DB = junk;
+  useDb(ctx, junk);
   const fromJunk = readRtkUsage({ days: 7 });
   assert.strictEqual(fromJunk.meta.dbExists, false, 'junk file reports no usable database');
   assert.deepStrictEqual(fromJunk.daily, []);
@@ -210,16 +182,13 @@ test('a file that exists but is not an rtk database degrades to an empty payload
   const other = new DatabaseSync(wrong);
   other.exec('CREATE TABLE something_else (id INTEGER PRIMARY KEY)');
   other.close();
-  process.env.RTK_DB = wrong;
+  useDb(ctx, wrong);
   const fromWrong = readRtkUsage({ days: 7 });
   assert.strictEqual(fromWrong.meta.dbExists, false, 'wrong schema reports no usable database');
   assert.deepStrictEqual(fromWrong.commands, []);
-
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });
 
-test('detail rows are capped per command, keeping the largest', () => {
+test('detail rows are capped per command, keeping the largest', (ctx) => {
   const now = new Date();
   // 20 distinct original_cmd values under one subcommand, saving 1..20 tokens.
   const rows = [];
@@ -232,9 +201,7 @@ test('detail rows are capped per command, keeping the largest', () => {
       input_tokens: 100,
     });
   }
-
-  const prev = process.env.RTK_DB;
-  process.env.RTK_DB = makeDb(rows);
+  useDb(ctx, makeDb(rows));
   const out = readRtkUsage({ days: 7 });
 
   const grep = out.commands.find((c) => c.name === 'grep');
@@ -243,16 +210,12 @@ test('detail rows are capped per command, keeping the largest', () => {
   assert.strictEqual(grep.details.length, 12, 'but the detail level is capped');
   assert.strictEqual(grep.details[0].name, 'grep pattern-20', 'largest first');
   assert.strictEqual(grep.details[11].name, 'grep pattern-09', 'and the 12 largest are the ones kept');
-
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });
 
-test('the Today range gets a full-day hour axis, not just the hours with rows', () => {
+test('the Today range gets a full-day hour axis, not just the hours with rows', (ctx) => {
   const at13 = new Date();
   at13.setHours(13, 20, 0, 0);
-  const prev = process.env.RTK_DB;
-  process.env.RTK_DB = makeDb([{ timestamp: utcStamp(at13), saved_tokens: 42, input_tokens: 90 }]);
+  useDb(ctx, makeDb([{ timestamp: utcStamp(at13), saved_tokens: 42, input_tokens: 90 }]));
 
   const out = readRtkUsage({ days: 'today', bucket: 'hour' });
 
@@ -281,89 +244,61 @@ test('the Today range gets a full-day hour axis, not just the hours with rows', 
     { commands: 0, input: 0, saved: 0 },
     'an hour with no commands is a real zero, not a missing bar'
   );
-
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });
 
-test('readRtkWindows returns one entry per range, exact to the second at the boundary', () => {
-  const prev = process.env.RTK_DB;
+test('readRtkWindows returns one entry per range, exact to the second at the boundary', (ctx) => {
   const t = new Date('2026-09-04T16:15:00Z').getTime();
-  try {
-    process.env.RTK_DB = makeDb([
-      { timestamp: utcStamp(new Date(t - 60_000)), input_tokens: 1000, saved_tokens: 600 },
-      { timestamp: utcStamp(new Date(t)), input_tokens: 1000, saved_tokens: 900 }, // exactly at t: after
-      { timestamp: utcStamp(new Date(t + 60_000)), input_tokens: 500, saved_tokens: 400 },
-    ]);
-    const [before, after, empty] = readRtkWindows([[t - 3_600_000, t], [t, t + 3_600_000], [0, 1000]]);
-    assert.deepStrictEqual(before, { commands: 1, keptPerCommand: 400, filteredShare: 0.6 });
-    assert.deepStrictEqual(after, { commands: 2, keptPerCommand: 100, filteredShare: 1300 / 1500 });
-    assert.deepStrictEqual(empty, { commands: 0, keptPerCommand: null, filteredShare: null });
-  } finally {
-    if (prev === undefined) delete process.env.RTK_DB;
-    else process.env.RTK_DB = prev;
-  }
+  useDb(ctx, makeDb([
+    { timestamp: utcStamp(new Date(t - 60_000)), input_tokens: 1000, saved_tokens: 600 },
+    { timestamp: utcStamp(new Date(t)), input_tokens: 1000, saved_tokens: 900 }, // exactly at t: after
+    { timestamp: utcStamp(new Date(t + 60_000)), input_tokens: 500, saved_tokens: 400 },
+  ]));
+  const [before, after, empty] = readRtkWindows([[t - 3_600_000, t], [t, t + 3_600_000], [0, 1000]]);
+  assert.deepStrictEqual(before, { commands: 1, keptPerCommand: 400, filteredShare: 0.6 });
+  assert.deepStrictEqual(after, { commands: 2, keptPerCommand: 100, filteredShare: 1300 / 1500 });
+  assert.deepStrictEqual(empty, { commands: 0, keptPerCommand: null, filteredShare: null });
 });
 
-test('readRtkWindows returns null when the database is missing or not rtk', () => {
-  const prev = process.env.RTK_DB;
-  try {
-    process.env.RTK_DB = path.join(os.tmpdir(), 'no-such-rtk.db');
-    assert.strictEqual(readRtkWindows([[0, 1]]), null);
-    const junk = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rtk-')), 'junk.db');
-    fs.writeFileSync(junk, 'not a database');
-    process.env.RTK_DB = junk;
-    assert.strictEqual(readRtkWindows([[0, 1]]), null);
-  } finally {
-    if (prev === undefined) delete process.env.RTK_DB;
-    else process.env.RTK_DB = prev;
-  }
+test('readRtkWindows returns null when the database is missing or not rtk', (ctx) => {
+  useDb(ctx, path.join(os.tmpdir(), 'no-such-rtk.db'));
+  assert.strictEqual(readRtkWindows([[0, 1]]), null);
+  const junk = path.join(helpers.tmpDir(null, 'rtk'), 'junk.db');
+  fs.writeFileSync(junk, 'not a database');
+  useDb(ctx, junk);
+  assert.strictEqual(readRtkWindows([[0, 1]]), null);
 });
 
-test('readRtkDaily gives each local day its tokens kept per command and share filtered', () => {
-  const prev = process.env.RTK_DB;
+test('readRtkDaily gives each local day its tokens kept per command and share filtered', (ctx) => {
   const day1 = new Date('2026-09-10T12:00:00'); // local noon
   const day2 = new Date('2026-09-11T12:00:00');
-  try {
-    process.env.RTK_DB = makeDb([
-      { timestamp: utcStamp(day1), input_tokens: 1000, saved_tokens: 600 },
-      { timestamp: utcStamp(new Date(day1.getTime() + 3_600_000)), input_tokens: 1000, saved_tokens: 800 },
-      { timestamp: utcStamp(day2), input_tokens: 0, saved_tokens: 0 }, // no input: no share to compute
-    ]);
-    assert.deepStrictEqual(readRtkDaily(), {
-      keptPerCommand: [
-        { date: '2026-09-10', n: 2, value: 300 },
-        { date: '2026-09-11', n: 1, value: 0 },
-      ],
-      filteredShare: [{ date: '2026-09-10', n: 2, value: 0.7 }],
-    });
-  } finally {
-    if (prev === undefined) delete process.env.RTK_DB;
-    else process.env.RTK_DB = prev;
-  }
+  useDb(ctx, makeDb([
+    { timestamp: utcStamp(day1), input_tokens: 1000, saved_tokens: 600 },
+    { timestamp: utcStamp(new Date(day1.getTime() + 3_600_000)), input_tokens: 1000, saved_tokens: 800 },
+    { timestamp: utcStamp(day2), input_tokens: 0, saved_tokens: 0 }, // no input: no share to compute
+  ]));
+  assert.deepStrictEqual(readRtkDaily(), {
+    keptPerCommand: [
+      { date: '2026-09-10', n: 2, value: 300 },
+      { date: '2026-09-11', n: 1, value: 0 },
+    ],
+    filteredShare: [{ date: '2026-09-10', n: 2, value: 0.7 }],
+  });
 });
 
-test('readRtkDaily returns null when the database is missing or not rtk', () => {
-  const prev = process.env.RTK_DB;
-  try {
-    process.env.RTK_DB = path.join(os.tmpdir(), 'no-such-rtk.db');
-    assert.strictEqual(readRtkDaily(), null);
-    const junk = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rtk-')), 'junk.db');
-    fs.writeFileSync(junk, 'not a database');
-    process.env.RTK_DB = junk;
-    assert.strictEqual(readRtkDaily(), null);
-  } finally {
-    if (prev === undefined) delete process.env.RTK_DB;
-    else process.env.RTK_DB = prev;
-  }
+test('readRtkDaily returns null when the database is missing or not rtk', (ctx) => {
+  useDb(ctx, path.join(os.tmpdir(), 'no-such-rtk.db'));
+  assert.strictEqual(readRtkDaily(), null);
+  const junk = path.join(helpers.tmpDir(null, 'rtk'), 'junk.db');
+  fs.writeFileSync(junk, 'not a database');
+  useDb(ctx, junk);
+  assert.strictEqual(readRtkDaily(), null);
 });
 
-test('day buckets run unbroken from the first day with rows to today', () => {
+test('day buckets run unbroken from the first day with rows to today', (ctx) => {
   const threeDaysAgo = new Date();
   threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
   threeDaysAgo.setHours(12, 0, 0, 0);
-  const prev = process.env.RTK_DB;
-  process.env.RTK_DB = makeDb([{ timestamp: utcStamp(threeDaysAgo), saved_tokens: 42 }]);
+  useDb(ctx, makeDb([{ timestamp: utcStamp(threeDaysAgo), saved_tokens: 42 }]));
 
   const out = readRtkUsage({ days: 7 });
 
@@ -378,7 +313,4 @@ test('day buckets run unbroken from the first day with rows to today', () => {
     out.daily.slice(1).map((d) => [d.commands, d.input, d.saved]),
     [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
   );
-
-  if (prev === undefined) delete process.env.RTK_DB;
-  else process.env.RTK_DB = prev;
 });

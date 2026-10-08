@@ -1,15 +1,15 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 // CLAUDE_CONFIG_DIR is read at call time, so each test points it at a throwaway
 // folder and requires fresh copies.
 function setup({ verdicts } = {}) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-updates-'));
+  const base = helpers.tmpDir(null, 'updates');
   fs.mkdirSync(path.join(base, 'projects', 'demo'), { recursive: true });
   process.env.CLAUDE_CONFIG_DIR = base;
   const file = path.join(base, 'cc-dashboard', 'updates.json');
