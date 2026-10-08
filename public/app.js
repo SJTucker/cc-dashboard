@@ -2760,9 +2760,18 @@ function setupRowDrag(onDrop) {
     const handle = el('span', { class: 'row-handle', title: 'Drag to move', 'aria-hidden': 'true' });
     // A release anywhere clears draggable. Some browsers send a release off the
     // handle to the element under the pointer, so the handle's own listener would miss it.
+    // A cancelled pointer (a touch the browser takes over for scrolling, say) sends
+    // pointercancel and no pointerup, so either event clears it, and the one
+    // AbortController removes both listeners together.
     handle.addEventListener('pointerdown', () => {
       row.draggable = true;
-      document.addEventListener('pointerup', () => { row.draggable = false; }, { once: true });
+      const release = new AbortController();
+      const end = () => {
+        row.draggable = false;
+        release.abort();
+      };
+      document.addEventListener('pointerup', end, { signal: release.signal });
+      document.addEventListener('pointercancel', end, { signal: release.signal });
     });
     row.querySelector('.panel-head h2').prepend(handle);
 
