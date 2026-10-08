@@ -509,3 +509,40 @@ test('a gone mark inside a failed transaction is written on the next refresh', {
   assertStoredAsGone(rows, dbFile, file, 1);
   store.close();
 });
+
+test(
+  'an unreadable projects root leaves the entries, generation and database untouched',
+  { skip: (process.getuid?.() === 0 && 'root can list a mode-000 directory') || needsSqlite },
+  async (t) => {
+    const { base, dir } = makeProjects();
+    writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+    const real = openStore(tmpDb());
+    t.after(() => real.close());
+    const calls = [];
+    const store = {
+      loadAll: () => real.loadAll(),
+      put: (p, e) => { calls.push('put'); real.put(p, e); },
+      markGone: (p) => { calls.push('markGone'); real.markGone(p); },
+      transaction: (fn) => real.transaction(fn),
+    };
+    const { rows, refresh } = harness(path.join(base, 'projects'), { store });
+    await refresh();
+    const entries = rows.entries();
+    const generation = rows.generation;
+    assert.strictEqual(entries.length, 1);
+    calls.length = 0;
+
+    const root = path.join(base, 'projects');
+    fs.chmodSync(root, 0o000);
+    t.after(() => fs.chmodSync(root, 0o755));
+    await refresh();
+    assert.deepStrictEqual(rows.entries(), entries);
+    assert.strictEqual(rows.generation, generation);
+    assert.deepStrictEqual(calls, []);
+
+    fs.chmodSync(root, 0o755);
+    await refresh();
+    assert.deepStrictEqual(calls, [], 'nothing is written again once the root is readable');
+    assert.strictEqual(rows.generation, generation);
+  },
+);
