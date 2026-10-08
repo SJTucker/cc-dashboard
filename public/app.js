@@ -966,6 +966,9 @@ function drawToolBars(container, rows, scaleMax, onSelect, selectedName) {
       node.addEventListener('click', () => onSelect(row.name));
       node.tabIndex = 0;
       node.dataset.name = row.name;
+      // A screen reader hears the row as a toggle button and its pressed state.
+      node.setAttribute('role', 'button');
+      node.setAttribute('aria-pressed', String(row.name === selectedName));
       node.addEventListener('keydown', (evt) => {
         if (evt.key === 'Enter' || evt.key === ' ') {
           evt.preventDefault();
@@ -1013,6 +1016,8 @@ function drawRtkBars(container, rows, scaleMax, onSelect, selectedName) {
       node.addEventListener('click', () => onSelect(row.name));
       node.tabIndex = 0;
       node.dataset.name = row.name;
+      node.setAttribute('role', 'button');
+      node.setAttribute('aria-pressed', String(row.name === selectedName));
       node.addEventListener('keydown', (evt) => {
         if (evt.key === 'Enter' || evt.key === ' ') {
           evt.preventDefault();

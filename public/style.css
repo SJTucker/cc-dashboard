@@ -966,7 +966,7 @@ html, body {
   grid-template-columns: minmax(0, 280px) 1fr auto;
   gap: 12px;
   align-items: center;
-  padding: 3px 0;
+  padding: 3px 0 3px 8px;
 }
 
 .usage-name {
@@ -999,9 +999,11 @@ html, body {
 .usage-row.selectable:hover { background: var(--surface-raised); }
 .usage-row.selectable:focus-visible { outline: 1px solid var(--accent-cost); outline-offset: 1px; }
 
-.usage-row.selected .usage-name { color: var(--text-primary); }
+/* Bold text and the left bar mark the selected row without relying on colour. The
+   bar is the one .ba-table tr.selected uses. */
+.usage-row.selected .usage-name { color: var(--text-primary); font-weight: 700; }
 .usage-row.selected .usage-track > i { background: var(--accent-cost); }
-.usage-row.selected { background: var(--surface-raised); }
+.usage-row.selected { background: var(--surface-raised); box-shadow: inset 3px 0 0 var(--text-primary); }
 
 /* Counts run wider than the "99.9%" the cost rows show. */
 .usage-count { min-width: 96px; }
