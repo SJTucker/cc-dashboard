@@ -83,12 +83,13 @@ function activityLabel(activity) {
   return { ...s, text: `${s.glyph} ${s.label}` };
 }
 
-// Doing now column: the running tool with its detail, then the subagent count.
-// Null when nothing is running.
+// Doing now column: the running tool's name, then the subagent count. Null when
+// nothing is running. The tool's detail is left out: a long Bash command widened the
+// column and moved the table on every 5 s poll.
 function doingNow(activity) {
   if (!activity) return null;
   const parts = [];
-  if (activity.tool) parts.push(activity.tool.detail ? `${activity.tool.name}: ${activity.tool.detail}` : activity.tool.name);
+  if (activity.tool) parts.push(activity.tool.name);
   if (activity.subagents > 0) parts.push(`${activity.subagents} ${activity.subagents === 1 ? 'subagent' : 'subagents'}`);
   return parts.length ? parts.join(' · ') : null;
 }

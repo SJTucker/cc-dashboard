@@ -142,11 +142,11 @@ test('activityLabel is null without activity or with an unknown state', () => {
   assert.strictEqual(activityLabel({ state: 'approval' }), null);
 });
 
-test('doingNow shows the tool with its detail, and the subagent count when there is one', () => {
+test('doingNow shows the tool name without its detail, and the subagent count when there is one', () => {
   const tool = { name: 'Bash', detail: 'npm test', startedAt: 1 };
-  assert.strictEqual(doingNow({ state: 'working', tool, subagents: 0 }), 'Bash: npm test');
+  assert.strictEqual(doingNow({ state: 'working', tool, subagents: 0 }), 'Bash');
   assert.strictEqual(doingNow({ state: 'working', tool: { ...tool, detail: '' }, subagents: 0 }), 'Bash');
-  assert.strictEqual(doingNow({ state: 'working', tool, subagents: 2 }), 'Bash: npm test · 2 subagents');
+  assert.strictEqual(doingNow({ state: 'working', tool, subagents: 2 }), 'Bash · 2 subagents');
   assert.strictEqual(doingNow({ state: 'working', tool: null, subagents: 1 }), '1 subagent');
 });
 
