@@ -9,7 +9,6 @@ then on.
 
 | Idea | Status |
 |---|---|
-| [SETUP.md for new users](setup-md.md) | Open: inventory of outside-the-repo setup done; SETUP.md versus README, platforms, and a CLAUDE.md rule to keep SETUP.md current, open |
 | [Better session titles](better-session-titles.md) | Open: branch line and first-prompt fallback shipped; decide around 2026-10-14 whether a model-written title is still needed |
 | [Subagent permission prompts](subagent-permission-prompts.md) | Open: a subagent waiting on a permission prompt shows as working; needs a way to read the permission mode first |
 | [Before and after chart polish](before-after-chart-polish.md) | Open: empty space under the chart, a change on the last day, axis labels and a legend; chart height and legend form open |
