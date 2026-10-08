@@ -40,7 +40,7 @@ function startServer() {
   // assertions below would depend on their shell history.
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
 
-  // Snapshots, prices.json, reviews and transcripts.db all resolve under it.
+  // Snapshots, prices.json and transcripts.db (reviews included) all resolve under it.
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.PORT = '0'; // let the OS pick a free port
   // The row store keeps its rows and database handle at module level, so each
@@ -49,6 +49,8 @@ function startServer() {
   delete require.cache[require.resolve('../lib/sessions')];
   delete require.cache[require.resolve('../lib/updates')];
   delete require.cache[require.resolve('../lib/review')];
+  delete require.cache[require.resolve('../lib/db')];
+  delete require.cache[require.resolve('../lib/review-db')];
   delete require.cache[require.resolve('../server')];
   const server = require('../server');
   return server;
@@ -913,27 +915,33 @@ test(
   }
 );
 
-test('GET /api/reviews lists finished reviews with the home directory', async (t) => {
+function openTestReviewDb() {
+  const { openReviewDb } = require('../lib/review-db');
+  return openReviewDb();
+}
+
+test('GET /api/reviews lists finished reviews with suggestion state and the home directory', async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
-  const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'reviews');
-  fs.mkdirSync(dir, { recursive: true });
+  const db = openTestReviewDb();
   const now = Date.now();
-  fs.writeFileSync(path.join(dir, 'sess-a.json'), JSON.stringify({
-    sessionId: 'sess-a', project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done',
-    suggestions: [{ kind: 'token-waste', text: 'Read the file once.' }],
-  }));
-  fs.writeFileSync(path.join(dir, 'sess-b.json'), JSON.stringify({
-    sessionId: 'sess-b', project: 'demo', endedAt: now - 30_000, status: 'skipped', reason: 'under 3 prompts', reviewedAt: now,
-  }));
+  const add = (id, status, extra = {}) => db.prepare(
+    'INSERT INTO reviews (session_id, project, ended_at, status, claimed_at, reviewed_at, skip_reason) VALUES (?, ?, ?, ?, ?, ?, ?)',
+  ).run(id, 'demo', now - 60_000, status, now - 90_000, now, extra.skip ?? null);
+  add('sess-a', 'done');
+  db.prepare("INSERT INTO suggestions (session_id, idx, kind, text) VALUES ('sess-a', 0, 'token-waste', 'Read the file once.')").run();
+  add('sess-b', 'skipped', { skip: 'under 3 prompts' });
+  db.close();
 
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`);
   assert.strictEqual(res.status, 200);
-  const body = await res.json();
-  assert.deepStrictEqual(body, {
+  assert.deepStrictEqual(await res.json(), {
     home: os.homedir(),
-    reviews: [{ sessionId: 'sess-a', title: null, branch: null, transcript: null, project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done', suggestions: [{ kind: 'token-waste', text: 'Read the file once.' }] }],
+    reviews: [{
+      sessionId: 'sess-a', title: null, branch: null, transcript: null, project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done',
+      suggestions: [{ idx: 0, kind: 'token-waste', text: 'Read the file once.', dismissedAt: null, reason: null }],
+    }],
   });
 });
 
@@ -944,4 +952,121 @@ test('GET /api/reviews answers an empty list before any review exists', async (t
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`);
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), { home: os.homedir(), reviews: [] });
+});
+
+test('GET /api/reviews imports review files from an earlier version', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'reviews');
+  fs.mkdirSync(dir, { recursive: true });
+  const now = Date.now();
+  fs.writeFileSync(path.join(dir, 'sess-old.json'), JSON.stringify({
+    sessionId: 'sess-old', project: 'demo', endedAt: now - 1000, reviewedAt: now, status: 'done', suggestions: [{ kind: 'workflow', text: 'Plan first.' }],
+  }));
+  const body = await (await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`)).json();
+  assert.deepStrictEqual(body.reviews.map((r) => [r.sessionId, r.suggestions.map((s) => s.text)]), [['sess-old', ['Plan first.']]]);
+});
+
+test('GET /api/reviews answers 500 with the reason when transcripts.db cannot be opened, and recovers when it can', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'transcripts.db');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, 'not a database '.repeat(100));
+  t.mock.method(console, 'error', () => {});
+  const url = `http://127.0.0.1:${server.address().port}/api/reviews`;
+  const res = await fetch(url);
+  assert.strictEqual(res.status, 500);
+  const body = await res.json();
+  assert.strictEqual(body.error, 'Failed to read session reviews');
+  assert.ok(body.detail);
+  fs.rmSync(file);
+  assert.strictEqual((await fetch(url)).status, 200);
+});
+
+// Seeds one finished review with two suggestions and returns the base URL.
+async function reviewServer(t) {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const db = require('../lib/review-db').openReviewDb();
+  const now = Date.now();
+  for (const id of ['sess-a', 'sess-b']) {
+    db.prepare("INSERT INTO reviews (session_id, project, ended_at, status, claimed_at, reviewed_at) VALUES (?, 'demo', ?, 'done', ?, ?)").run(id, now - 1000, now - 2000, now);
+    db.prepare("INSERT INTO suggestions (session_id, idx, kind, text) VALUES (?, 0, 'workflow', 'one'), (?, 1, 'token-waste', 'two')").run(id, id);
+  }
+  db.close();
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+const dismissUrl = (base, id, idx) => `${base}/api/reviews/${id}/suggestions/${idx}/dismiss`;
+const postJson = (url, body, headers = {}) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+const suggestionState = async (base, id) => (await (await fetch(`${base}/api/reviews`)).json()).reviews.find((r) => r.sessionId === id).suggestions.map((s) => s.reason);
+
+test('POST dismiss stores the reason and GET /api/reviews shows it, DELETE undoes it', async (t) => {
+  const base = await reviewServer(t);
+  const res = await postJson(dismissUrl(base, 'sess-a', 1), { reason: 'not_useful' });
+  assert.strictEqual(res.status, 200);
+  const body = await res.json();
+  assert.deepStrictEqual([body.ok, body.sessionId, body.idx, body.reason, typeof body.dismissedAt], [true, 'sess-a', 1, 'not_useful', 'number']);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, 'not_useful']);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-b'), [null, null]);
+
+  const undo = await fetch(dismissUrl(base, 'sess-a', 1), { method: 'DELETE' });
+  assert.strictEqual(undo.status, 200);
+  assert.deepStrictEqual(await undo.json(), { ok: true, sessionId: 'sess-a', idx: 1, dismissedAt: null, reason: null });
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, null]);
+});
+
+test('POST dismiss answers 400 for a bad reason, a missing body, bad json, a bad session id and a bad idx', async (t) => {
+  const base = await reviewServer(t);
+  for (const body of [{ reason: 'bored' }, {}, { reason: null }, { reason: ['done'] }]) {
+    assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', 0), body)).status, 400, JSON.stringify(body));
+  }
+  assert.strictEqual((await fetch(dismissUrl(base, 'sess-a', 0), { method: 'POST' })).status, 400);
+  const badJson = await fetch(dismissUrl(base, 'sess-a', 0), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{nope' });
+  assert.strictEqual(badJson.status, 400);
+  for (const idx of ['-1', '1.5', 'abc', '01x', '99999999999999999999']) {
+    assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', idx), { reason: 'done' })).status, 400, `idx ${idx}`);
+    assert.strictEqual((await fetch(dismissUrl(base, 'sess-a', idx), { method: 'DELETE' })).status, 400, `DELETE idx ${idx}`);
+  }
+  assert.strictEqual((await postJson(dismissUrl(base, 'bad.id', 0), { reason: 'done' })).status, 400);
+  assert.strictEqual((await postJson(dismissUrl(base, 'a'.repeat(129), 0), { reason: 'done' })).status, 400);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, null]);
+});
+
+test('POST and DELETE dismiss answer 404 for a session or an idx that does not exist', async (t) => {
+  const base = await reviewServer(t);
+  for (const [id, idx] of [['sess-a', 2], ['sess-zzz', 0], ['sess-a', 1000]]) {
+    assert.strictEqual((await postJson(dismissUrl(base, id, idx), { reason: 'done' })).status, 404, `${id} ${idx}`);
+    assert.strictEqual((await fetch(dismissUrl(base, id, idx), { method: 'DELETE' })).status, 404, `DELETE ${id} ${idx}`);
+  }
+});
+
+test('the dismiss routes refuse a cross-site request, like the price POST routes', async (t) => {
+  const base = await reviewServer(t);
+  for (const site of ['cross-site', 'same-site', 'none']) {
+    const post = await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }, { 'Sec-Fetch-Site': site });
+    assert.strictEqual(post.status, 403, `POST ${site}`);
+    const del = await fetch(dismissUrl(base, 'sess-a', 0), { method: 'DELETE', headers: { 'Sec-Fetch-Site': site } });
+    assert.strictEqual(del.status, 403, `DELETE ${site}`);
+  }
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, null]);
+  const ok = await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }, { 'Sec-Fetch-Site': 'same-origin' });
+  assert.strictEqual(ok.status, 200);
+});
+
+test('the dismiss routes answer 500 with the reason when transcripts.db cannot be opened', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'transcripts.db');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, 'not a database '.repeat(100));
+  t.mock.method(console, 'error', () => {});
+  const res = await postJson(dismissUrl(`http://127.0.0.1:${server.address().port}`, 'sess-a', 0), { reason: 'done' });
+  assert.strictEqual(res.status, 500);
+  assert.ok((await res.json()).detail);
 });

@@ -13,9 +13,10 @@ const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits, readDailyShare } = require('./lib/limits');
-const { readSessions, buildLiveSessions } = require('./lib/sessions');
+const { readSessions, buildLiveSessions, SESSION_ID_PATTERN } = require('./lib/sessions');
 const { readActivity } = require('./lib/activity');
-const { readReviews } = require('./lib/review');
+const { readReviews, setDismissal, DISMISS_REASONS } = require('./lib/review');
+const { getReviewDb } = require('./lib/review-db');
 const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
@@ -247,18 +248,67 @@ app.get('/api/sessions/live', async (req, res) => {
   }
 });
 
-// Reviews of ended sessions from cc-dashboard/reviews/ (lib/review.js), from the
-// last 7 days. Read-only: bin/review-session writes them, run by the mod in mod/.
-// Each review includes its session id and transcript path, because the user pastes
-// them into a prompt for another model. Only this machine can reach the API: the
-// server listens on HOST (127.0.0.1). home lets the page shorten the transcript path.
+// Reviews of ended sessions from the reviews and suggestions tables in
+// transcripts.db (lib/review.js), finished in the last 7 days. bin/review-session
+// writes the reviews, run by the mod in mod/. The dismiss routes below write the
+// dismissals. Each review includes its session id and transcript path, because the
+// user pastes them into a prompt for another model. Only this machine can reach the
+// API: the server listens on HOST (127.0.0.1). home lets the page shorten the
+// transcript path. When transcripts.db cannot be opened the answer is a 500 with the
+// reason, which the panel shows as text.
 app.get('/api/reviews', (req, res) => {
   try {
-    res.json({ home: os.homedir(), reviews: readReviews() });
+    res.json({ home: os.homedir(), reviews: readReviews(getReviewDb()) });
   } catch (err) {
     console.error('[API] /api/reviews failed:', err);
     res.status(500).json({ error: 'Failed to read session reviews', detail: err.message });
   }
+});
+
+// The one write the page makes to a review. app.use('/api', sameOriginOnly) above
+// covers both methods, so a cross-site page cannot dismiss or undo, the same
+// protection the price POST routes have.
+const DISMISS_PATH = '/api/reviews/:sessionId/suggestions/:idx/dismiss';
+
+// The session id and idx from the path, or null after answering 400.
+function suggestionTarget(req, res) {
+  const { sessionId, idx } = req.params;
+  if (!SESSION_ID_PATTERN.test(sessionId) || !/^\d+$/.test(idx) || !Number.isSafeInteger(Number(idx))) {
+    res.status(400).json({ error: 'Expected a session id and a whole-number suggestion index.' });
+    return null;
+  }
+  return { sessionId, idx: Number(idx) };
+}
+
+// Sets or clears the dismissal and answers. reason null clears it.
+function changeDismissal(res, target, reason) {
+  try {
+    const dismissedAt = reason ? Date.now() : null;
+    if (!setDismissal(getReviewDb(), target.sessionId, target.idx, reason, dismissedAt ?? undefined)) {
+      res.status(404).json({ error: 'No such suggestion.' });
+      return;
+    }
+    res.json({ ok: true, sessionId: target.sessionId, idx: target.idx, dismissedAt, reason });
+  } catch (err) {
+    console.error('[API] dismiss failed:', err);
+    res.status(500).json({ error: 'Failed to save the dismissal', detail: err.message });
+  }
+}
+
+app.post(DISMISS_PATH, express.json({ limit: '1kb' }), (req, res) => {
+  const target = suggestionTarget(req, res);
+  if (!target) return;
+  const reason = req.body ? req.body.reason : undefined;
+  if (!DISMISS_REASONS.includes(reason)) {
+    res.status(400).json({ error: `reason must be "${DISMISS_REASONS.join('" or "')}".` });
+    return;
+  }
+  changeDismissal(res, target, reason);
+});
+
+app.delete(DISMISS_PATH, (req, res) => {
+  const target = suggestionTarget(req, res);
+  if (target) changeDismissal(res, target, null);
 });
 
 // Every modern browser sends Sec-Fetch-Site. Any value other than same-origin or
