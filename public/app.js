@@ -147,17 +147,14 @@ function axisCost(usd) {
   return '$' + usd.toFixed(2).replace(/\.00$/, '');
 }
 
-// Rounds the top of the scale up to the next 1/2/5 x 10^n tick, draws the gridlines
-// and their labels, and returns that rounded max for the bars to scale against. The
-// point is reading a value off the chart without hovering, so the ticks have to be
-// round numbers, which means the scale top follows from the tick step rather than
-// from the data max.
+// Rounds the top of the scale up to the next 1/2/5 x 10^n tick (axisScale in
+// public/chart-geometry.js), draws the gridlines and their labels, and returns that
+// rounded max for the bars to scale against. The point is reading a value off the
+// chart without hovering, so the ticks have to be round numbers, which means the
+// scale top follows from the tick step rather than from the data max. The max is
+// never 0, so a caller can divide by it.
 function drawYAxis(svg, rawMax, width, format, ticks = 4) {
-  const rough = Math.max(rawMax, 1e-9) / ticks;
-  const mag = 10 ** Math.floor(Math.log10(rough));
-  const n = rough / mag;
-  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
-  const max = Math.ceil(rawMax / step) * step;
+  const { step, max } = axisScale(rawMax, ticks);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
 
   for (let i = 1; i * step <= max * 1.0001; i++) {

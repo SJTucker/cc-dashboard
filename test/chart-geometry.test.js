@@ -222,3 +222,16 @@ test('barSlots with no buckets returns finite numbers', () => {
   const { step, barWidth, x } = barSlots(0, 554);
   assert.ok([step, barWidth, x(0)].every(Number.isFinite));
 });
+
+test('axisScale rounds the top up to a whole 1, 2 or 5 step', () => {
+  assert.deepStrictEqual(axisScale(100), { step: 50, max: 100 });
+  assert.deepStrictEqual(axisScale(452e6), { step: 2e8, max: 6e8 });
+  assert.deepStrictEqual(axisScale(1.5), { step: 0.5, max: 1.5 });
+  assert.deepStrictEqual(axisScale(0.83), { step: 0.5, max: 1 });
+});
+
+test('axisScale treats a max that is not a positive number as 1, so the top is never 0', () => {
+  for (const raw of [0, -3, NaN, Infinity, undefined]) {
+    assert.deepStrictEqual(axisScale(raw), { step: 0.5, max: 1 }, `rawMax ${raw}`);
+  }
+});
