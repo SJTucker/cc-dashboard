@@ -159,8 +159,10 @@ tests can avoid the one in the clone.
 together, or none while a process is running.
 
 Review files that earlier versions wrote to `<cfg>/cc-dashboard/reviews/` are copied
-into `transcripts.db` once, the first time the server or `bin/review-session` opens
-it. The folder stays on disk and is never read or written again.
+into `transcripts.db` once. The import runs the first time the server answers a
+reviews request (the first `/api/reviews` or dismiss request, through `getReviewDb`)
+or the first time `bin/review-session` runs. The server does not import when it
+first opens the file. The folder stays on disk and is never read or written again.
 
 The mod also reads these files to record setup changes. It writes none of them.
 

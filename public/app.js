@@ -1625,16 +1625,24 @@ async function changeSuggestion(review, suggestion, reason) {
     reviewActionError = `Could not ${reason ? 'dismiss' : 'undo the dismissal of'} "${suggestionName(suggestion)}": ${(body && body.error) || 'the request failed'}`;
   } else {
     reviewActionError = null;
-    suggestion.dismissedAt = body.dismissedAt;
-    suggestion.reason = body.reason;
+    // A poll that landed during the request replaced lastReviews, so the suggestion
+    // captured at click time may no longer be the one on screen. Write to the current
+    // one, found by session and idx.
+    const currentReview = lastReviews?.reviews?.find((r) => r.sessionId === review.sessionId) ?? review;
+    const current = currentReview.suggestions.find((s) => s.idx === suggestion.idx);
+    for (const target of new Set([suggestion, current])) {
+      if (!target) continue;
+      target.dismissedAt = body.dismissedAt;
+      target.reason = body.reason;
+    }
     reviewMutations++;
     // The button the user pressed is about to leave the page. Dismiss moves focus to
     // the next open suggestion's Done button, else to the control that replaced it.
     // Undo moves focus to the restored suggestion's Done button.
-    const nextOpen = openSuggestions(review).find((s) => s.idx !== suggestion.idx);
+    const nextOpen = openSuggestions(currentReview).find((s) => s.idx !== suggestion.idx);
     if (!reason) reviewFocusKey = `done:${review.sessionId}:${suggestion.idx}`;
     else if (nextOpen) reviewFocusKey = `done:${review.sessionId}:${nextOpen.idx}`;
-    else reviewFocusKey = allDismissed(review) ? `toggle:${review.sessionId}` : `shown:${review.sessionId}`;
+    else reviewFocusKey = allDismissed(currentReview) ? `toggle:${review.sessionId}` : `shown:${review.sessionId}`;
   }
   renderReviews(lastReviews);
 }

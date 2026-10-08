@@ -186,7 +186,7 @@ hidden, and the review shows `N dismissed · Show`. Show lists each dismissed
 suggestion with `Marked done` or `Marked not useful` and an Undo button. Copy prompt
 leaves dismissed suggestions out. The panel note counts reviews that still have an
 open suggestion. A review whose suggestions are all dismissed shows as one line that
-opens with Enter.
+opens with Enter or Space.
 
 - **When it runs.** After a `/clear` or an in-process `/resume`, at once, because the
   process goes on. After an exit, at the next session start in any project. `-p` and

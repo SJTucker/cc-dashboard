@@ -243,6 +243,19 @@ test('finishReview writes the outcome, reviewedAt and numbered suggestions, and 
   assert.deepStrictEqual(suggestionsOf(db, 'never'), []);
 });
 
+test('a second finishReview for a finished review returns false and keeps its suggestions and dismissals', () => {
+  const { review, db } = fixture();
+  review.claimReview(db, { sessionId: 'a', project: 'demo', endedAt: 100 }, NOW);
+  review.finishReview(db, 'a', { status: 'done', suggestions: [{ kind: 'workflow', text: 'one' }, { kind: 'token-waste', text: 'two' }] }, NOW + 5);
+  db.prepare("UPDATE suggestions SET dismissed_at = ?, reason = 'done' WHERE session_id = 'a' AND idx = 0").run(NOW + 6);
+  const before = suggestionsOf(db, 'a');
+  const rowBefore = rowOf(db, 'a');
+  assert.strictEqual(review.finishReview(db, 'a', { status: 'failed', error: 'late', suggestions: [{ kind: 'claude-md', text: 'other' }] }, NOW + 9), false);
+  assert.deepStrictEqual(suggestionsOf(db, 'a'), before);
+  assert.strictEqual(before[0].dismissed_at, NOW + 6);
+  assert.deepStrictEqual(rowOf(db, 'a'), rowBefore);
+});
+
 test('pendingReviews returns sessions with 3 or more prompts and records the rest as skipped', async () => {
   const { review, db, sessionsDir, projects } = fixture();
   writeSnapshot(sessionsDir, { sessionId: 'big', project: 'demo', endedAt: NOW - 1 });

@@ -83,6 +83,16 @@ test('transaction commits on return and rolls back on a throw', () => {
   db.close();
 });
 
+test('transaction throws the original error when ROLLBACK also fails', () => {
+  const db = openDatabase(tmpFile());
+  // Closing the transaction inside fn makes the ROLLBACK in transaction() fail with "no transaction is active".
+  assert.throws(() => transaction(db, () => {
+    db.exec('ROLLBACK');
+    throw new Error('original');
+  }), /original/);
+  db.close();
+});
+
 test('two connections write the same file without a busy error', () => {
   const file = tmpFile();
   const a = openDatabase(file);
