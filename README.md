@@ -181,6 +181,13 @@ to check them. A review made before the transcript path was saved shows the path
 found by session id, and no title. A review made before branches were saved shows no
 branch.
 
+Each open suggestion has Done and Not useful buttons. A dismissed suggestion is
+hidden, and the review shows `N dismissed · Show`. Show lists each dismissed
+suggestion with `Marked done` or `Marked not useful` and an Undo button. Copy prompt
+leaves dismissed suggestions out. The panel note counts reviews that still have an
+open suggestion. A review whose suggestions are all dismissed shows as one line that
+opens with Enter.
+
 - **When it runs.** After a `/clear` or an in-process `/resume`, at once, because the
   process goes on. After an exit, at the next session start in any project. `-p` and
   Agent SDK runs do not start reviews.
@@ -189,8 +196,13 @@ branch.
 - **What Haiku sees.** A digest of the transcript, one line per typed prompt, reply
   start, tool call, tool error, large tool result and compaction. Prompts are cut to
   400 characters and the digest to about 60,000 characters.
-- **Where results go.** `~/.claude/cc-dashboard/reviews/<session id>.json`, written
-  by `bin/review-session`. Files older than 7 days are deleted on the next run.
+- **Where results go.** The `reviews` and `suggestions` tables in
+  `~/.claude/cc-dashboard/transcripts.db`, written by `bin/review-session`. Rows are
+  never deleted. The panel lists reviews finished in the last 7 days. Review files
+  that earlier versions saved in `cc-dashboard/reviews/` are copied in once, and the
+  folder is then left alone.
+- **When the database cannot be opened.** The panel shows the reason as text.
+  `bin/review-session` prints one line on stderr and exits 1, and the mod logs it.
 - **Failures.** A failed review is retried after an hour while the session's
   snapshot is still there, which is 24 hours.
 - **Cost.** Haiku calls made by the mod write no transcript line, so the dashboard's
@@ -391,7 +403,7 @@ only. History then starts at the oldest transcript on disk. Raising
 
 ## What it does and doesn't do
 
-- **Read-only, except for three write paths.** The dashboard server only ever reads
+- **Read-only, except for four write paths.** The dashboard server only ever reads
   your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
   `changes.json`, the setup change markers in `cc-dashboard/changes/`,
   `rate-limits.json` and the activity files in `cc-dashboard/activity/`, and opens rtk's `history.db` with
@@ -405,12 +417,17 @@ only. History then starts at the oldest transcript on disk. Raising
   `cc-dashboard/changes/` and the stored setup copies in `cc-dashboard/setup/` (see
   "Setup changes recorded automatically"). The other write path is the Apply
   button in the Cost by model panel: clicking it is the only thing that writes
-  `prices.json`. The third write path is the transcript database. `server.js`
-  writes `~/.claude/cc-dashboard/transcripts.db` (or
-  `$CLAUDE_CONFIG_DIR/cc-dashboard/transcripts.db`) with the usage rows of each
-  transcript last modified before today. Nothing deletes rows from it, because it
-  holds the only copy of a transcript Claude Code has deleted. Nothing else under
-  `server.js` or `public/` writes anything.
+  `prices.json`. The third write path is the transcript database,
+  `~/.claude/cc-dashboard/transcripts.db` (or
+  `$CLAUDE_CONFIG_DIR/cc-dashboard/transcripts.db`). `server.js` writes the usage
+  rows of each transcript last modified before today. `bin/review-session` writes
+  the session reviews and their suggestions. Nothing deletes rows from it, because
+  it holds the only copy of a transcript Claude Code has deleted. The fourth write
+  path is the Done, Not useful and Undo buttons in Session reviews. They call `POST`
+  and `DELETE /api/reviews/:sessionId/suggestions/:idx/dismiss`, which set or clear
+  `dismissed_at` and `reason` on one row of `suggestions`. The routes refuse
+  cross-site requests, like the price routes. Nothing else under `server.js` or
+  `public/` writes anything.
 - **One network request from the server, on demand.** The Cost by model panel has
   a Check prices button. Clicking it makes the server fetch
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's
@@ -444,7 +461,7 @@ only. History then starts at the oldest transcript on disk. Raising
 ## File layout
 
 ```
-server.js              Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records, /api/sessions/live, /api/reviews and the price routes (/api/prices, /api/prices/check, /api/prices/apply)
+server.js              Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records, /api/sessions/live, /api/reviews, the dismiss route (/api/reviews/:sessionId/suggestions/:idx/dismiss) and the price routes (/api/prices, /api/prices/check, /api/prices/apply)
 lib/scan.js            Finds the transcripts under ~/.claude/projects, and scanUsage, which reads all of them once
 lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts and per-session summaries
 lib/aggregate.js       Turns the rows of many transcripts into totals by day, model, tool and session
@@ -460,12 +477,14 @@ lib/price-fetch.js     Fetch and parse Anthropic's pricing page
 lib/net-guard.js       Host-header check + security headers
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
 lib/activity.js        Live state of each session, read from the activity files the mod writes, and old files pruned
-lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, review files
+lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeout
+lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
+lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
 bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
 bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
-bin/review-session     Lists ended sessions to review and records Haiku's suggestions in cc-dashboard/reviews/
+bin/review-session     Lists ended sessions to review and records Haiku's suggestions in transcripts.db
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/index.html      Page shell
 public/style.css       All styling

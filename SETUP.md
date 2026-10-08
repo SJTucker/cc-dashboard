@@ -32,9 +32,9 @@ Then open **http://localhost:3600**.
   changes.
 
 The first page load reads every transcript under `~/.claude/projects` and stores the
-rows in `~/.claude/cc-dashboard/transcripts.db`. Later loads, and later starts, read
-only the transcripts that changed. The server creates `~/.claude/cc-dashboard/` if it is missing, so that
-folder must be writable.
+rows, and the session reviews, in `~/.claude/cc-dashboard/transcripts.db`. Later
+loads, and later starts, read only the transcripts that changed. The server creates
+`~/.claude/cc-dashboard/` if it is missing, so that folder must be writable.
 
 ## Install the mod
 
@@ -149,11 +149,18 @@ tests can avoid the one in the clone.
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
-| `<cfg>/cc-dashboard/reviews/` | `CLAUDE_CONFIG_DIR` | `bin/review-session` |
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
-| `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server |
+| `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session` |
 | `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server, when you click Apply |
 | rtk's `history.db` | `RTK_DB` | rtk |
+
+`transcripts.db` runs in SQLite WAL mode. While a process has it open,
+`transcripts.db-wal` and `transcripts.db-shm` sit beside it. Back up all three
+together, or none while a process is running.
+
+Review files that earlier versions wrote to `<cfg>/cc-dashboard/reviews/` are copied
+into `transcripts.db` once, the first time the server or `bin/review-session` opens
+it. The folder stays on disk and is never read or written again.
 
 The mod also reads these files to record setup changes. It writes none of them.
 
