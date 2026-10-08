@@ -384,9 +384,8 @@ dashboard stored before Claude Code deleted it. A transcript deleted on the day 
 written is never stored. History starts at the first stored transcript. A
 before/after needs history on both sides of a change, so a change less than 7 days
 newer than your oldest stored row has no "before" window to compare and gets no
-marker. `node:sqlite` needs Node 22.13 or later. On an older Node, or when
-`transcripts.db` cannot be opened or was written by a newer version of the dashboard,
-`openStore` in `lib/store.js` leaves the file untouched, logs one warning and keeps
+marker. `node:sqlite` needs Node 22.13 or later. When `transcripts.db` cannot be
+opened or was written by a newer version of the dashboard, `openStore` in `lib/store.js` leaves the file untouched, logs one warning and keeps
 rows in memory only. History then starts at the oldest transcript on disk. Raising
 `cleanupPeriodDays` in `~/.claude/settings.json` keeps more transcripts on disk.
 

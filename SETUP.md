@@ -7,9 +7,8 @@ what each panel shows.
 
 - **macOS.** Linux and Windows are untested.
 - **Node 22.13 or later.** The server stores usage history in SQLite through
-  `node:sqlite`, which needs no flag from Node 22.13. The rtk panels use the same
-  module. On an older Node the server still starts. It prints one `[store]` warning,
-  keeps no history past the transcripts on disk, and hides the rtk panels.
+  `node:sqlite`, which needs no flag from Node 22.13. The server does not start
+  without it. The rtk panels use the same module.
 - **`node` on the PATH that Claude Code sees.** The mod runs the scripts in `bin/`
   directly, through their `#!/usr/bin/env node` line. A clone keeps their exec bit.
 - **Claude Code.** The mod uses Claude Code's function hooks, which are early access.
