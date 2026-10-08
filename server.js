@@ -17,7 +17,7 @@ const { readSessions, buildLiveSessions, SESSION_ID_PATTERN } = require('./lib/s
 const { readActivity } = require('./lib/activity');
 const { readReviews, setDismissal, DISMISS_REASONS } = require('./lib/review');
 const { getReviewDb } = require('./lib/review-db');
-const { isBusy } = require('./lib/db');
+const { closeServerDb, isBusy } = require('./lib/db');
 const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
@@ -413,5 +413,20 @@ server.on('error', (err) => {
   }
   throw err;
 });
+
+// Ctrl-C (SIGINT) or a service stop (SIGTERM) closes the listener, then the one
+// transcripts.db handle. Closing the last connection checkpoints the WAL into
+// transcripts.db and removes transcripts.db-wal. The handlers are registered only
+// when server.js is the program. test/api.test.js loads it once per test server, and
+// a pair of listeners per load would pile up on the test process.
+if (require.main === module) {
+  const shutdown = () => {
+    server.close();
+    closeServerDb();
+    process.exit(0);
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+}
 
 module.exports = server;

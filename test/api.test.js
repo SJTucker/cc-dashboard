@@ -83,6 +83,7 @@ async function listen(t) {
   const server = startServer(t);
   t.after(() => {
     server.close();
+    require('../lib/db').closeServerDb(); // the instance the server used, before the next startServer drops it
     require('../lib/pricing').setSnapshots([]);
   });
   await new Promise((resolve) => server.once('listening', resolve));
