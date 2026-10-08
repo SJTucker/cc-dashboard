@@ -396,3 +396,116 @@ test('a response copied into a live file counts once when its first copy is in a
   assert.strictEqual(data.summary.totalInput, 200);
   store.close();
 });
+
+// Reads the database the way a restart would, without the in-memory store.
+function reload(dbFile) {
+  const s = openStore(dbFile);
+  const all = s.loadAll();
+  s.close();
+  return all;
+}
+
+function mockWarn() {
+  const original = console.warn;
+  console.warn = () => {};
+  return { restore: () => { console.warn = original; } };
+}
+
+function failTransactionsOnce(store) {
+  const real = store.transaction.bind(store);
+  let failures = 1;
+  store.transaction = (fn) => {
+    if (failures-- > 0) throw new Error('busy');
+    return real(fn);
+  };
+}
+
+function assertStoredAsGone(rows, dbFile, file, calls) {
+  const entry = rows.entries().find((e) => e.path === file);
+  assert.ok(entry, 'the entry is still in memory');
+  assert.strictEqual(entry.rows.calls.length, calls);
+  assert.strictEqual(entry.onDisk, false);
+  const [stored] = reload(dbFile);
+  assert.strictEqual(stored.onDisk, false);
+  assert.strictEqual(stored.rows.calls.length, calls);
+}
+
+test('a stored file appended to today and then deleted keeps its newest rows', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const { rows, refresh } = harness(dir, { store });
+  await refresh();
+
+  fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+  await refresh();
+  fs.unlinkSync(file);
+  await refresh();
+
+  assertStoredAsGone(rows, dbFile, file, 2);
+  store.close();
+});
+
+test('a gone file that reappears with new content and is deleted again keeps its newest rows', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'b', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const { rows, refresh } = harness(dir, { store });
+  await refresh();
+  const saved = fs.readFileSync(file);
+  fs.unlinkSync(file);
+  await refresh();
+
+  fs.writeFileSync(file, saved);
+  fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+  await refresh();
+  fs.unlinkSync(file);
+  await refresh();
+
+  assertStoredAsGone(rows, dbFile, file, 2);
+  store.close();
+});
+
+test('a stored file whose write failed and which is then deleted is written as gone', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'e', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const { rows, refresh } = harness(dir, { store });
+  await refresh();
+
+  fs.appendFileSync(file, usageLine('2', new Date(Date.now() - 2 * DAY_MS).toISOString()) + '\n');
+  const seconds = (Date.now() - 2 * DAY_MS) / 1000 + 5;
+  fs.utimesSync(file, seconds, seconds);
+  const warn = mockWarn();
+  failTransactionsOnce(store);
+  await refresh();
+  fs.unlinkSync(file);
+  await refresh();
+  warn.restore();
+
+  assertStoredAsGone(rows, dbFile, file, 2);
+  store.close();
+});
+
+test('a gone mark inside a failed transaction is written on the next refresh', { skip: needsSqlite }, async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'c', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const { rows, refresh } = harness(dir, { store });
+  await refresh();
+
+  fs.unlinkSync(file);
+  const warn = mockWarn();
+  failTransactionsOnce(store);
+  await refresh();
+  assert.strictEqual(reload(dbFile)[0].onDisk, true, 'the failed transaction wrote nothing');
+  await refresh();
+  warn.restore();
+
+  assertStoredAsGone(rows, dbFile, file, 1);
+  store.close();
+});
