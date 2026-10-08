@@ -24,8 +24,6 @@ function fixture() {
 
 function run(base, args, input = '') {
   const env = { ...process.env, CLAUDE_CONFIG_DIR: base };
-  delete env.LIVE_SESSIONS_DIR;
-  delete env.REVIEWS_DIR;
   const res = spawnSync(process.execPath, [SCRIPT, ...args], { input, env, encoding: 'utf8' });
   return { code: res.status, out: res.stdout ? JSON.parse(res.stdout) : null, err: res.stderr };
 }

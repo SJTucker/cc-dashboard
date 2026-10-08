@@ -1,7 +1,7 @@
 {
   "name": "my-cc-dashboard",
   "version": "1.0.0",
-  "description": "A local Claude Code usage dashboard - reads ~/.claude/projects, and fetches Anthropic's pricing page only when asked.",
+  "description": "A local Claude Code usage dashboard that reads the transcripts in ~/.claude/projects.",
   "main": "server.js",
   "bin": {
     "my-cc-dashboard": "server.js"
@@ -13,7 +13,7 @@
     "test": "node --test test/*.test.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=22.13.0"
   },
   "dependencies": {
     "express": "^4.19.2",

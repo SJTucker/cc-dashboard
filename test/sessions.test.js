@@ -149,38 +149,40 @@ test('recordSession never throws, even when the directory cannot be created', ()
   assert.doesNotThrow(() => recordSession(undefined, tmpDir(), NOW));
 });
 
-test('getSessionsDir follows LIVE_SESSIONS_DIR, then CLAUDE_CONFIG_DIR, then ~/.claude', () => {
-  const saved = { LIVE_SESSIONS_DIR: process.env.LIVE_SESSIONS_DIR, CLAUDE_CONFIG_DIR: process.env.CLAUDE_CONFIG_DIR };
+test('getSessionsDir follows CLAUDE_CONFIG_DIR, then ~/.claude', () => {
+  const saved = process.env.CLAUDE_CONFIG_DIR;
   try {
-    process.env.LIVE_SESSIONS_DIR = '~/elsewhere';
-    assert.strictEqual(getSessionsDir(), path.join(os.homedir(), 'elsewhere'));
-    delete process.env.LIVE_SESSIONS_DIR;
     process.env.CLAUDE_CONFIG_DIR = '/tmp/cfg';
     assert.strictEqual(getSessionsDir(), path.join('/tmp/cfg', 'cc-dashboard', 'sessions'));
     delete process.env.CLAUDE_CONFIG_DIR;
     assert.strictEqual(getSessionsDir(), path.join(os.homedir(), '.claude', 'cc-dashboard', 'sessions'));
   } finally {
-    for (const [k, v] of Object.entries(saved)) {
-      if (v === undefined) delete process.env[k];
-      else process.env[k] = v;
-    }
+    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = saved;
   }
 });
 
-function runBin(name, input, env) {
+// A throwaway config dir for a bin script, with its sessions folder already made.
+function configDir() {
+  const config = tmpDir();
+  const sessions = path.join(config, 'cc-dashboard', 'sessions');
+  fs.mkdirSync(sessions, { recursive: true });
+  return { config, sessions, limits: path.join(config, 'rate-limits.json') };
+}
+
+function runBin(name, input, config) {
   return spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', name)], {
     input,
     encoding: 'utf8',
-    env: { ...process.env, ...env },
+    env: { ...process.env, CLAUDE_CONFIG_DIR: config },
   });
 }
 
 for (const name of ['record-statusline', 'record-limits']) {
   test(`bin/${name} writes the session snapshot and the rate limits`, () => {
-    const sessions = tmpDir();
-    const limits = path.join(tmpDir(), 'rate-limits.json');
+    const { config, sessions, limits } = configDir();
     const input = statuslineInput({ rate_limits: { five_hour: { used_percentage: 12.5, resets_at: null } } });
-    const result = runBin(name, JSON.stringify(input), { LIVE_SESSIONS_DIR: sessions, RATE_LIMITS_JSON: limits });
+    const result = runBin(name, JSON.stringify(input), config);
     assert.strictEqual(result.status, 0);
     assert.strictEqual(result.stdout, '');
     assert.strictEqual(result.stderr, '');
@@ -189,10 +191,9 @@ for (const name of ['record-statusline', 'record-limits']) {
   });
 
   test(`bin/${name} still writes the rate limits when the cost block is missing`, () => {
-    const sessions = tmpDir();
-    const limits = path.join(tmpDir(), 'rate-limits.json');
+    const { config, sessions, limits } = configDir();
     const input = statuslineInput({ cost: undefined, rate_limits: { five_hour: { used_percentage: 3, resets_at: null } } });
-    const result = runBin(name, JSON.stringify(input), { LIVE_SESSIONS_DIR: sessions, RATE_LIMITS_JSON: limits });
+    const result = runBin(name, JSON.stringify(input), config);
     assert.strictEqual(result.status, 0);
     assert.strictEqual(result.stdout + result.stderr, '');
     assert.deepStrictEqual(fs.readdirSync(sessions), []);
@@ -200,7 +201,7 @@ for (const name of ['record-statusline', 'record-limits']) {
   });
 
   test(`bin/${name} is silent and exits 0 on bad input`, () => {
-    const result = runBin(name, 'not json', { LIVE_SESSIONS_DIR: tmpDir(), RATE_LIMITS_JSON: path.join(tmpDir(), 'r.json') });
+    const result = runBin(name, 'not json', configDir().config);
     assert.strictEqual(result.status, 0);
     assert.strictEqual(result.stdout + result.stderr, '');
   });
@@ -385,17 +386,18 @@ test('buildLiveSessions counts ended sessions in the totals', () => {
 });
 
 test('bin/record-session-end marks the snapshot and prints nothing', () => {
-  const dir = writeSnapshots([snapshot({ sessionId: 's1' })]);
+  const { config, sessions } = configDir();
+  fs.writeFileSync(path.join(sessions, 's1.json'), JSON.stringify(snapshot({ sessionId: 's1' })));
   const input = JSON.stringify({ session_id: 's1', reason: 'clear', hook_event_name: 'SessionEnd', cwd: '/tmp' });
-  const result = runBin('record-session-end', input, { LIVE_SESSIONS_DIR: dir });
+  const result = runBin('record-session-end', input, config);
   assert.strictEqual(result.status, 0);
   assert.strictEqual(result.stdout + result.stderr, '');
-  assert.strictEqual(readFile(dir, 's1').endReason, 'clear');
+  assert.strictEqual(readFile(sessions, 's1').endReason, 'clear');
 });
 
 test('bin/record-session-end is silent and exits 0 on bad or empty input', () => {
   for (const input of ['not json', '', 'null']) {
-    const result = runBin('record-session-end', input, { LIVE_SESSIONS_DIR: tmpDir() });
+    const result = runBin('record-session-end', input, configDir().config);
     assert.strictEqual(result.status, 0, `input ${JSON.stringify(input)}`);
     assert.strictEqual(result.stdout + result.stderr, '', `input ${JSON.stringify(input)}`);
   }

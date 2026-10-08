@@ -1,18 +1,22 @@
 # Claude Code Dashboard
 
-A small, local dashboard for your Claude Code usage, making one network request only
-when you click Check prices: daily and cumulative cost, daily tokens broken out by
-input / output / cache-write / cache-read, cost by model with dollars per million
-tokens, and a weekday-by-hour heatmap of when the spend happens.
+A local dashboard for your Claude Code usage: daily and cumulative cost, daily tokens
+broken out by input / output / cache-write / cache-read, cost by model with dollars
+per million tokens, and a weekday-by-hour heatmap of when the spend happens.
 
 If you use `rtk`, it also charts the command output rtk filtered out before it reached
 the model. See "rtk savings" below.
 
-Built to be easy to fully read in one sitting — five small files, two dependencies,
-no telemetry, no CDN. It makes one outbound request, and only when you click
-Check prices.
+Two dependencies, no telemetry, no CDN. The server makes one outbound request, and
+only when you click Check prices. The optional Claude Code mod in `mod/` also fetches
+Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
+does and doesn't do" below.
 
 ## Run it
+
+[SETUP.md](SETUP.md) has the requirements, the install steps for the server and the
+mod, every environment variable, and every file the dashboard reads or writes outside
+this folder. In short, on Node 22.13 or later:
 
 ```bash
 npm install
@@ -21,12 +25,6 @@ npm start
 
 Then open **http://localhost:3600**.
 
-Options:
-```bash
-node server.js --port 3601      # use a different port
-node server.js --open           # also open your browser automatically
-```
-
 While editing the code, run `npm run watch`. Node's `--watch` flag restarts
 the server when `server.js` or any file under `lib/` changes. Files under
 `public/` are read from disk on each request, so a page reload picks them up
@@ -34,13 +32,6 @@ without a restart. A restart keeps the stored rows in `cc-dashboard/transcripts.
 the first request after it reads the transcripts modified today and any that changed
 since the server stopped. When no database is available (see the Setup changes
 section), nothing is stored and the first request reads every transcript.
-
-By default it reads `~/.claude/projects`. If you use a custom Claude config
-location, set `CLAUDE_CONFIG_DIR` before starting it, same as Claude Code itself:
-
-```bash
-CLAUDE_CONFIG_DIR=/path/to/.claude npm start
-```
 
 ## rtk savings (optional)
 
@@ -52,15 +43,11 @@ These are read straight from rtk's own sqlite history, opened read-only. Nothing
 invokes the `rtk` binary, because every `rtk` call writes a row and would inflate the
 numbers being displayed.
 
-The default location is macOS's `~/Library/Application Support/rtk/history.db`.
-Elsewhere, point at it yourself:
+The default location is `~/Library/Application Support/rtk/history.db`. `RTK_DB`
+points at another one (see SETUP.md).
 
-```bash
-RTK_DB=~/.local/share/rtk/history.db npm start
-```
-
-No rtk, or a Node older than 22.5 (which is where the built-in `node:sqlite` arrived)?
-The panels simply do not appear. Nothing else changes.
+No rtk, or a Node older than 22.13 (the first 22.x release where `node:sqlite` needs
+no flag)? The panels do not appear.
 
 **These numbers are not billed tokens.** They are rtk's own estimate of output it
 filtered out before the model saw it. The cost and token figures everywhere else on
@@ -88,9 +75,9 @@ recently. It makes no network request of its own.
   response in any running session, as before.
   The same script also keeps one small snapshot per session, holding that
   session's cost and duration, in
-  `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`,
-  or `LIVE_SESSIONS_DIR`). The Live sessions panel reads them. Snapshots older than
-  a day are deleted on the next write. The panel's Length column comes from that
+  `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`).
+  The Live sessions panel reads them. Snapshots older than a day are deleted on the
+  next write. The panel's Length column comes from that
   snapshot, so it covers the whole session from whenever it started. Its Prompts,
   Cost today and Lines columns come from today's transcripts instead. A session that
   started yesterday shows fewer prompts, less cost and fewer lines than over its
@@ -105,12 +92,8 @@ recently. It makes no network request of its own.
 
 ### Setting up the recorder
 
-The dashboard ships a Claude Code mod in `mod/`. Link it into your skills folder, and
-every Claude Code session loads it:
-
-```bash
-ln -s ~/code/cc-dashboard/mod ~/.claude/skills/cc-dashboard
-```
+The dashboard ships a Claude Code mod in `mod/`. SETUP.md has the steps to link it
+into your skills folder. Every Claude Code session started after that loads it.
 
 After each main turn, and whenever a rate-limit window moves by 1%, the mod runs
 `bin/record-statusline`. When a session ends, it runs `bin/record-session-end`. It
@@ -119,7 +102,7 @@ The mod needs nothing in your statusline script or in `settings.json`. It uses
 Claude Code's function hooks, which are early access and may change between
 releases. If an update breaks it, the transcript shows one line starting
 `cc-dashboard:`, or the Plan usage panel's "as of" time stops moving.
-`claude plugin validate ~/code/cc-dashboard/mod` says what the engine refuses.
+`claude plugin validate mod`, run from this folder, says what the engine refuses.
 
 ### Claude Code updates
 
@@ -256,42 +239,9 @@ so the text can contain what you typed in that command.
 
 ### Without the mod
 
-The scripts also work on their own. Use this path or the mod, not both.
-
-Add one line to your existing statusline script (the command `statusLine.command` in
-`~/.claude/settings.json` points at):
-
-```bash
-echo "$input" | ~/code/cc-dashboard/bin/record-statusline
-```
-
-`bin/record-limits` is the script's old name and still works.
-
-`record-statusline` never writes to stdout or stderr and always exits 0, so adding it
-does not change what the statusline shows. Do not point `statusLine.command`
-straight at `record-statusline`. It prints nothing, so the statusline would be blank.
-With no statusline script yet, a minimal one looks like this:
-
-```bash
-#!/bin/bash
-input=$(cat)
-echo "$input" | ~/code/cc-dashboard/bin/record-statusline
-echo "$input" | jq -r '.model.display_name'
-```
-
-For the cleared and ended marks in Live sessions, also run `bin/record-session-end` as
-a `SessionEnd` hook. Add this key to the `"hooks"` object in
-`~/.claude/settings.json`. If the file has no `"hooks"` object, create one at the top
-level, `"hooks": { … }`, and put the key inside it. Do not add a second `"hooks"`
-key: JSON keeps only the last one, and the hooks in the other are silently dropped.
-
-```json
-"SessionEnd": [
-  { "hooks": [{ "type": "command", "command": "~/code/cc-dashboard/bin/record-session-end" }] }
-]
-```
-
-`record-session-end` never writes to stdout or stderr and always exits 0.
+The scripts in `bin/` also run from your own statusline script and a `SessionEnd`
+hook. SETUP.md has the steps and lists what that route leaves out. Use that route or
+the mod, not both.
 
 ### What the panels show
 
@@ -320,9 +270,7 @@ does not expect, it is treated as absent, not an error; if both are absent, the
 panel stays hidden. The panel's note names which source it used. Claude Code only
 produces either source for claude.ai subscription logins, and only while it runs,
 so the panel shows the time of the last update. Per-model weekly limits are left
-out. Read the usage cache from another file with `CLAUDE_JSON=~/path/.claude.json
-npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.json
-npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
+out.
 
 The Live sessions panel holds two tables. Running now lists the live sessions,
 meaning those that wrote to a transcript in the last 10 minutes, and any session
@@ -346,9 +294,9 @@ Cost today.
 The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
 any other end, such as quitting or `/resume`. It reads this from
 `bin/record-session-end`, which the mod runs when a session ends. Without the mod,
-the `SessionEnd` hook under "Without the mod" runs it. With neither, a session shows
-as live for 10 minutes after its last response. So after a `/clear`, the old session
-and the new one both show as live for up to 10 minutes. A resumed session keeps its
+the `SessionEnd` hook from SETUP.md's "Without the mod" runs it. With neither, a
+session shows as live for 10 minutes after its last response. So after a `/clear`, the
+old session and the new one both show as live for up to 10 minutes. A resumed session keeps its
 session id, so its row shows as live again after its next response.
 When a project has two or more cleared or ended sessions, the panel shows them as
 one row with the summed figures and a count of each state. Click the row's arrow to
@@ -436,7 +384,7 @@ dashboard stored before Claude Code deleted it. A transcript deleted on the day 
 written is never stored. History starts at the first stored transcript. A
 before/after needs history on both sides of a change, so a change less than 7 days
 newer than your oldest stored row has no "before" window to compare and gets no
-marker. `node:sqlite` needs Node 22.5 or later. On an older Node, or when
+marker. `node:sqlite` needs Node 22.13 or later. On an older Node, or when
 `transcripts.db` cannot be opened or was written by a newer version of the dashboard,
 `openStore` in `lib/store.js` leaves the file untouched, logs one warning and keeps
 rows in memory only. History then starts at the oldest transcript on disk. Raising
@@ -458,12 +406,12 @@ rows in memory only. History then starts at the oldest transcript on disk. Raisi
   `cc-dashboard/changes/` and the stored setup copies in `cc-dashboard/setup/` (see
   "Setup changes recorded automatically"). The other write path is the Apply
   button in the Cost by model panel: clicking it is the only thing that writes
-  `prices.json` (`PRICES_JSON` moves it). The third write path is the transcript
-  database. `server.js` writes `~/.claude/cc-dashboard/transcripts.db` (or
-  `$CLAUDE_CONFIG_DIR/cc-dashboard/transcripts.db`, or `$TRANSCRIPTS_DB` when set)
-  with the usage rows of each transcript last modified before today. Nothing deletes
-  rows from it, because it holds the only copy of a transcript Claude Code has
-  deleted. Nothing else under `server.js` or `public/` writes anything.
+  `prices.json`. The third write path is the transcript database. `server.js`
+  writes `~/.claude/cc-dashboard/transcripts.db` (or
+  `$CLAUDE_CONFIG_DIR/cc-dashboard/transcripts.db`) with the usage rows of each
+  transcript last modified before today. Nothing deletes rows from it, because it
+  holds the only copy of a transcript Claude Code has deleted. Nothing else under
+  `server.js` or `public/` writes anything.
 - **One network request from the server, on demand.** The Cost by model panel has
   a Check prices button. Clicking it makes the server fetch
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's
@@ -487,12 +435,12 @@ rows in memory only. History then starts at the oldest transcript on disk. Raisi
 - **Pricing is an estimate, with a dated history.** `lib/pricing.js` has a built-in
   price table, last checked against Anthropic's pricing page on 2026-09-28. Check
   prices lists new models and changed prices and changes nothing. Apply saves them
-  to `~/.claude/cc-dashboard/prices.json` (set `PRICES_JSON` to move it) with an
-  effective-from date. A changed price applies to usage from that date on, and older
-  usage keeps the price it had. A new model is priced for all dates. A page that
-  does not parse is refused with the reason, and prices stay as they are. Any model
-  the table does not recognize is still counted in token totals but shown as
-  "unpriced" rather than silently costed at $0.
+  to `~/.claude/cc-dashboard/prices.json` with an effective-from date. A changed
+  price applies to usage from that date on, and older usage keeps the price it had.
+  A new model is priced for all dates. A page that does not parse is refused with
+  the reason, and prices stay as they are. Any model the table does not recognize is
+  still counted in token totals but shown as "unpriced" rather than silently costed
+  at $0.
 
 ## File layout
 

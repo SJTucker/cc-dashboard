@@ -444,10 +444,10 @@ test('a Haiku call with no answer records nothing and logs the reason', async ($
   expect(logged).toEqual(['Haiku gave no verdict for 2.1.290 (api-error)'])
 })
 
-test('UPDATES_FILE overrides the verdict file the check reads', async ($, on) => {
+test('CLAUDE_CONFIG_DIR moves the verdict file the check reads', async ($, on) => {
   const { fetched, asked, clock } = world(on, {
-    env: { HOME: '/home/u', UPDATES_FILE: '~/elsewhere/updates.json' },
-    files: { '/home/u/elsewhere/updates.json': '{"2.1.290":{"relevant":false}}' },
+    env: { HOME: '/home/u', CLAUDE_CONFIG_DIR: '/cfg' },
+    files: { '/cfg/cc-dashboard/updates.json': '{"2.1.290":{"relevant":false}}' },
   })
   await $.session.start(start)
   await clock.settle()

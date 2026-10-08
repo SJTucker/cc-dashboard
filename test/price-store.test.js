@@ -11,32 +11,29 @@ const store = require('../lib/price-store');
 const ROW = { match: 'sonnet-4-6', family: 'sonnet', label: 'Sonnet', name: 'Claude Sonnet 4.6', input: 6, output: 30 };
 const NOW = new Date(2026, 9, 20, 12, 0);
 
-// Each test gets its own prices file through PRICES_JSON, and starts from it.
-function useTempFile(t) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-prices-'));
-  const file = path.join(dir, 'nested', 'prices.json');
-  process.env.PRICES_JSON = file;
+// Points CLAUDE_CONFIG_DIR at dir for one test and puts it back afterwards.
+function useConfigDir(t, dir) {
+  const saved = process.env.CLAUDE_CONFIG_DIR;
+  process.env.CLAUDE_CONFIG_DIR = dir;
   t.after(() => {
-    delete process.env.PRICES_JSON;
+    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = saved;
     setSnapshots([]);
   });
-  store.loadPriceFile();
-  return file;
 }
 
-test('getPricesPath prefers PRICES_JSON, then CLAUDE_CONFIG_DIR', (t) => {
-  const saved = { p: process.env.PRICES_JSON, c: process.env.CLAUDE_CONFIG_DIR };
-  t.after(() => {
-    if (saved.p === undefined) delete process.env.PRICES_JSON; else process.env.PRICES_JSON = saved.p;
-    if (saved.c === undefined) delete process.env.CLAUDE_CONFIG_DIR; else process.env.CLAUDE_CONFIG_DIR = saved.c;
-  });
-  delete process.env.PRICES_JSON;
-  process.env.CLAUDE_CONFIG_DIR = '/tmp/cfg';
+// Each test gets its own config dir, so its own prices file, and starts from it.
+// cc-dashboard/ does not exist yet, so a write has to create it.
+function useTempFile(t) {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-prices-'));
+  useConfigDir(t, dir);
+  store.loadPriceFile();
+  return path.join(dir, 'cc-dashboard', 'prices.json');
+}
+
+test('getPricesPath is under CLAUDE_CONFIG_DIR, then ~/.claude', (t) => {
+  useConfigDir(t, '/tmp/cfg');
   assert.strictEqual(store.getPricesPath(), path.join('/tmp/cfg', 'cc-dashboard', 'prices.json'));
-  process.env.PRICES_JSON = '/tmp/elsewhere.json';
-  assert.strictEqual(store.getPricesPath(), '/tmp/elsewhere.json');
   delete process.env.CLAUDE_CONFIG_DIR;
-  delete process.env.PRICES_JSON;
   assert.strictEqual(store.getPricesPath(), path.join(os.homedir(), '.claude', 'cc-dashboard', 'prices.json'));
 });
 
@@ -153,17 +150,12 @@ test('appendSnapshot reloads the file first, so a file corrupted after the last 
 
 test('a write that cannot succeed returns an error instead of throwing', (t) => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-prices-'));
-  // Read-only directory: the file itself is missing (a harmless ENOENT on
-  // load), but mkdirSync cannot create the subdirectory to hold it.
+  // Read-only config dir: the file itself is missing (a harmless ENOENT on
+  // load), but mkdirSync cannot create cc-dashboard/ to hold it.
   const locked = path.join(dir, 'locked');
   fs.mkdirSync(locked, { mode: 0o555 });
-  const file = path.join(locked, 'sub', 'prices.json');
-  process.env.PRICES_JSON = file;
-  t.after(() => {
-    delete process.env.PRICES_JSON;
-    setSnapshots([]);
-    fs.chmodSync(locked, 0o755);
-  });
+  useConfigDir(t, locked);
+  t.after(() => fs.chmodSync(locked, 0o755));
   store.loadPriceFile();
   const result = store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [ROW], source: 'test', now: NOW });
   assert.match(result.error, /Could not write/);

@@ -40,10 +40,7 @@ function startServer() {
   // assertions below would depend on their shell history.
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
 
-  delete process.env.LIVE_SESSIONS_DIR; // snapshots resolve under CLAUDE_CONFIG_DIR
-  delete process.env.PRICES_JSON; // prices.json resolves under CLAUDE_CONFIG_DIR
-  delete process.env.REVIEWS_DIR; // reviews resolve under CLAUDE_CONFIG_DIR
-  delete process.env.TRANSCRIPTS_DB; // transcripts.db resolves under CLAUDE_CONFIG_DIR
+  // Snapshots, prices.json, reviews and transcripts.db all resolve under it.
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.PORT = '0'; // let the OS pick a free port
   // The row store keeps its rows and database handle at module level, so each
@@ -248,7 +245,6 @@ test('two concurrent cold requests for the same range aggregate once', async (t)
 
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
   process.env.CLAUDE_CONFIG_DIR = base;
-  delete process.env.TRANSCRIPTS_DB;
   process.env.PORT = '0';
   for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
   const aggregateModule = require('../lib/aggregate');
@@ -301,10 +297,8 @@ function startChangesServer({ changes, plugins } = {}) {
   const changesPath = path.join(base, 'changes.json');
   if (changes) fs.writeFileSync(changesPath, JSON.stringify(changes));
   process.env.CHANGES_FILE = changesPath;
-  process.env.UPDATES_FILE = path.join(base, 'updates-nonexistent.json');
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
   process.env.CLAUDE_CONFIG_DIR = base;
-  delete process.env.TRANSCRIPTS_DB;
   process.env.PORT = '0';
   for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/changes', '../lib/efficiency', '../server']) delete require.cache[require.resolve(mod)];
   return { server: require('../server'), changesPath };
@@ -360,7 +354,6 @@ test('GET /api/changes works with no marker sources at all', async (t) => {
 });
 
 test('GET /api/limits sends only the limits', async (t) => {
-  delete process.env.CLAUDE_JSON;
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
@@ -386,7 +379,6 @@ test('GET /api/limits sends only the limits', async (t) => {
 });
 
 test('GET /api/limits returns null when there is no usage cache', async (t) => {
-  delete process.env.CLAUDE_JSON;
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
@@ -544,12 +536,9 @@ test('the server still answers when the transcript database cannot be opened', {
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
   const warn = t.mock.method(console, 'warn', () => {});
-  // A path under a regular file cannot be created. It is set after startServer, which
-  // clears the variable, and before the first scan opens the database.
-  const blocker = path.join(process.env.CLAUDE_CONFIG_DIR, 'blocker');
-  fs.writeFileSync(blocker, 'x');
-  process.env.TRANSCRIPTS_DB = path.join(blocker, 'transcripts.db');
-  t.after(() => delete process.env.TRANSCRIPTS_DB);
+  // SQLite cannot open a directory as a database. It is made after startServer and
+  // before the first scan opens the database.
+  fs.mkdirSync(path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'transcripts.db'), { recursive: true });
 
   const res = await fetch(`http://127.0.0.1:${server.address().port}/api/summary?days=all`);
 
@@ -825,8 +814,6 @@ test('the price POST routes refuse a cross-site request', async (t) => {
 });
 
 test('GET /api/limits adds today\'s share of the weekly limit', async (t) => {
-  delete process.env.CLAUDE_JSON;
-  delete process.env.RATE_LIMITS_JSON;
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
