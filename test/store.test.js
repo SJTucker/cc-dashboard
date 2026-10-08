@@ -273,3 +273,12 @@ test('openStore leaves open a handle that getDb gave it, even when the store can
   assert.strictEqual(openStore(file, () => handle), null);
   assert.deepStrictEqual({ ...handle.prepare('SELECT 1 AS x').get() }, { x: 1 });
 });
+
+test('store.close leaves a handle that getDb gave the store usable', (t) => {
+  const file = path.join(tmpDir(t, 'store'), 'transcripts.db');
+  const handle = openDatabase(file);
+  t.after(() => handle.close());
+  const store = openStore(file, () => handle);
+  store.close();
+  assert.deepStrictEqual({ ...handle.prepare('SELECT 1 AS x').get() }, { x: 1 });
+});

@@ -116,6 +116,7 @@ test('openDatabase refuses a busy timeout that is not a whole number, before it 
   const file = path.join(tmpDir(t, 'db'), 'transcripts.db');
   assert.throws(() => openDatabase(file, { busyTimeoutMs: '250; DROP TABLE files' }), TypeError);
   assert.throws(() => openDatabase(file, { busyTimeoutMs: -1 }), TypeError);
+  assert.throws(() => openDatabase(file, { busyTimeoutMs: 1e21 }), TypeError);
   assert.strictEqual(fs.existsSync(file), false);
 });
 
