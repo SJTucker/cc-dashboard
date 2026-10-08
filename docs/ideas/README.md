@@ -14,3 +14,4 @@ then on.
 | [Subagent permission prompts](subagent-permission-prompts.md) | Open: a subagent waiting on a permission prompt shows as working; needs a way to read the permission mode first |
 | [Before and after chart polish](before-after-chart-polish.md) | Open: empty space under the chart, a change on the last day, axis labels and a legend; chart height and legend form open |
 | [Data storage and scan cost](data-storage.md) | Open: files only, transcripts bounded by cleanupPeriodDays; measure scan times before choosing an incremental scan, daily summaries or SQLite |
+| [Dismiss review suggestions](dismiss-review-suggestions.md) | Open: where a dismissal is stored, the endpoint, how a dismissed suggestion shows, and whether a reason feeds back to Haiku |
