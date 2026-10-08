@@ -15,3 +15,4 @@ then on.
 | [Before and after chart polish](before-after-chart-polish.md) | Open: empty space under the chart, a change on the last day, axis labels and a legend; chart height and legend form open |
 | [Data storage and scan cost](data-storage.md) | Open: keep history past 30 days in SQLite; old files stored once, live files parsed each refresh; Node fallback and extractor migrations open |
 | [Dismiss review suggestions](dismiss-review-suggestions.md) | Open: where a dismissal is stored, the endpoint, how a dismissed suggestion shows, and whether a reason feeds back to Haiku |
+| [Model mix: tokens or cost](model-mix-cost-toggle.md) | Open: click the donut to switch to cost; click target, remembering the choice, sort order and overlap with Cost by model open |
