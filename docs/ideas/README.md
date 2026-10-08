@@ -18,3 +18,4 @@ then on.
 | [Setup changes list follows the range](setup-changes-list-range.md) | Open: the day buttons ignore the range and start at 8/24; filter to the charts' span, consider a timeline or calendar, and decide what a selected change outside the range does |
 | [Row store growth](row-store-growth.md) | Open: loaded rows take 47 MB and the All range 75 ms after 40 days; the heap size or aggregate time that starts the work, and daily totals versus loading only the requested range, open |
 | [Feed "not useful" dismissals to Haiku](feed-dismissals-to-haiku.md) | Open: which dismissals to send, how to word them, token cost, and how to measure whether it helped |
+| [Session reviews: action buttons](review-actions-design.md) | Open: Done and Not useful become right-aligned icon buttons with tooltips, Copy prompt gets a tooltip saying what it copies; icons or a menu, and the label, open. Build after D |
