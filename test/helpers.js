@@ -88,4 +88,24 @@ function withEnv(t, vars) {
   }
 }
 
-module.exports = { tmpDir, removeTree, withEnv };
+// Boots the real server.js on an ephemeral port against an empty config dir. The
+// variables are set before server.js is required because it reads them at load time.
+function bootServer(t) {
+  const base = tmpDir(t, 'boot');
+  fs.mkdirSync(path.join(base, 'projects', 'demo'), { recursive: true });
+  withEnv(t, {
+    CLAUDE_CONFIG_DIR: base,
+    RTK_DB: path.join(base, 'no-rtk-here.db'),
+    CHANGES_FILE: path.join(base, 'changes.json'),
+    PORT: '0',
+  });
+  const serverPath = path.join(__dirname, '..', 'server');
+  delete require.cache[require.resolve(serverPath)];
+  const server = require(serverPath);
+  t.after(() => server.close());
+  return new Promise((resolve) => {
+    server.once('listening', () => resolve({ server, port: server.address().port, base }));
+  });
+}
+
+module.exports = { tmpDir, removeTree, withEnv, bootServer };
