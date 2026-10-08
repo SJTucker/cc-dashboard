@@ -1,0 +1,196 @@
+# Setup
+
+These steps take you from `git clone` to every panel showing data. The README says
+what each panel shows.
+
+## Requirements
+
+- **macOS.** Linux and Windows are untested.
+- **Node 22.13 or later.** The server stores usage history in SQLite through
+  `node:sqlite`, which needs no flag from Node 22.13. The rtk panels use the same
+  module. On an older Node the server still starts. It prints one `[store]` warning,
+  keeps no history past the transcripts on disk, and hides the rtk panels.
+- **`node` on the PATH that Claude Code sees.** The mod runs the scripts in `bin/`
+  directly, through their `#!/usr/bin/env node` line. A clone keeps their exec bit.
+- **Claude Code.** The mod uses Claude Code's function hooks, which are early access.
+  No minimum version is known. The mod was last run on 2.1.294.
+
+## Run the server
+
+```bash
+git clone <this repository's URL> cc-dashboard
+cd cc-dashboard
+npm install
+npm start
+```
+
+Then open **http://localhost:3600**.
+
+- The server binds `127.0.0.1` only.
+- `node server.js --port 3601` or `PORT=3601 npm start` picks another port.
+- `npm run dev` also opens the browser.
+- `npm run watch` restarts the server when `server.js` or a file under `lib/`
+  changes.
+
+The first page load reads every transcript under `~/.claude/projects` and stores the
+rows in `~/.claude/cc-dashboard/transcripts.db`. Later loads, and later starts, read
+only the transcripts that changed. The server creates `~/.claude/cc-dashboard/` if it is missing, so that
+folder must be writable.
+
+## Install the mod
+
+The mod in `mod/` records plan usage, live session state, session reviews, Claude Code
+release markers and setup change markers. Link it into your skills folder from the
+clone:
+
+```bash
+ln -s "$PWD/mod" ~/.claude/skills/cc-dashboard
+claude plugin validate "$PWD/mod"
+```
+
+Every Claude Code session started after that loads the mod. It needs no change to
+your statusline script or to `settings.json`.
+
+- **`mod/` must stay beside `bin/`.** The mod follows the link back to the clone and
+  runs `<clone>/bin/<script>`. A copy of `mod/` on its own finds no scripts.
+- **Moving the clone breaks the link.** Remove `~/.claude/skills/cc-dashboard` and run
+  the `ln -s` line again from the new location.
+- **A failure shows as one transcript line** starting `cc-dashboard:`.
+  `claude plugin validate` says what Claude Code refuses to load.
+
+## Without the mod
+
+The scripts in `bin/` also run from your own statusline and hooks. Use this route or
+the mod, not both.
+
+This route records plan usage, the session snapshots and the cleared and ended marks.
+It gives no session reviews, no State or Doing now columns, no subagent counts, no
+Claude Code release markers and no automatic setup change markers.
+
+Replace `/path/to/cc-dashboard` below with the clone's path. `pwd` in the clone
+prints it.
+
+Add one line to the statusline script that `statusLine.command` in
+`~/.claude/settings.json` points at:
+
+```bash
+echo "$input" | /path/to/cc-dashboard/bin/record-statusline
+```
+
+`record-statusline` prints nothing and always exits 0, so it does not change what the
+statusline shows. Do not point `statusLine.command` straight at it, because the
+statusline would be blank. With no statusline script yet, a minimal one looks like
+this:
+
+```bash
+#!/bin/bash
+input=$(cat)
+echo "$input" | /path/to/cc-dashboard/bin/record-statusline
+echo "$input" | jq -r '.model.display_name'
+```
+
+`bin/record-limits` is the old name of `bin/record-statusline` and still works.
+
+For the cleared and ended marks in Live sessions, run `bin/record-session-end` as a
+`SessionEnd` hook. Add this key to the `"hooks"` object in `~/.claude/settings.json`.
+If the file has no `"hooks"` object, create one at the top level and put the key
+inside it. Do not add a second `"hooks"` key. JSON keeps only the last one, and the
+hooks in the other are dropped.
+
+```json
+"SessionEnd": [
+  { "hooks": [{ "type": "command", "command": "/path/to/cc-dashboard/bin/record-session-end" }] }
+]
+```
+
+`record-session-end` prints nothing and always exits 0.
+
+With neither the mod nor this route, the Plan usage panel reads only the usage cache
+in `~/.claude.json`, which updates when you run `/usage`. Live sessions has no Length
+column data and no cleared or ended marks.
+
+## rtk
+
+The two rtk panels read rtk's `history.db` read-only. The default path is
+`~/Library/Application Support/rtk/history.db`. Set `RTK_DB` for another location.
+Without rtk the panels do not appear.
+
+## Environment variables
+
+`<cfg>` is `CLAUDE_CONFIG_DIR`, or `~/.claude` when it is unset. Every variable below
+expands a leading `~`.
+
+| Variable | Default | What it sets |
+|---|---|---|
+| `PORT` | `3600` | The server's port. `--port` takes precedence. |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's config folder, and so `<cfg>` for every path below. The mod reads it too. |
+| `CLAUDE_JSON` | `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set, else `~/.claude.json` | The usage cache for Plan usage |
+| `RATE_LIMITS_JSON` | `<cfg>/rate-limits.json` | The statusline rate-limits file |
+| `LIVE_SESSIONS_DIR` | `<cfg>/cc-dashboard/sessions` | The per-session snapshots |
+| `REVIEWS_DIR` | `<cfg>/cc-dashboard/reviews` | The session review files |
+| `UPDATES_FILE` | `<cfg>/cc-dashboard/updates.json` | The Claude Code release verdicts. The mod reads it too. |
+| `TRANSCRIPTS_DB` | `<cfg>/cc-dashboard/transcripts.db` | The stored usage rows |
+| `PRICES_JSON` | `<cfg>/cc-dashboard/prices.json` | The applied price history |
+| `CHANGES_FILE` | `changes.json` in the clone | Setup change markers you add by hand |
+| `RTK_DB` | `~/Library/Application Support/rtk/history.db` | rtk's history |
+
+Set a variable for the server when you start it, for example
+`CLAUDE_CONFIG_DIR=/path/to/.claude npm start`.
+
+The `bin/` scripts run inside Claude Code, so they read these variables from Claude
+Code's environment. The mod reads `CLAUDE_CONFIG_DIR` and `UPDATES_FILE` from the same
+place. A variable that moves a file the scripts write, such as `LIVE_SESSIONS_DIR`,
+must have the same value for Claude Code and for the server. Otherwise the server
+reads a folder the scripts never write.
+
+## Files outside the repo
+
+| Path | Override | Written by |
+|---|---|---|
+| `<cfg>/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` | Claude Code |
+| `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_JSON` | Claude Code |
+| `<cfg>/plugins/installed_plugins.json` | `CLAUDE_CONFIG_DIR` | Claude Code |
+| `<cfg>/rate-limits.json` | `RATE_LIMITS_JSON` | `bin/record-statusline` |
+| `<cfg>/cc-dashboard/sessions/` | `LIVE_SESSIONS_DIR` | `bin/record-statusline`, `bin/record-session-end` |
+| `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod |
+| `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
+| `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
+| `<cfg>/cc-dashboard/reviews/` | `REVIEWS_DIR` | `bin/review-session` |
+| `<cfg>/cc-dashboard/updates.json` | `UPDATES_FILE` | `bin/judge-updates` |
+| `<cfg>/cc-dashboard/transcripts.db` | `TRANSCRIPTS_DB` | the server |
+| `<cfg>/cc-dashboard/prices.json` | `PRICES_JSON` | the server, when you click Apply |
+| rtk's `history.db` | `RTK_DB` | rtk |
+
+The mod also reads these files to record setup changes. It writes none of them.
+
+- `<cfg>/CLAUDE.md`, the files it includes with an `@path` line, and `<cfg>/rules/`
+- `<cfg>/settings.json` and `<cfg>/settings.local.json`
+- `<cfg>/skills/*/SKILL.md` and `<cfg>/agents/*.md`
+- the scripts named by hook commands and by `statusLine` in `settings.json`
+- `config.toml` and `filters.toml` in `~/Library/Application Support/rtk/`. This path
+  ignores `RTK_DB`.
+- each session's project `CLAUDE.md`, `CLAUDE.local.md` and `.claude/settings.json`
+
+## Network and model use
+
+- **The server** makes one request, and only when you click Check prices. It fetches
+  Anthropic's pricing page from `platform.claude.com`.
+- **The mod** fetches `CHANGELOG.md` from `raw.githubusercontent.com/anthropics/claude-code`
+  when the running Claude Code version has no verdict, or when you run
+  `/backfill-updates`.
+- **The mod calls Haiku** through your Claude Code login to judge releases, review
+  ended sessions and label setup changes. No API key is read. These calls write no
+  transcript line, so the dashboard's totals leave out their cost.
+
+## Check it works
+
+1. **The server.** `npm start` prints `Claude Code Dashboard running at
+   http://localhost:3600`. The page loads at that address.
+2. **The database.** After the first page load, the server's output has no `[store]`
+   warning and `~/.claude/cc-dashboard/transcripts.db` exists.
+3. **The mod.** `claude plugin validate "$PWD/mod"` passes, run from the clone.
+4. **The recorder.** Start a Claude Code session and send one prompt. A file named
+   after the session id appears in `~/.claude/cc-dashboard/sessions/`, and the Plan
+   usage panel's "as of" time is a moment ago.
+5. **Live state.** While that session runs, its row in Running now shows ▶ working or
+   ⏸ waiting on you in the State column.
