@@ -195,5 +195,24 @@ test('the rows survive a JSON round trip unchanged', async () => {
   ]);
   const rows = await extractFile(file);
 
-  assert.deepStrictEqual(JSON.parse(JSON.stringify(rows)), rows);
+  // rows.sessions has no prototype and JSON.parse returns a plain object, so the
+  // expected value copies it into a plain object first.
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(rows)), { ...rows, sessions: { ...rows.sessions } });
+});
+
+test('a sessionId named like an Object.prototype member is an ordinary session', async () => {
+  const file = writeTranscript([
+    '{"type":"user","sessionId":"__proto__","gitBranch":"main","timestamp":"' + T0 + '","message":{"content":[]}}',
+    '{"type":"user","sessionId":"constructor","gitBranch":"feat","timestamp":"' + T1 + '","message":{"content":[]}}',
+    { type: 'ai-title', sessionId: 'constructor', aiTitle: 'A title' },
+  ]);
+  const rows = await extractFile(file);
+
+  assert.strictEqual(rows.ok, true);
+  assert.deepStrictEqual(Object.keys(rows.sessions).sort(), ['__proto__', 'constructor']);
+  assert.deepStrictEqual(rows.sessions.constructor.branches, ['feat']);
+  assert.strictEqual(rows.sessions.constructor.title, 'A title');
+  assert.strictEqual(Object.getPrototypeOf(rows.sessions), null);
+  assert.strictEqual({}.branches, undefined);
+  assert.strictEqual(Object.keys(Object.prototype).length, 0);
 });
