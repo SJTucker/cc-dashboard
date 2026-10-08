@@ -873,8 +873,25 @@ html, body {
 .sessions-table .session-child td:first-child { padding-left: 24px; }
 .sessions-table .session-group .row-toggle { padding-right: 4px; }
 
-/* A table wider than a narrow screen scrolls inside the panel, not the page. */
-.table-scroll { overflow-x: auto; }
+/* A table wider than a narrow screen scrolls inside the panel, not the page. A long
+   table stops at 20rem and scrolls inside its wrapper, with the header row and the
+   Total row pinned. The pinned cells need an opaque background so rows do not show
+   through, and a shadow for the border line, which border-collapse drops on sticky cells. */
+.table-scroll { overflow: auto; max-height: 20rem; }
+.table-scroll:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+.sessions-table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding-top: 4px;
+  background: var(--surface);
+}
+.sessions-table .sessions-total td {
+  position: sticky;
+  bottom: 0;
+  background: var(--surface);
+  box-shadow: inset 0 1px var(--border);
+}
 
 .sessions-subhead {
   margin: 14px 0 6px;
@@ -929,9 +946,6 @@ html, body {
 .review-kind { font-weight: 600; color: var(--text-primary); }
 .review-empty { margin: 4px 0 0; color: var(--text-tertiary); }
 .sessions-total td { font-weight: 600; }
-
-/* Eight columns do not fit a narrow window, so the table scrolls inside its panel. */
-#sessionsPanel { overflow-x: auto; }
 
 .usage-row {
   display: grid;
