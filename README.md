@@ -30,8 +30,10 @@ node server.js --open           # also open your browser automatically
 While editing the code, run `npm run watch`. Node's `--watch` flag restarts
 the server when `server.js` or any file under `lib/` changes. Files under
 `public/` are read from disk on each request, so a page reload picks them up
-without a restart. A restart clears the scan cache, so the first request after
-it takes a full scan.
+without a restart. A restart keeps the stored rows in `cc-dashboard/transcripts.db`, so
+the first request after it reads only the transcripts that changed. On a Node older
+than 22.5, which has no `node:sqlite`, nothing is stored and the first request reads
+every transcript.
 
 By default it reads `~/.claude/projects`. If you use a custom Claude config
 location, set `CLAUDE_CONFIG_DIR` before starting it, same as Claude Code itself:
@@ -383,10 +385,8 @@ is hidden:
 
 `/api/summary` and `/api/limits` are always requested.
 
-The Record day card's all-time value is cached in `~/.claude/cc-dashboard/records.json`
-for 3 days, so the page does not scan all history on every load. The Today range
-updates the file when today overtakes the record. Refresh and applying new prices
-delete it.
+The Record day card's all-time value is the busiest day in the All range. It is
+computed from the stored rows on each request, so no separate cache file exists.
 
 ## Setup changes
 
@@ -428,12 +428,16 @@ the marker's shape. Keep the file somewhere else with
 A before/after is only as clean as its window. When another change falls within 7
 days either side, the panel lists it, and the numbers cover both.
 
-Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default), so
-history has a sliding start rather than a fixed one. A before/after needs history on
-both sides of a change, so a change less than 7 days newer than your oldest surviving
-transcript has no "before" window to compare and gets no marker. Raising
-`cleanupPeriodDays` in `~/.claude/settings.json` keeps more history and pushes that
-boundary back.
+Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default). The
+dashboard stores the usage rows of every transcript it reads in
+`~/.claude/cc-dashboard/transcripts.db`, so the All range, the Record day card and
+these before/after windows keep that history after the transcript is gone. History
+starts at the first transcript the dashboard read. A before/after needs history on
+both sides of a change, so a change less than 7 days newer than your oldest stored
+row has no "before" window to compare and gets no marker. Without `node:sqlite` (a
+Node older than 22.5) nothing is stored, and history ends at the oldest transcript on
+disk. Raising `cleanupPeriodDays` in `~/.claude/settings.json` keeps more transcripts
+on disk.
 
 ## What it does and doesn't do
 
@@ -451,12 +455,12 @@ boundary back.
   `cc-dashboard/changes/` and the stored setup copies in `cc-dashboard/setup/` (see
   "Setup changes recorded automatically"). The other write path is the Apply
   button in the Cost by model panel: clicking it is the only thing that writes
-  `prices.json` (`PRICES_JSON` moves it). The third write path is the Record day
-  cache. `server.js` writes `~/.claude/cc-dashboard/records.json` (or
-  `$CLAUDE_CONFIG_DIR/cc-dashboard/records.json`, or `$RECORDS_FILE` when set) when
-  `/api/records` finds it missing or 3 days old, and when today's total passes the
-  cached record. It deletes that file on Refresh and on Apply. Nothing else under
-  `server.js` or `public/` writes anything.
+  `prices.json` (`PRICES_JSON` moves it). The third write path is the transcript
+  database. `server.js` writes `~/.claude/cc-dashboard/transcripts.db` (or
+  `$CLAUDE_CONFIG_DIR/cc-dashboard/transcripts.db`, or `$TRANSCRIPTS_DB` when set)
+  with the usage rows of each transcript last modified before today. Nothing deletes
+  rows from it, because it holds the only copy of a transcript Claude Code has
+  deleted. Nothing else under `server.js` or `public/` writes anything.
 - **One network request from the server, on demand.** The Cost by model panel has
   a Check prices button. Clicking it makes the server fetch
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's
@@ -491,7 +495,11 @@ boundary back.
 
 ```
 server.js              Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records, /api/sessions/live, /api/reviews and the price routes (/api/prices, /api/prices/check, /api/prices/apply)
-lib/scan.js            Walks ~/.claude/projects, parses JSONL, aggregates by day and model
+lib/scan.js            Finds the transcripts under ~/.claude/projects, and scanUsage, which reads all of them once
+lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts and per-session summaries
+lib/aggregate.js       Turns the rows of many transcripts into totals by day, model, tool and session
+lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript only when it changes, and stores settled ones
+lib/store.js           The transcript database, transcripts.db, through node:sqlite
 lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window
 lib/changes.js         Setup change markers: plugin installs, new models, Claude Code releases, the mod's setup changes, changes.json
@@ -503,7 +511,6 @@ lib/net-guard.js       Host-header check + security headers
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
 lib/activity.js        Live state of each session, read from the activity files the mod writes, and old files pruned
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, review files
-lib/records.js         The Record day cache in records.json
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
 bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
