@@ -23,19 +23,19 @@ function runServer(t, args) {
 
 test('a port that is not a number exits 1 and says so', (t) => {
   const res = runServer(t, ['--port', 'abc']);
-  assert.strictEqual(res.status, 1, res.stderr);
-  assert.match(res.stderr, /Invalid port "abc"/);
+  assert.strictEqual(res.status, 1, `${res.error || ''} ${res.stderr}`);
+  assert.match(res.stderr, /Invalid port "abc"/, String(res.error || res.stderr));
 });
 
 test('a port above 65535 exits 1 and says so', (t) => {
   const res = runServer(t, ['--port', '70000']);
-  assert.strictEqual(res.status, 1, res.stderr);
-  assert.match(res.stderr, /Invalid port "70000"/);
+  assert.strictEqual(res.status, 1, `${res.error || ''} ${res.stderr}`);
+  assert.match(res.stderr, /Invalid port "70000"/, String(res.error || res.stderr));
 });
 
 test('a second server on a port that is in use exits 1 and says so', async (t) => {
   const { port } = await bootServer(t);
   const res = runServer(t, ['--port', String(port)]);
-  assert.strictEqual(res.status, 1, res.stderr);
-  assert.match(res.stderr, /already in use/);
+  assert.strictEqual(res.status, 1, `${res.error || ''} ${res.stderr}`);
+  assert.match(res.stderr, /already in use/, String(res.error || res.stderr));
 });

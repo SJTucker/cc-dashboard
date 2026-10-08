@@ -10,8 +10,17 @@ const { tmpDir } = require('./helpers');
 // The mod test runner refuses to import a .json file, so the entries live in
 // register.test.ts between two marker comments, as strict JSON.
 const SOURCE = fs.readFileSync(path.join(__dirname, '..', 'mod', 'hooks', 'register.test.ts'), 'utf8');
-const BLOCK = SOURCE.split('// contract:begin\n')[1].split('// contract:end')[0];
-const CALLS = JSON.parse(BLOCK.replace(/^const CONTRACT = /, '').replace(/,\s*\]\s*$/, ']'));
+const CALLS = (() => {
+  const where = 'contract block between contract:begin and contract:end in mod/hooks/register.test.ts';
+  const begun = SOURCE.split('// contract:begin\n')[1];
+  if (begun === undefined || !begun.includes('// contract:end')) throw new Error(`${where} is missing a marker`);
+  const block = begun.split('// contract:end')[0];
+  try {
+    return JSON.parse(block.replace(/^const CONTRACT = /, '').replace(/,\s*\]\s*$/, ']'));
+  } catch (err) {
+    throw new Error(`${where} is not strict JSON: ${err.message}`);
+  }
+})();
 const PRINTS_JSON = new Set(['judge-updates', 'review-session']);
 const PRINTS_NOTHING = new Set(['record-statusline', 'record-session-end']);
 

@@ -4,7 +4,6 @@ const test = require('node:test');
 const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 // scanUsage resolves its directory from CLAUDE_CONFIG_DIR at call time, so each
