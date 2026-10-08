@@ -46,8 +46,7 @@ numbers being displayed.
 The default location is `~/Library/Application Support/rtk/history.db`. `RTK_DB`
 points at another one (see SETUP.md).
 
-No rtk, or a Node older than 22.13 (the first 22.x release where `node:sqlite` needs
-no flag)? The panels do not appear.
+No rtk? The panels do not appear.
 
 **These numbers are not billed tokens.** They are rtk's own estimate of output it
 filtered out before the model saw it. The cost and token figures everywhere else on
@@ -385,8 +384,9 @@ written is never stored. History starts at the first stored transcript. A
 before/after needs history on both sides of a change, so a change less than 7 days
 newer than your oldest stored row has no "before" window to compare and gets no
 marker. `node:sqlite` needs Node 22.13 or later. When `transcripts.db` cannot be
-opened or was written by a newer version of the dashboard, `openStore` in `lib/store.js` leaves the file untouched, logs one warning and keeps
-rows in memory only. History then starts at the oldest transcript on disk. Raising
+opened or was written by a newer version of the dashboard, `openStore` in
+`lib/store.js` leaves the file untouched, logs one warning and keeps rows in memory
+only. History then starts at the oldest transcript on disk. Raising
 `cleanupPeriodDays` in `~/.claude/settings.json` keeps more transcripts on disk.
 
 ## What it does and doesn't do

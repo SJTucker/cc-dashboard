@@ -6,14 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { openStore, upgradeRows, getStorePath, SCHEMA_VERSION } = require('../lib/store');
-
-let sqlite = null;
-try {
-  sqlite = require('node:sqlite');
-} catch {
-  // Node before 22.13: every test below that needs a database is skipped.
-}
-const skip = !sqlite && 'node:sqlite is not available';
+const sqlite = require('node:sqlite');
 
 const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-store-'));
 
@@ -32,7 +25,7 @@ test('getStorePath: under CLAUDE_CONFIG_DIR, then ~/.claude', (t) => {
   assert.strictEqual(getStorePath(), path.join(os.homedir(), '.claude', 'cc-dashboard', 'transcripts.db'));
 });
 
-test('openStore creates the file and its directory, and loadAll is empty', { skip }, () => {
+test('openStore creates the file and its directory, and loadAll is empty', () => {
   const file = path.join(tmpDir(), 'nested', 'transcripts.db');
   const store = openStore(file);
   assert.ok(store);
@@ -41,7 +34,7 @@ test('openStore creates the file and its directory, and loadAll is empty', { ski
   store.close();
 });
 
-test('put then loadAll round-trips an entry, and put replaces the same path', { skip }, () => {
+test('put then loadAll round-trips an entry, and put replaces the same path', () => {
   const store = openStore(path.join(tmpDir(), 'a.db'));
   store.put('/p/one.jsonl', entryOf({ rows: rowsOf({ calls: [{ key: 'k' }] }) }));
   store.put('/p/one.jsonl', entryOf({ size: 20, rows: rowsOf({ calls: [{ key: 'k2' }] }) }));
@@ -54,7 +47,7 @@ test('put then loadAll round-trips an entry, and put replaces the same path', { 
   store.close();
 });
 
-test('markGone clears onDisk and keeps the rows', { skip }, () => {
+test('markGone clears onDisk and keeps the rows', () => {
   const store = openStore(path.join(tmpDir(), 'a.db'));
   store.put('/p/one.jsonl', entryOf({ rows: rowsOf({ calls: [{ key: 'k' }] }) }));
   store.markGone('/p/one.jsonl');
@@ -65,7 +58,7 @@ test('markGone clears onDisk and keeps the rows', { skip }, () => {
   store.close();
 });
 
-test('a transaction that throws writes nothing', { skip }, () => {
+test('a transaction that throws writes nothing', () => {
   const store = openStore(path.join(tmpDir(), 'a.db'));
   assert.throws(() => store.transaction(() => {
     store.put('/p/one.jsonl', entryOf());
@@ -78,7 +71,7 @@ test('a transaction that throws writes nothing', { skip }, () => {
   store.close();
 });
 
-test('the database persists across close and reopen', { skip }, () => {
+test('the database persists across close and reopen', () => {
   const file = path.join(tmpDir(), 'a.db');
   const first = openStore(file);
   first.put('/p/one.jsonl', entryOf());
@@ -89,7 +82,7 @@ test('the database persists across close and reopen', { skip }, () => {
   second.close();
 });
 
-test('loadAll skips a row whose data is not JSON, warns, and leaves it in the database', { skip }, (t) => {
+test('loadAll skips a row whose data is not JSON, warns, and leaves it in the database', (t) => {
   const file = path.join(tmpDir(), 'a.db');
   const store = openStore(file);
   store.put('/p/good.jsonl', entryOf());
@@ -109,7 +102,7 @@ test('loadAll skips a row whose data is not JSON, warns, and leaves it in the da
   check.close();
 });
 
-test('openStore returns null with one warning when the path cannot be a database', { skip }, (t) => {
+test('openStore returns null with one warning when the path cannot be a database', (t) => {
   const warn = t.mock.method(console, 'warn', () => {});
   const blocker = path.join(tmpDir(), 'file');
   fs.writeFileSync(blocker, 'x');
@@ -118,7 +111,7 @@ test('openStore returns null with one warning when the path cannot be a database
   assert.strictEqual(warn.mock.callCount(), 1);
 });
 
-test('openStore returns null for a newer schema and leaves the file as it was', { skip }, (t) => {
+test('openStore returns null for a newer schema and leaves the file as it was', (t) => {
   const file = path.join(tmpDir(), 'a.db');
   openStore(file).close();
   const raw = new sqlite.DatabaseSync(file);
@@ -155,7 +148,7 @@ const tableNames = (file) => {
   return names;
 };
 
-test('openStore on a newer schema creates no tables and leaves the bytes unchanged', { skip }, (t) => {
+test('openStore on a newer schema creates no tables and leaves the bytes unchanged', (t) => {
   const file = path.join(tmpDir(), 'v2.db');
   const raw = new sqlite.DatabaseSync(file);
   raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); CREATE TABLE files_v2 (path TEXT PRIMARY KEY, data TEXT); INSERT INTO meta VALUES ('schema', '3');");
@@ -168,7 +161,7 @@ test('openStore on a newer schema creates no tables and leaves the bytes unchang
   assert.ok(fs.readFileSync(file).equals(before));
 });
 
-test('a damaged data page: loadAll returns [] with one warning and the store never writes', { skip }, (t) => {
+test('a damaged data page: loadAll returns [] with one warning and the store never writes', (t) => {
   const file = path.join(tmpDir(), 'a.db');
   const store = openStore(file);
   store.transaction(() => {
@@ -211,7 +204,7 @@ for (const [label, version, data] of [
   ['a JSON array', 1, '[]'],
   ['a version newer than EXTRACT_VERSION', 999, '{"ok":true}'],
 ]) {
-  test(`loadAll skips a row with ${label}, warns, and keeps it in the database`, { skip }, (t) => {
+  test(`loadAll skips a row with ${label}, warns, and keeps it in the database`, (t) => {
     const file = path.join(tmpDir(), 'a.db');
     const store = openStore(file);
     store.put('/p/good.jsonl', entryOf());
@@ -229,7 +222,7 @@ for (const [label, version, data] of [
   });
 }
 
-test('loadAll skips a row whose migration throws and warns', { skip }, (t) => {
+test('loadAll skips a row whose migration throws and warns', (t) => {
   const { MIGRATIONS } = require('../lib/store');
   const file = path.join(tmpDir(), 'a.db');
   const store = openStore(file);
