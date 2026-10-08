@@ -1731,7 +1731,7 @@ function renderRecord(daily) {
 
   document.getElementById('cardRecord').textContent = shownAllTime ? formatTokens(shownAllTime.tokens) : '—';
   document.getElementById('cardRecordDate').textContent =
-    shownAllTime ? `${shortDate(shownAllTime.date)} · ${formatCost(shownAllTime.cost)} · all time` : '';
+    shownAllTime ? `${shortDate(shownAllTime.date)} · ${formatCost(shownAllTime.cost)}` : '';
 
   // On Today the range record is today itself, and Total tokens already shows
   // that number, so the note stays empty.
