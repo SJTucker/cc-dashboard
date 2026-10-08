@@ -11,7 +11,7 @@ let sqlite = null;
 try {
   sqlite = require('node:sqlite');
 } catch {
-  // Node before 22.5: every test below that needs a database is skipped.
+  // Node before 22.13: every test below that needs a database is skipped.
 }
 const skip = !sqlite && 'node:sqlite is not available';
 
