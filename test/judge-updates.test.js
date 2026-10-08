@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
@@ -10,7 +11,7 @@ const path = require('path');
 const SCRIPT = path.join(__dirname, '..', 'bin', 'judge-updates');
 
 function fixture(versions = []) {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-judge-'));
+  const base = helpers.tmpDir(null, 'judge');
   fs.mkdirSync(path.join(base, 'projects', 'demo'), { recursive: true });
   fs.writeFileSync(path.join(base, 'projects', 'demo', 's.jsonl'), versions.map((version) => JSON.stringify({ version })).join('\n') + '\n');
   return base;

@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -12,7 +13,7 @@ const NOW = Date.parse('2026-09-28T17:55:00Z');
 const FETCHED = NOW - 3 * 60 * 1000;
 
 function tmpFile(name) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-limits-'));
+  const dir = helpers.tmpDir(null, 'limits');
   return path.join(dir, name);
 }
 
@@ -263,7 +264,7 @@ test('bin/record-limits exits 0 with no output on bad JSON', () => {
 
 test('bin/record-limits writes rate-limits.json under CLAUDE_CONFIG_DIR with valid input', () => {
   const transcript = makeTranscript(FETCHED);
-  const config = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-limits-cfg-'));
+  const config = helpers.tmpDir(null, 'limits-cfg');
   const file = path.join(config, 'rate-limits.json');
   const input = JSON.stringify({
     transcript_path: transcript,

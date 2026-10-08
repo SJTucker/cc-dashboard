@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -9,7 +10,7 @@ const path = require('path');
 // scanUsage resolves its directory from CLAUDE_CONFIG_DIR at call time, so each
 // test points it at a throwaway fixture tree: <tmp>/projects/<project>/<file>.jsonl
 function makeFixture() {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-test-'));
+  const base = helpers.tmpDir(null, 'test');
   fs.mkdirSync(path.join(base, 'projects', 'demo'), { recursive: true });
   return base;
 }

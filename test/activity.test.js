@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -13,7 +14,7 @@ const NOW = Date.now();
 const DAY = 24 * 60 * 60 * 1000;
 
 function tmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-activity-'));
+  return helpers.tmpDir(null, 'activity');
 }
 
 function activity(overrides = {}) {

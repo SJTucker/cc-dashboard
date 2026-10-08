@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -9,7 +10,7 @@ const { extractFile, EXTRACT_VERSION } = require('../lib/extract');
 
 // Writes one transcript from line objects and returns its path.
 function writeTranscript(lines) {
-  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-extract-'));
+  const dir = helpers.tmpDir(null, 'extract');
   const file = path.join(dir, 'session.jsonl');
   fs.writeFileSync(file, lines.map((l) => (typeof l === 'string' ? l : JSON.stringify(l))).join('\n') + '\n');
   return file;

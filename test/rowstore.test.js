@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -21,7 +22,7 @@ const needsSqlite = !sqliteAvailable && 'node:sqlite is not available';
 const DAY_MS = 24 * 60 * 60 * 1000;
 
 function makeProjects() {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rowstore-'));
+  const base = helpers.tmpDir(null, 'rowstore');
   const dir = path.join(base, 'projects', 'demo');
   fs.mkdirSync(dir, { recursive: true });
   return { base, dir };
@@ -63,7 +64,7 @@ function harness(dir, { store = null } = {}) {
   return { rows, reads, refresh, clock };
 }
 
-const tmpDb = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-rowstore-db-')), 'transcripts.db');
+const tmpDb = () => path.join(helpers.tmpDir(null, 'rowstore-db'), 'transcripts.db');
 
 test('an unchanged file is read once, however many refreshes run', async () => {
   const { dir } = makeProjects();

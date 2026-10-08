@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -8,7 +9,7 @@ const path = require('path');
 const { openReviewDb, importReviewFiles, legacyReviewsDir, IMPORT_KEY } = require('../lib/review-db');
 
 function fixture() {
-  const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-review-db-'));
+  const base = helpers.tmpDir(null, 'review-db');
   const legacy = path.join(base, 'reviews');
   fs.mkdirSync(legacy);
   const write = (name, body) => fs.writeFileSync(path.join(legacy, name), typeof body === 'string' ? body : JSON.stringify(body));

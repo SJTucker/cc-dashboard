@@ -1,6 +1,7 @@
 'use strict';
 
 const test = require('node:test');
+const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
@@ -8,7 +9,7 @@ const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const { openDatabase, transaction, SCHEMA_VERSION } = require('../lib/db');
 
-const tmpFile = () => path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-db-')), 'nested', 'transcripts.db');
+const tmpFile = () => path.join(helpers.tmpDir(null, 'db'), 'nested', 'transcripts.db');
 const tables = (db) => db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((r) => r.name);
 
 test('SCHEMA_VERSION is 2', () => {

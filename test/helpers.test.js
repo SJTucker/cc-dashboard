@@ -37,7 +37,7 @@ test(
   'removeTree removes a tree that holds a folder with mode 000',
   { skip: process.getuid?.() === 0 && 'root can read a mode-000 folder' },
   () => {
-    const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-helpers-locked-'));
+    const dir = tmpDir(null, 'helpers-locked');
     const locked = path.join(dir, 'locked');
     fs.mkdirSync(locked);
     fs.writeFileSync(path.join(locked, 'f.txt'), 'x');
