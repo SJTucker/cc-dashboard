@@ -1184,6 +1184,26 @@ function requestLimits() {
   return fetch('/api/limits').then((res) => res.json()).catch(() => null);
 }
 
+// The last drawn state of the four panels that renderPayload draws on every
+// settled response: Plan usage, Live sessions, Session reviews and the limits
+// banner. Each renderer skips its rebuild when its inputs and the clock minute
+// are unchanged, so a 5 s poll does not replace rows the reader is selecting text
+// in. The minute is in the key because formatAgo and the "may be stale" suffix
+// change with the clock at minute resolution. redrawCharts leaves these keys
+// alone, because a change of width does not change a table. reportDrawError
+// clears them, because a renderer that threw after storing its key drew only part
+// of its panel.
+const panelSignatures = new Map();
+
+// True when name was last drawn from the same parts in the same clock minute.
+// Otherwise stores the new key and returns false.
+function panelUnchanged(name, parts) {
+  const signature = JSON.stringify([parts, Math.floor(Date.now() / 60_000)]);
+  if (panelSignatures.get(name) === signature) return true;
+  panelSignatures.set(name, signature);
+  return false;
+}
+
 // Today's share of the weekly limit, as a row in the Plan usage panel. The bar fills
 // against 100% of the week, like the weekly rows above it, so the two scales match.
 // On a workday a tick marks the day's budget. A weekend has no budget and no tick.
@@ -1223,6 +1243,7 @@ function renderLimits(limits) {
   const panel = document.getElementById('limitsPanel');
   panel.hidden = !limits || currentDays !== 'today';
   if (panel.hidden) return;
+  if (panelUnchanged('limits', limits)) return;
   const rows = document.getElementById('limitsRows');
   rows.replaceChildren();
   for (const limit of limits.limits) {
@@ -1269,15 +1290,18 @@ let lastLiveSessions = null;
 // uses this map to move keyboard focus to the new button for the same project.
 let sessionToggles = new Map();
 
-// Runs on every loadAndRender, like renderLimits, because "Last active" moves
-// with the clock even when the payload does not. Hidden off Today and when no
-// session has a snapshot, for example with no statusline hook set up. The Running now
-// table hides when no session is live.
+// Runs on every renderPayload, like renderLimits, and rebuilds when the payload,
+// the expanded groups or the clock minute changed. The minute is there because
+// "Last active" moves with the clock even when the payload does not. Hidden off
+// Today and when no session has a snapshot, for example with no statusline hook
+// set up. The Running now table hides when no session is live.
 function renderSessions(live) {
   const panel = document.getElementById('sessionsPanel');
   panel.hidden = !live || !live.sessions.length || currentDays !== 'today';
   if (panel.hidden) return;
   lastLiveSessions = live;
+  // expandedProjects is in the key, so a group toggle's own call redraws.
+  if (panelUnchanged('sessions', [live, [...expandedProjects]])) return;
   const focused = [...sessionToggles].find(([, button]) => button === document.activeElement);
   const toggles = new Map();
 
@@ -1705,6 +1729,9 @@ function collapsedReview(r, now) {
 // A server error shows its text in place of the list.
 function renderReviews(data) {
   lastReviews = data;
+  // The key holds every input of the draw, so a dismiss, an undo, a Show or Hide
+  // toggle and a failed action each redraw from their own call.
+  if (panelUnchanged('reviews', [data, reviewMutations, [...reviewDismissedShown], [...reviewExpanded], reviewActionError])) return;
   const panel = document.getElementById('reviewsPanel');
   const status = document.getElementById('reviewsStatus');
   const list = document.getElementById('reviewsList');
@@ -1758,6 +1785,7 @@ function renderReviews(data) {
 const LIMIT_WARN_PERCENT = 75;
 
 function renderLimitsBanner(limits) {
+  if (panelUnchanged('limitsBanner', limits)) return;
   const banner = document.getElementById('limitsBanner');
   const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
   // dailyWarning (public/hud.js) compares today's share with the rolling budget.
@@ -3318,6 +3346,7 @@ function reportDrawError(err) {
   banner.hidden = false;
   banner.textContent = `Couldn't draw the page: ${err.message}`;
   lastSignature = null;
+  panelSignatures.clear();
 }
 
 // Every load goes through runLoad, so no caller leaves a rejection unhandled.
