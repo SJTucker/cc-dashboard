@@ -2822,9 +2822,8 @@ function setupCollapsibleRows() {
       else collapsed.delete(key);
       saveCollapsedRows(collapsed);
       // A chart drawn while hidden has the 200px fallback width, so an expand
-      // needs a redraw. Only the changes charts belong to this row when it's
-      // Setup changes (session-start or before/after); other rows' redraw covers
-      // only their own charts, via loadAndRender.
+      // needs a redraw. redrawCharts draws the payload charts from lastPayload;
+      // the changes charts are redrawn only when this row holds them.
       if (!isCollapsed) redrawCharts({ changes: row.id === 'sessionStartPanel' || row.id === 'beforeAfterPanel' });
     });
     headings[0].prepend(toggle);
@@ -2921,7 +2920,8 @@ function hideKey(key) {
 
 // A hidden panel was not drawn, so showing one redraws the page. A request that
 // was skipped because all its panels were hidden runs again here. rtk, sessions
-// and reviews are made by loadAndRender, which redrawCharts calls.
+// and reviews come from fetchAll, and lastPayload holds null for a skipped one, so
+// when one of those three resumes, redrawCharts loads the page again.
 function showKeys(keys) {
   const before = neededRequests(hiddenKeys, currentDays);
   for (const key of keys) hiddenKeys.delete(key);
@@ -2933,7 +2933,7 @@ function showKeys(keys) {
   if (resumed('prices')) loadPricesSource();
   // loadChanges renders both changes panels itself when it finishes.
   if (resumed('changes')) loadChanges();
-  redrawCharts({ changes: !resumed('changes') });
+  redrawCharts({ changes: !resumed('changes'), refetch: ['rtk', 'sessions', 'reviews'].some(resumed) });
 }
 
 // One button per hidden element, in page order, then Show all when two or more
@@ -3006,6 +3006,11 @@ let lastSignature = null;
 // so a 30d request issued before a Today click lands after it. Every request takes a
 // number, and a response is dropped unless its number is still the newest one.
 let requestSeq = 0;
+// The newest payload fetchAll returned. redrawCharts draws from it after a resize,
+// a hide or an expand, so a change of width makes no request. The range picker
+// sets it to null, because renderPayload reads currentDays and would draw the old
+// range's buckets with the new range's rules.
+let lastPayload = null;
 
 // Time of the last successful summary load, shown as Sync in the status strip.
 let lastLoadedAt = null;
@@ -3132,7 +3137,8 @@ async function fetchAll({ busy = false } = {}) {
   // changed in place, so this load cannot put a dismissed suggestion back. The
   // next poll shows the saved state.
   const reviewsNow = reviewMutations === reviewMutationsAtStart ? reviews : lastReviews;
-  return { data, rtk, limits, sessions, reviews: reviewsNow };
+  lastPayload = { data, rtk, limits, sessions, reviews: reviewsNow };
+  return lastPayload;
 }
 
 // Draws a payload from fetchAll. lastSignature is set on the last line, after every
@@ -3328,6 +3334,7 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   currentDays = value === 'all' || value === 'today' ? value : Number(value);
   placeSummaryCards();
   lastSignature = null; // the bucket keys change, so force a redraw
+  lastPayload = null;
   setLive(currentDays === 'today');
   if (changesReport) renderChanges(changesReport);
   runLoad({ busy: true });
@@ -3350,10 +3357,21 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
   reloadAll();
 });
 
-function redrawCharts({ changes = true } = {}) {
+// Draws every chart again at the current widths, from lastPayload and with no
+// request. It loads instead when there is no payload yet, or when showKeys passes
+// refetch because a request skipped at the last load is needed again.
+function redrawCharts({ changes = true, refetch = false } = {}) {
   lastSignature = null; // the width changed, so the same data still needs redrawing
   timelineSignature = null;
-  runLoad();
+  if (refetch || !lastPayload) {
+    runLoad();
+  } else {
+    try {
+      renderPayload(lastPayload);
+    } catch (err) {
+      reportDrawError(err);
+    }
+  }
   if (changes && changesReport) renderChanges(changesReport);
 }
 
