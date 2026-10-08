@@ -9,6 +9,10 @@ Asked for on 2026-10-07.
   this repo, such as installing the mod, as well as what is inside it.
 - **Find what lives outside the repo.** An inventory on 2026-10-07 found the items
   below. Check each one against the code again before writing `SETUP.md`.
+- **A rule that keeps `SETUP.md` current.** Asked for on 2026-10-08. Claude must
+  update `SETUP.md` in the same change whenever that change alters what a new user
+  needs. Examples: a new runtime requirement, a new environment variable, a new or
+  removed file outside the repo, or a change to how the mod is installed.
 
 ## What a new user needs
 
@@ -77,6 +81,14 @@ Asked for on 2026-10-07.
 - The environment variables are described in separate sections. No table lists them.
 
 ## Open questions
+
+- **Where the update rule lives.** The repo has no project `CLAUDE.md`. Creating one
+  puts the rule in front of every session in this repo. The rule should list the
+  triggers: `package.json` `engines`, a new `process.env` read, a new path under
+  `<cfg>/cc-dashboard/`, and changes under `mod/` or `bin/` that affect install.
+  The transcript row store (`docs/ideas/data-storage.md`)
+  is the first change that needs it: it adds `transcripts.db` and `TRANSCRIPTS_DB`
+  and removes `records.json` and `RECORDS_FILE`.
 
 - **SETUP.md or the README.** The README's "Run it", "Setting up the recorder" and
   "Without the mod" sections already hold most of the steps. Decide whether
