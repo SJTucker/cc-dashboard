@@ -478,6 +478,7 @@ lib/net-guard.js       Host-header check + security headers
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
 lib/activity.js        Live state of each session, read from the activity files the mod writes, and old files pruned
 lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeout
+lib/sqlite.js          Loads node:sqlite without its experimental-feature warning
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
