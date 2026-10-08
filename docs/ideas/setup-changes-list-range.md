@@ -14,7 +14,7 @@ days. Raised on 2026-10-08.
 
 ## What the code does
 
-- Commit `1ad971d` ("make the setup changes panels follow the range picker") limited
+- Commit `aa4af81` ("make the setup changes panels follow the range picker") limited
   the charts' time axis only. `visibleDays` in `public/app.js` returns 14 days for
   the Today and 7d ranges, the picked day count for 30d and 90d, and null for All.
   `chartDomain` narrows the axis with that number.
