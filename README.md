@@ -31,9 +31,9 @@ While editing the code, run `npm run watch`. Node's `--watch` flag restarts
 the server when `server.js` or any file under `lib/` changes. Files under
 `public/` are read from disk on each request, so a page reload picks them up
 without a restart. A restart keeps the stored rows in `cc-dashboard/transcripts.db`, so
-the first request after it reads only the transcripts that changed. On a Node older
-than 22.5, which has no `node:sqlite`, nothing is stored and the first request reads
-every transcript.
+the first request after it reads the transcripts modified today and any that changed
+since the server stopped. When no database is available (see the Setup changes
+section), nothing is stored and the first request reads every transcript.
 
 By default it reads `~/.claude/projects`. If you use a custom Claude config
 location, set `CLAUDE_CONFIG_DIR` before starting it, same as Claude Code itself:
@@ -59,7 +59,7 @@ Elsewhere, point at it yourself:
 RTK_DB=~/.local/share/rtk/history.db npm start
 ```
 
-No rtk, or a Node older than 22 (which is where the built-in `node:sqlite` arrived)?
+No rtk, or a Node older than 22.5 (which is where the built-in `node:sqlite` arrived)?
 The panels simply do not appear. Nothing else changes.
 
 **These numbers are not billed tokens.** They are rtk's own estimate of output it
@@ -429,15 +429,18 @@ A before/after is only as clean as its window. When another change falls within 
 days either side, the panel lists it, and the numbers cover both.
 
 Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default). The
-dashboard stores the usage rows of every transcript it reads in
-`~/.claude/cc-dashboard/transcripts.db`, so the All range, the Record day card and
-these before/after windows keep that history after the transcript is gone. History
-starts at the first transcript the dashboard read. A before/after needs history on
-both sides of a change, so a change less than 7 days newer than your oldest stored
-row has no "before" window to compare and gets no marker. Without `node:sqlite` (a
-Node older than 22.5) nothing is stored, and history ends at the oldest transcript on
-disk. Raising `cleanupPeriodDays` in `~/.claude/settings.json` keeps more transcripts
-on disk.
+dashboard stores the usage rows of each transcript last modified before today's local
+midnight in `~/.claude/cc-dashboard/transcripts.db`. The All range, the Record day
+card and these before/after windows keep the history of every transcript the
+dashboard stored before Claude Code deleted it. A transcript deleted on the day it was
+written is never stored. History starts at the first stored transcript. A
+before/after needs history on both sides of a change, so a change less than 7 days
+newer than your oldest stored row has no "before" window to compare and gets no
+marker. `node:sqlite` needs Node 22.5 or later. On an older Node, or when
+`transcripts.db` cannot be opened or was written by a newer version of the dashboard,
+`openStore` in `lib/store.js` leaves the file untouched, logs one warning and keeps
+rows in memory only. History then starts at the oldest transcript on disk. Raising
+`cleanupPeriodDays` in `~/.claude/settings.json` keeps more transcripts on disk.
 
 ## What it does and doesn't do
 

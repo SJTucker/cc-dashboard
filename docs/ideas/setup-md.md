@@ -76,7 +76,7 @@ Asked for on 2026-10-07.
 - Node 22 is mentioned only in the optional rtk section.
 - The symlink and statusline snippets hard-code `~/code/cc-dashboard`.
 - The intro says "five small files, two dependencies" and one network request on
-  Check prices. The repo has 15 `lib/` files and a mod, and the mod also fetches the
+  Check prices. The repo has 18 `lib/` files and a mod, and the mod also fetches the
   changelog and calls Haiku. `package.json`'s description repeats the network claim.
 - The environment variables are described in separate sections. No table lists them.
 
@@ -88,8 +88,8 @@ Asked for on 2026-10-07.
   `<cfg>/cc-dashboard/`, and changes under `mod/` or `bin/` that affect install.
   The transcript row store shipped on branch `feat/transcript-row-store`. It added
   `transcripts.db` and `TRANSCRIPTS_DB` and removed `records.json` and
-  `RECORDS_FILE`. The table above already reflects this. It is the kind of change
-  the rule must catch.
+  `RECORDS_FILE`. The table above already lists `transcripts.db` and `TRANSCRIPTS_DB`.
+  The row store is the kind of change the rule must catch.
 
 - **SETUP.md or the README.** The README's "Run it", "Setting up the recorder" and
   "Without the mod" sections already hold most of the steps. Decide whether
