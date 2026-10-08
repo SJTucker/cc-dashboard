@@ -16,5 +16,4 @@ then on.
 | [Dismiss review suggestions](dismiss-review-suggestions.md) | Open: where a dismissal is stored, the endpoint, how a dismissed suggestion shows, and whether a reason feeds back to Haiku |
 | [Model mix: tokens or cost](model-mix-cost-toggle.md) | Open: click the donut to switch to cost; click target, remembering the choice, sort order and overlap with Cost by model open |
 | [Setup changes list follows the range](setup-changes-list-range.md) | Open: the day buttons ignore the range and start at 8/24; filter to the charts' span, consider a timeline or calendar, and decide what a selected change outside the range does |
-| [Live sessions scrolling](live-sessions-scrolling.md) | Open: panel scroll bars come from 1 px of overflow under `overflow-x: auto`; fixed-height tables that scroll on their own, hidden scroll bars and the Doing now width open |
 | [Row store growth](row-store-growth.md) | Open: loaded rows take 47 MB and the All range 75 ms after 40 days; the heap size or aggregate time that starts the work, and daily totals versus loading only the requested range, open |
