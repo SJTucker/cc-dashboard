@@ -5,6 +5,7 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const { freshServerDb, holdWriteLock } = helpers;
 const { openReviewDb, importReviewFiles, legacyReviewsDir, IMPORT_KEY } = require('../lib/review-db');
 
 function fixture() {
@@ -119,4 +120,41 @@ test('loading lib/review-db.js does not load the row store', () => {
   const script = "require('./lib/review-db'); const loaded = Object.keys(require.cache).map((p) => require('path').basename(p)); process.stdout.write(JSON.stringify(loaded.filter((n) => ['rowstore.js', 'store.js'].includes(n))));";
   const res = spawnSync(process.execPath, ['-e', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
   assert.strictEqual(res.stdout, '[]');
+});
+
+test('getReviewDb imports once per process, so a second call does not wait for the lock', async (t) => {
+  const { dbModule, file } = freshServerDb(t);
+  const { getReviewDb } = require('../lib/review-db');
+  const handle = getReviewDb();
+  const release = await holdWriteLock(t, file);
+  const started = Date.now();
+  assert.strictEqual(getReviewDb(), handle);
+  const took = Date.now() - started;
+  await release();
+  assert.ok(took < 100, `the second call took ${took} ms`);
+  assert.strictEqual(handle, dbModule.getServerDb());
+});
+
+test('a getReviewDb whose import meets the lock throws a busy error, and the next call imports', async (t) => {
+  const { dbModule, base, file } = freshServerDb(t);
+  const dir = path.join(base, 'cc-dashboard', 'reviews');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'sess-old.json'), JSON.stringify({ sessionId: 'sess-old', status: 'done', reviewedAt: 1, suggestions: [] }));
+  dbModule.getServerDb(); // creates the file before the lock is taken
+  const { getReviewDb } = require('../lib/review-db');
+  const release = await holdWriteLock(t, file);
+  const started = Date.now();
+  assert.throws(() => getReviewDb(), (err) => dbModule.isBusy(err));
+  const took = Date.now() - started;
+  await release();
+  assert.ok(took < 1000, `the busy import gave up after ${took} ms`);
+  const handle = getReviewDb();
+  assert.strictEqual(handle.prepare("SELECT COUNT(*) AS n FROM reviews WHERE session_id = 'sess-old'").get().n, 1);
+});
+
+test('openReviewDb, the opener bin/review-session uses, keeps the 5000 ms busy timeout', (t) => {
+  const { dbPath, legacy } = fixture();
+  const db = openReviewDb(dbPath, legacy);
+  t.after(() => db.close());
+  assert.strictEqual(db.prepare('PRAGMA busy_timeout').get().timeout, 5000);
 });

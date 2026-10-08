@@ -513,6 +513,11 @@ test('a transcript that is deleted while the server is stopped still counts afte
   const firstBase = `http://127.0.0.1:${first.address().port}`;
   assert.strictEqual((await (await fetch(`${firstBase}/api/summary?days=all`)).json()).summary.totalInput, 6000);
   first.close();
+  // Both servers share lib/db's cached handle. Closing it makes the second server
+  // open transcripts.db from disk, which is what a restart does.
+  const dbModule = require('../lib/db');
+  const firstHandle = dbModule.getServerDb();
+  dbModule.closeServerDb();
 
   fs.unlinkSync(file);
   for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/store', '../server']) delete require.cache[require.resolve(mod)];
@@ -522,6 +527,7 @@ test('a transcript that is deleted while the server is stopped still counts afte
 
   const after = await (await fetch(`http://127.0.0.1:${second.address().port}/api/summary?days=all`)).json();
   assert.strictEqual(after.summary.totalInput, 6000, 'the database kept the deleted transcript across the restart');
+  assert.notStrictEqual(dbModule.getServerDb(), firstHandle, 'the second server opened transcripts.db again');
 });
 
 test('a range is aggregated again after local midnight, although no transcript changed', async (t) => {
@@ -1080,4 +1086,29 @@ test('the dismiss routes answer 500 with the reason when transcripts.db cannot b
   const res = await postJson(dismissUrl(`http://127.0.0.1:${server.address().port}`, 'sess-a', 0), { reason: 'done' });
   assert.strictEqual(res.status, 500);
   assert.ok((await res.json()).detail);
+});
+
+// A server whose transcripts.db exists in WAL mode before any request, so a child
+// process can hold its write lock (holdWriteLock in test/helpers.js).
+async function lockableServer(t) {
+  const base = await listen(t);
+  const { openDatabase, getStorePath } = require('../lib/db');
+  openDatabase().close();
+  return { base, file: getStorePath() };
+}
+
+test('a request whose row-store write meets the review lock answers 200 within 1000 ms', async (t) => {
+  const { base, file } = await lockableServer(t);
+  writeStoredTranscript(); // three days old, so the first refresh writes it
+  const release = await helpers.holdWriteLock(t, file);
+  const warn = t.mock.method(console, 'warn', () => {});
+  const started = Date.now();
+  const res = await fetch(`${base}/api/summary?days=7`);
+  const took = Date.now() - started;
+  const body = await res.json();
+  await release();
+  assert.strictEqual(res.status, 200);
+  assert.ok(took < 1000, `answered in ${took} ms`);
+  assert.strictEqual(body.summary.totalInput, 6000);
+  assert.ok(warn.mock.calls.some((c) => /\(database busy\)/.test(c.arguments[0])), 'the write met the lock');
 });

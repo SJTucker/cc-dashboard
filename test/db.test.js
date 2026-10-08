@@ -179,3 +179,54 @@ test('isBusy is false for other errors and true for the extended busy codes', (t
   assert.strictEqual(dbModule.isBusy(withCode(261)), true); // SQLITE_BUSY_RECOVERY
   assert.strictEqual(dbModule.isBusy(withCode(517)), true); // SQLITE_BUSY_SNAPSHOT
 });
+
+test('a row-store write that meets the review lock gives up within 1000 ms, and the first refresh after the lock writes it', async (t) => {
+  const { dbModule, base, file } = freshServerDb(t);
+  const { createRowStore, REFRESH_SHARE_MS } = require('../lib/rowstore');
+  const { openStore } = require('../lib/store');
+  const dir = path.join(base, 'projects', 'demo');
+  fs.mkdirSync(dir, { recursive: true });
+  // Three days old by content and by mtime, so the first refresh tries to store it.
+  const when = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const transcript = path.join(dir, 'old.jsonl');
+  fs.writeFileSync(transcript, JSON.stringify({
+    timestamp: new Date(when).toISOString(),
+    requestId: 'req-1',
+    message: { id: 'msg-1', model: 'claude-sonnet-4-6', usage: { input_tokens: 100, output_tokens: 50 } },
+  }) + '\n');
+  fs.utimesSync(transcript, when / 1000, when / 1000);
+  const store = openStore(file, dbModule.getServerDb);
+  const clock = { now: Date.now() };
+  const rows = createRowStore({ projectsDir: () => path.join(base, 'projects'), store, now: () => clock.now });
+  const stored = () => dbModule.getServerDb().prepare('SELECT COUNT(*) AS n FROM files').get().n;
+
+  const release = await holdWriteLock(t, file);
+  const warn = t.mock.method(console, 'warn', () => {});
+  const started = Date.now();
+  await rows.refresh();
+  const took = Date.now() - started;
+  assert.ok(took < 1000, `the refresh took ${took} ms`);
+  assert.strictEqual(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0].arguments[0], /^\[store\] Could not write transcript rows \(database busy\), will retry on the next refresh: /);
+  assert.strictEqual(stored(), 0);
+
+  await release();
+  clock.now += REFRESH_SHARE_MS + 1; // past the window in which a refresh is shared
+  await rows.refresh();
+  assert.strictEqual(stored(), 1);
+});
+
+test('getRowStore and getReviewDb use the one handle from getServerDb', (t) => {
+  const { dbModule } = freshServerDb(t);
+  // Spied before lib/rowstore.js and lib/review-db.js load, so their destructured
+  // getServerDb is the spy.
+  const spy = t.mock.method(dbModule, 'getServerDb');
+  const { getRowStore } = require('../lib/rowstore');
+  const { getReviewDb } = require('../lib/review-db');
+  getRowStore();
+  const reviewDb = getReviewDb();
+  assert.strictEqual(spy.mock.callCount(), 2);
+  assert.strictEqual(spy.mock.calls[0].result, spy.mock.calls[1].result);
+  assert.strictEqual(reviewDb, spy.mock.calls[0].result);
+  assert.strictEqual(reviewDb, dbModule.getServerDb());
+});
