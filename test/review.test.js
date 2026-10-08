@@ -319,7 +319,7 @@ function seed(review, db, id, fields = {}, suggestions = [], at = NOW - HOUR) {
 test('readReviews lists done and failed reviews from the last 7 days with suggestion state', () => {
   const { review, db, base } = fixture();
   seed(review, db, 'done', { endedAt: NOW - 2 * HOUR }, [{ kind: 'workflow', text: 'x' }, { kind: 'token-waste', text: 'y' }]);
-  db.prepare("UPDATE suggestions SET dismissed_at = ?, reason = 'not_useful' WHERE session_id = 'done' AND idx = 1").run(NOW);
+  review.setDismissal(db, 'done', 1, 'not_useful', NOW);
   seed(review, db, 'failed', { endedAt: NOW - HOUR, status: 'failed', error: 'Haiku call failed (Error)' });
   seed(review, db, 'skipped', { status: 'skipped', reason: 'under 3 prompts' });
   review.claimReview(db, { sessionId: 'pending', project: 'demo', endedAt: NOW - HOUR }, NOW);
@@ -378,4 +378,33 @@ test('pendingReviews saves the transcript path and title in the claim, and finis
   assert.deepStrictEqual([saved().transcript, saved().title, saved().branch], [file, 'Big one', 'feat/big']);
   review.recordReview(db, { sessionId: 'big', reply: '{"suggestions":[]}' }, NOW);
   assert.deepStrictEqual([saved().transcript, saved().title, saved().branch, saved().status], [file, 'Big one', 'feat/big', 'done']);
+});
+
+test('setDismissal dismisses, overwrites, undoes, and reports a suggestion that does not exist', () => {
+  const { review, db } = fixture();
+  seed(review, db, 'a', {}, [{ kind: 'workflow', text: 'x' }, { kind: 'token-waste', text: 'y' }]);
+  seed(review, db, 'b', {}, [{ kind: 'workflow', text: 'z' }]);
+  assert.strictEqual(review.setDismissal(db, 'a', 1, 'done', NOW), true);
+  assert.deepStrictEqual(suggestionsOf(db, 'a').map((s) => [s.dismissed_at, s.reason]), [[null, null], [NOW, 'done']]);
+  assert.strictEqual(review.setDismissal(db, 'a', 1, 'not_useful', NOW + 1), true);
+  assert.deepStrictEqual(suggestionsOf(db, 'a')[1].reason, 'not_useful');
+  assert.strictEqual(review.setDismissal(db, 'a', 1, null), true);
+  assert.deepStrictEqual(suggestionsOf(db, 'a').map((s) => [s.dismissed_at, s.reason]), [[null, null], [null, null]]);
+  assert.strictEqual(review.setDismissal(db, 'a', 2, 'done', NOW), false);
+  assert.strictEqual(review.setDismissal(db, 'nope', 0, 'done', NOW), false);
+  assert.deepStrictEqual(suggestionsOf(db, 'b').map((s) => s.reason), [null]);
+});
+
+test('setDismissal rejects a reason outside done and not_useful', () => {
+  const { review, db } = fixture();
+  seed(review, db, 'a', {}, [{ kind: 'workflow', text: 'x' }]);
+  assert.throws(() => review.setDismissal(db, 'a', 0, 'bored', NOW), /reason/);
+});
+
+test('a dismissal survives readReviews and a later finishReview of another session', () => {
+  const { review, db } = fixture();
+  seed(review, db, 'a', {}, [{ kind: 'workflow', text: 'x' }]);
+  review.setDismissal(db, 'a', 0, 'done', NOW);
+  seed(review, db, 'b', {}, [{ kind: 'workflow', text: 'y' }]);
+  assert.strictEqual(review.readReviews(db, NOW).find((r) => r.sessionId === 'a').suggestions[0].reason, 'done');
 });

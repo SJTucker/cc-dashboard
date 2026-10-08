@@ -985,3 +985,88 @@ test('GET /api/reviews answers 500 with the reason when transcripts.db cannot be
   fs.rmSync(file);
   assert.strictEqual((await fetch(url)).status, 200);
 });
+
+// Seeds one finished review with two suggestions and returns the base URL.
+async function reviewServer(t) {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const db = require('../lib/review-db').openReviewDb();
+  const now = Date.now();
+  for (const id of ['sess-a', 'sess-b']) {
+    db.prepare("INSERT INTO reviews (session_id, project, ended_at, status, claimed_at, reviewed_at) VALUES (?, 'demo', ?, 'done', ?, ?)").run(id, now - 1000, now - 2000, now);
+    db.prepare("INSERT INTO suggestions (session_id, idx, kind, text) VALUES (?, 0, 'workflow', 'one'), (?, 1, 'token-waste', 'two')").run(id, id);
+  }
+  db.close();
+  return `http://127.0.0.1:${server.address().port}`;
+}
+
+const dismissUrl = (base, id, idx) => `${base}/api/reviews/${id}/suggestions/${idx}/dismiss`;
+const postJson = (url, body, headers = {}) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
+const suggestionState = async (base, id) => (await (await fetch(`${base}/api/reviews`)).json()).reviews.find((r) => r.sessionId === id).suggestions.map((s) => s.reason);
+
+test('POST dismiss stores the reason and GET /api/reviews shows it, DELETE undoes it', async (t) => {
+  const base = await reviewServer(t);
+  const res = await postJson(dismissUrl(base, 'sess-a', 1), { reason: 'not_useful' });
+  assert.strictEqual(res.status, 200);
+  const body = await res.json();
+  assert.deepStrictEqual([body.ok, body.sessionId, body.idx, body.reason, typeof body.dismissedAt], [true, 'sess-a', 1, 'not_useful', 'number']);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, 'not_useful']);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-b'), [null, null]);
+
+  const undo = await fetch(dismissUrl(base, 'sess-a', 1), { method: 'DELETE' });
+  assert.strictEqual(undo.status, 200);
+  assert.deepStrictEqual(await undo.json(), { ok: true, sessionId: 'sess-a', idx: 1, dismissedAt: null, reason: null });
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, null]);
+});
+
+test('POST dismiss answers 400 for a bad reason, a missing body, bad json, a bad session id and a bad idx', async (t) => {
+  const base = await reviewServer(t);
+  for (const body of [{ reason: 'bored' }, {}, { reason: null }, { reason: ['done'] }]) {
+    assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', 0), body)).status, 400, JSON.stringify(body));
+  }
+  assert.strictEqual((await fetch(dismissUrl(base, 'sess-a', 0), { method: 'POST' })).status, 400);
+  const badJson = await fetch(dismissUrl(base, 'sess-a', 0), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{nope' });
+  assert.strictEqual(badJson.status, 400);
+  for (const idx of ['-1', '1.5', 'abc', '01x', '99999999999999999999']) {
+    assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', idx), { reason: 'done' })).status, 400, `idx ${idx}`);
+    assert.strictEqual((await fetch(dismissUrl(base, 'sess-a', idx), { method: 'DELETE' })).status, 400, `DELETE idx ${idx}`);
+  }
+  assert.strictEqual((await postJson(dismissUrl(base, 'bad.id', 0), { reason: 'done' })).status, 400);
+  assert.strictEqual((await postJson(dismissUrl(base, 'a'.repeat(129), 0), { reason: 'done' })).status, 400);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, null]);
+});
+
+test('POST and DELETE dismiss answer 404 for a session or an idx that does not exist', async (t) => {
+  const base = await reviewServer(t);
+  for (const [id, idx] of [['sess-a', 2], ['sess-zzz', 0], ['sess-a', 1000]]) {
+    assert.strictEqual((await postJson(dismissUrl(base, id, idx), { reason: 'done' })).status, 404, `${id} ${idx}`);
+    assert.strictEqual((await fetch(dismissUrl(base, id, idx), { method: 'DELETE' })).status, 404, `DELETE ${id} ${idx}`);
+  }
+});
+
+test('the dismiss routes refuse a cross-site request, like the price POST routes', async (t) => {
+  const base = await reviewServer(t);
+  for (const site of ['cross-site', 'same-site', 'none']) {
+    const post = await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }, { 'Sec-Fetch-Site': site });
+    assert.strictEqual(post.status, 403, `POST ${site}`);
+    const del = await fetch(dismissUrl(base, 'sess-a', 0), { method: 'DELETE', headers: { 'Sec-Fetch-Site': site } });
+    assert.strictEqual(del.status, 403, `DELETE ${site}`);
+  }
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, null]);
+  const ok = await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }, { 'Sec-Fetch-Site': 'same-origin' });
+  assert.strictEqual(ok.status, 200);
+});
+
+test('the dismiss routes answer 500 with the reason when transcripts.db cannot be opened', async (t) => {
+  const server = startServer();
+  t.after(() => server.close());
+  await new Promise((resolve) => server.once('listening', resolve));
+  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'transcripts.db');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, 'not a database '.repeat(100));
+  t.mock.method(console, 'error', () => {});
+  const res = await postJson(dismissUrl(`http://127.0.0.1:${server.address().port}`, 'sess-a', 0), { reason: 'done' });
+  assert.strictEqual(res.status, 500);
+  assert.ok((await res.json()).detail);
+});
