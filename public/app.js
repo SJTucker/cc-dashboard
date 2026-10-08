@@ -1660,8 +1660,8 @@ function renderLimitsBanner(limits) {
 }
 
 // The Record day card's all-time value. Fetched once on load and once on
-// Refresh, not on the 5s live poll or a range switch: /api/records reads records.json
-// and the 7-day scan, so polling it on every tick would buy nothing. A failure resolves
+// Refresh, not on the 5s live poll or a range switch: /api/records reads the all-time
+// and 7-day aggregates, so polling it on every tick would buy nothing. A failure resolves
 // to null, same as requestLimits.
 function requestRecords() {
   return fetch('/api/records').then((res) => res.json()).catch(() => null);
@@ -1689,8 +1689,8 @@ function refreshRecords() {
 // On Today, a second line under Total cost and Total tokens with the rolling
 // 7 days: today's live totals plus the 6 days before it from /api/records.
 // It shows a dash until /api/records has answered, which takes a few seconds
-// when records.json is missing or 3 days old and /api/records runs the all-history
-// scan. Empty on every other range.
+// on the first request after the server starts, while the row store reads the
+// transcripts. Empty on every other range.
 function renderWeekTotals(summary) {
   lastSummary = summary;
   // A page left open on Today past midnight refetches once, on the first poll of
@@ -1712,8 +1712,8 @@ function renderWeekTotals(summary) {
 
 // The value and date line show the all-time record: the day with the most tokens,
 // with that day's cost. The note shows the record within the range on screen, also
-// with its cost. Today's total grows on every live poll, and the range's scan can
-// be newer than the records.json value that /api/records returns. So today's total or
+// with its cost. Today's total grows on every live poll, and the range's aggregate can
+// be newer than the all-time value that /api/records returns. So today's total or
 // the range record replaces the fetched all-time record when it has more tokens.
 function renderRecord(daily) {
   lastRecordDaily = daily;

@@ -54,7 +54,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // page could otherwise run scans here with <img src> tags.
 app.use('/api', sameOriginOnly);
 
-// scanUsage skips a session file it cannot read, which lowers that range's totals.
+// The row store skips a session file it cannot read, which lowers that range's totals.
 // The terminal gets one warning per range each time the count of skipped files
 // changes, so the 5s live poll does not repeat it.
 const unreadableByRange = new Map();
@@ -109,8 +109,8 @@ function publicSummary({ efficiency, ...rest }) {
   return rest;
 }
 
-// The range picker's day counts. Each distinct count is its own cached scan of up
-// to about 20 MB, and nothing evicts the cache, so only these are accepted.
+// The range picker's day counts. Each distinct count is its own memo entry of up
+// to about 22 MB, and nothing evicts entries, so only these are accepted.
 const RANGE_DAYS = new Set([7, 30, 90]);
 const INVALID_DAYS = (raw) => `Invalid days: ${String(raw)}. Use 7, 30, 90, 'today', or 'all'.`;
 
@@ -149,8 +149,8 @@ app.get('/api/summary', async (req, res) => {
 // rtk request to clear a memo that exists to avoid re-aggregating the transcripts.
 //
 // The days parsing below duplicates /api/summary's rather than sharing a helper: the
-// two routes disagree on what 'today' means (that one returns early past the cache,
-// this one has no cache at all), and folding them together would need a flags
+// two routes disagree on what 'today' means (that one reads the row store and memo,
+// this one reads the rtk database with no cache at all), and folding them together would need a flags
 // argument for a nine-line branch.
 app.get('/api/rtk', (req, res) => {
   try {
