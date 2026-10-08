@@ -18,7 +18,6 @@ function fixture(versions = []) {
 
 function run(base, args, input) {
   const env = { ...process.env, CLAUDE_CONFIG_DIR: base };
-  delete env.UPDATES_FILE;
   const res = spawnSync(process.execPath, [SCRIPT, ...args], { input, env, encoding: 'utf8' });
   return { code: res.status, out: res.stdout ? JSON.parse(res.stdout) : null, err: res.stderr };
 }

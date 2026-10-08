@@ -6,13 +6,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 
-// CLAUDE_CONFIG_DIR and UPDATES_FILE are read at call time, so each test points
-// them at a throwaway folder and requires fresh copies.
+// CLAUDE_CONFIG_DIR is read at call time, so each test points it at a throwaway
+// folder and requires fresh copies.
 function setup({ verdicts } = {}) {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-updates-'));
   fs.mkdirSync(path.join(base, 'projects', 'demo'), { recursive: true });
   process.env.CLAUDE_CONFIG_DIR = base;
-  delete process.env.UPDATES_FILE;
   const file = path.join(base, 'cc-dashboard', 'updates.json');
   if (verdicts !== undefined) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -138,9 +137,7 @@ test('recordVerdicts refuses to replace a malformed file', () => {
   assert.strictEqual(fs.readFileSync(file, 'utf8'), '{"2.1.286": {"relevant": tru');
 });
 
-test('UPDATES_FILE overrides the path and expands a leading tilde', () => {
-  const { updates } = setup();
-  process.env.UPDATES_FILE = '~/u.json';
-  assert.strictEqual(updates.getUpdatesPath(), path.join(os.homedir(), 'u.json'));
-  delete process.env.UPDATES_FILE;
+test('getUpdatesPath is updates.json under CLAUDE_CONFIG_DIR', () => {
+  const { updates, file } = setup();
+  assert.strictEqual(updates.getUpdatesPath(), file);
 });

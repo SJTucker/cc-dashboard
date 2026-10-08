@@ -75,9 +75,9 @@ recently. It makes no network request of its own.
   response in any running session, as before.
   The same script also keeps one small snapshot per session, holding that
   session's cost and duration, in
-  `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`,
-  or `LIVE_SESSIONS_DIR`). The Live sessions panel reads them. Snapshots older than
-  a day are deleted on the next write. The panel's Length column comes from that
+  `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`).
+  The Live sessions panel reads them. Snapshots older than a day are deleted on the
+  next write. The panel's Length column comes from that
   snapshot, so it covers the whole session from whenever it started. Its Prompts,
   Cost today and Lines columns come from today's transcripts instead. A session that
   started yesterday shows fewer prompts, less cost and fewer lines than over its
@@ -270,9 +270,7 @@ does not expect, it is treated as absent, not an error; if both are absent, the
 panel stays hidden. The panel's note names which source it used. Claude Code only
 produces either source for claude.ai subscription logins, and only while it runs,
 so the panel shows the time of the last update. Per-model weekly limits are left
-out. Read the usage cache from another file with `CLAUDE_JSON=~/path/.claude.json
-npm start`, or the statusline file with `RATE_LIMITS_JSON=~/path/rate-limits.json
-npm start`. `PRICES_JSON=~/path/prices.json` moves the applied price history.
+out.
 
 The Live sessions panel holds two tables. Running now lists the live sessions,
 meaning those that wrote to a transcript in the last 10 minutes, and any session
@@ -408,12 +406,12 @@ rows in memory only. History then starts at the oldest transcript on disk. Raisi
   `cc-dashboard/changes/` and the stored setup copies in `cc-dashboard/setup/` (see
   "Setup changes recorded automatically"). The other write path is the Apply
   button in the Cost by model panel: clicking it is the only thing that writes
-  `prices.json` (`PRICES_JSON` moves it). The third write path is the transcript
-  database. `server.js` writes `~/.claude/cc-dashboard/transcripts.db` (or
-  `$CLAUDE_CONFIG_DIR/cc-dashboard/transcripts.db`, or `$TRANSCRIPTS_DB` when set)
-  with the usage rows of each transcript last modified before today. Nothing deletes
-  rows from it, because it holds the only copy of a transcript Claude Code has
-  deleted. Nothing else under `server.js` or `public/` writes anything.
+  `prices.json`. The third write path is the transcript database. `server.js`
+  writes `~/.claude/cc-dashboard/transcripts.db` (or
+  `$CLAUDE_CONFIG_DIR/cc-dashboard/transcripts.db`) with the usage rows of each
+  transcript last modified before today. Nothing deletes rows from it, because it
+  holds the only copy of a transcript Claude Code has deleted. Nothing else under
+  `server.js` or `public/` writes anything.
 - **One network request from the server, on demand.** The Cost by model panel has
   a Check prices button. Clicking it makes the server fetch
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's
@@ -437,12 +435,12 @@ rows in memory only. History then starts at the oldest transcript on disk. Raisi
 - **Pricing is an estimate, with a dated history.** `lib/pricing.js` has a built-in
   price table, last checked against Anthropic's pricing page on 2026-09-28. Check
   prices lists new models and changed prices and changes nothing. Apply saves them
-  to `~/.claude/cc-dashboard/prices.json` (set `PRICES_JSON` to move it) with an
-  effective-from date. A changed price applies to usage from that date on, and older
-  usage keeps the price it had. A new model is priced for all dates. A page that
-  does not parse is refused with the reason, and prices stay as they are. Any model
-  the table does not recognize is still counted in token totals but shown as
-  "unpriced" rather than silently costed at $0.
+  to `~/.claude/cc-dashboard/prices.json` with an effective-from date. A changed
+  price applies to usage from that date on, and older usage keeps the price it had.
+  A new model is priced for all dates. A page that does not parse is refused with
+  the reason, and prices stay as they are. Any model the table does not recognize is
+  still counted in token totals but shown as "unpriced" rather than silently costed
+  at $0.
 
 ## File layout
 

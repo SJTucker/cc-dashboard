@@ -314,11 +314,8 @@ function startReviews($: EngineInterface) {
 }
 
 // Where the verdicts live, as lib/updates.js getUpdatesPath finds them:
-// UPDATES_FILE with a leading ~ expanded, else <config dir>/cc-dashboard/updates.json.
-// Null when no path can be built.
+// <config dir>/cc-dashboard/updates.json. Null when no path can be built.
 async function updatesPath($: EngineInterface) {
-  const override = await $.env.get('UPDATES_FILE')
-  if (override) return override.replace(/^~(?=\/|$)/, (await $.env.get('HOME')) ?? '~')
   const dir = await configDir($)
   return dir ? `${dir}/cc-dashboard/updates.json` : null
 }

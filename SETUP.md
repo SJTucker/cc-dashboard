@@ -117,48 +117,43 @@ Without rtk the panels do not appear.
 
 ## Environment variables
 
-`<cfg>` is `CLAUDE_CONFIG_DIR`, or `~/.claude` when it is unset. Every variable below
-expands a leading `~`.
+`<cfg>` is `CLAUDE_CONFIG_DIR`, or `~/.claude` when it is unset. The server, the mod
+and the `bin/` scripts write every file under `<cfg>`, so `CLAUDE_CONFIG_DIR` is the
+only variable that moves them.
 
 | Variable | Default | What it sets |
 |---|---|---|
 | `PORT` | `3600` | The server's port. `--port` takes precedence. |
-| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's config folder, and so `<cfg>` for every path below. The mod reads it too. |
-| `CLAUDE_JSON` | `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set, else `~/.claude.json` | The usage cache for Plan usage |
-| `RATE_LIMITS_JSON` | `<cfg>/rate-limits.json` | The statusline rate-limits file |
-| `LIVE_SESSIONS_DIR` | `<cfg>/cc-dashboard/sessions` | The per-session snapshots |
-| `REVIEWS_DIR` | `<cfg>/cc-dashboard/reviews` | The session review files |
-| `UPDATES_FILE` | `<cfg>/cc-dashboard/updates.json` | The Claude Code release verdicts. The mod reads it too. |
-| `TRANSCRIPTS_DB` | `<cfg>/cc-dashboard/transcripts.db` | The stored usage rows |
-| `PRICES_JSON` | `<cfg>/cc-dashboard/prices.json` | The applied price history |
-| `CHANGES_FILE` | `changes.json` in the clone | Setup change markers you add by hand |
-| `RTK_DB` | `~/Library/Application Support/rtk/history.db` | rtk's history |
+| `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's config folder, and so `<cfg>` for every path in "Files outside the repo". A leading `~` is expanded. |
+| `RTK_DB` | `~/Library/Application Support/rtk/history.db` | rtk's history. A leading `~` is expanded. |
 
 Set a variable for the server when you start it, for example
 `CLAUDE_CONFIG_DIR=/path/to/.claude npm start`.
 
-The `bin/` scripts run inside Claude Code, so they read these variables from Claude
-Code's environment. The mod reads `CLAUDE_CONFIG_DIR` and `UPDATES_FILE` from the same
-place. A variable that moves a file the scripts write, such as `LIVE_SESSIONS_DIR`,
-must have the same value for Claude Code and for the server. Otherwise the server
-reads a folder the scripts never write.
+The mod and the `bin/` scripts run inside Claude Code, so they read
+`CLAUDE_CONFIG_DIR` from Claude Code's environment. If you set it, give the server the
+same value. Otherwise the server reads transcripts and snapshots from a folder Claude
+Code does not write to.
+
+`CHANGES_FILE` also exists. It points the server at another `changes.json` so the
+tests can avoid the one in the clone.
 
 ## Files outside the repo
 
 | Path | Override | Written by |
 |---|---|---|
 | `<cfg>/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` | Claude Code |
-| `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_JSON` | Claude Code |
+| `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/plugins/installed_plugins.json` | `CLAUDE_CONFIG_DIR` | Claude Code |
-| `<cfg>/rate-limits.json` | `RATE_LIMITS_JSON` | `bin/record-statusline` |
-| `<cfg>/cc-dashboard/sessions/` | `LIVE_SESSIONS_DIR` | `bin/record-statusline`, `bin/record-session-end` |
+| `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` |
+| `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, `bin/record-session-end` |
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
-| `<cfg>/cc-dashboard/reviews/` | `REVIEWS_DIR` | `bin/review-session` |
-| `<cfg>/cc-dashboard/updates.json` | `UPDATES_FILE` | `bin/judge-updates` |
-| `<cfg>/cc-dashboard/transcripts.db` | `TRANSCRIPTS_DB` | the server |
-| `<cfg>/cc-dashboard/prices.json` | `PRICES_JSON` | the server, when you click Apply |
+| `<cfg>/cc-dashboard/reviews/` | `CLAUDE_CONFIG_DIR` | `bin/review-session` |
+| `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
+| `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server |
+| `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server, when you click Apply |
 | rtk's `history.db` | `RTK_DB` | rtk |
 
 The mod also reads these files to record setup changes. It writes none of them.

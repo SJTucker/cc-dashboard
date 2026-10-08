@@ -26,11 +26,12 @@ function setup({ plugins, changes, updates, auto } = {}) {
   }
   const changesPath = path.join(base, 'changes.json');
   if (changes !== undefined) fs.writeFileSync(changesPath, typeof changes === 'string' ? changes : JSON.stringify(changes));
-  const updatesPath = path.join(base, 'updates.json');
-  if (updates !== undefined) fs.writeFileSync(updatesPath, JSON.stringify(updates));
+  if (updates !== undefined) {
+    fs.mkdirSync(path.join(base, 'cc-dashboard'), { recursive: true });
+    fs.writeFileSync(path.join(base, 'cc-dashboard', 'updates.json'), JSON.stringify(updates));
+  }
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.CHANGES_FILE = changesPath;
-  process.env.UPDATES_FILE = updatesPath;
   delete require.cache[require.resolve('../lib/scan')];
   delete require.cache[require.resolve('../lib/updates')];
   delete require.cache[require.resolve('../lib/changes')];

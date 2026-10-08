@@ -10,8 +10,6 @@ const path = require('path');
 // copies of every module that depends on it.
 function load(base) {
   process.env.CLAUDE_CONFIG_DIR = base;
-  delete process.env.REVIEWS_DIR;
-  delete process.env.LIVE_SESSIONS_DIR;
   for (const m of ['../lib/scan', '../lib/sessions', '../lib/updates', '../lib/review']) {
     delete require.cache[require.resolve(m)];
   }
@@ -173,12 +171,9 @@ function writeSessionTranscript(projects, id, promptCount) {
   writeTranscript(folder, Array.from({ length: promptCount }, (_, i) => typed(`prompt ${i}`)), `${id}.jsonl`);
 }
 
-test('getReviewsDir is under the config dir unless REVIEWS_DIR is set', () => {
+test('getReviewsDir is under the config dir', () => {
   const { review, base } = fixture();
   assert.strictEqual(review.getReviewsDir(), path.join(base, 'cc-dashboard', 'reviews'));
-  process.env.REVIEWS_DIR = '~/elsewhere';
-  assert.strictEqual(review.getReviewsDir(), path.join(os.homedir(), 'elsewhere'));
-  delete process.env.REVIEWS_DIR;
 });
 
 test('endedSessions lists ended snapshots, newest end first, and skips the rest', () => {

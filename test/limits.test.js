@@ -102,39 +102,29 @@ test('readLimits returns null for a missing file, missing key or bad JSON', () =
   );
 });
 
-test('getClaudeJsonPath: CLAUDE_JSON, then CLAUDE_CONFIG_DIR, then the home directory', () => {
-  const saved = { json: process.env.CLAUDE_JSON, dir: process.env.CLAUDE_CONFIG_DIR };
+test('getClaudeJsonPath: inside CLAUDE_CONFIG_DIR, else the home directory', () => {
+  const saved = process.env.CLAUDE_CONFIG_DIR;
   try {
-    delete process.env.CLAUDE_JSON;
     delete process.env.CLAUDE_CONFIG_DIR;
     assert.strictEqual(getClaudeJsonPath(), path.join(os.homedir(), '.claude.json'));
     process.env.CLAUDE_CONFIG_DIR = '~/alt-claude';
     assert.strictEqual(getClaudeJsonPath(), path.join(os.homedir(), 'alt-claude', '.claude.json'));
-    process.env.CLAUDE_JSON = '~/elsewhere/.claude.json';
-    assert.strictEqual(getClaudeJsonPath(), path.join(os.homedir(), 'elsewhere', '.claude.json'));
   } finally {
-    for (const [key, name] of [['json', 'CLAUDE_JSON'], ['dir', 'CLAUDE_CONFIG_DIR']]) {
-      if (saved[key] === undefined) delete process.env[name];
-      else process.env[name] = saved[key];
-    }
+    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = saved;
   }
 });
 
-test('getRateLimitsPath: RATE_LIMITS_JSON, then CLAUDE_CONFIG_DIR, then the home directory', () => {
-  const saved = { json: process.env.RATE_LIMITS_JSON, dir: process.env.CLAUDE_CONFIG_DIR };
+test('getRateLimitsPath: inside CLAUDE_CONFIG_DIR, else ~/.claude', () => {
+  const saved = process.env.CLAUDE_CONFIG_DIR;
   try {
-    delete process.env.RATE_LIMITS_JSON;
     delete process.env.CLAUDE_CONFIG_DIR;
     assert.strictEqual(getRateLimitsPath(), path.join(os.homedir(), '.claude', 'rate-limits.json'));
     process.env.CLAUDE_CONFIG_DIR = '~/alt-claude';
     assert.strictEqual(getRateLimitsPath(), path.join(os.homedir(), 'alt-claude', 'rate-limits.json'));
-    process.env.RATE_LIMITS_JSON = '~/elsewhere/rate-limits.json';
-    assert.strictEqual(getRateLimitsPath(), path.join(os.homedir(), 'elsewhere', 'rate-limits.json'));
   } finally {
-    for (const [key, name] of [['json', 'RATE_LIMITS_JSON'], ['dir', 'CLAUDE_CONFIG_DIR']]) {
-      if (saved[key] === undefined) delete process.env[name];
-      else process.env[name] = saved[key];
-    }
+    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = saved;
   }
 });
 
@@ -271,9 +261,10 @@ test('bin/record-limits exits 0 with no output on bad JSON', () => {
   assert.strictEqual(result.stderr, '');
 });
 
-test('bin/record-limits writes RATE_LIMITS_JSON with valid input', () => {
+test('bin/record-limits writes rate-limits.json under CLAUDE_CONFIG_DIR with valid input', () => {
   const transcript = makeTranscript(FETCHED);
-  const file = missingFile('rate-limits.json');
+  const config = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-limits-cfg-'));
+  const file = path.join(config, 'rate-limits.json');
   const input = JSON.stringify({
     transcript_path: transcript,
     rate_limits: { five_hour: { used_percentage: 12.5, resets_at: Math.floor(NOW / 1000) + 3600 } },
@@ -281,7 +272,7 @@ test('bin/record-limits writes RATE_LIMITS_JSON with valid input', () => {
   const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'record-limits')], {
     input,
     encoding: 'utf8',
-    env: { ...process.env, RATE_LIMITS_JSON: file },
+    env: { ...process.env, CLAUDE_CONFIG_DIR: config },
   });
   assert.strictEqual(result.status, 0);
   assert.strictEqual(result.stdout, '');

@@ -20,18 +20,13 @@ const tmpDir = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-store-'));
 const rowsOf = (extra = {}) => ({ ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], sessions: {}, minT: 100, maxT: 200, ...extra });
 const entryOf = (extra = {}) => ({ size: 10, mtimeMs: 1234.5, version: 1, onDisk: true, rows: rowsOf(), ...extra });
 
-test('getStorePath: TRANSCRIPTS_DB wins, then CLAUDE_CONFIG_DIR, then ~/.claude', (t) => {
-  const saved = { db: process.env.TRANSCRIPTS_DB, dir: process.env.CLAUDE_CONFIG_DIR };
+test('getStorePath: under CLAUDE_CONFIG_DIR, then ~/.claude', (t) => {
+  const saved = process.env.CLAUDE_CONFIG_DIR;
   t.after(() => {
-    for (const [key, value] of [['TRANSCRIPTS_DB', saved.db], ['CLAUDE_CONFIG_DIR', saved.dir]]) {
-      if (value === undefined) delete process.env[key];
-      else process.env[key] = value;
-    }
+    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = saved;
   });
-  process.env.TRANSCRIPTS_DB = '/x/y.db';
   process.env.CLAUDE_CONFIG_DIR = '/cfg';
-  assert.strictEqual(getStorePath(), '/x/y.db');
-  delete process.env.TRANSCRIPTS_DB;
   assert.strictEqual(getStorePath(), path.join('/cfg', 'cc-dashboard', 'transcripts.db'));
   delete process.env.CLAUDE_CONFIG_DIR;
   assert.strictEqual(getStorePath(), path.join(os.homedir(), '.claude', 'cc-dashboard', 'transcripts.db'));
