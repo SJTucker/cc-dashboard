@@ -4,7 +4,9 @@
 const express = require('express');
 const os = require('os');
 const path = require('path');
-const { scanUsage, getProjectsDir, localDateStr } = require('./lib/scan');
+const { getProjectsDir, localDateStr } = require('./lib/scan');
+const { aggregate } = require('./lib/aggregate');
+const { getRowStore } = require('./lib/rowstore');
 const { windowStart } = require('./lib/window');
 const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
@@ -18,7 +20,6 @@ const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
 const { PRICING_URL, PriceParseError, fetchPricingPage, parsePricingPage, diffPrices } = require('./lib/price-fetch');
-const { readRecord, writeRecord, clearRecord } = require('./lib/records');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -53,12 +54,7 @@ app.use(express.static(path.join(__dirname, 'public')));
 // page could otherwise run scans here with <img src> tags.
 app.use('/api', sameOriginOnly);
 
-// Simple 60s cache so switching the day-range control doesn't re-scan every file on
-// every click. Cleared automatically on the next scan cycle.
-const CACHE_TTL_MS = 60_000;
-const cache = new Map();
-
-// scanUsage skips a session file it cannot read, which lowers that range's totals.
+// The row store skips a session file it cannot read, which lowers that range's totals.
 // The terminal gets one warning per range each time the count of skipped files
 // changes, so the 5s live poll does not repeat it.
 const unreadableByRange = new Map();
@@ -73,50 +69,38 @@ function warnUnreadable(range, data) {
   return data;
 }
 
-// Caches the scan's promise, not just its result. Refresh on the All range fires
-// /api/summary?days=all and /api/changes together, both cold on the same key, and
-// without this each ran its own scan of the same files (measured 4.0s vs 2.2s for
-// the two combined). The promise is cached before the await so the second request
-// finds it already in the map, and evicted on rejection so the next request retries
-// instead of replaying the same failure until the entry expires.
-async function getCached(days) {
-  const key = String(days);
-  const hit = cache.get(key);
-  if (hit && Date.now() - hit.ts < CACHE_TTL_MS) return hit.data;
-  const range = days == null ? 'all-time' : `${days}-day`;
-  const promise = scanUsage({ days }).then((data) => warnUnreadable(range, data)).catch((err) => {
-    cache.delete(key);
-    throw err;
-  });
-  cache.set(key, { data: promise, ts: Date.now() });
-  return promise;
-}
-
-// /api/summary?days=today and /api/sessions/live both need the Today scan, and
-// loadAndRender requests them together. Sharing one scan for 2 seconds serves
-// both from a single file walk. The 5s live poll is past that window, so each
-// poll still scans afresh. A rejected scan is dropped at once so the next
-// request retries.
-const TODAY_SHARE_MS = 2000;
-let todayScan = null; // { promise, ts }
-
 // Before the first scan, so every cost uses the applied price history.
 loadPriceFile();
 
-// Costs are computed inside scanUsage, so a price change needs both scan caches dropped.
-function clearScans() {
-  cache.clear();
-  todayScan = null;
+// The latest aggregate for each range, reused while the row store's generation and
+// the local date are unchanged. A range's result is about 22 MB, so only the latest
+// one per range is kept. The date is part of the check because a range's start moves
+// at midnight with no transcript changing.
+const memo = new Map(); // `${days}:${bucket}` -> { generation, day, data }
+
+// Every route that needs a range goes through here. The row store re-reads only the
+// transcripts that changed, so a call with nothing new costs one stat pass.
+// Concurrent calls share that pass.
+async function scan(days, bucket = 'day') {
+  const rowStore = getRowStore();
+  await rowStore.refresh();
+  const key = `${days}:${bucket}`;
+  const day = localDateStr(new Date());
+  const hit = memo.get(key);
+  if (hit && hit.generation === rowStore.generation && hit.day === day) return hit.data;
+  const range = days == null ? 'all-time' : days === 'today' ? 'Today' : `${days}-day`;
+  const data = warnUnreadable(
+    range,
+    aggregate(rowStore.entries().map((e) => e.rows), { days, bucket, projectsDir: getProjectsDir() }),
+  );
+  memo.set(key, { generation: rowStore.generation, day, data });
+  return data;
 }
 
-function getTodayScan() {
-  if (todayScan && Date.now() - todayScan.ts < TODAY_SHARE_MS) return todayScan.promise;
-  const promise = scanUsage({ days: 'today', bucket: 'hour' }).then((data) => warnUnreadable('Today', data)).catch((err) => {
-    if (todayScan && todayScan.promise === promise) todayScan = null;
-    throw err;
-  });
-  todayScan = { promise, ts: Date.now() };
-  return promise;
+// Costs are computed when rows are aggregated, so a price change drops the memo. The
+// stored rows hold token counts only and need no re-read.
+function clearScans() {
+  memo.clear();
 }
 
 // The per-call records feed /api/changes only. Sent here they would add a few
@@ -125,8 +109,8 @@ function publicSummary({ efficiency, ...rest }) {
   return rest;
 }
 
-// The range picker's day counts. Each distinct count is its own cached scan of up
-// to about 20 MB, and nothing evicts the cache, so only these are accepted.
+// The range picker's day counts. Each distinct count is its own memo entry of up
+// to about 22 MB, and nothing evicts entries, so only these are accepted.
 const RANGE_DAYS = new Set([7, 30, 90]);
 const INVALID_DAYS = (raw) => `Invalid days: ${String(raw)}. Use 7, 30, 90, 'today', or 'all'.`;
 
@@ -134,11 +118,7 @@ app.get('/api/summary', async (req, res) => {
   try {
     const raw = req.query.days;
     if (raw === 'today') {
-      // A today-scan reads only files written since local midnight, which is fast
-      // enough that caching it past getTodayScan's 2s share would only make the
-      // live poll show stale numbers.
-      const data = await getTodayScan();
-      noteTodayRecord(data);
+      const data = await scan('today', 'hour');
       res.json(publicSummary(data));
       return;
     }
@@ -155,7 +135,7 @@ app.get('/api/summary', async (req, res) => {
       }
       days = n;
     }
-    const data = await getCached(days);
+    const data = await scan(days);
     res.json(publicSummary(data));
   } catch (err) {
     console.error('[API] /api/summary failed:', err);
@@ -165,12 +145,12 @@ app.get('/api/summary', async (req, res) => {
 
 // No cache. A full read of the reference database - 21,867 rows, both GROUP BYs,
 // open and close - measured 13ms, against ~1.9s for a 30-day scanUsage(). Putting
-// this behind the 60s cache above would either serve stale savings or force every
-// rtk request to bust a cache that exists to protect the slow JSONL scan.
+// this behind the aggregate memo above would either serve stale savings or force every
+// rtk request to clear a memo that exists to avoid re-aggregating the transcripts.
 //
 // The days parsing below duplicates /api/summary's rather than sharing a helper: the
-// two routes disagree on what 'today' means (that one returns early past the cache,
-// this one has no cache at all), and folding them together would need a flags
+// two routes disagree on what 'today' means (that one reads the row store and memo,
+// this one reads the rtk database with no cache at all), and folding them together would need a flags
 // argument for a nine-line branch.
 app.get('/api/rtk', (req, res) => {
   try {
@@ -207,14 +187,14 @@ app.get('/api/limits', (req, res) => {
 });
 
 // All history, whatever range the page shows: a before/after needs data on both
-// sides of a change. It reads the days=all cache entry, so it shares a scan with
-// the "all" range. The marker files are read on every request, so an edit to
+// sides of a change. It reads the all-time aggregate, the same one
+// the "all" range uses. The marker files are read on every request, so an edit to
 // changes.json shows on the next refresh instead of up to 60s later. `daily` holds
 // one series per before/after row; the two rtk series are added here because they
 // come from rtk's database, not the scan.
 app.get('/api/changes', async (req, res) => {
   try {
-    const data = await getCached(null);
+    const data = await scan(null);
     const { markers, changesFile } = collectMarkers(data.efficiency.calls);
     const rtkWindows = readRtkWindows(windowRanges(markers));
     const report = buildReport(data.efficiency, markers, rtkWindows, changesFile);
@@ -228,45 +208,17 @@ app.get('/api/changes', async (req, res) => {
   }
 });
 
-// Past days' totals never change, so only today can overtake the cached record.
-// The Today scan has already run, so the check costs one small file read per poll.
-// With no cached record nothing is written, so /api/records still computes the
-// real all-time value on its next request.
-function noteTodayRecord(data) {
-  const cached = readRecord();
-  const today = busiestDay(data.daily);
-  if (cached && today && today.tokens > cached.tokens) writeRecord(today);
-}
-
-// The cached all-time record, or the all-history scan's busiest day, which is
-// then cached.
-async function allTimeRecord() {
-  const cached = readRecord();
-  if (cached) return cached;
-  const allTime = busiestDay((await getCached(null)).daily);
-  if (allTime) writeRecord(allTime);
-  return allTime;
-}
-
 // The Record day card's all-time value: the day with the most tokens, with its
-// token total and cost, from records.json (lib/records.js) or the all-history scan.
-// recentDays is the per-day totals for the 6 days before today (not today), which
-// the Today range adds to its live totals for the rolling 7-day lines. It reads the
-// 7-day scan, the cache entry the 7d range also uses.
+// token total and cost, from the all-time aggregate. recentDays is the per-day totals
+// for the 6 days before today (not today), which the Today range adds to its live
+// totals for the rolling 7-day lines. It reads the 7-day aggregate, the one the 7d
+// range also uses.
 app.get('/api/records', async (req, res) => {
   try {
     const todayStr = localDateStr(new Date());
     const weekStart = localDateStr(new Date(windowStart(7)));
-    const [cachedRecord, week] = await Promise.all([allTimeRecord(), getCached(7)]);
-    // A Today poll can cache a day's partial total if the dashboard closes before
-    // that day ends. The 7-day scan holds the day's final total, so it replaces a
-    // lower cached record.
-    let allTime = cachedRecord;
-    const weekBest = busiestDay(week.daily);
-    if (weekBest && (!allTime || weekBest.tokens > allTime.tokens)) {
-      allTime = weekBest;
-      writeRecord(weekBest);
-    }
+    const [all, week] = await Promise.all([scan(null), scan(7)]);
+    const allTime = busiestDay(all.daily);
     const recentDays = dayTotals(week.daily).filter((d) => d.date >= weekStart && d.date < todayStr);
     res.json({ allTime, recentDays });
   } catch (err) {
@@ -282,7 +234,7 @@ app.get('/api/records', async (req, res) => {
 // (lib/activity.js), written by the mod. Session ids stay on the server.
 app.get('/api/sessions/live', async (req, res) => {
   try {
-    const data = await getTodayScan();
+    const data = await scan('today', 'hour');
     const { efficiency } = data;
     res.json(buildLiveSessions(readSessions(), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(), {
       branchesBySession: efficiency.branchesBySession,
@@ -327,7 +279,6 @@ function sameOriginOnly(req, res, next) {
 
 app.post('/api/refresh', (req, res) => {
   clearScans();
-  clearRecord(); // Refresh means re-scan logs, so the record is recomputed too.
   res.json({ ok: true });
 });
 
@@ -377,7 +328,6 @@ app.post('/api/prices/apply', express.json({ limit: '1kb' }), (req, res) => {
   }
   pendingCheck = null;
   clearScans();
-  clearRecord(); // the cached record's cost was computed at the old prices
   res.json(result.source);
 });
 

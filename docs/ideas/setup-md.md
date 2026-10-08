@@ -65,7 +65,7 @@ Asked for on 2026-10-07.
 | `<cfg>/cc-dashboard/changes/`, `setup/` | none | the mod |
 | `<cfg>/cc-dashboard/reviews/` | `REVIEWS_DIR` | `bin/review-session` |
 | `<cfg>/cc-dashboard/updates.json` | `UPDATES_FILE` | `bin/judge-updates` |
-| `<cfg>/cc-dashboard/records.json` | `RECORDS_FILE` | the server |
+| `<cfg>/cc-dashboard/transcripts.db` | `TRANSCRIPTS_DB` | the server |
 | `<cfg>/cc-dashboard/prices.json` | `PRICES_JSON` | the server, on Apply |
 | `<cfg>/plugins/installed_plugins.json` | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<repo>/changes.json` | `CHANGES_FILE` | the user, by hand |
@@ -76,7 +76,7 @@ Asked for on 2026-10-07.
 - Node 22 is mentioned only in the optional rtk section.
 - The symlink and statusline snippets hard-code `~/code/cc-dashboard`.
 - The intro says "five small files, two dependencies" and one network request on
-  Check prices. The repo has 15 `lib/` files and a mod, and the mod also fetches the
+  Check prices. The repo has 18 `lib/` files and a mod, and the mod also fetches the
   changelog and calls Haiku. `package.json`'s description repeats the network claim.
 - The environment variables are described in separate sections. No table lists them.
 
@@ -86,9 +86,10 @@ Asked for on 2026-10-07.
   puts the rule in front of every session in this repo. The rule should list the
   triggers: `package.json` `engines`, a new `process.env` read, a new path under
   `<cfg>/cc-dashboard/`, and changes under `mod/` or `bin/` that affect install.
-  The transcript row store (`docs/ideas/data-storage.md`)
-  is the first change that needs it: it adds `transcripts.db` and `TRANSCRIPTS_DB`
-  and removes `records.json` and `RECORDS_FILE`.
+  The transcript row store shipped on branch `feat/transcript-row-store`. It added
+  `transcripts.db` and `TRANSCRIPTS_DB` and removed `records.json` and
+  `RECORDS_FILE`. The table above already lists `transcripts.db` and `TRANSCRIPTS_DB`.
+  The row store is the kind of change the rule must catch.
 
 - **SETUP.md or the README.** The README's "Run it", "Setting up the recorder" and
   "Without the mod" sections already hold most of the steps. Decide whether

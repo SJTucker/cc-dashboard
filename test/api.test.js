@@ -7,10 +7,18 @@ const os = require('os');
 const path = require('path');
 const { localDateStr } = require('../lib/scan');
 
+let sqliteAvailable = true;
+try {
+  require('node:sqlite');
+} catch {
+  sqliteAvailable = false;
+}
+const needsSqlite = !sqliteAvailable && 'node:sqlite is not available';
+
 // Boot the real Express app on an ephemeral port against a fixture log directory.
 // CLAUDE_CONFIG_DIR has to be set before server.js is required, because
 // getProjectsDir() reads it when lib/scan.js is loaded into the module cache.
-function startServer({ onScan } = {}) {
+function startServer() {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-api-'));
   const dir = path.join(base, 'projects', 'demo');
   fs.mkdirSync(dir, { recursive: true });
@@ -35,34 +43,18 @@ function startServer({ onScan } = {}) {
   delete process.env.LIVE_SESSIONS_DIR; // snapshots resolve under CLAUDE_CONFIG_DIR
   delete process.env.PRICES_JSON; // prices.json resolves under CLAUDE_CONFIG_DIR
   delete process.env.REVIEWS_DIR; // reviews resolve under CLAUDE_CONFIG_DIR
-  delete process.env.RECORDS_FILE; // records.json resolves under CLAUDE_CONFIG_DIR
+  delete process.env.TRANSCRIPTS_DB; // transcripts.db resolves under CLAUDE_CONFIG_DIR
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.PORT = '0'; // let the OS pick a free port
-  delete require.cache[require.resolve('../lib/scan')];
-  // onScan sees each scanUsage call's options before the real scan runs. server.js
-  // destructures scanUsage when it is required, so the spy goes in first.
-  if (onScan) {
-    const scanModule = require('../lib/scan');
-    const realScanUsage = scanModule.scanUsage;
-    scanModule.scanUsage = (opts) => {
-      onScan(opts);
-      return realScanUsage(opts);
-    };
-  }
+  // The row store keeps its rows and database handle at module level, so each
+  // server starts from fresh copies.
+  for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
   delete require.cache[require.resolve('../lib/sessions')];
   delete require.cache[require.resolve('../lib/updates')];
   delete require.cache[require.resolve('../lib/review')];
   delete require.cache[require.resolve('../server')];
   const server = require('../server');
   return server;
-}
-
-// The records cache file for the server startServer just booted.
-const recordsFile = () => path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'records.json');
-
-function writeRecordsFile(allTime, computedAt = Date.now()) {
-  fs.mkdirSync(path.dirname(recordsFile()), { recursive: true });
-  fs.writeFileSync(recordsFile(), JSON.stringify({ allTime, computedAt }));
 }
 
 const PAGE = fs.readFileSync(path.join(__dirname, 'fixtures', 'pricing-page.md'), 'utf8');
@@ -126,7 +118,7 @@ test('GET /api/summary?days=today returns one bucket per local hour', async (t) 
   assert.strictEqual(ten.input, 1000, 'the 10:00 slot holds the fixture usage');
 });
 
-test('GET /api/summary?days=today is not served from the 60s cache', async (t) => {
+test('GET /api/summary?days=today is not served from the memo', async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
@@ -150,7 +142,7 @@ test('GET /api/summary?days=today is not served from the 60s cache', async (t) =
   });
   fs.appendFileSync(path.join(dir, 'session.jsonl'), line + '\n');
 
-  // Past getTodayScan's 2s share window, as every live poll is.
+  // Past the 2s refresh share, as every live poll is.
   await new Promise((resolve) => setTimeout(resolve, 2100));
   const second = await (await fetch(`http://127.0.0.1:${port}/api/summary?days=today`)).json();
   assert.strictEqual(second.summary.totalOutput, 500, 'the new entry appears without a manual refresh');
@@ -243,7 +235,7 @@ test('GET /api/summary does not send the per-call efficiency records', async (t)
   }
 });
 
-test('two concurrent cold requests for the same range call scanUsage once', async (t) => {
+test('two concurrent cold requests for the same range aggregate once', async (t) => {
   const base = fs.mkdtempSync(path.join(os.tmpdir(), 'cc-dash-inflight-'));
   const dir = path.join(base, 'projects', 'demo');
   fs.mkdirSync(dir, { recursive: true });
@@ -256,23 +248,24 @@ test('two concurrent cold requests for the same range call scanUsage once', asyn
 
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
   process.env.CLAUDE_CONFIG_DIR = base;
+  delete process.env.TRANSCRIPTS_DB;
   process.env.PORT = '0';
-  delete require.cache[require.resolve('../lib/scan')];
-  const scanModule = require('../lib/scan');
+  for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
+  const aggregateModule = require('../lib/aggregate');
   let calls = 0;
-  const realScanUsage = scanModule.scanUsage;
-  // A spy on the real scan, not a fake result: the point is counting runs, and the
-  // response still has to be the genuine scan output for the assertions to mean
-  // anything. There is no seam to count invocations through the HTTP API alone,
-  // since a cache hit and a shared in-flight promise return the same response shape.
-  scanModule.scanUsage = (...args) => {
+  const realAggregate = aggregateModule.aggregate;
+  // A spy on the real aggregate, not a fake result: the point is counting runs, and
+  // the response still has to be the genuine output for the assertions to mean
+  // anything. There is no seam to count runs through the HTTP API alone, since a memo
+  // hit and a shared in-flight refresh return the same response shape.
+  aggregateModule.aggregate = (...args) => {
     calls += 1;
-    return realScanUsage(...args);
+    return realAggregate(...args);
   };
   delete require.cache[require.resolve('../server')];
   const server = require('../server');
   t.after(() => {
-    scanModule.scanUsage = realScanUsage;
+    aggregateModule.aggregate = realAggregate;
     server.close();
   });
   await new Promise((resolve) => server.once('listening', resolve));
@@ -284,7 +277,7 @@ test('two concurrent cold requests for the same range call scanUsage once', asyn
   ]);
   assert.strictEqual(a.status, 200);
   assert.strictEqual(b.status, 200);
-  assert.strictEqual(calls, 1, 'the second cold request awaited the first scan instead of starting its own');
+  assert.strictEqual(calls, 1, 'the second cold request shared the first refresh and its aggregate');
 });
 
 // A fixture with one session that starts on Sep 1 and one on Sep 10, and a
@@ -311,8 +304,9 @@ function startChangesServer({ changes, plugins } = {}) {
   process.env.UPDATES_FILE = path.join(base, 'updates-nonexistent.json');
   process.env.RTK_DB = path.join(base, 'no-rtk-here.db');
   process.env.CLAUDE_CONFIG_DIR = base;
+  delete process.env.TRANSCRIPTS_DB;
   process.env.PORT = '0';
-  for (const mod of ['../lib/scan', '../lib/changes', '../lib/efficiency', '../server']) delete require.cache[require.resolve(mod)];
+  for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/changes', '../lib/efficiency', '../server']) delete require.cache[require.resolve(mod)];
   return { server: require('../server'), changesPath };
 }
 
@@ -450,126 +444,118 @@ test('GET /api/records returns recentDays: the 6 days before today, not today', 
   assert.deepStrictEqual(byDate[dateBack(3)], { date: dateBack(3), tokens: 0, cost: 0 });
 });
 
-const DAY_MS = 24 * 60 * 60 * 1000;
-const TODAY_RECORD = () => ({ date: localDateStr(new Date()), tokens: 1200, cost: 0.006 });
-
-test('GET /api/records with no records file scans all history and writes the file', async (t) => {
+test('GET /api/records writes no records.json, and nothing in cc-dashboard/ but the transcript database', { skip: needsSqlite }, async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
 
-  const data = await (await fetch(`http://127.0.0.1:${server.address().port}/api/records`)).json();
+  await fetch(`http://127.0.0.1:${server.address().port}/api/records`);
 
-  assert.deepStrictEqual(data.allTime, TODAY_RECORD());
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime, TODAY_RECORD());
+  const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard');
+  assert.strictEqual(fs.existsSync(path.join(dir, 'records.json')), false);
+  assert.ok(fs.readdirSync(dir).every((name) => name.startsWith('transcripts.db')), fs.readdirSync(dir).join(', '));
 });
 
-test('GET /api/records serves a fresh records file without the all-history scan', async (t) => {
-  const scans = [];
-  const server = startServer({ onScan: (opts) => scans.push(opts.days) });
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const cached = { date: '2026-01-02', tokens: 999999, cost: 12.5 };
-  writeRecordsFile(cached);
-
-  const data = await (await fetch(`http://127.0.0.1:${server.address().port}/api/records`)).json();
-
-  assert.deepStrictEqual(data.allTime, cached);
-  assert.ok(!scans.includes(null), 'the all-history scan did not run');
-  assert.ok(scans.includes(7), 'recentDays came from the 7-day scan');
-});
-
-test('GET /api/records raises a partial cached record to the 7-day scan\'s final total', async (t) => {
-  const server = startServer();
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-
+// A three-day-old transcript, old by content and by mtime so the row store persists it
+// on the first refresh. It is an assistant line with a session id, so /api/changes lists
+// it as a session too.
+function writeStoredTranscript() {
   const when = new Date();
+  when.setDate(when.getDate() - 3);
   when.setHours(10, 0, 0, 0);
-  when.setDate(when.getDate() - 1);
-  const yesterday = localDateStr(when);
-  fs.writeFileSync(
-    path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo', 'partial.jsonl'),
-    JSON.stringify({
-      timestamp: when.toISOString(),
-      requestId: 'req-partial',
-      message: { id: 'msg-partial', model: 'claude-sonnet-4-6-20260115', usage: { input_tokens: 2000, output_tokens: 200 } },
-    }) + '\n',
-  );
-  writeRecordsFile({ date: yesterday, tokens: 500, cost: 0.1 });
+  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo', 'old.jsonl');
+  fs.writeFileSync(file, JSON.stringify({
+    type: 'assistant',
+    sessionId: 'sess-old',
+    timestamp: when.toISOString(),
+    requestId: 'req-old',
+    message: { id: 'msg-old', model: 'claude-sonnet-4-6-20260115', content: [], usage: { input_tokens: 5000, output_tokens: 0 } },
+  }) + '\n');
+  fs.utimesSync(file, when, when);
+  return { file, when };
+}
 
-  const data = await (await fetch(`http://127.0.0.1:${server.address().port}/api/records`)).json();
-
-  assert.strictEqual(data.allTime.date, yesterday);
-  assert.strictEqual(data.allTime.tokens, 2200);
-  const written = JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime;
-  assert.strictEqual(written.date, yesterday);
-  assert.strictEqual(written.tokens, 2200);
-});
-
-test('GET /api/records rescans when the records file is 3 days old', async (t) => {
+test('a transcript that is deleted after it was stored still counts in the All range, the record day and /api/changes', async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
-  writeRecordsFile({ date: '2026-01-02', tokens: 999999, cost: 12.5 }, Date.now() - 3 * DAY_MS);
+  const base = `http://127.0.0.1:${server.address().port}`;
+  const { file, when } = writeStoredTranscript();
 
-  const data = await (await fetch(`http://127.0.0.1:${server.address().port}/api/records`)).json();
+  const before = await (await fetch(`${base}/api/summary?days=all`)).json();
+  assert.strictEqual(before.summary.totalInput, 6000);
+  const changesBefore = await (await fetch(`${base}/api/changes`)).json();
+  assert.ok(changesBefore.sessions.some((s) => s.context === 5000), 'the stored transcript is a session');
 
-  assert.deepStrictEqual(data.allTime, TODAY_RECORD());
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime, TODAY_RECORD());
+  fs.unlinkSync(file);
+  // /api/refresh clears the result memo, so the next request aggregates again
+  // from whatever the row store holds instead of replaying an earlier result.
+  assert.strictEqual((await fetch(`${base}/api/refresh`, { method: 'POST' })).status, 200);
+  const after = await (await fetch(`${base}/api/summary?days=all`)).json();
+  assert.strictEqual(after.summary.totalInput, 6000, 'the deleted transcript still counts');
+  const changesAfter = await (await fetch(`${base}/api/changes`)).json();
+  assert.deepStrictEqual(changesAfter.sessions, changesBefore.sessions, 'the deleted session is still listed');
+
+  const records = await (await fetch(`${base}/api/records`)).json();
+  assert.deepStrictEqual(records.allTime, { date: localDateStr(when), tokens: 5000, cost: 0.015 });
 });
 
-test('GET /api/summary?days=today writes today as the record when it has more tokens', async (t) => {
+test('a transcript that is deleted while the server is stopped still counts after a restart', { skip: needsSqlite }, async (t) => {
+  const first = startServer();
+  await new Promise((resolve) => first.once('listening', resolve));
+  const { file } = writeStoredTranscript();
+  const firstBase = `http://127.0.0.1:${first.address().port}`;
+  assert.strictEqual((await (await fetch(`${firstBase}/api/summary?days=all`)).json()).summary.totalInput, 6000);
+  first.close();
+
+  fs.unlinkSync(file);
+  for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/store', '../server']) delete require.cache[require.resolve(mod)];
+  const second = require('../server');
+  t.after(() => second.close());
+  await new Promise((resolve) => second.once('listening', resolve));
+
+  const after = await (await fetch(`http://127.0.0.1:${second.address().port}/api/summary?days=all`)).json();
+  assert.strictEqual(after.summary.totalInput, 6000, 'the database kept the deleted transcript across the restart');
+});
+
+test('a range is aggregated again after local midnight, although no transcript changed', async (t) => {
+  // 23:59:50 local, so 20 s later the date has changed. The clock is mocked before the
+  // first request, so the first result carries the old date.
+  const late = new Date();
+  late.setHours(23, 59, 50, 0);
+  t.mock.timers.enable({ apis: ['Date'], now: late.getTime() });
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
-  writeRecordsFile({ date: '2026-01-02', tokens: 500, cost: 0.1 });
+  const base = `http://127.0.0.1:${server.address().port}`;
 
-  await fetch(`http://127.0.0.1:${server.address().port}/api/summary?days=today`);
+  const first = await (await fetch(`${base}/api/summary?days=7`)).json();
+  assert.strictEqual(first.daily[first.daily.length - 1].date, localDateStr(new Date()));
 
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime, TODAY_RECORD());
+  // Day buckets run to today, so the last bucket moves when the date does.
+  t.mock.timers.tick(20 * 1000);
+  const second = await (await fetch(`${base}/api/summary?days=7`)).json();
+  assert.strictEqual(second.daily[second.daily.length - 1].date, localDateStr(new Date()));
+  assert.notStrictEqual(second.daily[second.daily.length - 1].date, first.daily[first.daily.length - 1].date);
 });
 
-test('GET /api/summary?days=today keeps a record that today has not beaten', async (t) => {
+test('the server still answers when the transcript database cannot be opened', { skip: needsSqlite }, async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
-  const cached = { date: '2026-01-02', tokens: 999999, cost: 12.5 };
-  writeRecordsFile(cached);
+  const warn = t.mock.method(console, 'warn', () => {});
+  // A path under a regular file cannot be created. It is set after startServer, which
+  // clears the variable, and before the first scan opens the database.
+  const blocker = path.join(process.env.CLAUDE_CONFIG_DIR, 'blocker');
+  fs.writeFileSync(blocker, 'x');
+  process.env.TRANSCRIPTS_DB = path.join(blocker, 'transcripts.db');
+  t.after(() => delete process.env.TRANSCRIPTS_DB);
 
-  await fetch(`http://127.0.0.1:${server.address().port}/api/summary?days=today`);
+  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/summary?days=all`);
 
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(recordsFile(), 'utf8')).allTime, cached);
-});
-
-test('GET /api/summary?days=today writes no records file when there is none', async (t) => {
-  const server = startServer();
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-
-  await fetch(`http://127.0.0.1:${server.address().port}/api/summary?days=today`);
-
-  assert.strictEqual(fs.existsSync(recordsFile()), false);
-});
-
-test('POST /api/refresh deletes the records file', async (t) => {
-  const base = await listen(t);
-  writeRecordsFile({ date: '2026-01-02', tokens: 999999, cost: 12.5 });
-
-  assert.strictEqual((await post(`${base}/api/refresh`)).status, 200);
-
-  assert.strictEqual(fs.existsSync(recordsFile()), false);
-});
-
-test('POST /api/prices/apply deletes the records file', async (t) => {
-  stubPricingPage(t, PAGE);
-  const base = await listen(t);
-  writeRecordsFile({ date: '2026-01-02', tokens: 999999, cost: 12.5 });
-
-  await post(`${base}/api/prices/check`);
-  assert.strictEqual((await post(`${base}/api/prices/apply`, { effectiveFrom: localDateStr(new Date()) })).status, 200);
-
-  assert.strictEqual(fs.existsSync(recordsFile()), false);
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual((await res.json()).summary.totalInput, 1000);
+  assert.ok(warn.mock.calls.some((c) => /Could not open/.test(c.arguments[0])));
 });
 
 test('GET /stats.js serves the shared statistics helpers', async (t) => {
@@ -933,9 +919,10 @@ test(
       assert.strictEqual((await fetch(`${base}/api/summary?days=today`)).status, 200);
     }
 
-    assert.strictEqual(warn.mock.callCount(), 1);
-    assert.match(warn.mock.calls[0].arguments[0], /1 session file could not be read/);
-    assert.match(warn.mock.calls[0].arguments[0], /Today/);
+    const scanWarnings = warn.mock.calls.filter((call) => /^\[scan\]/.test(call.arguments[0]));
+    assert.strictEqual(scanWarnings.length, 1);
+    assert.match(scanWarnings[0].arguments[0], /1 session file could not be read/);
+    assert.match(scanWarnings[0].arguments[0], /Today/);
   }
 );
 
