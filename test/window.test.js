@@ -29,8 +29,8 @@ test('windowStart(null) has no start', () => {
 });
 
 test('windowStart stays on midnight across a daylight saving change', () => {
-  // US clocks go back on 2026-11-01 and EU clocks on 2026-10-25. A 30-day window
-  // ending 2026-11-03 crosses both, so this checks the rule in either zone.
+  // This file pins TZ to America/New_York, so the test runs in one zone. US clocks go
+  // back on 2026-11-01, and a 30-day window ending 2026-11-03 crosses that change.
   const start = new Date(windowStart(30, new Date(2026, 10, 3, 12).getTime()));
   assert.deepStrictEqual([start.getMonth(), start.getDate(), start.getHours(), start.getMinutes()], [9, 5, 0, 0]);
 });

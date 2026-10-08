@@ -147,7 +147,12 @@ test('recordSession never throws, even when the directory cannot be created', ()
   const blocker = path.join(tmpDir(), 'a-file');
   fs.writeFileSync(blocker, '');
   assert.doesNotThrow(() => recordSession(statuslineInput(), path.join(blocker, 'sessions'), NOW));
-  assert.doesNotThrow(() => recordSession(undefined, tmpDir(), NOW));
+  assert.strictEqual(fs.statSync(blocker).isFile(), true, 'the blocking file is untouched');
+  assert.strictEqual(fs.existsSync(path.join(blocker, 'sessions')), false, 'nothing was created under the blocker');
+
+  const empty = tmpDir();
+  assert.doesNotThrow(() => recordSession(undefined, empty, NOW));
+  assert.deepStrictEqual(fs.readdirSync(empty), [], 'a missing statusline input writes no snapshot');
 });
 
 test('getSessionsDir follows CLAUDE_CONFIG_DIR, then ~/.claude', () => {
