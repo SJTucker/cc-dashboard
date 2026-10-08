@@ -7,7 +7,10 @@ days. Raised on 2026-10-08.
 ## What was asked for
 
 - **Check why the list still starts at 8/24.** The user thought an earlier change
-  limited the panel to the last 14 days.
+  limited the panel to the last 14 days. The screenshot was taken on the Today
+  range, where the charts show 14 days.
+- **A better way to show the changes.** 27 day buttons wrap over four rows above the
+  comparison. The user suggested a timeline or a calendar instead.
 
 ## What the code does
 
@@ -34,6 +37,11 @@ days. Raised on 2026-10-08.
   defaults to the newest change. Decide what happens when the user had picked an
   older change and then narrows the range: fall back to the newest change in range,
   or keep the old one selected and visible.
+- **Timeline or calendar.** A timeline could share the charts' time axis, with one
+  mark per day that has changes, and open that day's changes on click. A calendar
+  grid of weeks could show a glyph on each day with changes. Either one replaces the
+  wrapped rows of `.marker-day-btn` buttons. Decide which one, and whether it also
+  replaces the glyph stacks under the charts (`+9` on 9/28).
 - **A range with no changes.** Show an empty-state line, as other panels do when a
   range has no data.
 - **The before/after numbers.** They are computed on the server from each change's

@@ -17,7 +17,11 @@ picked on the Today range.
   window.
 - **The top of the y-axis.** The "2k" label sits just under the chart title, and the
   tallest bar reaches the top of the plot. The axis has no 0 label.
-- **Two x-axis labels.** A 14-day axis shows only 9/28 and 10/5.
+- **Two x-axis labels.** A 14-day axis shows only 9/28 and 10/5. `drawTimeAxis`
+  in `public/app.js` labels each Monday and nothing else, so a 14-day axis gets two
+  labels. The Context at session start chart has the same axis and the same two
+  labels, because both Setup changes charts call `drawTimeAxis`. The user asked on
+  2026-10-08 for more dates to be labelled.
 - **No legend.** Nothing on the chart says what the pale bars (inside the 7-day
   windows), the dark bars (outside), the dashed white line (the before median) or
   the orange line (the after median, and the change itself) mean.
@@ -49,5 +53,8 @@ picked on the Today range.
 - **Colour.** The user is red-green colourblind.
   Pale versus dark bars and white versus orange lines must still read
   apart. Use a texture or a line style, not hue alone.
+- **Axis label spacing.** Pick the step from the axis length. For example, label
+  every day or every second day on a 14-day axis, and each Monday on longer ones.
+  Check that labels do not overlap at the narrowest panel width.
 - **Empty days.** Decide whether a day with no data draws a zero tick on the
   baseline, or stays empty.
