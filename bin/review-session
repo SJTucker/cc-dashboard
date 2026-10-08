@@ -6,11 +6,13 @@
 //   prompt   claims ended sessions not reviewed yet and prints
 //            {"reviews": [{"sessionId", "system", "prompt"}]}
 //   record   {"sessionId", "reply"} or {"sessionId", "error"} on stdin; writes
-//            the review
+//            the review to transcripts.db
 // Prints one JSON object on success. On failure it prints the reason on stderr
 // and exits 1, and the mod logs it.
 
 const { pendingReviews, recordReview } = require('../lib/review');
+const { openReviewDb } = require('../lib/review-db');
+const { getStorePath } = require('../lib/db');
 
 function readStdin() {
   return new Promise((resolve, reject) => {
@@ -24,16 +26,28 @@ function readStdin() {
   });
 }
 
-const [command] = process.argv.slice(2);
-const work =
-  command === 'prompt' ? pendingReviews().then((reviews) => ({ reviews }))
-  : command === 'record' ? readStdin().then((input) => recordReview(JSON.parse(input)))
-  : Promise.reject(new Error('usage: review-session prompt | record'));
+function fail(message) {
+  process.stderr.write(`review-session: ${message}\n`);
+  process.exitCode = 1;
+}
 
-work.then(
-  (out) => process.stdout.write(JSON.stringify(out) + '\n'),
-  (err) => {
-    process.stderr.write(`review-session: ${err.message}\n`);
-    process.exitCode = 1;
-  },
-);
+const [command] = process.argv.slice(2);
+if (command !== 'prompt' && command !== 'record') {
+  fail('usage: review-session prompt | record');
+} else {
+  let db = null;
+  try {
+    db = openReviewDb();
+  } catch (err) {
+    fail(`cannot open ${getStorePath()}: ${String(err.message).split('\n')[0]}`);
+  }
+  if (db) {
+    const work =
+      command === 'prompt' ? pendingReviews({ db }).then((reviews) => ({ reviews }))
+      : readStdin().then((input) => recordReview(db, JSON.parse(input)));
+    work.then(
+      (out) => process.stdout.write(JSON.stringify(out) + '\n'),
+      (err) => fail(err.message),
+    ).finally(() => db.close());
+  }
+}

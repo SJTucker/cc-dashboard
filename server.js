@@ -16,6 +16,7 @@ const { readLimits, readDailyShare } = require('./lib/limits');
 const { readSessions, buildLiveSessions } = require('./lib/sessions');
 const { readActivity } = require('./lib/activity');
 const { readReviews } = require('./lib/review');
+const { getReviewDb } = require('./lib/review-db');
 const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
@@ -247,14 +248,17 @@ app.get('/api/sessions/live', async (req, res) => {
   }
 });
 
-// Reviews of ended sessions from cc-dashboard/reviews/ (lib/review.js), from the
-// last 7 days. Read-only: bin/review-session writes them, run by the mod in mod/.
-// Each review includes its session id and transcript path, because the user pastes
-// them into a prompt for another model. Only this machine can reach the API: the
-// server listens on HOST (127.0.0.1). home lets the page shorten the transcript path.
+// Reviews of ended sessions from the reviews and suggestions tables in
+// transcripts.db (lib/review.js), finished in the last 7 days. bin/review-session
+// writes the reviews, run by the mod in mod/. The dismiss routes below write the
+// dismissals. Each review includes its session id and transcript path, because the
+// user pastes them into a prompt for another model. Only this machine can reach the
+// API: the server listens on HOST (127.0.0.1). home lets the page shorten the
+// transcript path. When transcripts.db cannot be opened the answer is a 500 with the
+// reason, which the panel shows as text.
 app.get('/api/reviews', (req, res) => {
   try {
-    res.json({ home: os.homedir(), reviews: readReviews() });
+    res.json({ home: os.homedir(), reviews: readReviews(getReviewDb()) });
   } catch (err) {
     console.error('[API] /api/reviews failed:', err);
     res.status(500).json({ error: 'Failed to read session reviews', detail: err.message });
