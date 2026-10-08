@@ -1112,3 +1112,42 @@ test('a request whose row-store write meets the review lock answers 200 within 1
   assert.strictEqual(body.summary.totalInput, 6000);
   assert.ok(warn.mock.calls.some((c) => /\(database busy\)/.test(c.arguments[0])), 'the write met the lock');
 });
+
+const BUSY = { error: 'The review database is busy. Try again.' };
+
+test('GET /api/reviews answers 503 within 1000 ms when its first import meets the review lock, and 200 once the lock is gone', async (t) => {
+  const { base, file } = await lockableServer(t);
+  const release = await helpers.holdWriteLock(t, file);
+  const started = Date.now();
+  const res = await fetch(`${base}/api/reviews`);
+  const took = Date.now() - started;
+  assert.strictEqual(res.status, 503);
+  assert.deepStrictEqual(await res.json(), BUSY);
+  assert.ok(took < 1000, `answered in ${took} ms`);
+  await release();
+  const after = await fetch(`${base}/api/reviews`);
+  assert.strictEqual(after.status, 200);
+  assert.deepStrictEqual(await after.json(), { home: os.homedir(), reviews: [] });
+});
+
+test('the dismiss routes answer 503 within 1000 ms under the review lock, reads still answer, and a dismiss works after', async (t) => {
+  const base = await reviewServer(t);
+  assert.strictEqual((await fetch(`${base}/api/reviews`)).status, 200); // runs the import before the lock
+  const release = await helpers.holdWriteLock(t, require('../lib/db').getStorePath());
+  const sends = {
+    POST: () => postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }),
+    DELETE: () => fetch(dismissUrl(base, 'sess-a', 0), { method: 'DELETE' }),
+  };
+  for (const [method, send] of Object.entries(sends)) {
+    const started = Date.now();
+    const res = await send();
+    const took = Date.now() - started;
+    assert.strictEqual(res.status, 503, method);
+    assert.deepStrictEqual(await res.json(), BUSY, method);
+    assert.ok(took < 1000, `${method} answered in ${took} ms`);
+  }
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, null], 'GET /api/reviews reads under the lock');
+  await release();
+  assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' })).status, 200);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), ['done', null]);
+});

@@ -203,6 +203,12 @@ opens with Enter or Space.
   folder is then left alone.
 - **When the database cannot be opened.** The panel shows the reason as text.
   `bin/review-session` prints one line on stderr and exits 1, and the mod logs it.
+- **While `bin/review-session` is writing.** The server waits up to 250 ms for the
+  database lock. If the lock is still held, the panel shows "The review database is
+  busy. Try again." A Done, Not useful or Undo click that meets the lock leaves the
+  suggestion as it was. Reading the list does not wait for the lock. Until one import
+  succeeds after a server start, any reviews request can meet the lock and show the
+  busy text. After that, only the three buttons can meet it.
 - **Failures.** A failed review is retried after an hour while the session's
   snapshot is still there, which is 24 hours.
 - **Cost.** Haiku calls made by the mod write no transcript line, so the dashboard's
@@ -477,7 +483,7 @@ lib/price-fetch.js     Fetch and parse Anthropic's pricing page
 lib/net-guard.js       Host-header check + security headers
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
 lib/activity.js        Live state of each session, read from the activity files the mod writes, and old files pruned
-lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeout
+lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeouts, and the server's one shared handle
 lib/sqlite.js          Loads node:sqlite without its experimental-feature warning
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
