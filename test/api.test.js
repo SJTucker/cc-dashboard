@@ -7,6 +7,14 @@ const os = require('os');
 const path = require('path');
 const { localDateStr } = require('../lib/scan');
 
+let sqliteAvailable = true;
+try {
+  require('node:sqlite');
+} catch {
+  sqliteAvailable = false;
+}
+const needsSqlite = !sqliteAvailable && 'node:sqlite is not available';
+
 // Boot the real Express app on an ephemeral port against a fixture log directory.
 // CLAUDE_CONFIG_DIR has to be set before server.js is required, because
 // getProjectsDir() reads it when lib/scan.js is loaded into the module cache.
@@ -436,7 +444,7 @@ test('GET /api/records returns recentDays: the 6 days before today, not today', 
   assert.deepStrictEqual(byDate[dateBack(3)], { date: dateBack(3), tokens: 0, cost: 0 });
 });
 
-test('GET /api/records writes no records.json, and nothing in cc-dashboard/ but the transcript database', async (t) => {
+test('GET /api/records writes no records.json, and nothing in cc-dashboard/ but the transcript database', { skip: needsSqlite }, async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
@@ -492,7 +500,7 @@ test('a transcript that is deleted after it was stored still counts in the All r
   assert.deepStrictEqual(records.allTime, { date: localDateStr(when), tokens: 5000, cost: 0.015 });
 });
 
-test('a transcript that is deleted while the server is stopped still counts after a restart', async (t) => {
+test('a transcript that is deleted while the server is stopped still counts after a restart', { skip: needsSqlite }, async (t) => {
   const first = startServer();
   await new Promise((resolve) => first.once('listening', resolve));
   const { file } = writeStoredTranscript();
@@ -531,7 +539,7 @@ test('a range is aggregated again after local midnight, although no transcript c
   assert.notStrictEqual(second.daily[second.daily.length - 1].date, first.daily[first.daily.length - 1].date);
 });
 
-test('the server still answers when the transcript database cannot be opened', async (t) => {
+test('the server still answers when the transcript database cannot be opened', { skip: needsSqlite }, async (t) => {
   const server = startServer();
   t.after(() => server.close());
   await new Promise((resolve) => server.once('listening', resolve));
@@ -911,9 +919,10 @@ test(
       assert.strictEqual((await fetch(`${base}/api/summary?days=today`)).status, 200);
     }
 
-    assert.strictEqual(warn.mock.callCount(), 1);
-    assert.match(warn.mock.calls[0].arguments[0], /1 session file could not be read/);
-    assert.match(warn.mock.calls[0].arguments[0], /Today/);
+    const scanWarnings = warn.mock.calls.filter((call) => /^\[scan\]/.test(call.arguments[0]));
+    assert.strictEqual(scanWarnings.length, 1);
+    assert.match(scanWarnings[0].arguments[0], /1 session file could not be read/);
+    assert.match(scanWarnings[0].arguments[0], /Today/);
   }
 );
 
