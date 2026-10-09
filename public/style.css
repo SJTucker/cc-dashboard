@@ -513,8 +513,9 @@ html, body {
 
 /* The title is the row's main text. Under it, in small muted type, the project and
    git branch (contextLine in public/panels/sessions.mjs), so two sessions of one
-   project can be told apart. A title taken from the first prompt is dimmer and italic, so it reads
-   apart from a title Claude Code wrote without relying on hue. */
+   project can be told apart. A title taken from the first prompt is dimmer and
+   italic, so it reads apart from a title Claude Code wrote without relying on
+   hue. */
 .session-title {
   display: inline-block;
   max-width: 28ch;

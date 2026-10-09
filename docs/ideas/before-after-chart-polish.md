@@ -18,10 +18,10 @@ picked on the Today range.
 - **The top of the y-axis.** The "2k" label sits just under the chart title, and the
   tallest bar reaches the top of the plot. The axis has no 0 label.
 - **Two x-axis labels.** A 14-day axis shows only 9/28 and 10/5. `drawTimeAxis`
-  in `public/app.js` labels each Monday and nothing else, so a 14-day axis gets two
-  labels. The Context at session start chart has the same axis and the same two
-  labels, because both Setup changes charts call `drawTimeAxis`. The user asked on
-  2026-10-08 for more dates to be labelled.
+  in `public/charts/setup-changes.mjs` labels each Monday and nothing else, so a
+  14-day axis gets two labels. The Context at session start chart has the same axis
+  and the same two labels, because both Setup changes charts call `drawTimeAxis`.
+  The user asked on 2026-10-08 for more dates to be labelled.
 - **No legend.** Nothing on the chart says what the pale bars (inside the 7-day
   windows), the dark bars (outside), the dashed white line (the before median) or
   the orange line (the after median, and the change itself) mean.
@@ -32,10 +32,11 @@ picked on the Today range.
 
 ## Where the work happens
 
-- `drawMetricChart(container, report, marker, row)` in `public/app.js` draws the
-  bars, the shaded windows, the median lines and the marker line.
-- `drawYAxis` and `drawTimeAxis` in `public/app.js` draw the axes for both Setup
-  changes charts.
+- `drawMetricChart(container, report, marker, row, domain)` in
+  `public/charts/setup-changes.mjs` draws the bars, the shaded windows, the median
+  lines and the marker line.
+- `drawYAxis` in `public/charts/axes.mjs` and `drawTimeAxis` in
+  `public/charts/setup-changes.mjs` draw the axes for both Setup changes charts.
 - `.ba-grid`, `.window-before`, `.window-after` and `.day-bar` in
   `public/style.css`.
 

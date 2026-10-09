@@ -10,8 +10,9 @@ each model's share of cost. Asked for on 2026-10-08.
 
 ## How the donut works today
 
-- `drawModelMix` in `public/app.js` draws the donut from `data.models`. Slices,
-  the centre total, the tooltip, the `aria-label` and the legend percentages all use
+- `drawModelMix` in `public/charts/donut.mjs`, called from
+  `public/panels/models.mjs`, draws the donut from `data.models`. Slices, the centre
+  total, the tooltip, the `aria-label` and the legend percentages all use
   `m.tokens`.
 - Each entry in `data.models` already carries `cost` as well as `tokens`, so the
   server needs no change.

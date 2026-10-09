@@ -15,8 +15,9 @@ days. Raised on 2026-10-08.
 ## What the code does
 
 - Commit `aa4af81` ("make the setup changes panels follow the range picker") limited
-  the charts' time axis only. `visibleDays` in `public/app.js` returns 14 days for
-  the Today and 7d ranges, the picked day count for 30d and 90d, and null for All.
+  the charts' time axis only. `visibleDays` in `public/panels/changes.mjs` returns
+  14 days for the Today and 7d ranges, the picked day count for 30d and 90d, and
+  null for All.
   `chartDomain` narrows the axis with that number.
 - The day buttons are built from `report.markers` with no range filter.
   `groupMarkersByDay(report.markers)` in the Setup changes render code groups every

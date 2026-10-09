@@ -140,8 +140,9 @@ async function fetchAll({ busy = false } = {}) {
   // Every request is issued before any is awaited, so the summary never
   // waits on the others. None of the promises rejects (getJson never does). rtk
   // and limits are optional and resolve to null on failure, so an absent or
-  // unreadable source hides its panel. A failed summary resolves to an error payload, which
-  // renderPayload turns into the error banner after limits have rendered.
+  // unreadable source hides its panel. A failed summary resolves to an error
+  // payload, which renderPayload turns into the error banner after limits have
+  // rendered.
   const summaryRequest = getJson(`/api/summary?days=${state.currentDays}`);
   // A request whose every panel is hidden is skipped (see neededRequests in
   // visibility.js), and its panels render from null, as on a failed request.

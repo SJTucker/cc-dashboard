@@ -8,8 +8,8 @@ asked for two things:
 
 ## What the code does now
 
-- `openList` in `public/app.js` renders each open suggestion as one `<li>`: the
-  kind in bold, the suggestion text, then a `.review-actions` span holding two
+- `openList` in `public/panels/reviews.mjs` renders each open suggestion as one
+  `<li>`: the kind in bold, the suggestion text, then a `.review-actions` span holding two
   `.refresh-btn` buttons, "Done" and "Not useful". The buttons sit inline after
   the text, so they land wherever the text ends. A long suggestion pushes them to
   the start of the next line. A short one leaves them mid-row.
@@ -70,7 +70,6 @@ button count but costs a second click on every dismissal.
 
 ## When to build it
 
-After workstream D splits `public/app.js`. D moves `openList`, `dismissedList` and
-the review rendering into `public/panels/reviews.mjs`. Building this first would
-make D move code twice. Workstream C's Task 8 also changes how list rows mark
-selection, so check that its row styles and these do not conflict.
+Workstream D is merged, so the code this changes is in `openList` and
+`dismissedList` in `public/panels/reviews.mjs`. Check that the list row styles from
+workstream C's Task 8 and these do not conflict.

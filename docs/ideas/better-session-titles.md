@@ -27,10 +27,13 @@ branch next to it. Asked for on 2026-10-07.
 - `lib/extract.js` reads the last `ai-title` line per session into `titleBySession`.
   `lib/review.js` reads the same line for session reviews.
 - `buildLiveSessions` in `lib/sessions.js` puts it on each session as `title`.
-- `public/app.js` shows it in three places, each with `contextLine` under it:
-  - the Running now and Today tables (`sessionCell`);
-  - the timeline bar tooltip;
-  - the review head (`.review-head`).
+- The page shows it in three places:
+  - the Running now and Today tables (`sessionCell` in `public/panels/sessions.mjs`),
+    with `contextLine` under it;
+  - the timeline bar label and tooltip (`public/panels/timeline.mjs`), with project
+    and branch under it;
+  - the review head (`.review-head` in `public/panels/reviews.mjs`), with
+    `contextLine` under it.
 - With no `ai-title`, a live session shows its first typed prompt. A review with no
   title shows the project and branch alone.
 - The branch is read from the transcripts' `gitBranch` in `lib/extract.js`. The project
