@@ -104,8 +104,8 @@ function sendBusy(res, err) {
   return true;
 }
 
-// The one write the page makes to a review. app.use('/api', sameOriginOnly) above
-// covers both methods, so a cross-site page cannot dismiss or undo, the same
+// The one write the page makes to a review. app.use('/api', sameOriginOnly) in
+// createServer covers both methods, so a cross-site page cannot dismiss or undo, the same
 // protection the price POST routes have.
 const DISMISS_PATH = '/api/reviews/:sessionId/suggestions/:idx/dismiss';
 
@@ -123,7 +123,9 @@ function suggestionTarget(req, res) {
 // http.Server that is not listening yet. Everything that keeps state lives in
 // here: the transcripts.db handle, the row store, the reviews import flag, the
 // aggregate memo and the pending price check. The handle closes when the server
-// closes.
+// closes. The price table is the exception: lib/pricing.js holds it for the whole
+// process, so the last prices.json loaded or applied sets it for every server in
+// the process.
 function createServer(config) {
   const projectsDir = getProjectsDir(config.configDir);
   const storePath = getStorePath(config.configDir);
