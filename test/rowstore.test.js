@@ -574,7 +574,7 @@ test('a file whose extract throws counts as unreadable, the others load, and it 
   assert.strictEqual(byPath.get(good).rows.calls.length, 1);
   const extractWarnings = warn.mock.calls.filter((c) => String(c.arguments[0]).includes(bad));
   assert.strictEqual(extractWarnings.length, 1);
-  assert.match(String(extractWarnings[0].arguments[0]), /extract bug/);
+  assert.strictEqual(extractWarnings[0].arguments[1].message, 'extract bug');
 });
 
 test('a file that loaded and then throws after a change keeps its previous rows', async (t) => {
@@ -593,4 +593,37 @@ test('a file that loaded and then throws after a change keeps its previous rows'
 
   assert.strictEqual(rows.entries()[0].rows.ok, true);
   assert.strictEqual(rows.entries()[0].rows.calls.length, 1);
+});
+
+test('a growing file that keeps throwing warns once', async (t) => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1']);
+  const warn = t.mock.method(console, 'warn', () => {});
+  const { refresh } = throwingHarness(dir, new Set([file]));
+
+  await refresh();
+  fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+  await refresh();
+  fs.appendFileSync(file, usageLine('3', new Date().toISOString()) + '\n');
+  await refresh();
+
+  assert.strictEqual(warn.mock.calls.filter((c) => String(c.arguments[0]).includes(file)).length, 1);
+});
+
+test('a file that extracts cleanly after throwing warns again when it next throws', async (t) => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1']);
+  const warn = t.mock.method(console, 'warn', () => {});
+  const broken = new Set([file]);
+  const { refresh } = throwingHarness(dir, broken);
+
+  await refresh();
+  broken.delete(file);
+  fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+  await refresh();
+  broken.add(file);
+  fs.appendFileSync(file, usageLine('3', new Date().toISOString()) + '\n');
+  await refresh();
+
+  assert.strictEqual(warn.mock.calls.filter((c) => String(c.arguments[0]).includes(file)).length, 2);
 });
