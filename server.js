@@ -5,10 +5,10 @@ const express = require('express');
 const os = require('os');
 const path = require('path');
 const { getProjectsDir } = require('./lib/transcript-files');
-const { localDateStr } = require('./lib/dates');
+const { localDateStr, windowStart } = require('./lib/dates');
 const { aggregate } = require('./lib/aggregate');
 const { getRowStore } = require('./lib/rowstore');
-const { windowStart } = require('./lib/dates');
+const { createScanMemo } = require('./lib/scan-memo');
 const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
@@ -50,7 +50,25 @@ function getPort() {
 const PORT = getPort();
 const HOST = '127.0.0.1'; // intentionally not configurable - see lib/net-guard.js
 
+// Every modern browser sends Sec-Fetch-Site. Any value other than same-origin or
+// none means another page issued the request. 'none' is the user opening an /api
+// URL from the address bar, which is always a GET, so a POST with 'none' is
+// refused. The Host guard cannot catch a cross-site request, because a browser
+// sets Host from the address it connected to, not from the page that asked.
+// Non-browser clients send no such header and still work.
+function sameOriginOnly(req, res, next) {
+  const site = req.get('sec-fetch-site');
+  const typedUrl = site === 'none' && req.method === 'GET';
+  if (site && site !== 'same-origin' && !typedUrl) {
+    res.status(403).json({ error: 'Cross-site requests are not accepted.' });
+    return;
+  }
+  next();
+}
+
 const app = express();
+// Express names itself in every response unless told not to.
+app.disable('x-powered-by');
 app.use(hostGuard);
 app.use(securityHeaders);
 app.use(express.static(path.join(__dirname, 'public')));
@@ -58,54 +76,10 @@ app.use(express.static(path.join(__dirname, 'public')));
 // page could otherwise run scans here with <img src> tags.
 app.use('/api', sameOriginOnly);
 
-// The row store skips a session file it cannot read, which lowers that range's totals.
-// The terminal gets one warning per range each time the count of skipped files
-// changes, so the 5s live poll does not repeat it.
-const unreadableByRange = new Map();
-function warnUnreadable(range, data) {
-  const n = data.meta.unreadableFiles || 0;
-  if (n === (unreadableByRange.get(range) || 0)) return data;
-  unreadableByRange.set(range, n);
-  if (n) {
-    const files = n === 1 ? '1 session file could not be read and was' : `${n} session files could not be read and were`;
-    console.warn(`[scan] ${files} left out of the ${range} totals.`);
-  }
-  return data;
-}
-
 // Before the first scan, so every cost uses the applied price history.
 loadPriceFile();
 
-// The latest aggregate for each range, reused while the row store's generation and
-// the local date are unchanged. A range's result is about 22 MB, so only the latest
-// one per range is kept. The date is part of the check because a range's start moves
-// at midnight with no transcript changing.
-const memo = new Map(); // `${days}:${bucket}` -> { generation, day, data }
-
-// Every route that needs a range goes through here. The row store re-reads only the
-// transcripts that changed, so a call with nothing new costs one stat pass.
-// Concurrent calls share that pass.
-async function scan(days, bucket = 'day') {
-  const rowStore = getRowStore();
-  await rowStore.refresh();
-  const key = `${days}:${bucket}`;
-  const day = localDateStr(new Date());
-  const hit = memo.get(key);
-  if (hit && hit.generation === rowStore.generation && hit.day === day) return hit.data;
-  const range = days == null ? 'all-time' : days === 'today' ? 'Today' : `${days}-day`;
-  const data = warnUnreadable(
-    range,
-    aggregate(rowStore.entries().map((e) => e.rows), { days, bucket, projectsDir: getProjectsDir() }),
-  );
-  memo.set(key, { generation: rowStore.generation, day, data });
-  return data;
-}
-
-// Costs are computed when rows are aggregated, so a price change drops the memo. The
-// stored rows hold token counts only and need no re-read.
-function clearScans() {
-  memo.clear();
-}
+const { scan, clear: clearScans } = createScanMemo({ getRowStore, aggregate, getProjectsDir });
 
 // The per-call records feed /api/changes only. Sent here they would add a few
 // megabytes to every summary request, and to every 5s poll on the Today range.
@@ -113,33 +87,32 @@ function publicSummary({ efficiency, ...rest }) {
   return rest;
 }
 
-// The range picker's day counts. Each distinct count is its own memo entry of up
-// to about 22 MB, and nothing evicts entries, so only these are accepted.
+// The range picker's day counts. Each distinct count is its own memo entry, and
+// nothing evicts entries, so only these are accepted.
 const RANGE_DAYS = new Set([7, 30, 90]);
 const INVALID_DAYS = (raw) => `Invalid days: ${String(raw)}. Use 7, 30, 90, 'today', or 'all'.`;
 
+// The days query of /api/summary and /api/rtk, as { days } or { error }. days is
+// 'today', null (all), or one of RANGE_DAYS, and 30 when the query is absent or
+// empty. Each route picks its own bucket for 'today'. Number(raw) || 30 once turned
+// days=0 and days=abc into 30 without saying so, which is why anything else is an
+// error.
+function parseDays(raw) {
+  if (raw === 'today') return { days: 'today' };
+  if (raw === 'all') return { days: null };
+  if (raw == null || raw === '') return { days: 30 };
+  const n = Number(raw);
+  return RANGE_DAYS.has(n) ? { days: n } : { error: INVALID_DAYS(raw) };
+}
+
 app.get('/api/summary', async (req, res) => {
+  const { days, error } = parseDays(req.query.days);
+  if (error) {
+    res.status(400).json({ error });
+    return;
+  }
   try {
-    const raw = req.query.days;
-    if (raw === 'today') {
-      const data = await scan('today', 'hour');
-      res.json(publicSummary(data));
-      return;
-    }
-    // Only the range picker's values are accepted. Number(raw) || 30 once turned
-    // days=0 and days=abc into 30 without saying so.
-    let days = 30;
-    if (raw === 'all') {
-      days = null;
-    } else if (raw != null && raw !== '') {
-      const n = Number(raw);
-      if (!RANGE_DAYS.has(n)) {
-        res.status(400).json({ error: INVALID_DAYS(raw) });
-        return;
-      }
-      days = n;
-    }
-    const data = await scan(days);
+    const data = days === 'today' ? await scan('today', 'hour') : await scan(days);
     res.json(publicSummary(data));
   } catch (err) {
     console.error('[API] /api/summary failed:', err);
@@ -151,30 +124,14 @@ app.get('/api/summary', async (req, res) => {
 // open and close - measured 13ms, against ~1.9s for a 30-day read of every transcript. Putting
 // this behind the aggregate memo above would either serve stale savings or force every
 // rtk request to clear a memo that exists to avoid re-aggregating the transcripts.
-//
-// The days parsing below duplicates /api/summary's rather than sharing a helper: the
-// two routes disagree on what 'today' means (that one reads the row store and memo,
-// this one reads the rtk database with no cache at all), and folding them together would need a flags
-// argument for a nine-line branch.
 app.get('/api/rtk', (req, res) => {
+  const { days, error } = parseDays(req.query.days);
+  if (error) {
+    res.status(400).json({ error });
+    return;
+  }
   try {
-    const raw = req.query.days;
-    if (raw === 'today') {
-      res.json(readRtkUsage({ days: 'today', bucket: 'hour' }));
-      return;
-    }
-    let days = 30;
-    if (raw === 'all') {
-      days = null;
-    } else if (raw != null && raw !== '') {
-      const n = Number(raw);
-      if (!RANGE_DAYS.has(n)) {
-        res.status(400).json({ error: INVALID_DAYS(raw) });
-        return;
-      }
-      days = n;
-    }
-    res.json(readRtkUsage({ days }));
+    res.json(days === 'today' ? readRtkUsage({ days, bucket: 'hour' }) : readRtkUsage({ days }));
   } catch (err) {
     console.error('[API] /api/rtk failed:', err);
     res.status(500).json({ error: 'Failed to read rtk history', detail: err.message });
@@ -328,22 +285,6 @@ app.delete(DISMISS_PATH, (req, res) => {
   const target = suggestionTarget(req, res);
   if (target) changeDismissal(res, target, null);
 });
-
-// Every modern browser sends Sec-Fetch-Site. Any value other than same-origin or
-// none means another page issued the request. 'none' is the user opening an /api
-// URL from the address bar, which is always a GET, so a POST with 'none' is
-// refused. The Host guard cannot catch a cross-site request, because a browser
-// sets Host from the address it connected to, not from the page that asked.
-// Non-browser clients send no such header and still work.
-function sameOriginOnly(req, res, next) {
-  const site = req.get('sec-fetch-site');
-  const typedUrl = site === 'none' && req.method === 'GET';
-  if (site && site !== 'same-origin' && !typedUrl) {
-    res.status(403).json({ error: 'Cross-site requests are not accepted.' });
-    return;
-  }
-  next();
-}
 
 app.post('/api/refresh', (req, res) => {
   clearScans();

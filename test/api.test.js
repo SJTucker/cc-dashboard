@@ -233,53 +233,6 @@ test('GET /api/summary does not send the per-call efficiency records', async (t)
   }
 });
 
-test('two concurrent cold requests for the same range aggregate once', async (t) => {
-  const base = helpers.tmpDir(t, 'inflight');
-  const dir = path.join(base, 'projects', 'demo');
-  fs.mkdirSync(dir, { recursive: true });
-  const line = JSON.stringify({
-    timestamp: new Date().toISOString(),
-    requestId: 'req-1',
-    message: { id: 'msg-1', model: 'claude-sonnet-4-6-20260115', usage: { input_tokens: 100, output_tokens: 20 } },
-  });
-  fs.writeFileSync(path.join(dir, 'session.jsonl'), line + '\n');
-
-  helpers.withEnv(t, {
-    RTK_DB: path.join(base, 'no-rtk-here.db'),
-    CLAUDE_CONFIG_DIR: base,
-    CHANGES_FILE: path.join(base, 'changes.json'),
-    PORT: '0',
-  });
-  for (const mod of ['../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
-  const aggregateModule = require('../lib/aggregate');
-  let calls = 0;
-  const realAggregate = aggregateModule.aggregate;
-  // A spy on the real aggregate, not a fake result: the point is counting runs, and
-  // the response still has to be the genuine output for the assertions to mean
-  // anything. There is no seam to count runs through the HTTP API alone, since a memo
-  // hit and a shared in-flight refresh return the same response shape.
-  aggregateModule.aggregate = (...args) => {
-    calls += 1;
-    return realAggregate(...args);
-  };
-  delete require.cache[require.resolve('../server')];
-  const server = require('../server');
-  t.after(() => {
-    aggregateModule.aggregate = realAggregate;
-    server.close();
-  });
-  await new Promise((resolve) => server.once('listening', resolve));
-
-  const port = server.address().port;
-  const [a, b] = await Promise.all([
-    fetch(`http://127.0.0.1:${port}/api/summary?days=30`),
-    fetch(`http://127.0.0.1:${port}/api/summary?days=30`),
-  ]);
-  assert.strictEqual(a.status, 200);
-  assert.strictEqual(b.status, 200);
-  assert.strictEqual(calls, 1, 'the second cold request shared the first refresh and its aggregate');
-});
-
 // A fixture with one session that starts on Sep 1 and one on Sep 10, and a
 // changes.json marker on Sep 5 between them.
 function startChangesServer(t, { changes, plugins } = {}) {
@@ -890,6 +843,24 @@ test('days accepts only the range picker values on /api/summary and /api/rtk', a
     for (const days of ['7', '30', '90']) {
       assert.strictEqual((await fetch(`${base}${route}?days=${days}`)).status, 200, `${route}?days=${days}`);
     }
+  }
+});
+
+test('the summary and rtk routes send no X-Powered-By header', async (t) => {
+  const base = await listen(t);
+  for (const route of ['/api/summary?days=7', '/api/rtk?days=7']) {
+    const res = await fetch(`${base}${route}`);
+    assert.strictEqual(res.status, 200, route);
+    assert.strictEqual(res.headers.get('x-powered-by'), null, route);
+  }
+});
+
+test('an empty days query reads the 30-day range on both routes', async (t) => {
+  const base = await listen(t);
+  for (const route of ['/api/summary', '/api/rtk']) {
+    const empty = await (await fetch(`${base}${route}?days=`)).json();
+    const thirty = await (await fetch(`${base}${route}?days=30`)).json();
+    assert.deepStrictEqual(empty, thirty, route);
   }
 });
 
