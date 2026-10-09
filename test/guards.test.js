@@ -64,3 +64,13 @@ test('createDrawGuard reset forgets the last key', async () => {
   guard.reset();
   assert.equal(guard.draw('x', () => {}), true);
 });
+
+test('createDrawGuard draws again after a throw, even for the parts drawn before it', async () => {
+  const { createDrawGuard } = await load();
+  const guard = createDrawGuard({ now: () => 0 });
+  assert.equal(guard.draw('a', () => {}), true);
+  assert.throws(() => guard.draw('b', () => { throw new Error('boom'); }), /boom/);
+  let drew = false;
+  assert.equal(guard.draw('a', () => { drew = true; }), true);
+  assert.equal(drew, true);
+});

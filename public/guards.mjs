@@ -17,14 +17,17 @@ export function createSequence() {
 // Skips a panel's rebuild when its inputs and the clock minute are unchanged, so
 // a 5 s poll does not replace rows the reader is selecting text in. The minute is
 // in the key because formatAgo and the "may be stale" suffix change with the
-// clock at minute resolution. The key is stored only after drawFn returns, so a
-// draw that throws is tried again on the next call. now is for the tests.
+// clock at minute resolution. The stored key is cleared before drawFn runs and set
+// after it returns, so a draw that throws leaves no key. The panel may be half
+// drawn, and the next call draws again even for the parts of the earlier draw.
+// now is for the tests.
 export function createDrawGuard({ now = Date.now } = {}) {
   let last = null;
   return {
     draw(parts, drawFn) {
       const key = JSON.stringify([parts, Math.floor(now() / 60_000)]);
       if (key === last) return false;
+      last = null;
       drawFn();
       last = key;
       return true;
