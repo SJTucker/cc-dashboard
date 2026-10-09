@@ -9,10 +9,9 @@ export function renderAttribution(data) {
   const totalCost = data.summary.totalCost;
   document.getElementById('attributionPanel').hidden = totalCost <= 0;
   if (!shown('attribution')) return;
-  // Every bar in the panel shares one scale. Groups on separate scales made a
-  // 30.8% subagent bar draw longer than a 68.2% thread bar.
-  // The two split bars are self-scaling, so only the skill and subagent lists
-  // share this one, which is what keeps their lengths comparable to each other.
+  // The skill and subagent lists share one scale. On separate scales a 30.8%
+  // subagent bar drew longer than a 68.2% thread bar. The two split bars scale
+  // themselves.
   const attributionScale = [...data.skills, ...data.subagents].reduce((max, r) => Math.max(max, r.cost), 0);
   // Skill and subagent rows: the bar against the shared scale, the text the true
   // share of total cost.

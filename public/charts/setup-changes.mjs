@@ -83,10 +83,9 @@ function dayNoon(dateKey) {
 }
 
 // Both charts share one time axis so a marker sits at the same x in each. This is
-// the all-history axis; chartDomain narrows it to the range picker. Built
-// from sessions and the daily series named by keys (the transcript rows of the
-// before/after table) only. Markers and rtk days
-// are left out. Claude Code deletes transcripts after cleanupPeriodDays (30 by
+// the all-history axis; chartDomain narrows it to the range picker. Built from
+// sessions and the daily series named by keys (the transcript rows of the
+// before/after table) only. Markers and rtk days are left out. Claude Code deletes transcripts after cleanupPeriodDays (30 by
 // default), so history has a sliding start, while rtk keeps every row. A marker or
 // an rtk day from before the earliest surviving transcript would stretch the axis
 // with an empty strip on one side. Markers outside the resulting domain are
@@ -99,7 +98,6 @@ export function timeDomain(report, keys) {
   ];
   return [Math.min(...times) - DAY_MS / 2, Math.max(...times) + DAY_MS / 2];
 }
-
 
 // True when a marker falls inside the time axis both charts share. A marker just
 // outside it (see timeDomain above) keeps its place in the marker button list but

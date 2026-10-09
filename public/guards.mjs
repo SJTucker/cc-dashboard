@@ -18,9 +18,9 @@ export function createSequence() {
 // a 5 s poll does not replace rows the reader is selecting text in. The minute is
 // in the key because formatAgo and the "may be stale" suffix change with the
 // clock at minute resolution. The stored key is cleared before drawFn runs and set
-// after it returns, so a draw that throws leaves no key. The panel may be half
-// drawn, and the next call draws again even for the parts of the earlier draw.
-// now is for the tests.
+// after it returns, so a draw that throws leaves no key. A panel left half drawn
+// by a throw is drawn again on the next call, even when that call carries the
+// parts of the last good draw. now is for the tests.
 export function createDrawGuard({ now = Date.now } = {}) {
   let last = null;
   return {
@@ -31,9 +31,6 @@ export function createDrawGuard({ now = Date.now } = {}) {
       drawFn();
       last = key;
       return true;
-    },
-    reset() {
-      last = null;
     },
   };
 }

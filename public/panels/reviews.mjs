@@ -16,7 +16,7 @@ const reviewsGuard = createDrawGuard();
 // server error resolves to { error } so the panel shows the reason. A network
 // failure (status 0) resolves to null and hides the panel, like requestSessions.
 export function requestReviews() {
-  return getJson('/api/reviews').then((reviews) => (reviews.error && reviews.status === 0 ? null : reviews));
+  return getJson('/api/reviews').then((reviews) => (reviews?.error && reviews.status === 0 ? null : reviews));
 }
 
 const REVIEW_KINDS = {

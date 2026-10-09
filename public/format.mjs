@@ -48,9 +48,10 @@ export function localDateStr(d) {
 
 // Average cost per COMPLETE day. Today is excluded because it is partial and
 // would drag the average down. The divisor is the calendar span between the
-// first and last complete bucket, not the bucket count. aggregate (lib/aggregate.js) fills idle
-// days with zero buckets, so the two are equal for its output. The span still
-// gives the right rate for a daily list with days missing.
+// first and last complete bucket, not the bucket count. aggregate
+// (lib/aggregate.js) fills idle days with zero buckets, so the two are equal for
+// its output. The span still gives the right rate for a daily list with days
+// missing.
 export function costPerDay(daily, today = localDateStr(new Date())) {
   const complete = daily.filter((d) => d.date !== today);
   if (!complete.length) return null;
@@ -93,11 +94,11 @@ export function axisTokens(n) {
   return formatTokens(n).replace(/\.0+(?=[kMB]$)/, '');
 }
 
-// A compact cost for the y axis: formatCost's grouped "$1,200.00" is wider than the
-// axis gutter.
-// Gridline values are round by construction but not whole: drawYAxis picks a
-// step of 0.5 whenever the max lands in (0.80, 2.00], so dropping the cents
-// labelled the $1.50 line "$2" and left two ticks reading the same number.
+// A compact cost for the y axis: formatCost's grouped "$1,200.00" is wider than
+// the axis gutter. Gridline values are round by construction but not whole:
+// axisScale (public/chart-geometry.js) picks a step of 0.5 whenever the max lands
+// in (0.80, 2.00], so dropping the cents labelled the $1.50 line "$2" and left
+// two ticks reading the same number.
 export function axisCost(usd) {
   if (usd >= 1000) return '$' + (usd / 1000).toFixed(1) + 'k';
   if (usd >= 10) return '$' + usd.toFixed(0);

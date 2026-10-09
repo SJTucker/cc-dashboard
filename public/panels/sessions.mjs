@@ -7,7 +7,8 @@ import { createDrawGuard } from '../guards.mjs';
 
 const sessionsGuard = createDrawGuard();
 
-// Today's sessions from the statusline snapshots (see lib/sessions.js). Optional, like requestLimits.
+// Today's sessions from the statusline snapshots (see lib/sessions.js). Optional,
+// like requestLimits.
 export function requestSessions() {
   return getJson('/api/sessions/live', { optional: true });
 }

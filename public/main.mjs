@@ -122,8 +122,9 @@ function placeSummaryCards() {
   }
 }
 
-// The optional requests fetchAll makes. resumeRequests loads the page again when
-// one of them was skipped at the last load and is needed again.
+// The requests fetchAll skips when every panel they feed is hidden.
+// resumeRequests loads the page again when one of them was skipped at the last
+// load and is needed again.
 const FETCH_ALL_OPTIONAL = ['rtk', 'sessions', 'reviews'];
 
 // Issues the five requests and waits for all of them. Returns { data, rtk, limits,
@@ -137,9 +138,9 @@ async function fetchAll({ busy = false } = {}) {
   if (busy) setBusy(true);
 
   // Every request is issued before any is awaited, so the summary never
-  // waits on the others. None of the promises rejects (getJson never does). rtk and limits
-  // are optional and resolve to null on failure, so an absent or unreadable source
-  // hides its panel. A failed summary resolves to an error payload, which
+  // waits on the others. None of the promises rejects (getJson never does). rtk
+  // and limits are optional and resolve to null on failure, so an absent or
+  // unreadable source hides its panel. A failed summary resolves to an error payload, which
   // renderPayload turns into the error banner after limits have rendered.
   const summaryRequest = getJson(`/api/summary?days=${state.currentDays}`);
   // A request whose every panel is hidden is skipped (see neededRequests in
@@ -284,8 +285,8 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 });
 
 // Draws every chart again at the current widths, from lastPayload and with no
-// request. It loads instead when there is no payload yet, or when resumeRequests passes
-// refetch because a request skipped at the last load is needed again.
+// request. It loads instead when there is no payload yet, or when resumeRequests
+// passes refetch because a request skipped at the last load is needed again.
 function redrawCharts({ changes = true, refetch = false } = {}) {
   lastSignature = null; // the width changed, so the same data still needs redrawing
   resetTimeline();

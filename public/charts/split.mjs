@@ -6,8 +6,8 @@ import { textureCss } from './palette.mjs';
 // Two shares of one whole, drawn as a single split bar. Main-thread vs subagent
 // and over- vs under-threshold context are both partitions of total cost, so the
 // pair reads better as one bar than as two the eye has to add up. The skill and
-// subagent lists (drawHBars) are not partitions - one call can appear in both - so they
-// keep the separate-bar form.
+// subagent lists (drawHBars) are not partitions - one call can appear in both - so
+// they keep the separate-bar form.
 //
 // Validated with the dataviz skill's validate_palette.js against the panel
 // surface: CVD deltaE 27.3 (protan). Texture and the direct labels carry identity;

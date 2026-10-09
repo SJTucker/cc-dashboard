@@ -5,9 +5,9 @@ import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawYAxis } from './axe
 import { appendPatternDefs, fillFor, modelColor, modelTexture } from './palette.mjs';
 
 // Stacked bars, one segment per model family. Series order is fixed across
-// buckets so a model keeps its vertical position
-// and its colour from day to day. mode picks whether the segments measure tokens or
-// dollars; the two differ sharply because an Opus token costs five Haiku tokens.
+// buckets so a model keeps its vertical position and its colour from day to day.
+// mode picks whether the segments measure tokens or dollars. The two differ
+// sharply because an Opus token costs five Haiku tokens.
 export function drawModelDailyChart(container, data, models, mode = 'tokens') {
   const source = mode === 'cost' ? 'costByModel' : 'byModel';
   const axisFmt = mode === 'cost' ? axisCost : axisTokens;

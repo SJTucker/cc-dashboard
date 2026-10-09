@@ -57,14 +57,6 @@ test('createDrawGuard keeps no key when the draw throws, so the next call draws'
   assert.equal(drew, true);
 });
 
-test('createDrawGuard reset forgets the last key', async () => {
-  const { createDrawGuard } = await load();
-  const guard = createDrawGuard({ now: () => 0 });
-  guard.draw('x', () => {});
-  guard.reset();
-  assert.equal(guard.draw('x', () => {}), true);
-});
-
 test('createDrawGuard draws again after a throw, even for the parts drawn before it', async () => {
   const { createDrawGuard } = await load();
   const guard = createDrawGuard({ now: () => 0 });

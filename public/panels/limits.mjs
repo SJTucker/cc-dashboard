@@ -32,8 +32,9 @@ function formatReset(ms) {
 const LIMITS_STALE_MS = 60 * 60 * 1000;
 
 // Plan usage describes right now, not a date range. The panel shows only on
-// Today, and the 75% warning banner shows on every range. Like rtk it is
-// optional: a failure, including a 500, resolves to null and hides both.
+// Today, and the warning banner (LIMIT_WARN_PERCENT) shows on every range. Like
+// rtk it is optional: a failure, including a 500, resolves to null and hides
+// both.
 export function requestLimits() {
   return getJson('/api/limits', { optional: true });
 }
@@ -102,10 +103,11 @@ function drawLimits(limits) {
   document.getElementById('limitsNote').textContent = `as of ${asOf} (${zone})${stale}`;
 }
 
-// Warn once either window reaches LIMIT_WARN_PERCENT, on every range. Within a window the percent
-// only rises, and readLimits() drops a window past its reset, so a stale cache
-// understates usage and never raises a false warning. The rounded percent is
-// compared so the banner agrees with the "N% used" the panel shows.
+// Warn once either window reaches LIMIT_WARN_PERCENT, on every range. Within a
+// window the percent only rises, and readLimits() drops a window past its reset,
+// so a stale cache understates usage and never raises a false warning. The
+// rounded percent is compared so the banner agrees with the "N% used" the panel
+// shows.
 export function renderLimitsBanner(limits) {
   bannerGuard.draw(limits, () => drawLimitsBanner(limits));
 }

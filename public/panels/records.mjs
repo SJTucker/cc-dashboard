@@ -5,9 +5,10 @@ import { state, shown } from '../state.mjs';
 import { createSequence } from '../guards.mjs';
 
 // The Record day card's all-time value. Fetched once on load and once on
-// Refresh, not on the 5s live poll or a range switch: /api/records reads the all-time
-// and 7-day aggregates, so polling it on every tick would buy nothing. A failure,
-// including a 500 whose body is { error }, resolves to null. Optional, like requestSessions.
+// Refresh, not on the 5s live poll or a range switch: /api/records reads the
+// all-time and 7-day aggregates, so polling it on every tick would buy nothing. A
+// failure, including a 500 whose body is { error }, resolves to null. Optional,
+// like requestSessions.
 function requestRecords() {
   return getJson('/api/records', { optional: true });
 }

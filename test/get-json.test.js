@@ -48,3 +48,14 @@ test('getJson calls the fetch that is global when it runs', async () => {
     globalThis.fetch = real;
   }
 });
+
+test('requestReviews resolves to null for a 2xx answer whose JSON body is null', async () => {
+  const { requestReviews } = await import('../public/panels/reviews.mjs');
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = async () => ({ ok: true, status: 200, json: async () => null });
+  try {
+    assert.equal(await requestReviews(), null);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+});

@@ -9,8 +9,8 @@ import { DETAIL_LIMIT } from '../constants.mjs';
 // bytes rtk filtered before the text reached the model, estimated by rtk's own
 // tokeniser; the cards above count tokens Anthropic billed. Adding one to the other
 // would produce a number that means nothing.
-// Held across renders for the same reason selectedTool is: a range switch or a live
-// poll should not throw the reader back to the first command.
+// Held across renders so a range switch or a live poll does not move the reader
+// back to the first command.
 let selectedRtkCommand = null;
 
 // How the rtk lists draw a row: scaled by tokens saved rather than by call count,
