@@ -8,7 +8,8 @@ const { loadConfig } = require('./lib/config-dir');
 const { getProjectsDir } = require('./lib/transcript-files');
 const { localDateStr, windowStart } = require('./lib/dates');
 const { aggregate } = require('./lib/aggregate');
-const { getRowStore } = require('./lib/rowstore');
+const { createRowStore } = require('./lib/rowstore');
+const { openStore } = require('./lib/store');
 const { createScanMemo } = require('./lib/scan-memo');
 const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
@@ -19,8 +20,8 @@ const { readSessions, buildLiveSessions } = require('./lib/sessions');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
 const { readActivity } = require('./lib/activity');
 const { readReviews, setDismissal, DISMISS_REASONS } = require('./lib/review');
-const { getReviewDb } = require('./lib/review-db');
-const { closeServerDb, isBusy } = require('./lib/db');
+const { createReviewDbGetter, legacyReviewsDir } = require('./lib/review-db');
+const { createServerDb, getStorePath, isBusy } = require('./lib/db');
 const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
@@ -79,6 +80,18 @@ app.use('/api', sameOriginOnly);
 
 // Before the first scan, so every cost uses the applied price history.
 loadPriceFile();
+
+// One transcripts.db handle for the row store and the reviews (lib/db.js). It closes
+// when the server closes.
+const serverDb = createServerDb(getStorePath());
+const getReviewDb = createReviewDbGetter(serverDb.get, legacyReviewsDir());
+
+// Opened on the first scan, not at start, the same as before the factory.
+let rowStore = null;
+function getRowStore() {
+  if (!rowStore) rowStore = createRowStore({ store: openStore(getStorePath(), serverDb.get) });
+  return rowStore;
+}
 
 const { scan, clear: clearScans } = createScanMemo({ getRowStore, aggregate, getProjectsDir });
 
@@ -350,6 +363,8 @@ const server = app.listen(PORT, HOST, () => {
   }
 });
 
+server.on('close', () => serverDb.close());
+
 server.on('error', (err) => {
   if (err.code === 'EADDRINUSE') {
     console.error(`Port ${PORT} is already in use. Try: node server.js --port 3601`);
@@ -366,7 +381,7 @@ server.on('error', (err) => {
 if (require.main === module) {
   const shutdown = () => {
     server.close();
-    closeServerDb();
+    serverDb.close();
     process.exit(0);
   };
   process.once('SIGINT', shutdown);

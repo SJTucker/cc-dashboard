@@ -6,7 +6,8 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { freshServerDb, holdWriteLock } = helpers;
-const { openReviewDb, importReviewFiles, legacyReviewsDir, IMPORT_KEY } = require('../lib/review-db');
+const { isBusy } = require('../lib/db');
+const { openReviewDb, importReviewFiles, legacyReviewsDir, createReviewDbGetter, IMPORT_KEY } = require('../lib/review-db');
 
 function fixture() {
   const base = helpers.tmpDir(null, 'review-db');
@@ -122,9 +123,9 @@ test('loading lib/review-db.js does not load the row store', () => {
   assert.strictEqual(res.stdout, '[]');
 });
 
-test('getReviewDb imports once per process, so a second call does not wait for the lock', async (t) => {
-  const { dbModule, file } = freshServerDb(t);
-  const { getReviewDb } = require('../lib/review-db');
+test('a reviews getter imports once, so a second call does not wait for the lock', async (t) => {
+  const { serverDb, base, file } = freshServerDb(t);
+  const getReviewDb = createReviewDbGetter(serverDb.get, path.join(base, 'cc-dashboard', 'reviews'));
   const handle = getReviewDb();
   const release = await holdWriteLock(t, file);
   const started = Date.now();
@@ -132,19 +133,19 @@ test('getReviewDb imports once per process, so a second call does not wait for t
   const took = Date.now() - started;
   await release();
   assert.ok(took < 100, `the second call took ${took} ms`);
-  assert.strictEqual(handle, dbModule.getServerDb());
+  assert.strictEqual(handle, serverDb.get());
 });
 
-test('a getReviewDb whose import meets the lock throws a busy error, and the next call imports', async (t) => {
-  const { dbModule, base, file } = freshServerDb(t);
+test('a reviews getter whose import meets the lock throws a busy error, and the next call imports', async (t) => {
+  const { serverDb, base, file } = freshServerDb(t);
   const dir = path.join(base, 'cc-dashboard', 'reviews');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'sess-old.json'), JSON.stringify({ sessionId: 'sess-old', status: 'done', reviewedAt: 1, suggestions: [] }));
-  dbModule.getServerDb(); // creates the file before the lock is taken
-  const { getReviewDb } = require('../lib/review-db');
+  serverDb.get(); // creates the file before the lock is taken
+  const getReviewDb = createReviewDbGetter(serverDb.get, dir);
   const release = await holdWriteLock(t, file);
   const started = Date.now();
-  assert.throws(() => getReviewDb(), (err) => dbModule.isBusy(err));
+  assert.throws(() => getReviewDb(), (err) => isBusy(err));
   const took = Date.now() - started;
   await release();
   assert.ok(took < 1000, `the busy import gave up after ${took} ms`);

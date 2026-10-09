@@ -119,10 +119,11 @@ async function bootServer(t, config = testConfig(t, 'boot')) {
   withEnv(t, { CLAUDE_CONFIG_DIR: config.configDir, CHANGES_FILE: config.changesFile, RTK_DB: config.rtkDb, PORT: '0' });
   for (const mod of SERVER_MODULES) delete require.cache[require.resolve(mod)];
   const server = require('../server');
-  const dbModule = require('../lib/db'); // the copy this server uses
-  t.after(() => {
-    server.close();
-    dbModule.closeServerDb();
+  t.after(async () => {
+    await new Promise((resolve) => {
+      server.close(() => resolve());
+      server.closeAllConnections();
+    });
     require('../lib/pricing').setSnapshots([]);
   });
   await new Promise((resolve) => server.once('listening', resolve));
@@ -159,20 +160,14 @@ function holdWriteLock(t, file) {
   });
 }
 
-// lib/db.js keeps the server's handle at module level. lib/rowstore.js keeps the row
-// store and lib/review-db.js keeps the import flag. This points CLAUDE_CONFIG_DIR at
-// a new temp folder and drops the cached copies of those modules and of lib/store.js
-// and lib/review.js, which load lib/db.js, so the test's next require starts with no
-// handle. The handle is closed after the test, before the folder is removed.
-const SERVER_DB_MODULES = ['../lib/db', '../lib/store', '../lib/rowstore', '../lib/review', '../lib/review-db'];
+// A server handle on a fresh transcripts.db in a temp folder, closed after the test.
 function freshServerDb(t) {
-  let dbModule = null;
-  t.after(() => dbModule && dbModule.closeServerDb());
+  const { createServerDb } = require('../lib/db');
   const base = tmpDir(t, 'serverdb');
-  withEnv(t, { CLAUDE_CONFIG_DIR: base });
-  for (const mod of SERVER_DB_MODULES) delete require.cache[require.resolve(mod)];
-  dbModule = require('../lib/db');
-  return { dbModule, base, file: dbModule.getStorePath() };
+  const file = path.join(base, 'transcripts.db');
+  const serverDb = createServerDb(file);
+  t.after(() => serverDb.close());
+  return { serverDb, base, file };
 }
 
 module.exports = { tmpDir, removeTree, withEnv, testConfig, bootServer, holdWriteLock, freshServerDb };

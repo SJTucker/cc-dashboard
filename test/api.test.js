@@ -378,10 +378,8 @@ test('a transcript that is deleted while the server is stopped still counts afte
   const first = await startServer(t);
   const { file } = writeStoredTranscript(first.config);
   assert.strictEqual((await (await fetch(`${first.url}/api/summary?days=all`)).json()).summary.totalInput, 6000);
-  first.server.close();
-  // Closing the first server's handle makes the second server open transcripts.db
-  // from disk, which is what a restart does.
-  require('../lib/db').closeServerDb();
+  await new Promise((resolve) => first.server.close(resolve));
+  // Closing the first server closes its transcripts.db handle, so the second server opens the file from disk, which is what a restart does.
 
   fs.unlinkSync(file);
   const second = await helpers.bootServer(t, first.config);
