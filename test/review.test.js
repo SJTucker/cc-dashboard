@@ -73,6 +73,12 @@ test('digestTranscript skips a line that is not JSON and reads on', async () => 
   assert.deepStrictEqual(await review.digestTranscript(file), { prompts: 2, text: 'USER: first\nUSER: second' });
 });
 
+test('digestTranscript skips a line that is JSON but not an object', async () => {
+  const base = tmpDir();
+  const file = writeTranscript(base, [typed('first'), 'null', '42', '[]', typed('second')]);
+  assert.deepStrictEqual(await review.digestTranscript(file), { prompts: 2, text: 'USER: first\nUSER: second' });
+});
+
 test('digestTranscript keeps the start and end of a long session', async () => {
   const base = tmpDir();
   const lines = Array.from({ length: 400 }, (_, i) => typed(`p${i} ${'x'.repeat(300)}`));

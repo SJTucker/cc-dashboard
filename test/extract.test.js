@@ -192,6 +192,17 @@ test('a file that cannot be read gives ok: false and no rows, and malformed line
   assert.strictEqual(rows.calls.length, 1);
 });
 
+test('a line that is JSON but not an object is skipped, and null no longer throws', async () => {
+  const withOdd = await extractFile(
+    writeTranscript([assistant({ msg: 'm1', req: 'r1' }), 'null', '42', '"text"', 'true', '[]', assistant({ msg: 'm2', req: 'r2', ts: T1 })]),
+  );
+  const plain = await extractFile(writeTranscript([assistant({ msg: 'm1', req: 'r1' }), assistant({ msg: 'm2', req: 'r2', ts: T1 })]));
+
+  assert.strictEqual(withOdd.ok, true);
+  assert.strictEqual(withOdd.calls.length, 2);
+  assert.deepStrictEqual(withOdd, plain);
+});
+
 test('the rows survive a JSON round trip unchanged', async () => {
   const file = writeTranscript([
     typed('hi', { uuid: 'u1', timestamp: T0, gitBranch: 'main' }),

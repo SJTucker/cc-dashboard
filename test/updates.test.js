@@ -59,6 +59,12 @@ test('transcriptVersions reads only the top-level version field of each line', a
   assert.deepStrictEqual([...(await updates.transcriptVersions(path.join(base, 'projects')))].sort(), ['2.1.285', '2.1.286']);
 });
 
+test('transcriptVersions skips a line that is JSON but not an object', async () => {
+  const { updates, base } = setup();
+  fs.writeFileSync(path.join(base, 'projects', 'demo', 's.jsonl'), ['null', '42', JSON.stringify({ type: 'user', version: '2.1.285' })].join('\n') + '\n');
+  assert.deepStrictEqual([...(await updates.transcriptVersions(path.join(base, 'projects')))], ['2.1.285']);
+});
+
 test('pendingVersions keeps seen versions with no verdict and a changelog entry, oldest first', () => {
   const { updates } = setup();
   const changelog = updates.parseChangelog(CHANGELOG);
