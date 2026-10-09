@@ -7,7 +7,7 @@ calendar days. Moved from README "Extending it" on 2026-10-09.
 
 - The Plan usage panel shows the server-reported five-hour window as "Current
   session", with percent used and reset time (`WINDOWS` in `lib/limits.js`,
-  `public/panels/limits.mjs`). It does not bucket calls.
+  `public/panels/limits.mjs`). The panel does not bucket calls.
 - `aggregate` in `lib/aggregate.js` buckets by day or by hour only. `lib/dates.js`
   builds the hour slots for Today.
 

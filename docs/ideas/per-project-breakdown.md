@@ -8,8 +8,8 @@ Usage and cost grouped by project. Moved from README "Extending it" on 2026-10-0
   `-`, for example `-Users-you-code-myapp`.
 - `aggregate` in `lib/aggregate.js` has no project dimension. The only project
   grouping is the display grouping of ended sessions in `public/session-groups.js`.
-- The README once skipped this to keep the price table honest. Costs are estimates,
-  and the earlier view was that per-project estimates were not worth the code.
+- The README left this out because costs are estimates. Per-project estimates were
+  judged not worth the extra code.
 
 ## Open questions
 

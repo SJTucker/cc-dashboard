@@ -452,7 +452,7 @@ only. History then starts at the oldest transcript on disk. Raising
 ```
 server.js              Express app on 127.0.0.1: serves public/ and the /api routes summary, rtk, limits, changes, records, sessions/live, reviews (with dismiss and undo), refresh and prices (check, apply)
 lib/activity.js        Reads the activity files the mod writes (working or waiting), ignores stale ones, deletes those older than a day
-lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill, subagent and session
+lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill and subagent, plus per-session titles, branches and edited lines
 lib/changes.js         Setup change markers: plugin installs, new models, Claude Code releases, the mod's setup changes, changes.json
 lib/config-dir.js      loadConfig: the one place the server reads the environment (CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB, PORT)
 lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
@@ -514,7 +514,7 @@ public/charts/setup-changes.mjs  The Setup changes charts: context at session st
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
 public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists
-public/panels/cards.mjs  The summary cards: burn rate, projection and Claude Code's own session counters
+public/panels/cards.mjs  The summary cards: total cost, tokens, cache, files, tool calls, burn rate, projection and Claude Code's reported cost
 public/panels/changes.mjs  The Setup changes panels; fetches /api/changes
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
 public/panels/models.mjs  Cost by model table, the model mix donut and the model daily charts

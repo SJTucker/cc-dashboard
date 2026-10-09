@@ -5,7 +5,7 @@ README "Extending it" on 2026-10-09.
 
 ## Why the cause split matters
 
-Without it the rate misleads. On this machine Opus 5.5 looked twice as error-prone
+Without the cause split the rate misleads. On this machine Opus 5.5 looked twice as error-prone
 as Opus 5, but 64 of its 135 errors were the worktree isolation check blocking
 commands. That count says where the model ran, not how well it used the tools.
 
