@@ -1,28 +1,22 @@
 import { state, shown } from './state.mjs';
 import { getJson } from './api.mjs';
 import { createSequence } from './guards.mjs';
-import {
-  formatCost, formatTokens, formatPercent, costPerDay,
-  fullDate, axisTokens, escapeHtml,
-} from './format.mjs';
+import { escapeHtml } from './format.mjs';
 import { el, spinnerNode } from './dom.mjs';
-import { TOKEN_SERIES } from './charts/palette.mjs';
-import { drawHBars } from './charts/hbars.mjs';
-import { drawBarChart, drawCumulativeChart } from './charts/bar.mjs';
-import { drawLogLineChart, drawTokenLegend } from './charts/line.mjs';
-import { drawActivityHeatmap } from './charts/heatmap.mjs';
-import { drawSplitBar } from './charts/split.mjs';
 
 import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderTimeline, resetTimeline } from './panels/timeline.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
-import { refreshRecords, renderWeekTotals, renderRecord } from './panels/records.mjs';
+import { refreshRecords } from './panels/records.mjs';
 import { renderTools } from './panels/tools.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { loadPricesSource, setupPrices } from './panels/prices.mjs';
 import { renderModels } from './panels/models.mjs';
 import { loadChanges, redrawChanges } from './panels/changes.mjs';
+import { renderCards } from './panels/cards.mjs';
+import { renderUsageCharts } from './panels/usage.mjs';
+import { renderAttribution } from './panels/attribution.mjs';
 
 // #region panel light
 
@@ -554,19 +548,13 @@ async function fetchAll({ busy = false } = {}) {
   return lastPayload;
 }
 
-// Draws a payload from fetchAll. lastSignature is set on the last line, after every
-// renderer has run. A renderer that throws therefore leaves the previous signature,
-// and reportDrawError clears that one. The four panel guards keep no key for a
-// draw that threw, so those panels need no clearing.
-function renderPayload({ data, rtk, limits, sessions, reviews }) {
-  const banner = document.getElementById('statusBanner');
-
-  // Plan usage describes right now: its "stale" suffix and its reset wording
-  // (today vs. a dated form) depend on the clock, not on the fetched numbers, so
-  // this has to run on every settled response. That includes one whose summary
-  // failed, and one the signature below would otherwise treat as unchanged.
-  // These three panels show on Today only. Their renderers set that, but a hidden
-  // panel's renderer is skipped, so the range rule is applied here too.
+// Plan usage describes right now: its "stale" suffix and its reset wording
+// (today vs. a dated form) depend on the clock, not on the fetched numbers, so
+// this has to run on every settled response. That includes one whose summary
+// failed, and one the payload signature would otherwise treat as unchanged.
+// These three panels show on Today only. Their renderers set that, but a hidden
+// panel's renderer is skipped, so the range rule is applied here too.
+function renderNowPanels({ limits, sessions, reviews }) {
   if (state.currentDays !== 'today') {
     for (const id of ['limitsPanel', 'sessionsPanel', 'timelinePanel']) document.getElementById(id).hidden = true;
   }
@@ -575,142 +563,44 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
   if (shown('timeline')) renderTimeline(sessions);
   if (shown('reviews')) renderReviews(reviews);
   renderLimitsBanner(limits);
+}
 
+// The status banner after a summary loaded: hidden, or a note that the projects
+// folder or its session files are missing.
+function renderMetaBanner(meta) {
+  const banner = document.getElementById('statusBanner');
+  banner.hidden = true;
+  if (!meta.dirExists) {
+    banner.hidden = false;
+    banner.innerHTML = `No Claude Code project logs found at <code>${escapeHtml(meta.projectsDir)}</code>. Use Claude Code at least once, or set <code>CLAUDE_CONFIG_DIR</code> if you use a custom location.`;
+  } else if (meta.scannedFiles === 0) {
+    banner.hidden = false;
+    banner.textContent = 'Found the projects folder, but no session files yet.';
+  }
+}
+
+// Draws a payload from fetchAll, one call per section. lastSignature is set on the
+// last line, after every renderer has run. A renderer that throws therefore
+// leaves the previous signature, and reportDrawError clears that one. The panel
+// draw guards keep no key for a draw that threw, so those panels need no clearing.
+function renderPayload(payload) {
+  const { data, rtk } = payload;
+  renderNowPanels(payload);
   if (data.error) {
+    const banner = document.getElementById('statusBanner');
     banner.hidden = false;
     banner.textContent = `Couldn't load usage data: ${data.error}`;
     lastSignature = null;
     return;
   }
-
   const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
   if (signature === lastSignature) return;
-  banner.hidden = true;
-
-  if (!data.meta.dirExists) {
-    banner.hidden = false;
-    banner.innerHTML = `No Claude Code project logs found at <code>${escapeHtml(data.meta.projectsDir)}</code>. Use Claude Code at least once, or set <code>CLAUDE_CONFIG_DIR</code> if you use a custom location.`;
-  } else if (data.meta.scannedFiles === 0) {
-    banner.hidden = false;
-    banner.textContent = 'Found the projects folder, but no session files yet.';
-  }
-
-  const s = data.summary;
-  if (shown('card-cost')) {
-    document.getElementById('cardCost').textContent = formatCost(s.totalCost);
-    // The compact header card on Today has room for a short note only, so there
-    // the full sentence moves to the note's tooltip.
-    const unpricedNote = s.unpricedTokens
-      ? `${formatTokens(s.unpricedTokens)} tokens from unrecognized models not priced`
-      : '';
-    const costNote = document.getElementById('cardCostNote');
-    const compact = state.currentDays === 'today';
-    costNote.textContent = compact && s.unpricedTokens
-      ? `${formatTokens(s.unpricedTokens)} unpriced`
-      : unpricedNote;
-    costNote.title = compact ? unpricedNote : '';
-  }
-  if (shown('card-tokens')) document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
-  renderWeekTotals(s);
-  if (shown('card-cache')) document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
-
-  // Claude Code's own per-session counters, shown as a separate card rather than
-  // folded into Total cost. Only present on the all-time range, and only for the
-  // sessions that wrote a cost-state line, so it is a floor on what the
-  // per-request scan misses, not a replacement total.
-  const reportedCard = document.getElementById('reportedCard');
-  reportedCard.hidden = s.reportedCost == null;
-  if (s.reportedCost != null && shown('card-reported')) {
-    document.getElementById('cardReported').textContent = formatCost(s.reportedCost);
-    document.getElementById('cardReportedNote').textContent =
-      `${s.reportedSessions} of ${s.reportedSessionsOf} sessions`;
-  }
-  if (shown('card-files')) document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
-  if (shown('card-tools')) document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');
-  if (shown('card-record')) renderRecord(data.daily);
-
-  if (shown('dailyCost')) {
-    drawBarChart(document.getElementById('costChart'), data.daily, {
-      color: 'var(--accent-cost)',
-      valueKey: 'cost',
-      tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatCost(d.cost)}`,
-    });
-  }
-
-  if (shown('dailyTokens')) {
-    // The payload carries the four token types per bucket but not their sum, so the
-    // total is derived here rather than widening the wire format for one chart.
-    const dailyTokens = data.daily.map((d) => ({
-      ...d,
-      tokens: d.input + d.output + d.cacheCreate + d.cacheRead,
-    }));
-    drawBarChart(document.getElementById('tokenChart'), dailyTokens, {
-      // Cache reads are ~97% of every total, so this borrows their colour rather
-      // than adding a sixth hue to a palette validated as a set.
-      color: '#9085e9',
-      valueKey: 'tokens',
-      tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatTokens(d.tokens)} tokens`,
-    });
-  }
-
-  if (shown('cumulativeCost')) drawCumulativeChart(document.getElementById('cumulativeChart'), data.daily);
-
-  // Hourly buckets on the Today range, where a daily rate has no meaning.
-  const perDay = state.currentDays === 'today' ? null : costPerDay(data.daily);
-  document.getElementById('burnCard').hidden = perDay == null;
-  document.getElementById('projectionCard').hidden = perDay == null;
-  if (perDay != null && shown('card-burn')) document.getElementById('cardBurn').textContent = formatCost(perDay);
-  if (perDay != null && shown('card-projection')) document.getElementById('cardProjection').textContent = formatCost(perDay * 30);
-
-  if (shown('tokenTypes')) {
-    // Reversed so the legend reads in the order the lines actually appear, cache read
-    // at the top down to input at the bottom. TOKEN_SERIES is copied, not reversed in
-    // place: the stacked charts rely on its order.
-    drawTokenLegend(document.getElementById('tokenTypeLegend'), data.daily, [...TOKEN_SERIES].reverse(), true);
-    drawLogLineChart(document.getElementById('tokenTypeChart'), data.daily, TOKEN_SERIES);
-  }
-
-  // Every bar in the panel shares one scale. Groups on separate scales made a
-  // 30.8% subagent bar draw longer than a 68.2% thread bar.
-  // The two split bars are self-scaling, so only the skill and subagent lists
-  // share this one, which is what keeps their lengths comparable to each other.
-  const attributionScale = [...data.skills, ...data.subagents].reduce((max, r) => Math.max(max, r.cost), 0);
-  const totalCost = data.summary.totalCost;
-  // Skill and subagent rows: the bar against the shared scale, the text the true
-  // share of total cost.
-  const shareOfTotal = (row) => `${(totalCost > 0 ? (row.cost / totalCost) * 100 : 0).toFixed(1)}%`;
-  const usageBars = {
-    size: (row) => row.cost,
-    scaleMax: attributionScale,
-    value: shareOfTotal,
-    tooltip: (row) => `<b>${escapeHtml(row.name)}</b><br>${formatCost(row.cost)} &middot; ${shareOfTotal(row)} of total`,
-    empty: 'Nothing attributed in this range.',
-  };
-  const threadRows = [
-    { name: 'Main thread', cost: data.threads.main },
-    { name: 'Subagents', cost: data.threads.subagent },
-  ];
-  const contextRows = [
-    { name: `Over ${axisTokens(data.contextThreshold)} context`, cost: data.context.over },
-    { name: `Under ${axisTokens(data.contextThreshold)} context`, cost: data.context.under },
-  ];
-  document.getElementById('attributionPanel').hidden = totalCost <= 0;
-  if (shown('attribution')) {
-    drawSplitBar(document.getElementById('threadBars'), threadRows);
-    drawSplitBar(document.getElementById('contextBars'), contextRows);
-    drawHBars(document.getElementById('skillBars'), data.skills.slice(0, 8), usageBars);
-    drawHBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), usageBars);
-  }
-
-  if (shown('tools')) renderTools(data.tools || []);
-
+  renderMetaBanner(data.meta);
+  renderCards(data);
+  renderUsageCharts(data);
   renderModels(data);
-
-  // Like the model daily charts, the heatmap shows on multi-day ranges only.
-  const multiDay = state.currentDays !== 'today';
-  document.getElementById('activityPanel').hidden = !multiDay;
-  if (multiDay && shown('activity')) drawActivityHeatmap(document.getElementById('activityHeatmap'), data.activity);
-
+  renderAttribution(data);
+  if (shown('tools')) renderTools(data.tools || []);
   renderRtk(rtk);
   lastSignature = signature;
 }
