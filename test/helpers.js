@@ -89,24 +89,45 @@ function withEnv(t, vars) {
   }
 }
 
-// Boots the real server.js on an ephemeral port against an empty config dir. The
-// variables are set before server.js is required because it reads them at load time.
-function bootServer(t) {
-  const base = tmpDir(t, 'boot');
+// A config for one test, built by loadConfig, with every path in a fresh temp
+// folder. projects/demo exists, so the server has a transcript folder to walk.
+// rtkDb names a file that does not exist, so no test reads the developer's rtk
+// history.
+function testConfig(t, name = 'cfg') {
+  const { loadConfig } = require('../lib/config-dir');
+  const base = tmpDir(t, name);
   fs.mkdirSync(path.join(base, 'projects', 'demo'), { recursive: true });
-  withEnv(t, {
+  return loadConfig({
     CLAUDE_CONFIG_DIR: base,
-    RTK_DB: path.join(base, 'no-rtk-here.db'),
     CHANGES_FILE: path.join(base, 'changes.json'),
-    PORT: '0',
+    RTK_DB: path.join(base, 'no-rtk-here.db'),
   });
-  const serverPath = path.join(__dirname, '..', 'server');
-  delete require.cache[require.resolve(serverPath)];
-  const server = require(serverPath);
-  t.after(() => server.close());
-  return new Promise((resolve) => {
-    server.once('listening', () => resolve({ server, port: server.address().port, base }));
+}
+
+// The modules that hold server state or read the environment when loaded. Until
+// server.js exports a factory (B2 Task 13), each boot reloads them, so every server
+// starts from fresh copies.
+const SERVER_MODULES = [
+  '../server', '../lib/aggregate', '../lib/rowstore', '../lib/store', '../lib/db', '../lib/review-db',
+  '../lib/review', '../lib/sessions', '../lib/updates', '../lib/changes', '../lib/efficiency',
+];
+
+// Boots server.js on an ephemeral port with `config`, and resolves once it listens.
+// Write fixtures under config.configDir before the first request, not before the
+// boot: the row store opens on the first scan.
+async function bootServer(t, config = testConfig(t, 'boot')) {
+  withEnv(t, { CLAUDE_CONFIG_DIR: config.configDir, CHANGES_FILE: config.changesFile, RTK_DB: config.rtkDb, PORT: '0' });
+  for (const mod of SERVER_MODULES) delete require.cache[require.resolve(mod)];
+  const server = require('../server');
+  const dbModule = require('../lib/db'); // the copy this server uses
+  t.after(() => {
+    server.close();
+    dbModule.closeServerDb();
+    require('../lib/pricing').setSnapshots([]);
   });
+  await new Promise((resolve) => server.once('listening', resolve));
+  const port = server.address().port;
+  return { server, config, port, url: `http://127.0.0.1:${port}` };
 }
 
 // Holds the write lock on the SQLite file `file` from a child process, as
@@ -154,4 +175,4 @@ function freshServerDb(t) {
   return { dbModule, base, file: dbModule.getStorePath() };
 }
 
-module.exports = { tmpDir, removeTree, withEnv, bootServer, holdWriteLock, freshServerDb };
+module.exports = { tmpDir, removeTree, withEnv, testConfig, bootServer, holdWriteLock, freshServerDb };

@@ -8,14 +8,10 @@ const path = require('path');
 const helpers = require('./helpers');
 const { localDateStr } = require('../lib/dates');
 
-// Boot the real Express app on an ephemeral port against a fixture log directory.
-// CLAUDE_CONFIG_DIR has to be set before server.js is required, because
-// getProjectsDir() reads it when lib/transcript-files.js is loaded into the module cache.
-function startServer(t) {
-  const base = helpers.tmpDir(t, 'api');
-  const dir = path.join(base, 'projects', 'demo');
-  fs.mkdirSync(dir, { recursive: true });
-
+// Boots the server on a config whose projects/demo holds one Sonnet call at 10:00
+// today. Resolves to { server, config, port, url }.
+async function startServer(t) {
+  const config = helpers.testConfig(t, 'api');
   const now = new Date();
   now.setHours(10, 0, 0, 0);
   const line = JSON.stringify({
@@ -27,31 +23,8 @@ function startServer(t) {
       usage: { input_tokens: 1000, output_tokens: 200 },
     },
   });
-  fs.writeFileSync(path.join(dir, 'session.jsonl'), line + '\n');
-
-  // RTK_DB: without it the route would read the developer's real rtk database and the
-  // assertions below would depend on their shell history.
-  // CLAUDE_CONFIG_DIR: snapshots, prices.json and transcripts.db (reviews included)
-  // all resolve under it.
-  // CHANGES_FILE: without it lib/changes.js falls back to the repo's own changes.json.
-  // PORT: 0 lets the OS pick a free port.
-  helpers.withEnv(t, {
-    RTK_DB: path.join(base, 'no-rtk-here.db'),
-    CLAUDE_CONFIG_DIR: base,
-    CHANGES_FILE: path.join(base, 'changes.json'),
-    PORT: '0',
-  });
-  // The row store keeps its rows and database handle at module level, so each
-  // server starts from fresh copies.
-  for (const mod of ['../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
-  delete require.cache[require.resolve('../lib/sessions')];
-  delete require.cache[require.resolve('../lib/updates')];
-  delete require.cache[require.resolve('../lib/review')];
-  delete require.cache[require.resolve('../lib/db')];
-  delete require.cache[require.resolve('../lib/review-db')];
-  delete require.cache[require.resolve('../server')];
-  const server = require('../server');
-  return server;
+  fs.writeFileSync(path.join(config.configDir, 'projects', 'demo', 'session.jsonl'), line + '\n');
+  return helpers.bootServer(t, config);
 }
 
 const PAGE = fs.readFileSync(path.join(__dirname, 'fixtures', 'pricing-page.md'), 'utf8');
@@ -79,27 +52,14 @@ function withModelCells(md, name, values) {
   }).join('\n');
 }
 
-async function listen(t) {
-  const server = startServer(t);
-  t.after(() => {
-    server.close();
-    require('../lib/db').closeServerDb(); // the instance the server used, before the next startServer drops it
-    require('../lib/pricing').setSnapshots([]);
-  });
-  await new Promise((resolve) => server.once('listening', resolve));
-  return `http://127.0.0.1:${server.address().port}`;
-}
+async function listen(t) { return (await startServer(t)).url; }
 
 const post = (url, body) =>
   fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
 
 test('GET /api/summary?days=today returns one bucket per local hour', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-
-  const port = server.address().port;
-  const res = await fetch(`http://127.0.0.1:${port}/api/summary?days=today`);
+  const { url } = await startServer(t);
+  const res = await fetch(`${url}/api/summary?days=today`);
   const data = await res.json();
 
   assert.strictEqual(res.status, 200);
@@ -117,16 +77,12 @@ test('GET /api/summary?days=today returns one bucket per local hour', async (t) 
 });
 
 test('GET /api/summary?days=today is not served from the memo', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-
-  const port = server.address().port;
-  const first = await (await fetch(`http://127.0.0.1:${port}/api/summary?days=today`)).json();
+  const { url, config } = await startServer(t);
+  const first = await (await fetch(`${url}/api/summary?days=today`)).json();
   assert.strictEqual(first.summary.totalOutput, 200);
 
   // Append a second entry, then request again with no /api/refresh call in between.
-  const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo');
+  const dir = path.join(config.configDir, 'projects', 'demo');
   const now = new Date();
   now.setHours(11, 0, 0, 0);
   const line = JSON.stringify({
@@ -142,16 +98,13 @@ test('GET /api/summary?days=today is not served from the memo', async (t) => {
 
   // Past the 2s refresh share, as every live poll is.
   await new Promise((resolve) => setTimeout(resolve, 2100));
-  const second = await (await fetch(`http://127.0.0.1:${port}/api/summary?days=today`)).json();
+  const second = await (await fetch(`${url}/api/summary?days=today`)).json();
   assert.strictEqual(second.summary.totalOutput, 500, 'the new entry appears without a manual refresh');
 });
 
 test('GET /api/summary rejects a days value it cannot honour', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const port = server.address().port;
-  const get = (qs) => fetch(`http://127.0.0.1:${port}/api/summary${qs}`);
+  const { url } = await startServer(t);
+  const get = (qs) => fetch(`${url}/api/summary${qs}`);
 
   // Each of these used to return the 30-day rollup while looking like it had
   // honoured the request.
@@ -166,11 +119,8 @@ test('GET /api/summary rejects a days value it cannot honour', async (t) => {
 });
 
 test('POST /api/refresh refuses a cross-site request', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const port = server.address().port;
-  const url = `http://127.0.0.1:${port}/api/refresh`;
+  const { url: base } = await startServer(t);
+  const url = `${base}/api/refresh`;
 
   // A browser sets Host from the address it connected to, so the Host guard
   // cannot tell these apart. Sec-Fetch-Site can.
@@ -185,11 +135,9 @@ test('POST /api/refresh refuses a cross-site request', async (t) => {
 });
 
 test('GET /api/rtk returns an empty payload when there is no rtk database', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url } = await startServer(t);
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/rtk?days=30`);
+  const res = await fetch(`${url}/api/rtk?days=30`);
   const data = await res.json();
 
   assert.strictEqual(res.status, 200, 'a missing rtk database is not an error');
@@ -199,22 +147,18 @@ test('GET /api/rtk returns an empty payload when there is no rtk database', asyn
 });
 
 test('GET /api/rtk rejects a malformed days value the same way /api/summary does', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url } = await startServer(t);
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/rtk?days=-3`);
+  const res = await fetch(`${url}/api/rtk?days=-3`);
   assert.strictEqual(res.status, 400);
   const data = await res.json();
   assert.match(data.error, /Invalid days/);
 });
 
 test('GET /api/rtk?days=today buckets by hour', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url } = await startServer(t);
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/rtk?days=today`);
+  const res = await fetch(`${url}/api/rtk?days=today`);
   const data = await res.json();
   assert.strictEqual(res.status, 200);
   // No fixture rows, so the assertion is on shape, not content.
@@ -222,23 +166,20 @@ test('GET /api/rtk?days=today buckets by hour', async (t) => {
 });
 
 test('GET /api/summary does not send the per-call efficiency records', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const port = server.address().port;
+  const { url } = await startServer(t);
 
   for (const days of ['today', '30']) {
-    const data = await (await fetch(`http://127.0.0.1:${port}/api/summary?days=${days}`)).json();
+    const data = await (await fetch(`${url}/api/summary?days=${days}`)).json();
     assert.strictEqual(data.efficiency, undefined, `days=${days} must not include efficiency`);
   }
 });
 
 // A fixture with one session that starts on Sep 1 and one on Sep 10, and a
 // changes.json marker on Sep 5 between them.
-function startChangesServer(t, { changes, plugins } = {}) {
-  const base = helpers.tmpDir(t, 'changes-api');
+async function startChangesServer(t, { changes, plugins } = {}) {
+  const config = helpers.testConfig(t, 'changes-api');
+  const base = config.configDir;
   const dir = path.join(base, 'projects', 'demo');
-  fs.mkdirSync(dir, { recursive: true });
   const line = (iso, id, sessionId, context) => JSON.stringify({
     type: 'assistant', timestamp: iso, sessionId, requestId: 'req-' + id,
     message: { id: 'msg-' + id, model: 'claude-opus-5', content: [], usage: { input_tokens: context, output_tokens: 10 } },
@@ -251,23 +192,13 @@ function startChangesServer(t, { changes, plugins } = {}) {
     fs.mkdirSync(path.join(base, 'plugins'));
     fs.writeFileSync(path.join(base, 'plugins', 'installed_plugins.json'), JSON.stringify(plugins));
   }
-  const changesPath = path.join(base, 'changes.json');
-  if (changes) fs.writeFileSync(changesPath, JSON.stringify(changes));
-  helpers.withEnv(t, {
-    CHANGES_FILE: changesPath,
-    RTK_DB: path.join(base, 'no-rtk-here.db'),
-    CLAUDE_CONFIG_DIR: base,
-    PORT: '0',
-  });
-  for (const mod of ['../lib/aggregate', '../lib/rowstore', '../lib/changes', '../lib/efficiency', '../server']) delete require.cache[require.resolve(mod)];
-  return { server: require('../server'), changesPath };
+  if (changes) fs.writeFileSync(config.changesFile, JSON.stringify(changes));
+  return { ...(await helpers.bootServer(t, config)), changesPath: config.changesFile };
 }
 
 test('GET /api/changes returns sessions and before/after windows per marker', async (t) => {
-  const { server } = startChangesServer(t, { changes: [{ date: '2026-09-05T12:00', kind: 'skill', label: 'a skill' }] });
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/changes`);
+  const { url } = await startChangesServer(t, { changes: [{ date: '2026-09-05T12:00', kind: 'skill', label: 'a skill' }] });
+  const res = await fetch(`${url}/api/changes`);
   const data = await res.json();
 
   assert.strictEqual(res.status, 200);
@@ -289,10 +220,8 @@ test('GET /api/changes returns sessions and before/after windows per marker', as
 });
 
 test('GET /api/changes re-reads changes.json on every request', async (t) => {
-  const { server, changesPath } = startChangesServer(t, { changes: [] });
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const url = `http://127.0.0.1:${server.address().port}/api/changes`;
+  const { url: base, changesPath } = await startChangesServer(t, { changes: [] });
+  const url = `${base}/api/changes`;
 
   assert.strictEqual((await (await fetch(url)).json()).markers.length, 0);
   fs.writeFileSync(changesPath, JSON.stringify([{ date: '2026-09-05T12:00', kind: 'hook', label: 'new hook' }]));
@@ -301,10 +230,8 @@ test('GET /api/changes re-reads changes.json on every request', async (t) => {
 });
 
 test('GET /api/changes works with no marker sources at all', async (t) => {
-  const { server } = startChangesServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/changes`);
+  const { url } = await startChangesServer(t);
+  const res = await fetch(`${url}/api/changes`);
   const data = await res.json();
 
   assert.strictEqual(res.status, 200);
@@ -313,12 +240,10 @@ test('GET /api/changes works with no marker sources at all', async (t) => {
 });
 
 test('GET /api/limits sends only the limits', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url, config } = await startServer(t);
 
   const resets = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-  fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, '.claude.json'), JSON.stringify({
+  fs.writeFileSync(path.join(config.configDir, '.claude.json'), JSON.stringify({
     oauthAccount: { emailAddress: 'someone@example.com' },
     cachedUsageUtilization: {
       fetchedAtMs: 123,
@@ -327,7 +252,7 @@ test('GET /api/limits sends only the limits', async (t) => {
     },
   }));
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/limits`);
+  const res = await fetch(`${url}/api/limits`);
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), {
     fetchedAt: 123,
@@ -338,22 +263,18 @@ test('GET /api/limits sends only the limits', async (t) => {
 });
 
 test('GET /api/limits returns null when there is no usage cache', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url } = await startServer(t);
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/limits`);
+  const res = await fetch(`${url}/api/limits`);
   assert.strictEqual(res.status, 200);
   assert.strictEqual(await res.json(), null);
 });
 
 test('GET /api/records returns the all-time busiest day', async (t) => {
-  const server = startServer(t);
+  const { url } = await startServer(t);
   const day = localDateStr(new Date());
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/records`);
+  const res = await fetch(`${url}/api/records`);
   const data = await res.json();
   if (localDateStr(new Date()) !== day) return t.skip('crossed local midnight');
 
@@ -362,13 +283,11 @@ test('GET /api/records returns the all-time busiest day', async (t) => {
 });
 
 test('GET /api/records returns recentDays: the 6 days before today, not today', async (t) => {
-  const server = startServer(t);
+  const { url, config } = await startServer(t);
   const day = localDateStr(new Date());
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
 
   // The fixture holds one line dated today. Add lines for 7, 6 and 1 days back.
-  const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo');
+  const dir = path.join(config.configDir, 'projects', 'demo');
   const lines = [7, 6, 1].map((back) => {
     const when = new Date();
     when.setHours(10, 0, 0, 0);
@@ -381,7 +300,7 @@ test('GET /api/records returns recentDays: the 6 days before today, not today', 
   });
   fs.writeFileSync(path.join(dir, 'older.jsonl'), lines.join('\n') + '\n');
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/records`);
+  const res = await fetch(`${url}/api/records`);
   const data = await res.json();
   if (localDateStr(new Date()) !== day) return t.skip('crossed local midnight');
 
@@ -400,13 +319,11 @@ test('GET /api/records returns recentDays: the 6 days before today, not today', 
 });
 
 test('GET /api/records writes no records.json, and nothing in cc-dashboard/ but the transcript database', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url, config } = await startServer(t);
 
-  await fetch(`http://127.0.0.1:${server.address().port}/api/records`);
+  await fetch(`${url}/api/records`);
 
-  const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard');
+  const dir = path.join(config.configDir, 'cc-dashboard');
   assert.strictEqual(fs.existsSync(path.join(dir, 'records.json')), false);
   assert.ok(fs.readdirSync(dir).every((name) => name.startsWith('transcripts.db')), fs.readdirSync(dir).join(', '));
 });
@@ -414,11 +331,11 @@ test('GET /api/records writes no records.json, and nothing in cc-dashboard/ but 
 // A three-day-old transcript, old by content and by mtime so the row store persists it
 // on the first refresh. It is an assistant line with a session id, so /api/changes lists
 // it as a session too.
-function writeStoredTranscript() {
+function writeStoredTranscript(config) {
   const when = new Date();
   when.setDate(when.getDate() - 3);
   when.setHours(10, 0, 0, 0);
-  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo', 'old.jsonl');
+  const file = path.join(config.configDir, 'projects', 'demo', 'old.jsonl');
   fs.writeFileSync(file, JSON.stringify({
     type: 'assistant',
     sessionId: 'sess-old',
@@ -431,18 +348,15 @@ function writeStoredTranscript() {
 }
 
 test('a transcript that is deleted after it was stored still counts in the All range, the record day and /api/changes', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
-  const { file, when } = writeStoredTranscript();
+  const { url: base, config } = await startServer(t);
+  const { file, when } = writeStoredTranscript(config);
 
   const before = await (await fetch(`${base}/api/summary?days=all`)).json();
   assert.strictEqual(before.summary.totalInput, 6000);
   const changesBefore = await (await fetch(`${base}/api/changes`)).json();
   assert.ok(changesBefore.sessions.some((s) => s.context === 5000), 'the stored transcript is a session');
   assert.ok(
-    changesBefore.changesFile.path.startsWith(process.env.CLAUDE_CONFIG_DIR),
+    changesBefore.changesFile.path.startsWith(config.configDir),
     `changes.json path ${changesBefore.changesFile.path} is outside the test folder`,
   );
   assert.strictEqual(changesBefore.changesFile.status, 'missing');
@@ -461,27 +375,18 @@ test('a transcript that is deleted after it was stored still counts in the All r
 });
 
 test('a transcript that is deleted while the server is stopped still counts after a restart', async (t) => {
-  const first = startServer(t);
-  await new Promise((resolve) => first.once('listening', resolve));
-  const { file } = writeStoredTranscript();
-  const firstBase = `http://127.0.0.1:${first.address().port}`;
-  assert.strictEqual((await (await fetch(`${firstBase}/api/summary?days=all`)).json()).summary.totalInput, 6000);
-  first.close();
-  // Both servers share lib/db's cached handle. Closing it makes the second server
-  // open transcripts.db from disk, which is what a restart does.
-  const dbModule = require('../lib/db');
-  const firstHandle = dbModule.getServerDb();
-  dbModule.closeServerDb();
+  const first = await startServer(t);
+  const { file } = writeStoredTranscript(first.config);
+  assert.strictEqual((await (await fetch(`${first.url}/api/summary?days=all`)).json()).summary.totalInput, 6000);
+  first.server.close();
+  // Closing the first server's handle makes the second server open transcripts.db
+  // from disk, which is what a restart does.
+  require('../lib/db').closeServerDb();
 
   fs.unlinkSync(file);
-  for (const mod of ['../lib/aggregate', '../lib/rowstore', '../lib/store', '../server']) delete require.cache[require.resolve(mod)];
-  const second = require('../server');
-  t.after(() => second.close());
-  await new Promise((resolve) => second.once('listening', resolve));
-
-  const after = await (await fetch(`http://127.0.0.1:${second.address().port}/api/summary?days=all`)).json();
+  const second = await helpers.bootServer(t, first.config);
+  const after = await (await fetch(`${second.url}/api/summary?days=all`)).json();
   assert.strictEqual(after.summary.totalInput, 6000, 'the database kept the deleted transcript across the restart');
-  assert.notStrictEqual(dbModule.getServerDb(), firstHandle, 'the second server opened transcripts.db again');
 });
 
 test('a range is aggregated again after local midnight, although no transcript changed', async (t) => {
@@ -490,10 +395,7 @@ test('a range is aggregated again after local midnight, although no transcript c
   const late = new Date();
   late.setHours(23, 59, 50, 0);
   t.mock.timers.enable({ apis: ['Date'], now: late.getTime() });
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const { url: base } = await startServer(t);
 
   const first = await (await fetch(`${base}/api/summary?days=7`)).json();
   assert.strictEqual(first.daily[first.daily.length - 1].date, localDateStr(new Date()));
@@ -506,15 +408,13 @@ test('a range is aggregated again after local midnight, although no transcript c
 });
 
 test('the server still answers when the transcript database cannot be opened', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url, config } = await startServer(t);
   const warn = t.mock.method(console, 'warn', () => {});
   // SQLite cannot open a directory as a database. It is made after startServer and
   // before the first scan opens the database.
-  fs.mkdirSync(path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'transcripts.db'), { recursive: true });
+  fs.mkdirSync(path.join(config.configDir, 'cc-dashboard', 'transcripts.db'), { recursive: true });
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/summary?days=all`);
+  const res = await fetch(`${url}/api/summary?days=all`);
 
   assert.strictEqual(res.status, 200);
   assert.strictEqual((await res.json()).summary.totalInput, 1000);
@@ -522,11 +422,9 @@ test('the server still answers when the transcript database cannot be opened', a
 });
 
 test('GET /stats.js serves the shared statistics helpers', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url } = await startServer(t);
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/stats.js`);
+  const res = await fetch(`${url}/stats.js`);
   assert.strictEqual(res.status, 200);
   assert.match(res.headers.get('content-type'), /javascript/);
   assert.match(await res.text(), /function percentile/);
@@ -551,10 +449,8 @@ function appendCall(base, { sessionId, id, input, output }) {
 }
 
 test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const base = process.env.CLAUDE_CONFIG_DIR;
+  const { url, config } = await startServer(t);
+  const base = config.configDir;
   appendCall(base, { sessionId: 'sess-a', id: 'a1', input: 700, output: 300 });
   // An Edit result: 1 line removed and 2 added, which the snapshot's 5 and 1 must not override.
   const editTime = new Date();
@@ -571,7 +467,7 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
     costUsd: 0.42, durationMs: 90_000, apiDurationMs: 20_000, linesAdded: 5, linesRemoved: 1,
   });
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  const res = await fetch(`${url}/api/sessions/live`);
   assert.strictEqual(res.status, 200);
   const body = await res.json();
   assert.strictEqual(body.sessions.length, 1);
@@ -596,16 +492,14 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
 });
 
 test('GET /api/sessions/live marks a session that ended', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  writeSnapshot(process.env.CLAUDE_CONFIG_DIR, {
+  const { url, config } = await startServer(t);
+  writeSnapshot(config.configDir, {
     sessionId: 'sess-b', lastActiveAt: Date.now() - 60_000, project: 'demo', model: 'Sonnet 4.6',
     costUsd: 0.1, durationMs: 60_000, apiDurationMs: 5_000, linesAdded: 0, linesRemoved: 0,
     endedAt: Date.now() - 30_000, endReason: 'clear',
   });
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  const res = await fetch(`${url}/api/sessions/live`);
   const body = await res.json();
   assert.strictEqual(body.sessions[0].ended, 'clear');
   assert.strictEqual(body.sessions[0].live, false);
@@ -613,10 +507,8 @@ test('GET /api/sessions/live marks a session that ended', async (t) => {
 });
 
 test('GET /api/sessions/live joins the activity file of a session', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const base = process.env.CLAUDE_CONFIG_DIR;
+  const { url, config } = await startServer(t);
+  const base = config.configDir;
   writeSnapshot(base, {
     sessionId: 'sess-c', lastActiveAt: Date.now() - 30_000, project: 'demo', model: 'Sonnet 4.6',
     costUsd: 0.1, durationMs: 60_000, apiDurationMs: 5_000, linesAdded: 0, linesRemoved: 0,
@@ -629,7 +521,7 @@ test('GET /api/sessions/live joins the activity file of a session', async (t) =>
     tool: { name: 'Bash', detail: 'npm test', startedAt: now - 3000 }, subagents: 2, updatedAt: now - 1000,
   }));
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  const res = await fetch(`${url}/api/sessions/live`);
   const [row] = (await res.json()).sessions;
   assert.strictEqual(row.activity.state, 'working');
   assert.strictEqual(row.activity.tool.detail, 'npm test');
@@ -638,22 +530,18 @@ test('GET /api/sessions/live joins the activity file of a session', async (t) =>
 });
 
 test('GET /api/sessions/live gives null activity when there is no activity directory', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  writeSnapshot(process.env.CLAUDE_CONFIG_DIR, {
+  const { url, config } = await startServer(t);
+  writeSnapshot(config.configDir, {
     sessionId: 'sess-d', lastActiveAt: Date.now() - 30_000, project: 'demo', model: 'Sonnet 4.6',
     costUsd: 0.1, durationMs: 60_000, apiDurationMs: 5_000, linesAdded: 0, linesRemoved: 0,
   });
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  const res = await fetch(`${url}/api/sessions/live`);
   assert.strictEqual((await res.json()).sessions[0].activity, null);
 });
 
 test('GET /api/sessions/live is empty with no snapshot directory', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  const { url } = await startServer(t);
+  const res = await fetch(`${url}/api/sessions/live`);
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), {
     sessions: [],
@@ -662,43 +550,38 @@ test('GET /api/sessions/live is empty with no snapshot directory', async (t) => 
 });
 
 test('GET /api/sessions/live skips a corrupt snapshot and serves the rest', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const base = process.env.CLAUDE_CONFIG_DIR;
+  const { url, config } = await startServer(t);
+  const base = config.configDir;
   const dir = writeSnapshot(base, {
     sessionId: 'ok', lastActiveAt: Date.now() - 1000, project: 'demo', model: null,
     costUsd: 1, durationMs: 1, apiDurationMs: 1, linesAdded: 0, linesRemoved: 0,
   });
   fs.writeFileSync(path.join(dir, 'broken.json'), '{"sessionId":');
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/sessions/live`);
+  const res = await fetch(`${url}/api/sessions/live`);
   assert.strictEqual(res.status, 200);
   assert.strictEqual((await res.json()).sessions.length, 1);
 });
 
 test('the Today scan is shared between /api/summary and /api/sessions/live', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const port = server.address().port;
-  const base = process.env.CLAUDE_CONFIG_DIR;
+  const { url, config } = await startServer(t);
+  const base = config.configDir;
   writeSnapshot(base, {
     sessionId: 'sess-b', lastActiveAt: Date.now() - 1000, project: 'demo', model: null,
     costUsd: 1, durationMs: 1, apiDurationMs: 1, linesAdded: 0, linesRemoved: 0,
   });
   // Requested together, the way loadAndRender sends them.
   const [summary] = await Promise.all([
-    fetch(`http://127.0.0.1:${port}/api/summary?days=today`).then((r) => r.json()),
-    fetch(`http://127.0.0.1:${port}/api/sessions/live`).then((r) => r.json()),
+    fetch(`${url}/api/summary?days=today`).then((r) => r.json()),
+    fetch(`${url}/api/sessions/live`).then((r) => r.json()),
   ]);
   // A line appended right after is not in a scan shared within 2 seconds...
   appendCall(base, { sessionId: 'sess-b', id: 'b1', input: 10, output: 0 });
-  const live = await (await fetch(`http://127.0.0.1:${port}/api/sessions/live`)).json();
+  const live = await (await fetch(`${url}/api/sessions/live`)).json();
   assert.strictEqual(live.sessions[0].tokens, 0);
   assert.strictEqual(summary.summary.totalOutput, 200);
   // ...and is after the share window, which a 5s live poll always is.
   await new Promise((resolve) => setTimeout(resolve, 2100));
-  const later = await (await fetch(`http://127.0.0.1:${port}/api/sessions/live`)).json();
+  const later = await (await fetch(`${url}/api/sessions/live`)).json();
   assert.strictEqual(later.sessions[0].tokens, 10);
 });
 
@@ -722,7 +605,7 @@ test('POST /api/prices/check returns the diff and changes nothing', async (t) =>
 
 test('POST /api/prices/apply saves the check and re-prices the summary', async (t) => {
   stubPricingPage(t, withModelCells(PAGE, 'Claude Sonnet 4.6', ['$6 / MTok', '$7.50 / MTok', '$12 / MTok', '$0.60 / MTok', '$30 / MTok']));
-  const base = await listen(t);
+  const { url: base, config } = await startServer(t);
   const cost = async () => (await (await fetch(`${base}/api/summary?days=today`)).json()).summary.totalCost;
   // The fixture log is one claude-sonnet-4-6 request: 1000 input, 200 output.
   assert.ok(Math.abs((await cost()) - 0.006) < 1e-12);
@@ -736,7 +619,7 @@ test('POST /api/prices/apply saves the check and re-prices the summary', async (
   assert.strictEqual(source.date, today);
   assert.ok(Math.abs((await cost()) - 0.012) < 1e-12, 'the cached scan was dropped and re-priced');
 
-  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'prices.json');
+  const file = path.join(config.configDir, 'cc-dashboard', 'prices.json');
   const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.deepStrictEqual(saved.snapshots[0].rows.map((r) => r.match).sort(), ['sonnet-4-6', 'sonnet-5-5']);
 
@@ -788,28 +671,23 @@ test('the price POST routes refuse a cross-site request', async (t) => {
 });
 
 test('GET /api/limits adds today\'s share of the weekly limit', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url, config } = await startServer(t);
 
   const now = Date.now();
-  fs.writeFileSync(path.join(process.env.CLAUDE_CONFIG_DIR, 'rate-limits.json'), JSON.stringify({
+  fs.writeFileSync(path.join(config.configDir, 'rate-limits.json'), JSON.stringify({
     fetchedAtMs: now,
     rate_limits: { seven_day: { used_percentage: 17, resets_at: Math.floor(now / 1000) + 2 * 24 * 60 * 60 } },
     dayStart: { date: localDateStr(new Date(now)), percent: 13, from: 'previous-reading' },
   }));
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/limits`);
+  const res = await fetch(`${url}/api/limits`);
   const body = await res.json();
   assert.strictEqual(body.source, 'statusline');
   assert.strictEqual(body.today.share, 4);
 });
 
 test('every GET /api route refuses a cross-site or same-site request', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const { url: base } = await startServer(t);
 
   for (const route of ['/api/summary?days=today', '/api/rtk?days=today', '/api/limits', '/api/sessions/live', '/api/prices']) {
     for (const site of ['cross-site', 'same-site']) {
@@ -820,19 +698,14 @@ test('every GET /api route refuses a cross-site or same-site request', async (t)
 });
 
 test('a GET /api request typed into the address bar is accepted', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url } = await startServer(t);
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/limits`, { headers: { 'Sec-Fetch-Site': 'none' } });
+  const res = await fetch(`${url}/api/limits`, { headers: { 'Sec-Fetch-Site': 'none' } });
   assert.strictEqual(res.status, 200);
 });
 
 test('days accepts only the range picker values on /api/summary and /api/rtk', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const { url: base } = await startServer(t);
 
   for (const route of ['/api/summary', '/api/rtk']) {
     for (const days of ['5', '1000000000']) {
@@ -866,10 +739,7 @@ test('an empty days query reads the 30-day range on both routes', async (t) => {
 
 test("the POST /api routes refuse Sec-Fetch-Site: none, which only a GET from the address bar sends", async (t) => {
   stubPricingPage(t, PAGE); // so a broken guard cannot reach platform.claude.com
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const base = `http://127.0.0.1:${server.address().port}`;
+  const { url: base } = await startServer(t);
 
   for (const route of ['/api/refresh', '/api/prices/check', '/api/prices/apply']) {
     const res = await fetch(base + route, { method: 'POST', headers: { 'Sec-Fetch-Site': 'none' } });
@@ -881,11 +751,8 @@ test(
   'a session file the scan cannot read is logged once per range, not on every scan',
   { skip: process.getuid?.() === 0 && 'root can read a mode-000 file' },
   async (t) => {
-    const server = startServer(t);
-    t.after(() => server.close());
-    await new Promise((resolve) => server.once('listening', resolve));
-    const base = `http://127.0.0.1:${server.address().port}`;
-    const locked = path.join(process.env.CLAUDE_CONFIG_DIR, 'projects', 'demo', 'locked.jsonl');
+    const { url: base, config } = await startServer(t);
+    const locked = path.join(config.configDir, 'projects', 'demo', 'locked.jsonl');
     fs.writeFileSync(locked, '{}\n');
     fs.chmodSync(locked, 0o000);
     // No chmod back to 0o644: the folder is removed when the test ends, and unlinking a
@@ -910,9 +777,7 @@ function openTestReviewDb() {
 }
 
 test('GET /api/reviews lists finished reviews with suggestion state and the home directory', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url } = await startServer(t);
   const db = openTestReviewDb();
   const now = Date.now();
   const add = (id, status, extra = {}) => db.prepare(
@@ -923,7 +788,7 @@ test('GET /api/reviews lists finished reviews with suggestion state and the home
   add('sess-b', 'skipped', { skip: 'under 3 prompts' });
   db.close();
 
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`);
+  const res = await fetch(`${url}/api/reviews`);
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), {
     home: os.homedir(),
@@ -935,37 +800,31 @@ test('GET /api/reviews lists finished reviews with suggestion state and the home
 });
 
 test('GET /api/reviews answers an empty list before any review exists', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const res = await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`);
+  const { url } = await startServer(t);
+  const res = await fetch(`${url}/api/reviews`);
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), { home: os.homedir(), reviews: [] });
 });
 
 test('GET /api/reviews imports review files from an earlier version', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const dir = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'reviews');
+  const { url, config } = await startServer(t);
+  const dir = path.join(config.configDir, 'cc-dashboard', 'reviews');
   fs.mkdirSync(dir, { recursive: true });
   const now = Date.now();
   fs.writeFileSync(path.join(dir, 'sess-old.json'), JSON.stringify({
     sessionId: 'sess-old', project: 'demo', endedAt: now - 1000, reviewedAt: now, status: 'done', suggestions: [{ kind: 'workflow', text: 'Plan first.' }],
   }));
-  const body = await (await fetch(`http://127.0.0.1:${server.address().port}/api/reviews`)).json();
+  const body = await (await fetch(`${url}/api/reviews`)).json();
   assert.deepStrictEqual(body.reviews.map((r) => [r.sessionId, r.suggestions.map((s) => s.text)]), [['sess-old', ['Plan first.']]]);
 });
 
 test('GET /api/reviews answers 500 with the reason when transcripts.db cannot be opened, and recovers when it can', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'transcripts.db');
+  const { url: base, config } = await startServer(t);
+  const file = path.join(config.configDir, 'cc-dashboard', 'transcripts.db');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, 'not a database '.repeat(100));
   t.mock.method(console, 'error', () => {});
-  const url = `http://127.0.0.1:${server.address().port}/api/reviews`;
+  const url = `${base}/api/reviews`;
   const res = await fetch(url);
   assert.strictEqual(res.status, 500);
   const body = await res.json();
@@ -977,9 +836,7 @@ test('GET /api/reviews answers 500 with the reason when transcripts.db cannot be
 
 // Seeds one finished review with two suggestions and returns the base URL.
 async function reviewServer(t) {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
+  const { url } = await startServer(t);
   const db = require('../lib/review-db').openReviewDb();
   const now = Date.now();
   for (const id of ['sess-a', 'sess-b']) {
@@ -987,7 +844,7 @@ async function reviewServer(t) {
     db.prepare("INSERT INTO suggestions (session_id, idx, kind, text) VALUES (?, 0, 'workflow', 'one'), (?, 1, 'token-waste', 'two')").run(id, id);
   }
   db.close();
-  return `http://127.0.0.1:${server.address().port}`;
+  return url;
 }
 
 const dismissUrl = (base, id, idx) => `${base}/api/reviews/${id}/suggestions/${idx}/dismiss`;
@@ -1048,14 +905,12 @@ test('the dismiss routes refuse a cross-site request, like the price POST routes
 });
 
 test('the dismiss routes answer 500 with the reason when transcripts.db cannot be opened', async (t) => {
-  const server = startServer(t);
-  t.after(() => server.close());
-  await new Promise((resolve) => server.once('listening', resolve));
-  const file = path.join(process.env.CLAUDE_CONFIG_DIR, 'cc-dashboard', 'transcripts.db');
+  const { url, config } = await startServer(t);
+  const file = path.join(config.configDir, 'cc-dashboard', 'transcripts.db');
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, 'not a database '.repeat(100));
   t.mock.method(console, 'error', () => {});
-  const res = await postJson(dismissUrl(`http://127.0.0.1:${server.address().port}`, 'sess-a', 0), { reason: 'done' });
+  const res = await postJson(dismissUrl(url, 'sess-a', 0), { reason: 'done' });
   assert.strictEqual(res.status, 500);
   assert.ok((await res.json()).detail);
 });
@@ -1063,15 +918,15 @@ test('the dismiss routes answer 500 with the reason when transcripts.db cannot b
 // A server whose transcripts.db exists in WAL mode before any request, so a child
 // process can hold its write lock (holdWriteLock in test/helpers.js).
 async function lockableServer(t) {
-  const base = await listen(t);
+  const { url: base, config } = await startServer(t);
   const { openDatabase, getStorePath } = require('../lib/db');
   openDatabase().close();
-  return { base, file: getStorePath() };
+  return { base, config, file: getStorePath() };
 }
 
 test('a request whose row-store write meets the review lock answers 200 within 1000 ms', async (t) => {
-  const { base, file } = await lockableServer(t);
-  writeStoredTranscript(); // three days old, so the first refresh writes it
+  const { base, config, file } = await lockableServer(t);
+  writeStoredTranscript(config); // three days old, so the first refresh writes it
   const release = await helpers.holdWriteLock(t, file);
   const warn = t.mock.method(console, 'warn', () => {});
   const started = Date.now();
