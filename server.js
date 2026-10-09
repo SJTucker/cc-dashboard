@@ -4,6 +4,7 @@
 const express = require('express');
 const os = require('os');
 const path = require('path');
+const { loadConfig } = require('./lib/config-dir');
 const { getProjectsDir } = require('./lib/transcript-files');
 const { localDateStr, windowStart } = require('./lib/dates');
 const { aggregate } = require('./lib/aggregate');
@@ -37,7 +38,7 @@ function getArg(name) {
 // friendly message never prints. `--port` with no value takes the next argv
 // token, which is how `--port --open` used to become NaN.
 function getPort() {
-  const raw = getArg('port') || process.env.PORT;
+  const raw = getArg('port') || loadConfig().port;
   if (raw == null) return 3600;
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
