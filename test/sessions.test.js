@@ -87,6 +87,26 @@ test('recordSession skips an older snapshot of the same session', () => {
   assert.strictEqual(written.costUsd, 2);
 });
 
+test('recordSession replaces a longer snapshot when the transcript is newer, as after a resume', () => {
+  const dir = tmpDir();
+  const T = NOW - 120_000;
+  const cost = statuslineInput().cost;
+  recordSession(statuslineInput({ transcript_path: makeTranscript(T), cost: { ...cost, total_duration_ms: 7_200_000 } }), dir, NOW);
+  recordSession(statuslineInput({ transcript_path: makeTranscript(T + 60_000), cost: { ...cost, total_duration_ms: 300_000 } }), dir, NOW);
+  const written = readSnapshot(dir);
+  assert.strictEqual(written.durationMs, 300_000);
+  assert.strictEqual(written.lastActiveAt, T + 60_000);
+});
+
+test('recordSession skips a snapshot whose transcript is older, whatever its duration', () => {
+  const dir = tmpDir();
+  const T = NOW - 120_000;
+  const cost = statuslineInput().cost;
+  recordSession(statuslineInput({ transcript_path: makeTranscript(T), cost: { ...cost, total_duration_ms: 300_000 } }), dir, NOW);
+  recordSession(statuslineInput({ transcript_path: makeTranscript(T - 60_000), cost: { ...cost, total_duration_ms: 900_000 } }), dir, NOW);
+  assert.strictEqual(readSnapshot(dir).durationMs, 300_000);
+});
+
 test('recordSession rejects an unsafe session id', () => {
   const parent = tmpDir();
   const dir = path.join(parent, 'sessions');
