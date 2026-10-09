@@ -20,3 +20,9 @@ then on.
 | [Feed "not useful" dismissals to Haiku](feed-dismissals-to-haiku.md) | Open: which dismissals to send, how to word them, token cost, and how to measure whether it helped |
 | [Group Today's sessions by launch](group-sessions-by-launch.md) | Open: sessions after a `/clear` in one `claude` launch show as separate rows; how to link them (a per-process id from the mod, the transcripts, or timing) and how the group row looks, open |
 | [Session reviews: action buttons](review-actions-design.md) | Open: Done and Not useful become right-aligned icon buttons with tooltips, Copy prompt gets a tooltip saying what it copies; icons or a menu, and the label, open. Build after D |
+| [All-time session drill-down](all-time-session-drill-down.md) | Open: per-session totals across all time on a new route; columns, paging and where it shows open |
+| [Per-project breakdown](per-project-breakdown.md) | Open: usage and cost per project; decoding folder names or using `cwd`, worktrees, and whether estimates are worth showing open |
+| [Five-hour window blocks](five-hour-windows.md) | Open: bucket usage into 5-hour windows like `/usage`; how a window starts and where it shows open |
+| [Same-week model comparison](same-week-model-comparison.md) | Open: compare two models used in one week; minimum calls, mixed-model prompts and where it shows open |
+| [Tool error rate by model](tool-errors-by-model.md) | Open: split the error rate by model and cause; add the model to tool use rows or join through calls open |
+| [Cost per unit of work](cost-per-unit-of-work.md) | Open: spend per commit or per Edit and Write call; repository counting and noise open |

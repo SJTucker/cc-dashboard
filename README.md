@@ -549,34 +549,3 @@ public/ui/panel-light.mjs  Lights the border of the panel under the pointer
 public/ui/row-order.mjs  Drag to reorder rows of panels; the order is saved in localStorage
 public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by style.css, with their SIL OFL licence files
 ```
-
-## Extending it
-
-A few obvious next steps if you want to keep going, roughly in order of effort:
-- **All-time session drill-down**: `lib/scan.js` already has everything needed
-  per-file; add a route such as `/api/sessions/history` that returns per-session
-  totals across all time, instead of only the daily/model rollups. `/api/sessions/live`
-  already covers today's sessions, so a new route needs a different name.
-- **Per-project breakdown**: project folder names under `~/.claude/projects` are
-  the encoded path (e.g. `-Users-you-code-myapp`) — decode and group by them.
-  Skipped in this offline version to keep the pricing table's approach honest: it's
-  an estimate, and cost figures for pieces smaller than the machine-wide daily total
-  didn't feel worth the extra code.
-- **5-hour billing-window blocks**: mirror what `/usage` shows, by bucketing
-  messages into rolling 5-hour windows instead of calendar days.
-- **A `--live` mode**: rerun the scan on an interval and push updates over SSE
-  instead of requiring a manual refresh.
-- **Same-week model comparison**: when two models run in the same week, compare them
-  side by side (cost per prompt, calls per prompt, output and thinking tokens per
-  call). Inside one week the calendar and the setup are the same for both, which
-  comparing this month with last month cannot give you. The efficiency records from
-  `lib/scan.js` already carry the model per call.
-- **Tool error rate by model**: `lib/scan.js` already joins tool_use to tool_result
-  errors. Split that by the model that made the call, and by cause. Without the cause
-  split the rate misleads: here Opus 5.5 looked twice as error-prone as Opus 5, but 64
-  of its 135 errors were the worktree isolation check blocking commands, which says
-  where it was run, not how well it used the tools.
-- **Cost per unit of work**: weekly spend divided by commits (from `git log` in each
-  session's `cwd`, counted once per repository because worktrees share history) or by
-  Edit/Write calls. It trends, but day-to-day values swing by a coefficient of
-  variation near 0.7, so label it as noisy.
