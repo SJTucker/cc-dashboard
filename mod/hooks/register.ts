@@ -372,7 +372,7 @@ function backfillText(judged: Judged) {
 // mean a dialog opened.
 const ACTIVITY_WRITE_MS = 250
 const DETAIL_MAX = 60
-// The same characters lib/activity.js accepts, because the id becomes a file name.
+// The same characters as SESSION_ID_PATTERN in lib/session-id.js, because the id becomes a file name. The mod cannot require lib/, so test/session-id.test.js checks the two match.
 const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/
 
 type ToolRun = { name: string; detail: string; startedAt: number }

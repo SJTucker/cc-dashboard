@@ -24,7 +24,7 @@ branch next to it. Asked for on 2026-10-07.
 
 ## Where titles show today
 
-- `lib/scan.js` reads the last `ai-title` line per session into `titleBySession`.
+- `lib/extract.js` reads the last `ai-title` line per session into `titleBySession`.
   `lib/review.js` reads the same line for session reviews.
 - `buildLiveSessions` in `lib/sessions.js` puts it on each session as `title`.
 - `public/app.js` shows it in three places, each with `contextLine` under it:
@@ -33,7 +33,7 @@ branch next to it. Asked for on 2026-10-07.
   - the review head (`.review-head`).
 - With no `ai-title`, a live session shows its first typed prompt. A review with no
   title shows the project and branch alone.
-- The branch is read from the transcripts' `gitBranch` in `lib/scan.js`. The project
+- The branch is read from the transcripts' `gitBranch` in `lib/extract.js`. The project
   comes from the mod's session snapshot (`projectName` in `lib/sessions.js`).
 
 ## Open questions

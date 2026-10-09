@@ -6,7 +6,8 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { freshServerDb, holdWriteLock } = helpers;
-const { openReviewDb, importReviewFiles, legacyReviewsDir, IMPORT_KEY } = require('../lib/review-db');
+const { isBusy } = require('../lib/db');
+const { openReviewDb, importReviewFiles, legacyReviewsDir, createReviewDbGetter, IMPORT_KEY } = require('../lib/review-db');
 
 function fixture() {
   const base = helpers.tmpDir(null, 'review-db');
@@ -20,14 +21,7 @@ function fixture() {
 const rows = (db, sql, ...args) => db.prepare(sql).all(...args).map((r) => ({ ...r }));
 
 test('legacyReviewsDir is under the config dir', () => {
-  const saved = process.env.CLAUDE_CONFIG_DIR;
-  process.env.CLAUDE_CONFIG_DIR = '/cfg';
-  try {
-    assert.strictEqual(legacyReviewsDir(), path.join('/cfg', 'cc-dashboard', 'reviews'));
-  } finally {
-    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = saved;
-  }
+  assert.strictEqual(legacyReviewsDir('/cfg'), path.join('/cfg', 'cc-dashboard', 'reviews'));
 });
 
 test('openReviewDb imports every review file once, with all fields and suggestion order', () => {
@@ -117,14 +111,15 @@ test('openReviewDb throws for a database it cannot open', () => {
 
 test('loading lib/review-db.js does not load the row store', () => {
   const { spawnSync } = require('child_process');
-  const script = "require('./lib/review-db'); const loaded = Object.keys(require.cache).map((p) => require('path').basename(p)); process.stdout.write(JSON.stringify(loaded.filter((n) => ['rowstore.js', 'store.js'].includes(n))));";
+  // require('module')._cache is the module cache object that the require function exposes.
+  const script = "require('./lib/review-db'); const loaded = Object.keys(require('module')._cache).map((p) => require('path').basename(p)); process.stdout.write(JSON.stringify(loaded.filter((n) => ['rowstore.js', 'store.js'].includes(n))));";
   const res = spawnSync(process.execPath, ['-e', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
   assert.strictEqual(res.stdout, '[]');
 });
 
-test('getReviewDb imports once per process, so a second call does not wait for the lock', async (t) => {
-  const { dbModule, file } = freshServerDb(t);
-  const { getReviewDb } = require('../lib/review-db');
+test('a reviews getter imports once, so a second call does not wait for the lock', async (t) => {
+  const { serverDb, base, file } = freshServerDb(t);
+  const getReviewDb = createReviewDbGetter(serverDb.get, path.join(base, 'cc-dashboard', 'reviews'));
   const handle = getReviewDb();
   const release = await holdWriteLock(t, file);
   const started = Date.now();
@@ -132,19 +127,19 @@ test('getReviewDb imports once per process, so a second call does not wait for t
   const took = Date.now() - started;
   await release();
   assert.ok(took < 100, `the second call took ${took} ms`);
-  assert.strictEqual(handle, dbModule.getServerDb());
+  assert.strictEqual(handle, serverDb.get());
 });
 
-test('a getReviewDb whose import meets the lock throws a busy error, and the next call imports', async (t) => {
-  const { dbModule, base, file } = freshServerDb(t);
+test('a reviews getter whose import meets the lock throws a busy error, and the next call imports', async (t) => {
+  const { serverDb, base, file } = freshServerDb(t);
   const dir = path.join(base, 'cc-dashboard', 'reviews');
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'sess-old.json'), JSON.stringify({ sessionId: 'sess-old', status: 'done', reviewedAt: 1, suggestions: [] }));
-  dbModule.getServerDb(); // creates the file before the lock is taken
-  const { getReviewDb } = require('../lib/review-db');
+  serverDb.get(); // creates the file before the lock is taken
+  const getReviewDb = createReviewDbGetter(serverDb.get, dir);
   const release = await holdWriteLock(t, file);
   const started = Date.now();
-  assert.throws(() => getReviewDb(), (err) => dbModule.isBusy(err));
+  assert.throws(() => getReviewDb(), (err) => isBusy(err));
   const took = Date.now() - started;
   await release();
   assert.ok(took < 1000, `the busy import gave up after ${took} ms`);
@@ -157,4 +152,15 @@ test('openReviewDb, the opener bin/review-session uses, keeps the 5000 ms busy t
   const db = openReviewDb(dbPath, legacy);
   t.after(() => db.close());
   assert.strictEqual(db.prepare('PRAGMA busy_timeout').get().timeout, 5000);
+});
+
+test('the import skips a stranded tmp file beside the review files', () => {
+  const f = fixture();
+  f.write('abc.json.4242', { sessionId: 'abc', status: 'done' });
+  const db = openReviewDb(f.dbPath, f.legacy);
+  try {
+    assert.deepStrictEqual(rows(db, 'SELECT session_id FROM reviews'), []);
+  } finally {
+    db.close();
+  }
 });

@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir, removeTree, withEnv } = require('./helpers');
+const { tmpDir, removeTree } = require('./helpers');
 
 test('tmpDir makes a cc-dash folder under the OS temp dir and removes it when the test ends', async (t) => {
   let dir;
@@ -49,38 +49,4 @@ test(
 
 test('removeTree does not throw when the folder is already gone', () => {
   assert.doesNotThrow(() => removeTree(path.join(os.tmpdir(), 'cc-dash-helpers-never-existed')));
-});
-
-test('withEnv sets variables and restores them, deleting a key that was unset before', async (t) => {
-  delete process.env.CC_DASH_TEST_UNSET;
-  process.env.CC_DASH_TEST_SET = 'before';
-  t.after(() => { delete process.env.CC_DASH_TEST_SET; });
-  await t.test('inner', (inner) => {
-    withEnv(inner, { CC_DASH_TEST_UNSET: 'during', CC_DASH_TEST_SET: 'during' });
-    assert.strictEqual(process.env.CC_DASH_TEST_UNSET, 'during');
-    assert.strictEqual(process.env.CC_DASH_TEST_SET, 'during');
-  });
-  assert.strictEqual('CC_DASH_TEST_UNSET' in process.env, false);
-  assert.strictEqual(process.env.CC_DASH_TEST_SET, 'before');
-});
-
-test('withEnv called twice for one key restores the value from before the first call', async (t) => {
-  process.env.CC_DASH_TEST_TWICE = 'original';
-  t.after(() => { delete process.env.CC_DASH_TEST_TWICE; });
-  await t.test('inner', (inner) => {
-    withEnv(inner, { CC_DASH_TEST_TWICE: 'first' });
-    withEnv(inner, { CC_DASH_TEST_TWICE: 'second' });
-    assert.strictEqual(process.env.CC_DASH_TEST_TWICE, 'second');
-  });
-  assert.strictEqual(process.env.CC_DASH_TEST_TWICE, 'original');
-});
-
-test('withEnv with undefined deletes the key for the test', async (t) => {
-  process.env.CC_DASH_TEST_DEL = 'present';
-  t.after(() => { delete process.env.CC_DASH_TEST_DEL; });
-  await t.test('inner', (inner) => {
-    withEnv(inner, { CC_DASH_TEST_DEL: undefined });
-    assert.strictEqual('CC_DASH_TEST_DEL' in process.env, false);
-  });
-  assert.strictEqual(process.env.CC_DASH_TEST_DEL, 'present');
 });

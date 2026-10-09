@@ -64,49 +64,40 @@ function tmpDir(t, name) {
   return dir;
 }
 
-// t.after hooks run in registration order. Restoring each call's own saved value in
-// that order would leave the second call's stale value in place. So the first call
-// for a test records the original of each key, and later calls only add keys.
-const savedByTest = new WeakMap();
-
-function setOrDelete(key, value) {
-  if (value === undefined) delete process.env[key];
-  else process.env[key] = String(value);
-}
-
-function withEnv(t, vars) {
-  let saved = savedByTest.get(t);
-  if (!saved) {
-    saved = new Map();
-    savedByTest.set(t, saved);
-    t.after(() => {
-      for (const [key, value] of saved) setOrDelete(key, value);
-    });
-  }
-  for (const [key, value] of Object.entries(vars)) {
-    if (!saved.has(key)) saved.set(key, process.env[key]);
-    setOrDelete(key, value);
-  }
-}
-
-// Boots the real server.js on an ephemeral port against an empty config dir. The
-// variables are set before server.js is required because it reads them at load time.
-function bootServer(t) {
-  const base = tmpDir(t, 'boot');
+// A config for one test, built by loadConfig, with every path in a fresh temp
+// folder. projects/demo exists, so the server has a transcript folder to walk.
+// rtkDb names a file that does not exist, so no test reads the developer's rtk
+// history.
+function testConfig(t, name = 'cfg') {
+  const { loadConfig } = require('../lib/config-dir');
+  const base = tmpDir(t, name);
   fs.mkdirSync(path.join(base, 'projects', 'demo'), { recursive: true });
-  withEnv(t, {
+  return loadConfig({
     CLAUDE_CONFIG_DIR: base,
-    RTK_DB: path.join(base, 'no-rtk-here.db'),
     CHANGES_FILE: path.join(base, 'changes.json'),
-    PORT: '0',
+    RTK_DB: path.join(base, 'no-rtk-here.db'),
   });
-  const serverPath = path.join(__dirname, '..', 'server');
-  delete require.cache[require.resolve(serverPath)];
-  const server = require(serverPath);
-  t.after(() => server.close());
-  return new Promise((resolve) => {
-    server.once('listening', () => resolve({ server, port: server.address().port, base }));
+}
+
+// Builds the server for `config` (createServer in server.js), listens on an
+// ephemeral port, and resolves once it listens. Fixtures can be written under
+// config.configDir until the first request: the row store opens on the first scan.
+async function bootServer(t, config = testConfig(t, 'boot')) {
+  const { createServer } = require('../server');
+  const server = createServer(config);
+  t.after(async () => {
+    await new Promise((resolve) => {
+      server.close(() => resolve());
+      server.closeAllConnections();
+    });
+    require('../lib/pricing').setSnapshots([]);
   });
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
+  const port = server.address().port;
+  return { server, config, port, url: `http://127.0.0.1:${port}` };
 }
 
 // Holds the write lock on the SQLite file `file` from a child process, as
@@ -138,20 +129,14 @@ function holdWriteLock(t, file) {
   });
 }
 
-// lib/db.js keeps the server's handle at module level. lib/rowstore.js keeps the row
-// store and lib/review-db.js keeps the import flag. This points CLAUDE_CONFIG_DIR at
-// a new temp folder and drops the cached copies of those modules and of lib/store.js
-// and lib/review.js, which load lib/db.js, so the test's next require starts with no
-// handle. The handle is closed after the test, before the folder is removed.
-const SERVER_DB_MODULES = ['../lib/db', '../lib/store', '../lib/rowstore', '../lib/review', '../lib/review-db'];
+// A server handle on a fresh transcripts.db in a temp folder, closed after the test.
 function freshServerDb(t) {
-  let dbModule = null;
-  t.after(() => dbModule && dbModule.closeServerDb());
+  const { createServerDb } = require('../lib/db');
   const base = tmpDir(t, 'serverdb');
-  withEnv(t, { CLAUDE_CONFIG_DIR: base });
-  for (const mod of SERVER_DB_MODULES) delete require.cache[require.resolve(mod)];
-  dbModule = require('../lib/db');
-  return { dbModule, base, file: dbModule.getStorePath() };
+  const file = path.join(base, 'transcripts.db');
+  const serverDb = createServerDb(file);
+  t.after(() => serverDb.close());
+  return { serverDb, base, file };
 }
 
-module.exports = { tmpDir, removeTree, withEnv, bootServer, holdWriteLock, freshServerDb };
+module.exports = { tmpDir, removeTree, testConfig, bootServer, holdWriteLock, freshServerDb };

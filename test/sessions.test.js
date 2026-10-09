@@ -4,7 +4,6 @@ const test = require('node:test');
 const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -87,6 +86,26 @@ test('recordSession skips an older snapshot of the same session', () => {
   assert.strictEqual(written.costUsd, 2);
 });
 
+test('recordSession replaces a longer snapshot when the transcript is newer', () => {
+  const dir = tmpDir();
+  const T = NOW - 120_000;
+  const cost = statuslineInput().cost;
+  recordSession(statuslineInput({ transcript_path: makeTranscript(T), cost: { ...cost, total_duration_ms: 7_200_000 } }), dir, NOW);
+  recordSession(statuslineInput({ transcript_path: makeTranscript(T + 60_000), cost: { ...cost, total_duration_ms: 300_000 } }), dir, NOW);
+  const written = readSnapshot(dir);
+  assert.strictEqual(written.durationMs, 300_000);
+  assert.strictEqual(written.lastActiveAt, T + 60_000);
+});
+
+test('recordSession skips a snapshot whose transcript is older, whatever its duration', () => {
+  const dir = tmpDir();
+  const T = NOW - 120_000;
+  const cost = statuslineInput().cost;
+  recordSession(statuslineInput({ transcript_path: makeTranscript(T), cost: { ...cost, total_duration_ms: 300_000 } }), dir, NOW);
+  recordSession(statuslineInput({ transcript_path: makeTranscript(T - 60_000), cost: { ...cost, total_duration_ms: 900_000 } }), dir, NOW);
+  assert.strictEqual(readSnapshot(dir).durationMs, 300_000);
+});
+
 test('recordSession rejects an unsafe session id', () => {
   const parent = tmpDir();
   const dir = path.join(parent, 'sessions');
@@ -155,17 +174,8 @@ test('recordSession never throws, even when the directory cannot be created', ()
   assert.deepStrictEqual(fs.readdirSync(empty), [], 'a missing statusline input writes no snapshot');
 });
 
-test('getSessionsDir follows CLAUDE_CONFIG_DIR, then ~/.claude', () => {
-  const saved = process.env.CLAUDE_CONFIG_DIR;
-  try {
-    process.env.CLAUDE_CONFIG_DIR = '/tmp/cfg';
-    assert.strictEqual(getSessionsDir(), path.join('/tmp/cfg', 'cc-dashboard', 'sessions'));
-    delete process.env.CLAUDE_CONFIG_DIR;
-    assert.strictEqual(getSessionsDir(), path.join(os.homedir(), '.claude', 'cc-dashboard', 'sessions'));
-  } finally {
-    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = saved;
-  }
+test('getSessionsDir is under the config dir', () => {
+  assert.strictEqual(getSessionsDir('/cfg'), path.join('/cfg', 'cc-dashboard', 'sessions'));
 });
 
 // A throwaway config dir for a bin script, with its sessions folder already made.
@@ -183,6 +193,18 @@ function runBin(name, input, config) {
     env: { ...process.env, CLAUDE_CONFIG_DIR: config },
   });
 }
+
+test('bin/record-statusline records with a PORT that the server would refuse', () => {
+  const { config, sessions } = configDir();
+  const res = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'record-statusline')], {
+    input: JSON.stringify(statuslineInput()),
+    encoding: 'utf8',
+    env: { ...process.env, CLAUDE_CONFIG_DIR: config, PORT: 'abc' },
+  });
+  assert.strictEqual(res.status, 0, res.stderr);
+  assert.strictEqual(res.stdout, '');
+  assert.strictEqual(readSnapshot(sessions).sessionId, 'abc-123');
+});
 
 for (const name of ['record-statusline', 'record-limits']) {
   test(`bin/${name} writes the session snapshot and the rate limits`, () => {

@@ -4,7 +4,6 @@ const test = require('node:test');
 const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 
 const { getActivityDir, readActivity, resolveActivity, STALE_AFTER_MS } = require('../lib/activity');
@@ -33,18 +32,8 @@ function write(dir, a, name = `${a.sessionId}.json`) {
   fs.writeFileSync(path.join(dir, name), typeof a === 'string' ? a : JSON.stringify(a));
 }
 
-test('getActivityDir follows CLAUDE_CONFIG_DIR, expanding a leading ~, else ~/.claude', (t) => {
-  const saved = process.env.CLAUDE_CONFIG_DIR;
-  t.after(() => {
-    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = saved;
-  });
-  process.env.CLAUDE_CONFIG_DIR = '/cfg';
-  assert.strictEqual(getActivityDir(), path.join('/cfg', 'cc-dashboard', 'activity'));
-  process.env.CLAUDE_CONFIG_DIR = '~/cfg';
-  assert.strictEqual(getActivityDir(), path.join(os.homedir(), 'cfg', 'cc-dashboard', 'activity'));
-  delete process.env.CLAUDE_CONFIG_DIR;
-  assert.strictEqual(getActivityDir(), path.join(os.homedir(), '.claude', 'cc-dashboard', 'activity'));
+test('getActivityDir is under the config dir', () => {
+  assert.strictEqual(getActivityDir('/cfg'), path.join('/cfg', 'cc-dashboard', 'activity'));
 });
 
 test('readActivity returns a map keyed by session id', () => {

@@ -5,16 +5,10 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const { toolDetail } = require('../lib/extract');
 
-// lib/scan.js reads CLAUDE_CONFIG_DIR when it loads, so each fixture gets fresh
-// copies of every module that depends on it.
-function load(base) {
-  process.env.CLAUDE_CONFIG_DIR = base;
-  for (const m of ['../lib/scan', '../lib/sessions', '../lib/updates', '../lib/review', '../lib/db', '../lib/review-db']) {
-    delete require.cache[require.resolve(m)];
-  }
-  return { review: require('../lib/review'), scan: require('../lib/scan'), reviewDb: require('../lib/review-db') };
-}
+const review = require('../lib/review');
+const reviewDb = require('../lib/review-db');
 
 const tmpDir = () => helpers.tmpDir(null, 'review');
 
@@ -34,7 +28,6 @@ function writeTranscript(dir, lines, name = 's.jsonl') {
 
 test('digestTranscript lists prompts, replies, tools, errors, large output and compactions in order', async () => {
   const base = tmpDir();
-  const { review, scan } = load(base);
   const file = writeTranscript(base, [
     typed('fix the build'),
     say('Looking at the build.'),
@@ -46,7 +39,7 @@ test('digestTranscript lists prompts, replies, tools, errors, large output and c
     { ...typed('summary of the earlier conversation'), isCompactSummary: true },
     typed('now commit'),
   ]);
-  const bash = scan.toolDetail('Bash', { command: 'ls -la' });
+  const bash = toolDetail('Bash', { command: 'ls -la' });
   assert.deepStrictEqual(await review.digestTranscript(file), {
     prompts: 2,
     text: [
@@ -64,7 +57,6 @@ test('digestTranscript lists prompts, replies, tools, errors, large output and c
 
 test('digestTranscript skips subagent lines, slash commands and repeated tool_use blocks', async () => {
   const base = tmpDir();
-  const { review } = load(base);
   const file = writeTranscript(base, [
     typed('<command-name>/clear</command-name>'),
     { ...typed('a subagent task'), isSidechain: true },
@@ -77,14 +69,12 @@ test('digestTranscript skips subagent lines, slash commands and repeated tool_us
 
 test('digestTranscript skips a line that is not JSON and reads on', async () => {
   const base = tmpDir();
-  const { review } = load(base);
   const file = writeTranscript(base, [typed('first'), '{"type":"user","mess', typed('second')]);
   assert.deepStrictEqual(await review.digestTranscript(file), { prompts: 2, text: 'USER: first\nUSER: second' });
 });
 
 test('digestTranscript keeps the start and end of a long session', async () => {
   const base = tmpDir();
-  const { review } = load(base);
   const lines = Array.from({ length: 400 }, (_, i) => typed(`p${i} ${'x'.repeat(300)}`));
   const { prompts, text } = await review.digestTranscript(writeTranscript(base, lines));
   assert.strictEqual(prompts, 400);
@@ -96,17 +86,14 @@ test('digestTranscript keeps the start and end of a long session', async () => {
 
 test('digestTranscript returns null for a missing file', async () => {
   const base = tmpDir();
-  const { review } = load(base);
   assert.strictEqual(await review.digestTranscript(path.join(base, 'gone.jsonl')), null);
 });
 
 test('parseReview accepts an empty list as no suggestions', () => {
-  const { review } = load(tmpDir());
   assert.deepStrictEqual(review.parseReview('{"suggestions": []}'), []);
 });
 
 test('parseReview reads a fenced reply and collapses whitespace', () => {
-  const { review } = load(tmpDir());
   const reply = '```json\n{"suggestions": [{"kind": "token-waste", "text": "Read  the file\\nonce."}, {"kind": "claude-md", "text": "Add a rule."}]}\n```';
   assert.deepStrictEqual(review.parseReview(reply), [
     { kind: 'token-waste', text: 'Read the file once.' },
@@ -115,7 +102,6 @@ test('parseReview reads a fenced reply and collapses whitespace', () => {
 });
 
 test('parseReview drops unknown kinds and empty text, keeps at most 3, and cuts text to 300 chars', () => {
-  const { review } = load(tmpDir());
   const items = [
     { kind: 'magic', text: 'dropped' },
     { kind: 'workflow', text: '   ' },
@@ -130,7 +116,6 @@ test('parseReview drops unknown kinds and empty text, keeps at most 3, and cuts 
 });
 
 test('parseReview returns null for prose, a top-level array, or suggestions that are not a list', () => {
-  const { review } = load(tmpDir());
   assert.strictEqual(review.parseReview('Nothing to suggest.'), null);
   assert.strictEqual(review.parseReview('[]'), null);
   assert.strictEqual(review.parseReview('{"suggestions": "none"}'), null);
@@ -138,7 +123,6 @@ test('parseReview returns null for prose, a top-level array, or suggestions that
 });
 
 test('the system prompt names every kind and allows an empty list', () => {
-  const { review } = load(tmpDir());
   for (const kind of review.KINDS) assert.ok(review.SYSTEM.includes(`"${kind}"`), kind);
   assert.ok(review.SYSTEM.includes('{"suggestions": []}'));
 });
@@ -155,11 +139,10 @@ function writeSnapshot(dir, s) {
 
 function fixture() {
   const base = tmpDir();
-  const mods = load(base);
   return {
-    ...mods,
+    review,
     base,
-    db: mods.reviewDb.openReviewDb(path.join(base, 'transcripts.db'), path.join(base, 'cc-dashboard', 'reviews')),
+    db: reviewDb.openReviewDb(path.join(base, 'transcripts.db'), path.join(base, 'cc-dashboard', 'reviews')),
     sessionsDir: path.join(base, 'cc-dashboard', 'sessions'),
     projects: path.join(base, 'projects'),
   };
@@ -337,7 +320,7 @@ test('readReviews lists done and failed reviews from the last 7 days with sugges
   seed(review, db, 'skipped', { status: 'skipped', reason: 'under 3 prompts' });
   review.claimReview(db, { sessionId: 'pending', project: 'demo', endedAt: NOW - HOUR }, NOW);
   seed(review, db, 'old', { endedAt: NOW - 8 * DAY }, [], NOW - 8 * DAY);
-  assert.deepStrictEqual(review.readReviews(db, NOW, path.join(base, 'projects')), [
+  assert.deepStrictEqual(review.readReviews(db, path.join(base, 'projects'), NOW), [
     { sessionId: 'failed', title: null, branch: null, transcript: null, project: 'demo', endedAt: NOW - HOUR, reviewedAt: NOW - HOUR, status: 'failed', suggestions: [], error: 'Haiku call failed (Error)' },
     { sessionId: 'done', title: null, branch: null, transcript: null, project: 'demo', endedAt: NOW - 2 * HOUR, reviewedAt: NOW - HOUR, status: 'done', suggestions: [
       { idx: 0, kind: 'workflow', text: 'x', dismissedAt: null, reason: null },
@@ -347,8 +330,8 @@ test('readReviews lists done and failed reviews from the last 7 days with sugges
 });
 
 test('readReviews returns an empty list for an empty database', () => {
-  const { review, db } = fixture();
-  assert.deepStrictEqual(review.readReviews(db, NOW), []);
+  const { review, db, projects } = fixture();
+  assert.deepStrictEqual(review.readReviews(db, projects, NOW), []);
 });
 
 test('readReviews returns the saved title and transcript, and finds the transcript of a row without one', () => {
@@ -356,7 +339,7 @@ test('readReviews returns the saved title and transcript, and finds the transcri
   seed(review, db, 'saved', { transcript: '/x/saved.jsonl', title: 'Fix the chart', branch: 'feat/chart' });
   seed(review, db, 'older', {});
   writeSessionTranscript(projects, 'older', 1);
-  const byId = Object.fromEntries(review.readReviews(db, NOW, projects).map((r) => [r.sessionId, r]));
+  const byId = Object.fromEntries(review.readReviews(db, projects, NOW).map((r) => [r.sessionId, r]));
   assert.deepStrictEqual([byId.saved.title, byId.saved.transcript, byId.saved.branch], ['Fix the chart', '/x/saved.jsonl', 'feat/chart']);
   assert.deepStrictEqual([byId.older.title, byId.older.transcript], [null, path.join(projects, '-work-demo', 'older.jsonl')]);
 });
@@ -415,9 +398,9 @@ test('setDismissal rejects a reason outside done and not_useful', () => {
 });
 
 test('a dismissal survives readReviews and a later finishReview of another session', () => {
-  const { review, db } = fixture();
+  const { review, db, projects } = fixture();
   seed(review, db, 'a', {}, [{ kind: 'workflow', text: 'x' }]);
   review.setDismissal(db, 'a', 0, 'done', NOW);
   seed(review, db, 'b', {}, [{ kind: 'workflow', text: 'y' }]);
-  assert.strictEqual(review.readReviews(db, NOW).find((r) => r.sessionId === 'a').suggestions[0].reason, 'done');
+  assert.strictEqual(review.readReviews(db, projects, NOW).find((r) => r.sessionId === 'a').suggestions[0].reason, 'done');
 });
