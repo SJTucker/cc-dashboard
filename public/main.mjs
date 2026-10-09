@@ -1,4 +1,5 @@
 import { state, shown } from './state.mjs';
+import { getJson } from './api.mjs';
 import {
   formatCost, formatTokens, formatPercent, formatDuration, formatAgo, localDateStr, costPerDay,
   shortDate, fullDate, shortModel, axisTokens, axisCost, escapeHtml,
@@ -1025,9 +1026,9 @@ const LIMITS_STALE_MS = 60 * 60 * 1000;
 
 // Plan usage describes right now, not a date range. The panel shows only on
 // Today, and the 75% warning banner shows on every range. Like rtk it is
-// optional: a failure resolves to null and hides both.
+// optional: a failure, including a 500, resolves to null and hides both.
 function requestLimits() {
-  return fetch('/api/limits').then((res) => res.json()).catch(() => null);
+  return getJson('/api/limits', { optional: true });
 }
 
 // The last drawn state of the four panels that renderPayload draws on every
@@ -1111,13 +1112,9 @@ function renderLimits(limits) {
   document.getElementById('limitsNote').textContent = `as of ${asOf} (${zone})${stale}`;
 }
 
-// Today's sessions from the statusline snapshots (see lib/sessions.js). A
-// failure resolves to null, same as requestLimits.
+// Today's sessions from the statusline snapshots (see lib/sessions.js). Optional, like requestLimits.
 function requestSessions() {
-  return fetch('/api/sessions/live')
-    .then((res) => res.json())
-    .then((payload) => (payload && payload.error ? null : payload))
-    .catch(() => null);
+  return getJson('/api/sessions/live', { optional: true });
 }
 
 // The suffix of a Live sessions row's Last active cell. Words, not only a colour,
@@ -1408,14 +1405,11 @@ function renderTimeline(live) {
     `${lanes.length} ${lanes.length === 1 ? 'session' : 'sessions'} today · ${liveLanes} live`;
 }
 
-// Reviews of ended sessions from the last 7 days (see lib/review.js). A server
-// error resolves to { error } so the panel shows the reason. A network failure
-// resolves to null, same as requestSessions.
+// Reviews of ended sessions from the last REVIEW_DAYS days (see lib/review.js). A
+// server error resolves to { error } so the panel shows the reason. A network
+// failure (status 0) resolves to null and hides the panel, like requestSessions.
 function requestReviews() {
-  return fetch('/api/reviews')
-    .then((res) => res.json())
-    .then((payload) => (payload && payload.error ? { error: payload.detail || payload.error } : payload))
-    .catch(() => null);
+  return getJson('/api/reviews').then((reviews) => (reviews.error && reviews.status === 0 ? null : reviews));
 }
 
 const REVIEW_KINDS = {
@@ -1649,12 +1643,9 @@ function renderLimitsBanner(limits) {
 // The Record day card's all-time value. Fetched once on load and once on
 // Refresh, not on the 5s live poll or a range switch: /api/records reads the all-time
 // and 7-day aggregates, so polling it on every tick would buy nothing. A failure,
-// including a 500 whose body is { error }, resolves to null, same as requestSessions.
+// including a 500 whose body is { error }, resolves to null. Optional, like requestSessions.
 function requestRecords() {
-  return fetch('/api/records')
-    .then((res) => res.json())
-    .then((payload) => (payload && payload.error ? null : payload))
-    .catch(() => null);
+  return getJson('/api/records', { optional: true });
 }
 
 // Kept so /api/records resolving after the first render can redraw the card
@@ -1838,7 +1829,10 @@ let lastAppliedDate = null;
 async function loadPricesSource() {
   if (!neededRequests(state.hiddenKeys, state.currentDays).has('prices')) return;
   const note = document.getElementById('pricesSource');
-  const source = await fetch('/api/prices').then((r) => r.json()).catch(() => null);
+  // /api/prices answers 200 with an error field when prices.json was ignored.
+  // That field is a warning to show, so this request does not use getJson.
+  const res = await fetch('/api/prices').catch(() => null);
+  const source = res?.ok ? await res.json().catch(() => null) : null;
   if (!source) {
     note.textContent = '';
     return;
@@ -2475,14 +2469,12 @@ async function loadChanges() {
   if (!neededRequests(state.hiddenKeys, state.currentDays).has('changes')) return;
   const seq = ++changesSeq;
   showChangesLoading();
+  const report = await getJson('/api/changes');
+  if (seq !== changesSeq) return;
   try {
-    const res = await fetch('/api/changes');
-    const report = await res.json();
-    if (seq !== changesSeq) return;
-    if (report.error) throw new Error(report.detail || report.error);
+    if (report.error) throw new Error(report.error);
     renderChanges(report);
   } catch (err) {
-    if (seq !== changesSeq) return;
     // A spinner that never stops reads as still loading, so it goes, and the
     // before/after panel has nothing to show without a report.
     for (const id of CHANGES_CHARTS) document.getElementById(id).replaceChildren();
@@ -3004,21 +2996,16 @@ async function fetchAll({ busy = false } = {}) {
   if (busy) setBusy(true);
 
   // Every request is issued before any is awaited, so the summary never
-  // waits on the others. None of the promises rejects. rtk and limits
+  // waits on the others. None of the promises rejects (getJson never does). rtk and limits
   // are optional and resolve to null on failure, so an absent or unreadable source
   // hides its panel. A failed summary resolves to an error payload, which
   // renderPayload turns into the error banner after limits have rendered.
-  const summaryRequest = fetch(`/api/summary?days=${state.currentDays}`)
-    .then((res) => res.json())
-    .catch((err) => ({ error: err.message }));
+  const summaryRequest = getJson(`/api/summary?days=${state.currentDays}`);
   // A request whose every panel is hidden is skipped (see neededRequests in
   // visibility.js), and its panels render from null, as on a failed request.
   const needed = neededRequests(state.hiddenKeys, state.currentDays);
   const rtkRequest = needed.has('rtk')
-    ? fetch(`/api/rtk?days=${state.currentDays}`)
-      .then((res) => res.json())
-      .then((payload) => (payload && payload.error ? null : payload))
-      .catch(() => null)
+    ? getJson(`/api/rtk?days=${state.currentDays}`, { optional: true })
     : Promise.resolve(null);
 
   const limitsRequest = requestLimits();
@@ -3064,7 +3051,7 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
 
   if (data.error) {
     banner.hidden = false;
-    banner.textContent = `Couldn't load usage data: ${data.detail || data.error}`;
+    banner.textContent = `Couldn't load usage data: ${data.error}`;
     lastSignature = null;
     return;
   }
