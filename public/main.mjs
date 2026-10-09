@@ -2,16 +2,12 @@ import { state, shown } from './state.mjs';
 import { getJson } from './api.mjs';
 import { createSequence, createDrawGuard } from './guards.mjs';
 import {
-  formatCost, formatTokens, formatPercent, formatDuration, formatAgo, localDateStr, costPerDay,
+  formatCost, formatTokens, formatPercent, formatAgo, localDateStr, costPerDay,
   shortDate, fullDate, axisTokens, axisCost, escapeHtml,
 } from './format.mjs';
-import {
-  el, svgEl, hideTooltip, withTooltip, chartWidth, spinnerNode,
-} from './dom.mjs';
-import { DETAIL_LIMIT, LIVE_WINDOW_MS, REVIEW_DAYS, LIMIT_WARN_PERCENT } from './constants.mjs';
-import {
-  TOKEN_SERIES, appendPatternDefs, fillFor, segmentTexture,
-} from './charts/palette.mjs';
+import { el, spinnerNode } from './dom.mjs';
+import { DETAIL_LIMIT, REVIEW_DAYS } from './constants.mjs';
+import { TOKEN_SERIES, segmentTexture } from './charts/palette.mjs';
 import { drawHBars } from './charts/hbars.mjs';
 import { drawBarChart, drawCumulativeChart } from './charts/bar.mjs';
 import { drawModelDailyChart } from './charts/stacked.mjs';
@@ -22,6 +18,10 @@ import { drawSplitBar } from './charts/split.mjs';
 import {
   WEEK_MS, markerDate, markerIcon, timeDomain, drawSessionStartChart, drawMetricChart,
 } from './charts/setup-changes.mjs';
+
+import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits.mjs';
+import { requestSessions, renderSessions, contextLine } from './panels/sessions.mjs';
+import { renderTimeline, resetTimeline } from './panels/timeline.mjs';
 
 // A detail row for Read, Write or Edit is an absolute file path. The name cell
 // truncates from the right, which on a path shows the part every row has in common,
@@ -185,401 +185,10 @@ function renderRtkCommands(commands) {
   });
 }
 
-// "Resets 5:20pm" today, "Resets Oct 4 at 5am" on another day, worded the way
-// Claude Code's /usage screen words it.
-function formatReset(ms) {
-  // The cache's resets_at lands a few milliseconds either side of the minute
-  // (e.g. 22:19:59.941Z), so round to the nearest minute before formatting.
-  const d = new Date(Math.round(ms / 60000) * 60000);
-  const time = d
-    .toLocaleTimeString('en-US', { hour: 'numeric', minute: d.getMinutes() ? '2-digit' : undefined })
-    .replace(/\s/g, '')
-    .toLowerCase();
-  if (localDateStr(d) === localDateStr(new Date())) return `Resets ${time}`;
-  return `Resets ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${time}`;
-}
-
-// The usage-cache source only refreshes while Claude Code runs, and /usage itself
-// stops trusting cached bars after 60 minutes, so the panel says so past that age.
-// The statusline source changes after every API response, so it only reaches this
-// age when no session has run for an hour. The same threshold applies to it.
-const LIMITS_STALE_MS = 60 * 60 * 1000;
-
-// Plan usage describes right now, not a date range. The panel shows only on
-// Today, and the 75% warning banner shows on every range. Like rtk it is
-// optional: a failure, including a 500, resolves to null and hides both.
-function requestLimits() {
-  return getJson('/api/limits', { optional: true });
-}
-
-// One draw guard per panel that renderPayload draws on every settled response:
-// Plan usage, the limits banner, Live sessions and Session reviews.
-// redrawCharts leaves them alone, because a change of width does not change a
-// table.
-const limitsGuard = createDrawGuard();
-const bannerGuard = createDrawGuard();
-const sessionsGuard = createDrawGuard();
+// Draw guard for Session reviews, which renderPayload draws on every settled
+// response. redrawCharts leaves it alone, because a change of width does not
+// change a table.
 const reviewsGuard = createDrawGuard();
-
-// Today's share of the weekly limit, as a row in the Plan usage panel. The bar fills
-// against 100% of the week, like the weekly rows above it, so the two scales match.
-// On a workday a tick marks the day's budget. A weekend has no budget and no tick.
-function dailyShareRow(today) {
-  const notes = [];
-  if (today.budget == null) {
-    notes.push('weekend, no budget');
-  } else {
-    notes.push(`budget ${today.budget}%`);
-    if (today.rollingBudget != null) {
-      const days = `${today.workdaysLeft} workday${today.workdaysLeft === 1 ? '' : 's'} to reset`;
-      notes.push(`rolling ${Math.round(today.rollingBudget)}% (${days})`);
-    }
-  }
-  if (today.from === 'first-reading') notes.push("counted from today's first reading");
-  if (today.from === 'reset') notes.push('counted from the weekly reset');
-  if (today.from === 'no-reading-today') notes.push('no API response yet today');
-
-  const meter = shareMeter(today);
-  const fill = el('i');
-  fill.style.width = meter.fill + '%';
-  const track = el('span', { class: 'usage-track' }, [fill]);
-  if (meter.tick != null) {
-    const tick = el('b', { class: 'budget-tick', title: `budget ${meter.tick}%` });
-    tick.style.left = meter.tick + '%';
-    track.appendChild(tick);
-  }
-  return el('div', { class: 'limit-row' }, [
-    el('span', { class: 'limit-name', text: 'Today (share of the week)' }),
-    track,
-    el('span', { class: 'limit-pct', text: `${Math.round(today.share)}% of the week` }),
-    el('span', { class: 'limit-reset', text: notes.join(' · ') }),
-  ]);
-}
-
-function renderLimits(limits) {
-  const panel = document.getElementById('limitsPanel');
-  panel.hidden = !limits || state.currentDays !== 'today';
-  if (panel.hidden) return;
-  limitsGuard.draw(limits, () => drawLimits(limits));
-}
-
-function drawLimits(limits) {
-  const rows = document.getElementById('limitsRows');
-  rows.replaceChildren();
-  for (const limit of limits.limits) {
-    const fill = el('i');
-    fill.style.width = Math.min(100, Math.max(0, limit.percent)) + '%';
-    rows.appendChild(el('div', { class: 'limit-row' }, [
-      el('span', { class: 'limit-name', text: limit.label }),
-      el('span', { class: 'usage-track' }, [fill]),
-      el('span', { class: 'limit-pct', text: `${Math.round(limit.percent)}% used` }),
-      el('span', { class: 'limit-reset', text: limit.resetsAt == null ? '' : formatReset(limit.resetsAt) }),
-    ]));
-  }
-  if (limits.today) rows.appendChild(dailyShareRow(limits.today));
-  const asOf = new Date(limits.fetchedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
-  const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const stale = Date.now() - limits.fetchedAt > LIMITS_STALE_MS
-    ? ' · may be stale'
-    : '';
-  document.getElementById('limitsNote').textContent = `as of ${asOf} (${zone})${stale}`;
-}
-
-// Today's sessions from the statusline snapshots (see lib/sessions.js). Optional, like requestLimits.
-function requestSessions() {
-  return getJson('/api/sessions/live', { optional: true });
-}
-
-// The suffix of a Live sessions row's Last active cell. Words, not only a colour,
-// mark each state: a /clear, any other end, or a response in the last 10 minutes.
-function sessionState(s) {
-  if (s.ended === 'clear') return ' · cleared';
-  if (s.ended) return ' · ended';
-  return s.live ? ' · live' : '';
-}
-
-// Projects whose ended sessions are shown one by one. Kept for the page's lifetime
-// only, and read again by every renderSessions call so the 5 s poll keeps it.
-const expandedProjects = new Set();
-let lastLiveSessions = null;
-// Each group row's toggle button by project. renderSessions replaces the tbody, so it
-// uses this map to move keyboard focus to the new button for the same project.
-let sessionToggles = new Map();
-
-// Runs on every renderPayload, like renderLimits, and rebuilds when the payload,
-// the expanded groups or the clock minute changed. The minute is there because
-// "Last active" moves with the clock even when the payload does not. Hidden off
-// Today and when no session has a snapshot, for example with no statusline hook
-// set up. The Running now table hides when no session is live.
-function renderSessions(live) {
-  const panel = document.getElementById('sessionsPanel');
-  panel.hidden = !live || !live.sessions.length || state.currentDays !== 'today';
-  if (panel.hidden) return;
-  lastLiveSessions = live;
-  // expandedProjects is in the key, so a group toggle's own call redraws.
-  sessionsGuard.draw([live, [...expandedProjects]], () => drawSessions(live));
-}
-
-function drawSessions(live) {
-  const focused = [...sessionToggles].find(([, button]) => button === document.activeElement);
-  const toggles = new Map();
-
-  const now = Date.now();
-  const cell = (text, cls) => el('td', cls ? { class: cls, text } : { text });
-  const lines = (added, removed) => `+${added} −${removed}`;
-  // ⬢ for a live session, ⬡ for any other. The Last active cell still says the state in words.
-  const sessionCell = (s) => el('td', {}, [
-    el('span', { class: 'session-hex', 'aria-hidden': 'true', text: s.live ? '⬢' : '⬡' }),
-    ...(s.title
-      ? [el('span', { class: s.titleSource === 'prompt' ? 'session-title from-prompt' : 'session-title', title: s.title, text: s.title })]
-      : []),
-    contextLine(s),
-  ]);
-  // The number is text. The bar behind it is one series in one colour, its width the
-  // row's share of the day's highest cost (costShare), so it needs no texture. The
-  // tooltip carries the whole-session counter, which includes earlier days.
-  const costCell = (usd, title, share) => {
-    const td = el('td', { class: 'num cost cost-cell', title });
-    if (share !== null) {
-      const bar = el('span', { class: 'cost-bar', 'aria-hidden': 'true' });
-      bar.style.width = `${Math.round(share * 100)}%`;
-      td.appendChild(bar);
-    }
-    td.appendChild(el('span', { class: 'cost-value', text: formatCost(usd) }));
-    return td;
-  };
-
-  const items = groupSessions(live.sessions);
-  const maxCost = Math.max(0, ...live.sessions.map((s) => s.costTodayUsd));
-
-  const sessionRow = (s, cls) => el('tr', cls ? { class: cls } : {}, [
-    sessionCell(s),
-    cell(String(s.prompts), 'num'),
-    cell(formatDuration(s.durationMs), 'num'),
-    cell(lines(s.linesAdded, s.linesRemoved), 'num'),
-    costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, costShare(s.costTodayUsd, maxCost)),
-    cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
-  ]);
-  const groupRow = (g) => {
-    const name = g.project || '—';
-    const open = expandedProjects.has(g.project);
-    const toggle = el('button', {
-      type: 'button',
-      class: 'row-toggle',
-      'aria-expanded': String(open),
-      'aria-label': `${open ? 'Collapse' : 'Expand'} ${g.sessions.length} ended sessions of ${name}`,
-    });
-    toggle.addEventListener('click', () => {
-      if (expandedProjects.has(g.project)) expandedProjects.delete(g.project);
-      else expandedProjects.add(g.project);
-      renderSessions(lastLiveSessions);
-    });
-    toggles.set(g.project, toggle);
-    const counts = [[g.cleared, 'cleared'], [g.ended, 'ended']]
-      .filter(([n]) => n)
-      .map(([n, word]) => ` · ${n} ${word}`)
-      .join('');
-    return el('tr', { class: 'session-group' }, [
-      el('td', {}, [
-        toggle,
-        el('span', { class: 'session-hex', 'aria-hidden': 'true', text: '⬡' }),
-        document.createTextNode(name),
-      ]),
-      cell(String(g.prompts), 'num'),
-      cell(formatDuration(g.durationMs), 'num'),
-      cell(lines(g.linesAdded, g.linesRemoved), 'num'),
-      costCell(g.costTodayUsd, `Session totals since they started: ${formatCost(g.costUsd)}`, costShare(g.costTodayUsd, maxCost)),
-      cell(formatAgo(g.lastActiveAt, now) + counts),
-    ]);
-  };
-  const rows = [];
-  for (const item of items) {
-    if (item.type === 'session') {
-      rows.push(sessionRow(item.session));
-      continue;
-    }
-    rows.push(groupRow(item));
-    if (expandedProjects.has(item.project)) {
-      for (const s of item.sessions) rows.push(sessionRow(s, 'session-child'));
-    }
-  }
-  const t = live.total;
-  rows.push(el('tr', { class: 'sessions-total' }, [
-    cell('Total'),
-    cell(String(live.sessions.reduce((sum, s) => sum + s.prompts, 0)), 'num'),
-    // Concurrent sessions overlap, so wall durations do not add up.
-    cell('—', 'num'),
-    cell(lines(t.linesAdded, t.linesRemoved), 'num'),
-    el('td', { class: 'num cost', text: formatCost(t.costTodayUsd) }),
-    cell(''),
-  ]));
-  document.getElementById('sessionsTable').replaceChildren(...rows);
-  sessionToggles = toggles;
-  if (focused) toggles.get(focused[0])?.focus();
-
-  // Running now: live sessions and sessions waiting on you, in a fixed order. State
-  // and Doing now come from the mod's activity files (lib/activity.js) and show "—"
-  // without the mod.
-  const running = runningSessions(live.sessions);
-  document.getElementById('runningSessions').hidden = !running.length;
-  document.getElementById('runningTable').replaceChildren(...running.map((s) => {
-    const label = activityLabel(s.activity);
-    return el('tr', {}, [
-      sessionCell(s),
-      // Waiting uses the brighter text colour as well as its glyph.
-      el('td', label?.attention ? { class: 'is-attention', text: label.text } : { text: label ? label.text : '—' }),
-      cell(doingNow(s.activity) ?? '—'),
-      costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, null),
-      // A waiting session can be past its live window, so only live rows get is-live.
-      cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
-    ]);
-  }));
-
-  const liveCount = live.sessions.filter((s) => s.live).length;
-  const endedCount = live.sessions.filter((s) => s.ended).length;
-  const ended = endedCount ? ` · ${endedCount} ended` : '';
-  document.getElementById('sessionsNote').textContent =
-    `${live.sessions.length} today · ${liveCount} live${ended}`;
-}
-
-// Session timeline: one lane per session that has activity today (laneLayout in
-// public/chart-geometry.js), with a bar per span. A live session's bars are solid
-// and, when its last call was within the last 10 minutes, its last bar ends in an
-// arrowhead at now. Every other session's bars carry the
-// diagonal texture. The key in the p.panel-note under the chart (public/index.html)
-// says so in words, so the two kinds never depend on colour. SVG fills need a literal colour for the texture pattern,
-// so TIMELINE_COLOR repeats --accent-cyan from public/style.css.
-const TIMELINE_COLOR = '#3fe0ff';
-const TIMELINE_LANE_HEIGHT = 22;
-const TIMELINE_BAR_HEIGHT = 10;
-const TIMELINE_AXIS_HEIGHT = 20;
-const TIMELINE_GUTTER = 200;
-const TIMELINE_RIGHT_PAD = 10;
-
-// The redraw tears down the SVG, which would kill an open tooltip, so an unchanged
-// payload within the same minute and width skips it. The minute is in the signature
-// because the "now" line and the open bars move with the clock.
-let timelineSignature = null;
-
-function cutLabel(text, max) {
-  return text.length > max ? `${text.slice(0, Math.max(0, max - 1))}…` : text;
-}
-
-function clockTime(ms) {
-  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-// The line under a session's title: the project, then the git branch. The branch is
-// its own span so CSS can cut a long name. Its tooltip has the full name and, for a
-// session that switched branch, every branch in order. A review has a branch but no
-// branches list. extra is text appended at the end, such as a review's end time.
-function contextLine(item, extra = '') {
-  const parts = [document.createTextNode(item.project || '—')];
-  if (item.branch) {
-    const branches = item.branches || [];
-    const tip = branches.length > 1 ? `${item.branch}\nbranches: ${branches.join(' → ')}` : item.branch;
-    parts.push(document.createTextNode(' · '), el('span', { class: 'session-branch', title: tip, text: item.branch }));
-  }
-  if (extra) parts.push(document.createTextNode(extra));
-  return el('span', { class: 'session-context' }, parts);
-}
-
-function timelineTooltip(s, bar) {
-  const name = s.title || s.project || '—';
-  // With a title, the line under it is project · branch. Without one the project is
-  // already the name, so the line is the branch alone.
-  const context = (s.title ? [s.project, s.branch] : [s.branch]).filter(Boolean);
-  const contextHtml = context.length ? `${context.map(escapeHtml).join(' · ')}<br>` : '';
-  const range = bar.start === bar.end ? clockTime(bar.start) : `${clockTime(bar.start)} – ${clockTime(bar.end)}`;
-  return `<b>${escapeHtml(name)}</b><br>${contextHtml}${range}<br>${formatCost(s.costTodayUsd)} today · ${s.prompts} ${s.prompts === 1 ? 'prompt' : 'prompts'}`;
-}
-
-function renderTimeline(live) {
-  const panel = document.getElementById('timelinePanel');
-  panel.hidden = !live || !live.sessions.some((s) => s.spans.length) || state.currentDays !== 'today';
-  if (panel.hidden) {
-    timelineSignature = null;
-    return;
-  }
-  const container = document.getElementById('timelineChart');
-  const width = chartWidth(container);
-  const now = Date.now();
-  const signature = JSON.stringify([
-    width,
-    Math.floor(now / 60_000),
-    live.sessions.map((s) => [s.spans, s.live, s.title, s.titleSource, s.project, s.branch, s.costTodayUsd, s.prompts]),
-  ]);
-  if (signature === timelineSignature) return;
-  timelineSignature = signature;
-  hideTooltip();
-
-  const starts = live.sessions.flatMap((s) => s.spans.map((span) => span[0]));
-  const ticks = hourTicks(Math.min(...starts), now);
-  const domain = [ticks[0], ticks[ticks.length - 1]];
-  const gutter = Math.min(TIMELINE_GUTTER, Math.round(width * 0.4));
-  const xOf = (t) => gutter + ((t - domain[0]) / (domain[1] - domain[0])) * (width - gutter - TIMELINE_RIGHT_PAD);
-  const lanes = laneLayout(live.sessions, xOf, now, 3, LIVE_WINDOW_MS);
-  const plotHeight = lanes.length * TIMELINE_LANE_HEIGHT;
-  const height = plotHeight + TIMELINE_AXIS_HEIGHT;
-
-  const liveLanes = lanes.filter((l) => l.session.live).length;
-  const svg = svgEl('svg', {
-    viewBox: `0 0 ${width} ${height}`,
-    height,
-    role: 'img',
-    'aria-label': `Session timeline: ${lanes.length} ${lanes.length === 1 ? 'session' : 'sessions'} today, ${liveLanes} live`,
-  });
-  appendPatternDefs(svg, 'timeline', [{ texture: 'diag', color: TIMELINE_COLOR }]);
-
-  const step = labelStep(ticks.length, width - gutter);
-  ticks.forEach((t, i) => {
-    svg.appendChild(svgEl('line', { x1: xOf(t), x2: xOf(t), y1: 0, y2: plotHeight, stroke: 'var(--border)', 'stroke-width': 1 }));
-    if (i % step !== 0) return;
-    const label = svgEl('text', { class: 'axis-label', x: xOf(t), y: height - 4, 'text-anchor': 'middle' });
-    label.textContent = `${String(new Date(t).getHours()).padStart(2, '0')}:00`;
-    svg.appendChild(label);
-  });
-
-  const maxChars = Math.floor((gutter - 8 - 14) / 6.6);
-  for (const { session: s, lane, bars } of lanes) {
-    const top = lane * TIMELINE_LANE_HEIGHT;
-    const mid = top + TIMELINE_LANE_HEIGHT / 2;
-    const label = svgEl('text', { class: 'timeline-label', x: 0, y: mid + 4 });
-    if (s.titleSource === 'prompt') label.classList.add('prompt-title');
-    const fullName = s.title || s.project || '—';
-    const glyph = svgEl('tspan', { 'aria-hidden': 'true' });
-    glyph.textContent = s.live ? '⬢' : '⬡';
-    const name = svgEl('title', {});
-    name.textContent = fullName;
-    label.append(glyph, ` ${cutLabel(fullName, maxChars)}`, name);
-    svg.appendChild(label);
-
-    const fill = fillFor('timeline', s.live ? 'solid' : 'diag', TIMELINE_COLOR);
-    for (const bar of bars) {
-      // laneLayout's 3px minimum shows half of the 6px diagonal texture tile.
-      if (!s.live) bar.width = Math.max(6, bar.width);
-      const y = mid - TIMELINE_BAR_HEIGHT / 2;
-      svg.appendChild(withTooltip(svgEl('rect', {
-        class: 'timeline-bar', x: bar.x, y, width: bar.width, height: TIMELINE_BAR_HEIGHT, rx: 3, fill,
-      }), timelineTooltip(s, bar)));
-      if (bar.open) {
-        const tip = bar.x + bar.width;
-        svg.appendChild(svgEl('path', {
-          class: 'timeline-arrow', d: `M${tip},${y - 1} L${tip + 6},${mid} L${tip},${y + TIMELINE_BAR_HEIGHT + 1} Z`, fill: TIMELINE_COLOR,
-        }));
-      }
-    }
-  }
-
-  svg.appendChild(svgEl('line', {
-    class: 'timeline-now', x1: xOf(now), x2: xOf(now), y1: 0, y2: plotHeight,
-    stroke: 'var(--text-secondary)', 'stroke-width': 1, 'stroke-dasharray': '4 3',
-  }));
-  container.replaceChildren(svg);
-
-  document.getElementById('timelineNote').textContent =
-    `${lanes.length} ${lanes.length === 1 ? 'session' : 'sessions'} today · ${liveLanes} live`;
-}
 
 // Reviews of ended sessions from the last REVIEW_DAYS days (see lib/review.js). A
 // server error resolves to { error } so the panel shows the reason. A network
@@ -798,31 +407,6 @@ function drawReviews(data) {
 
   document.getElementById('reviewsNote').textContent =
     `${data.reviews.length} in the last ${REVIEW_DAYS} days · ${countWithOpen(data.reviews)} with open suggestions`;
-}
-
-// Warn once either window reaches 75%, on every range. Within a window the percent
-// only rises, and readLimits() drops a window past its reset, so a stale cache
-// understates usage and never raises a false warning. The rounded percent is
-// compared so the banner agrees with the "N% used" the panel shows.
-function renderLimitsBanner(limits) {
-  bannerGuard.draw(limits, () => drawLimitsBanner(limits));
-}
-
-function drawLimitsBanner(limits) {
-  const banner = document.getElementById('limitsBanner');
-  const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
-  // dailyWarning (public/hud.js) compares today's share with the rolling budget.
-  const dayHigh = dailyWarning(limits ? limits.today : null);
-  banner.hidden = !high.length && !dayHigh;
-  banner.replaceChildren(
-    el('strong', { text: high.length ? 'Nearing your plan limit' : "Nearing today's budget" }),
-    ...high.map((l) => el('div', {
-      text: `${l.label}: ${Math.round(l.percent)}% used${l.resetsAt == null ? '' : ` · ${formatReset(l.resetsAt)}`}`,
-    })),
-    ...(dayHigh ? [el('div', {
-      text: `Today: ${dayHigh.share}% of the week, ${dayHigh.rolling ? 'rolling budget' : 'budget'} ${dayHigh.budget}%`,
-    })] : [])
-  );
 }
 
 // The Record day card's all-time value. Fetched once on load and once on
@@ -2075,7 +1659,7 @@ function reportDrawError(err) {
   banner.hidden = false;
   banner.textContent = `Couldn't draw the page: ${err?.message ?? err}`;
   lastSignature = null;
-  timelineSignature = null;
+  resetTimeline();
 }
 
 // Every load goes through runLoad, so no caller leaves a rejection unhandled.
@@ -2120,7 +1704,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 // refetch because a request skipped at the last load is needed again.
 function redrawCharts({ changes = true, refetch = false } = {}) {
   lastSignature = null; // the width changed, so the same data still needs redrawing
-  timelineSignature = null;
+  resetTimeline();
   if (refetch || !lastPayload) {
     runLoad();
   } else {
