@@ -104,10 +104,11 @@ export function axisCost(usd) {
   return '$' + usd.toFixed(2).replace(/\.00$/, '');
 }
 
-// A model id without its "claude-" prefix: "claude-opus-4-6" -> "opus-4-6". A
-// date suffix stays, because the version group runs to the last digit, and a
-// one-digit version ("claude-sonnet-5") is not shortened. Task 17 fixes both.
+// A model id without its "claude-" prefix and without a date suffix:
+// "claude-haiku-4-5-20251001" -> "haiku-4-5", "claude-sonnet-5" -> "sonnet-5".
+// Each version part is one or two digits not followed by another digit, so the
+// match stops before an eight-digit date. Any other id is returned whole.
 export function shortModel(name) {
-  const m = name.match(/claude-([a-z]+)-(\d[\d.-]*\d)/i);
+  const m = name.match(/claude-([a-z]+)-(\d{1,2}(?!\d)(?:[.-]\d{1,2}(?!\d))*)/i);
   return m ? `${m[1]}-${m[2]}` : name;
 }

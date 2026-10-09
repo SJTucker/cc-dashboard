@@ -64,13 +64,16 @@ test('shortDate and fullDate read day and hour bucket keys', async () => {
   assert.equal(fullDate('2026-09-21T14'), '2026-09-21 14:00');
 });
 
-test('shortModel drops the claude- prefix and keeps the rest, date included', async () => {
+test('shortModel keeps the family and version and drops a date suffix', async () => {
   const { shortModel } = await load();
-  assert.equal(shortModel('claude-opus-4-6'), 'opus-4-6');
-  // The old comment promised "sonnet-4-6" here. The pattern's last group runs to
-  // the last digit, so the date stays. Task 17 fixes this after the split, whose
-  // checks need the page text unchanged.
-  assert.equal(shortModel('claude-sonnet-4-6-20260115'), 'sonnet-4-6-20260115');
+  assert.equal(shortModel('claude-opus-5-5'), 'opus-5-5');
+  assert.equal(shortModel('claude-sonnet-5'), 'sonnet-5');
+  assert.equal(shortModel('claude-haiku-4-5-20251001'), 'haiku-4-5');
+  assert.equal(shortModel('claude-sonnet-4-6-20260115'), 'sonnet-4-6');
+  assert.equal(shortModel('claude-sonnet-4.5'), 'sonnet-4.5');
+  assert.equal(shortModel('claude-opus-5-5[1m]'), 'opus-5-5');
+  // An id that does not start claude-<family>-<digit> is shown whole.
+  assert.equal(shortModel('claude-3-5-sonnet-20240620'), 'claude-3-5-sonnet-20240620');
   assert.equal(shortModel('gpt-x'), 'gpt-x');
 });
 
