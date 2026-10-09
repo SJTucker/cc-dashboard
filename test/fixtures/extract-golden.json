@@ -1,0 +1,869 @@
+{
+  "a.jsonl": {
+    "ok": true,
+    "calls": [
+      {
+        "key": "m-a1:r-a1",
+        "t": 1791464460000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": "2.1.280",
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 367,
+          "cache_read_input_tokens": 50000,
+          "cache_creation_input_tokens": 2000,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 1500,
+            "ephemeral_1h_input_tokens": 500
+          }
+        },
+        "attributionSkill": "tdd",
+        "attributionAgent": null,
+        "tools": [
+          "Bash",
+          "Read"
+        ]
+      },
+      {
+        "key": "m-a2:r-a2",
+        "t": 1791464640000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": "2.1.280",
+        "usage": {
+          "input_tokens": 800,
+          "output_tokens": 120
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": [
+          "Edit",
+          "Write",
+          "Write",
+          "Write",
+          "Bash",
+          "Edit",
+          "Write"
+        ]
+      },
+      {
+        "key": "m-a3:r-a3",
+        "t": 1791468000000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": "2.1.280",
+        "usage": {
+          "input_tokens": 500,
+          "output_tokens": 40
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": [
+          "Edit",
+          "WebFetch",
+          "WebFetch",
+          "Agent",
+          "Skill",
+          "unknown",
+          "Bash"
+        ]
+      },
+      {
+        "key": null,
+        "t": 1791471660000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 30,
+          "output_tokens": 3
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": [
+          "Bash"
+        ]
+      },
+      {
+        "key": null,
+        "t": 1791471660000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 30,
+          "output_tokens": 3
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": []
+      },
+      {
+        "key": "m-gpt:r-gpt",
+        "t": 1791471720000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": "gpt-4o",
+        "version": null,
+        "usage": {
+          "input_tokens": 400,
+          "output_tokens": 40
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": []
+      },
+      {
+        "key": "m-nomodel:r-nomodel",
+        "t": 1791471780000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": null,
+        "version": null,
+        "usage": {
+          "input_tokens": 20,
+          "output_tokens": 2
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": []
+      },
+      {
+        "key": "m-big:r-big",
+        "t": 1791471840000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": "claude-opus-4-6-20260315",
+        "version": null,
+        "usage": {
+          "input_tokens": 2000,
+          "output_tokens": 900,
+          "cache_read_input_tokens": 160000
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": []
+      },
+      {
+        "key": "m-sub:r-sub",
+        "t": 1791471960000,
+        "sessionId": "sess-a",
+        "sidechain": true,
+        "model": "claude-haiku-4-5-20251001",
+        "version": null,
+        "usage": {
+          "input_tokens": 300,
+          "output_tokens": 30
+        },
+        "attributionSkill": null,
+        "attributionAgent": "Explore",
+        "tools": []
+      }
+    ],
+    "toolUses": [
+      {
+        "key": "toolu_a1",
+        "t": 1791464460000,
+        "name": "Bash",
+        "detail": "git"
+      },
+      {
+        "key": "m-a1:r-a1:0",
+        "t": 1791464520000,
+        "name": "Read",
+        "detail": "/repo/a.js"
+      },
+      {
+        "key": "toolu_a2",
+        "t": 1791464640000,
+        "name": "Edit",
+        "detail": "/repo/a.js"
+      },
+      {
+        "key": "toolu_a3",
+        "t": 1791464640000,
+        "name": "Write",
+        "detail": "/repo/new.txt"
+      },
+      {
+        "key": "toolu_a4",
+        "t": 1791464640000,
+        "name": "Write",
+        "detail": "/repo/empty.txt"
+      },
+      {
+        "key": "toolu_a5",
+        "t": 1791464640000,
+        "name": "Write",
+        "detail": "/repo/two.txt"
+      },
+      {
+        "key": "toolu_a6",
+        "t": 1791464640000,
+        "name": "Bash",
+        "detail": "sed"
+      },
+      {
+        "key": "toolu_a7",
+        "t": 1791464640000,
+        "name": "Edit",
+        "detail": null
+      },
+      {
+        "key": "toolu_a8",
+        "t": 1791464640000,
+        "name": "Write",
+        "detail": "/repo/odd.txt"
+      },
+      {
+        "key": "toolu_a9",
+        "t": 1791468000000,
+        "name": "Edit",
+        "detail": "/repo/b.js"
+      },
+      {
+        "key": "toolu_a10",
+        "t": 1791468000000,
+        "name": "WebFetch",
+        "detail": "example.com"
+      },
+      {
+        "key": "toolu_a11",
+        "t": 1791468000000,
+        "name": "WebFetch",
+        "detail": null
+      },
+      {
+        "key": "toolu_a12",
+        "t": 1791468000000,
+        "name": "Agent",
+        "detail": "Explore"
+      },
+      {
+        "key": "toolu_a13",
+        "t": 1791468000000,
+        "name": "Skill",
+        "detail": "tdd"
+      },
+      {
+        "key": "toolu_a14",
+        "t": 1791468000000,
+        "name": "unknown",
+        "detail": null
+      },
+      {
+        "key": "toolu_a15",
+        "t": 1791468000000,
+        "name": "Bash",
+        "detail": "ls"
+      },
+      {
+        "key": "undefined:undefined:0",
+        "t": 1791471660000,
+        "name": "Bash",
+        "detail": "ls"
+      }
+    ],
+    "errors": [
+      {
+        "toolUseId": "toolu_a1",
+        "t": 1791464580000,
+        "text": "Exit code 1\nfatal: not a git repository (or any of the parent directories): .git"
+      },
+      {
+        "toolUseId": "toolu_a9",
+        "t": 1791468060000,
+        "text": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+      },
+      {
+        "toolUseId": "toolu_a10",
+        "t": 1791468060000,
+        "text": "Permission for this action was denied by the auto mode classifier."
+      },
+      {
+        "toolUseId": "toolu_a11",
+        "t": 1791468060000,
+        "text": "The user doesn't want to proceed with this tool use."
+      },
+      {
+        "toolUseId": "toolu_a13",
+        "t": 1791468120000,
+        "text": "InputValidationError: skill not found"
+      },
+      {
+        "toolUseId": "toolu_a14",
+        "t": 1791468120000,
+        "text": "Command blocked: isolated in the worktree"
+      },
+      {
+        "toolUseId": "toolu_a15",
+        "t": 1791468120000,
+        "text": "ls: /tmp/x 12: No such file"
+      }
+    ],
+    "edits": [
+      {
+        "toolUseId": "toolu_a2",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "added": 2,
+        "removed": 1
+      },
+      {
+        "toolUseId": "toolu_a3",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "added": 2,
+        "removed": 0
+      },
+      {
+        "toolUseId": "toolu_a4",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "added": 0,
+        "removed": 0
+      },
+      {
+        "toolUseId": "toolu_a5",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "added": 2,
+        "removed": 0
+      }
+    ],
+    "prompts": [
+      {
+        "id": "u-a1",
+        "t": 1791464400000,
+        "sessionId": "sess-a"
+      },
+      {
+        "id": "sess-a:2026-10-08T14:04:00.000Z",
+        "t": 1791468240000,
+        "sessionId": "sess-a"
+      }
+    ],
+    "sessions": {
+      "sess-a": {
+        "branches": [
+          "main",
+          "feature/x",
+          "feature/x2",
+          "early",
+          "no-time"
+        ],
+        "newestBranch": {
+          "t": 1791471900000,
+          "branch": "feature/x2"
+        },
+        "title": "Final title",
+        "firstPrompt": "a long pasted prompt that runs past the eighty character preview limit, so its…",
+        "reportedCost": 2.25
+      }
+    },
+    "minT": 1791464400000,
+    "maxT": 1791471960000
+  },
+  "b.jsonl": {
+    "ok": true,
+    "calls": [
+      {
+        "key": "m-a1:r-a1",
+        "t": 1791464460000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": "2.1.280",
+        "usage": {
+          "input_tokens": 1000,
+          "output_tokens": 367,
+          "cache_read_input_tokens": 50000,
+          "cache_creation_input_tokens": 2000,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 1500,
+            "ephemeral_1h_input_tokens": 500
+          }
+        },
+        "attributionSkill": "tdd",
+        "attributionAgent": null,
+        "tools": [
+          "Bash",
+          "Read"
+        ]
+      },
+      {
+        "key": "m-a2:r-a2",
+        "t": 1791464640000,
+        "sessionId": "sess-a",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": "2.1.280",
+        "usage": {
+          "input_tokens": 800,
+          "output_tokens": 120
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": [
+          "Edit",
+          "Write",
+          "Write",
+          "Write",
+          "Bash",
+          "Edit",
+          "Write"
+        ]
+      },
+      {
+        "key": "m-b1:r-b1",
+        "t": 1791205260000,
+        "sessionId": "sess-b",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 700,
+          "output_tokens": 70,
+          "cache_read_input_tokens": 50000,
+          "cache_creation_input_tokens": 2000,
+          "cache_creation": {
+            "ephemeral_5m_input_tokens": 1500,
+            "ephemeral_1h_input_tokens": 500
+          }
+        },
+        "attributionSkill": "review",
+        "attributionAgent": null,
+        "tools": []
+      },
+      {
+        "key": "m-b2:r-b2",
+        "t": 1791223200000,
+        "sessionId": "sess-b",
+        "sidechain": false,
+        "model": "claude-haiku-4-5-20251001",
+        "version": null,
+        "usage": {
+          "input_tokens": 200,
+          "output_tokens": 20
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": []
+      },
+      {
+        "key": "m-b3:r-b3",
+        "t": 1791430200000,
+        "sessionId": "sess-b",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 100,
+          "output_tokens": 10
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": []
+      }
+    ],
+    "toolUses": [
+      {
+        "key": "toolu_a1",
+        "t": 1791464460000,
+        "name": "Bash",
+        "detail": "git"
+      },
+      {
+        "key": "m-a1:r-a1:0",
+        "t": 1791464520000,
+        "name": "Read",
+        "detail": "/repo/a.js"
+      },
+      {
+        "key": "toolu_a2",
+        "t": 1791464640000,
+        "name": "Edit",
+        "detail": "/repo/a.js"
+      },
+      {
+        "key": "toolu_a3",
+        "t": 1791464640000,
+        "name": "Write",
+        "detail": "/repo/new.txt"
+      },
+      {
+        "key": "toolu_a4",
+        "t": 1791464640000,
+        "name": "Write",
+        "detail": "/repo/empty.txt"
+      },
+      {
+        "key": "toolu_a5",
+        "t": 1791464640000,
+        "name": "Write",
+        "detail": "/repo/two.txt"
+      },
+      {
+        "key": "toolu_a6",
+        "t": 1791464640000,
+        "name": "Bash",
+        "detail": "sed"
+      },
+      {
+        "key": "toolu_a7",
+        "t": 1791464640000,
+        "name": "Edit",
+        "detail": null
+      },
+      {
+        "key": "toolu_a8",
+        "t": 1791464640000,
+        "name": "Write",
+        "detail": "/repo/odd.txt"
+      }
+    ],
+    "errors": [
+      {
+        "toolUseId": "toolu_a1",
+        "t": 1791464580000,
+        "text": "Exit code 1\nfatal: not a git repository (or any of the parent directories): .git"
+      },
+      {
+        "toolUseId": "toolu_a1",
+        "t": 1791464880000,
+        "text": "Exit code 2\nfatal: a later copy of the error"
+      }
+    ],
+    "edits": [
+      {
+        "toolUseId": "toolu_a2",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "added": 2,
+        "removed": 1
+      }
+    ],
+    "prompts": [
+      {
+        "id": "u-a1",
+        "t": 1791464400000,
+        "sessionId": "sess-a"
+      },
+      {
+        "id": "u-b1",
+        "t": 1791205200000,
+        "sessionId": "sess-b"
+      }
+    ],
+    "sessions": {
+      "sess-a": {
+        "branches": [
+          "main",
+          "feature/z"
+        ],
+        "newestBranch": {
+          "t": 1791474600000,
+          "branch": "feature/z"
+        },
+        "title": "Title from b",
+        "firstPrompt": "a long pasted prompt that runs past the eighty character preview limit, so its…",
+        "reportedCost": 3
+      },
+      "sess-b": {
+        "branches": [
+          "feature/y",
+          "main"
+        ],
+        "newestBranch": {
+          "t": 1791430200000,
+          "branch": "main"
+        },
+        "title": "Resumed work",
+        "firstPrompt": "pick up where we left off",
+        "reportedCost": 0.5
+      }
+    },
+    "minT": 1791205200000,
+    "maxT": 1791464880000
+  },
+  "c.jsonl": {
+    "ok": true,
+    "calls": [
+      {
+        "key": "m-c1:r-c1",
+        "t": 1788012060000,
+        "sessionId": "sess-c",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 900,
+          "output_tokens": 90
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": [
+          "Edit"
+        ]
+      }
+    ],
+    "toolUses": [
+      {
+        "key": "toolu_c1",
+        "t": 1788012060000,
+        "name": "Edit",
+        "detail": "/old/c.js"
+      }
+    ],
+    "errors": [
+      {
+        "toolUseId": "toolu_c1",
+        "t": 1788012120000,
+        "text": "File has not been read yet"
+      }
+    ],
+    "edits": [
+      {
+        "toolUseId": "toolu_c1",
+        "t": 1788012120000,
+        "sessionId": "sess-c",
+        "added": 1,
+        "removed": 0
+      }
+    ],
+    "prompts": [
+      {
+        "id": "u-c1",
+        "t": 1788012000000,
+        "sessionId": "sess-c"
+      }
+    ],
+    "sessions": {
+      "sess-c": {
+        "branches": [
+          "old-branch"
+        ],
+        "newestBranch": {
+          "t": 1788012060000,
+          "branch": "old-branch"
+        },
+        "title": "Old session",
+        "firstPrompt": "an old prompt",
+        "reportedCost": 0.75
+      }
+    },
+    "minT": 1788012000000,
+    "maxT": 1788012120000
+  },
+  "d.jsonl": {
+    "ok": true,
+    "calls": [
+      {
+        "key": "m-d1:r-d1",
+        "t": 1790611200000,
+        "sessionId": "<corpus>/d.jsonl",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 50,
+          "output_tokens": 5
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": []
+      },
+      {
+        "key": "m-d2:r-d2",
+        "t": 1790611320000,
+        "sessionId": "constructor",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 60,
+          "output_tokens": 6
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": []
+      }
+    ],
+    "toolUses": [],
+    "errors": [],
+    "edits": [],
+    "prompts": [],
+    "sessions": {
+      "<corpus>/d.jsonl": {
+        "branches": [],
+        "newestBranch": null,
+        "title": "No session id",
+        "firstPrompt": null,
+        "reportedCost": null
+      },
+      "constructor": {
+        "branches": [
+          "proto"
+        ],
+        "newestBranch": {
+          "t": 1790611260000,
+          "branch": "proto"
+        },
+        "title": null,
+        "firstPrompt": null,
+        "reportedCost": null
+      }
+    },
+    "minT": 1790611200000,
+    "maxT": 1790611320000
+  },
+  "e.jsonl": {
+    "ok": true,
+    "calls": [
+      {
+        "key": "m-e1:r-e1",
+        "t": 1790578800000,
+        "sessionId": "sess-e",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 110,
+          "output_tokens": 11
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": [
+          "Bash"
+        ]
+      },
+      {
+        "key": "m-e2:r-e2",
+        "t": 1790650800000,
+        "sessionId": "sess-e",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 120,
+          "output_tokens": 12
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": [
+          "Edit"
+        ]
+      },
+      {
+        "key": "m-e3:r-e3",
+        "t": 1791001800000,
+        "sessionId": "sess-e",
+        "sidechain": false,
+        "model": "claude-sonnet-4-6-20260115",
+        "version": null,
+        "usage": {
+          "input_tokens": 130,
+          "output_tokens": 13
+        },
+        "attributionSkill": null,
+        "attributionAgent": null,
+        "tools": [
+          "Bash",
+          "Read"
+        ]
+      }
+    ],
+    "toolUses": [
+      {
+        "key": "toolu_e1",
+        "t": 1790578800000,
+        "name": "Bash",
+        "detail": "npm"
+      },
+      {
+        "key": "toolu_e2",
+        "t": 1790650800000,
+        "name": "Edit",
+        "detail": "/e.js"
+      },
+      {
+        "key": "toolu_e3",
+        "t": 1791001800000,
+        "name": "Bash",
+        "detail": "npm"
+      },
+      {
+        "key": "toolu_e4",
+        "t": 1791001800000,
+        "name": "Read",
+        "detail": "/e.md"
+      }
+    ],
+    "errors": [
+      {
+        "toolUseId": "toolu_e1",
+        "t": null,
+        "text": "Exit code 3\nnpm ERR! 7 failing"
+      },
+      {
+        "toolUseId": "toolu_e3",
+        "t": 1791001860000,
+        "text": "Exit code 3\nlint failed"
+      },
+      {
+        "toolUseId": "toolu_e4",
+        "t": null,
+        "text": "File does not exist."
+      }
+    ],
+    "edits": [
+      {
+        "toolUseId": "toolu_e2",
+        "t": null,
+        "sessionId": "sess-e",
+        "added": 1,
+        "removed": 1
+      }
+    ],
+    "prompts": [],
+    "sessions": {},
+    "minT": 1790578800000,
+    "maxT": 1791001860000
+  },
+  "f.jsonl": {
+    "ok": true,
+    "calls": [],
+    "toolUses": [],
+    "errors": [],
+    "edits": [],
+    "prompts": [],
+    "sessions": {
+      "sess-f": {
+        "branches": [],
+        "newestBranch": null,
+        "title": "Titles only",
+        "firstPrompt": null,
+        "reportedCost": 0.1
+      }
+    },
+    "minT": null,
+    "maxT": null
+  },
+  "missing.jsonl": {
+    "ok": false,
+    "calls": [],
+    "toolUses": [],
+    "errors": [],
+    "edits": [],
+    "prompts": [],
+    "sessions": {},
+    "minT": null,
+    "maxT": null
+  }
+}
