@@ -231,7 +231,8 @@ function extractInChild(files) {
   return out.stderr;
 }
 
-const untagged = (text) => ({ type: 'user', sessionId: 's1', timestamp: T0, message: { role: 'user', content: text } });
+// Recent, because only lines from the last 7 days count toward the warning.
+const untagged = (text) => ({ type: 'user', sessionId: 's1', timestamp: new Date().toISOString(), message: { role: 'user', content: text } });
 const typedPrompt = (text) => ({ ...untagged(text), origin: { kind: 'human' }, promptSource: 'typed' });
 
 test('a file whose prompts carry no origin prints one warning, once per process', () => {
@@ -254,6 +255,27 @@ test('subagent task prompts, commands and meta lines print nothing', () => {
 
 test('a file with a typed prompt prints nothing, even beside an untagged line', () => {
   const file = writeTranscript([typedPrompt('typed'), untagged('untagged')]);
+  assert.strictEqual(extractInChild([file]), '');
+});
+
+test('a claude -p line (promptSource sdk, no origin) prints nothing', () => {
+  const file = writeTranscript([{ ...untagged('hi'), entrypoint: 'sdk-cli', promptSource: 'sdk', turnOrigin: 'sdk' }]);
+  assert.strictEqual(extractInChild([file]), '');
+});
+
+test('a compact summary prints nothing', () => {
+  const file = writeTranscript([{ ...untagged('summary'), isCompactSummary: true }]);
+  assert.strictEqual(extractInChild([file]), '');
+});
+
+test('an untagged line 30 days old prints nothing', () => {
+  const file = writeTranscript([{ ...untagged('old'), timestamp: new Date(Date.now() - 30 * 86400000).toISOString() }]);
+  assert.strictEqual(extractInChild([file]), '');
+});
+
+test('an untagged line with no timestamp prints nothing', () => {
+  const { timestamp, ...line } = untagged('no time');
+  const file = writeTranscript([line]);
   assert.strictEqual(extractInChild([file]), '');
 });
 
