@@ -17,6 +17,7 @@ const { readSessions, buildLiveSessions, SESSION_ID_PATTERN } = require('./lib/s
 const { readActivity } = require('./lib/activity');
 const { readReviews, setDismissal, DISMISS_REASONS } = require('./lib/review');
 const { getReviewDb } = require('./lib/review-db');
+const { closeServerDb, isBusy } = require('./lib/db');
 const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
@@ -248,6 +249,18 @@ app.get('/api/sessions/live', async (req, res) => {
   }
 });
 
+// bin/review-session holds the write lock while it records a review. The server
+// waits SERVER_BUSY_TIMEOUT_MS (250 ms, lib/db.js) for it and then answers 503 with
+// this text. The Session reviews panel shows it as text.
+const DB_BUSY = 'The review database is busy. Try again.';
+
+// Answers 503 and returns true when err is a SQLite busy error.
+function sendBusy(res, err) {
+  if (!isBusy(err)) return false;
+  res.status(503).json({ error: DB_BUSY });
+  return true;
+}
+
 // Reviews of ended sessions from the reviews and suggestions tables in
 // transcripts.db (lib/review.js), finished in the last 7 days. bin/review-session
 // writes the reviews, run by the mod in mod/. The dismiss routes below write the
@@ -255,11 +268,13 @@ app.get('/api/sessions/live', async (req, res) => {
 // user pastes them into a prompt for another model. Only this machine can reach the
 // API: the server listens on HOST (127.0.0.1). home lets the page shorten the
 // transcript path. When transcripts.db cannot be opened the answer is a 500 with the
-// reason, which the panel shows as text.
+// reason. When the one-time import (getReviewDb) or a write meets the lock of
+// bin/review-session the answer is a 503 with DB_BUSY. The panel shows either as text.
 app.get('/api/reviews', (req, res) => {
   try {
     res.json({ home: os.homedir(), reviews: readReviews(getReviewDb()) });
   } catch (err) {
+    if (sendBusy(res, err)) return;
     console.error('[API] /api/reviews failed:', err);
     res.status(500).json({ error: 'Failed to read session reviews', detail: err.message });
   }
@@ -290,6 +305,7 @@ function changeDismissal(res, target, reason) {
     }
     res.json({ ok: true, sessionId: target.sessionId, idx: target.idx, dismissedAt, reason });
   } catch (err) {
+    if (sendBusy(res, err)) return;
     console.error('[API] dismiss failed:', err);
     res.status(500).json({ error: 'Failed to save the dismissal', detail: err.message });
   }
@@ -397,5 +413,20 @@ server.on('error', (err) => {
   }
   throw err;
 });
+
+// Ctrl-C (SIGINT) or a service stop (SIGTERM) closes the listener, then the one
+// transcripts.db handle. Closing the last connection checkpoints the WAL into
+// transcripts.db and removes transcripts.db-wal. The handlers are registered only
+// when server.js is the program. test/api.test.js loads it once per test server, and
+// a pair of listeners per load would pile up on the test process.
+if (require.main === module) {
+  const shutdown = () => {
+    server.close();
+    closeServerDb();
+    process.exit(0);
+  };
+  process.once('SIGINT', shutdown);
+  process.once('SIGTERM', shutdown);
+}
 
 module.exports = server;

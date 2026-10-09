@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { DatabaseSync } = require('node:sqlite');
 const { openDatabase, transaction, SCHEMA_VERSION } = require('../lib/db');
+const { tmpDir, freshServerDb, holdWriteLock } = helpers;
 
 const tmpFile = () => path.join(helpers.tmpDir(null, 'db'), 'nested', 'transcripts.db');
 const tables = (db) => db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((r) => r.name);
@@ -102,4 +103,131 @@ test('two connections write the same file without a busy error', () => {
   assert.strictEqual(a.prepare("SELECT COUNT(*) AS n FROM meta WHERE key IN ('a','b')").get().n, 2);
   a.close();
   b.close();
+});
+
+test('openDatabase sets the busy timeout it is given', (t) => {
+  const file = path.join(tmpDir(t, 'db'), 'transcripts.db');
+  const db = openDatabase(file, { busyTimeoutMs: 250 });
+  assert.strictEqual(db.prepare('PRAGMA busy_timeout').get().timeout, 250);
+  db.close();
+});
+
+test('openDatabase refuses a busy timeout that is not a whole number, before it creates the file', (t) => {
+  const file = path.join(tmpDir(t, 'db'), 'transcripts.db');
+  assert.throws(() => openDatabase(file, { busyTimeoutMs: '250; DROP TABLE files' }), TypeError);
+  assert.throws(() => openDatabase(file, { busyTimeoutMs: -1 }), TypeError);
+  assert.throws(() => openDatabase(file, { busyTimeoutMs: 1e21 }), TypeError);
+  assert.strictEqual(fs.existsSync(file), false);
+});
+
+test('getServerDb opens transcripts.db under CLAUDE_CONFIG_DIR once, with a 250 ms busy timeout', (t) => {
+  const { dbModule, file } = freshServerDb(t);
+  const handle = dbModule.getServerDb();
+  assert.strictEqual(dbModule.getServerDb(), handle);
+  assert.strictEqual(dbModule.SERVER_BUSY_TIMEOUT_MS, 250);
+  assert.strictEqual(handle.prepare('PRAGMA busy_timeout').get().timeout, 250);
+  assert.ok(fs.existsSync(file));
+});
+
+test('getServerDb does not cache a failed open, so the next call tries again', (t) => {
+  const { dbModule, file } = freshServerDb(t);
+  fs.mkdirSync(file, { recursive: true }); // SQLite cannot open a directory
+  assert.throws(() => dbModule.getServerDb(), (err) => !dbModule.isBusy(err));
+  fs.rmdirSync(file);
+  assert.ok(dbModule.getServerDb());
+});
+
+test('closeServerDb closes the handle, removes the WAL file, and the next getServerDb opens a new handle', (t) => {
+  const { dbModule, file } = freshServerDb(t);
+  const first = dbModule.getServerDb();
+  first.prepare("INSERT INTO meta (key, value) VALUES ('probe', '1')").run();
+  assert.ok(fs.existsSync(`${file}-wal`));
+  dbModule.closeServerDb();
+  assert.throws(() => first.prepare('SELECT 1'), /database is not open/);
+  assert.strictEqual(fs.existsSync(`${file}-wal`), false, 'closing the last connection removes the WAL file');
+  const second = dbModule.getServerDb();
+  assert.notStrictEqual(second, first);
+  dbModule.closeServerDb();
+  dbModule.closeServerDb(); // a second close does nothing
+});
+
+test('a server write that meets another process\'s lock fails after about 250 ms, and isBusy says so', async (t) => {
+  const { dbModule, file } = freshServerDb(t);
+  const handle = dbModule.getServerDb();
+  const release = await holdWriteLock(t, file);
+  const started = Date.now();
+  let err = null;
+  try {
+    handle.prepare("INSERT INTO meta (key, value) VALUES ('probe', '1')").run();
+  } catch (e) {
+    err = e;
+  }
+  const waited = Date.now() - started;
+  await release();
+  assert.ok(err, 'the write failed');
+  assert.strictEqual(dbModule.isBusy(err), true);
+  assert.ok(waited >= 200 && waited < 1000, `waited ${waited} ms`);
+});
+
+test('isBusy is false for other errors and true for the extended busy codes', (t) => {
+  const { dbModule } = freshServerDb(t);
+  const withCode = (errcode) => Object.assign(new Error('x'), { errcode });
+  assert.strictEqual(dbModule.isBusy(new Error('x')), false);
+  assert.strictEqual(dbModule.isBusy(undefined), false);
+  assert.strictEqual(dbModule.isBusy(withCode(1)), false);
+  assert.strictEqual(dbModule.isBusy(withCode(14)), false);
+  assert.strictEqual(dbModule.isBusy(withCode(5)), true);
+  assert.strictEqual(dbModule.isBusy(withCode(261)), true); // SQLITE_BUSY_RECOVERY
+  assert.strictEqual(dbModule.isBusy(withCode(517)), true); // SQLITE_BUSY_SNAPSHOT
+});
+
+test('a row-store write that meets the review lock gives up within 1000 ms, and the first refresh after the lock writes it', async (t) => {
+  const { dbModule, base, file } = freshServerDb(t);
+  const { createRowStore, REFRESH_SHARE_MS } = require('../lib/rowstore');
+  const { openStore } = require('../lib/store');
+  const dir = path.join(base, 'projects', 'demo');
+  fs.mkdirSync(dir, { recursive: true });
+  // Three days old by content and by mtime, so the first refresh tries to store it.
+  const when = Date.now() - 3 * 24 * 60 * 60 * 1000;
+  const transcript = path.join(dir, 'old.jsonl');
+  fs.writeFileSync(transcript, JSON.stringify({
+    timestamp: new Date(when).toISOString(),
+    requestId: 'req-1',
+    message: { id: 'msg-1', model: 'claude-sonnet-4-6', usage: { input_tokens: 100, output_tokens: 50 } },
+  }) + '\n');
+  fs.utimesSync(transcript, when / 1000, when / 1000);
+  const store = openStore(file, dbModule.getServerDb);
+  const clock = { now: Date.now() };
+  const rows = createRowStore({ projectsDir: () => path.join(base, 'projects'), store, now: () => clock.now });
+  const stored = () => dbModule.getServerDb().prepare('SELECT COUNT(*) AS n FROM files').get().n;
+
+  const release = await holdWriteLock(t, file);
+  const warn = t.mock.method(console, 'warn', () => {});
+  const started = Date.now();
+  await rows.refresh();
+  const took = Date.now() - started;
+  assert.ok(took < 1000, `the refresh took ${took} ms`);
+  assert.strictEqual(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0].arguments[0], /^\[store\] Could not write transcript rows \(database busy\), will retry on the next refresh: /);
+  assert.strictEqual(stored(), 0);
+
+  await release();
+  clock.now += REFRESH_SHARE_MS + 1; // past the window in which a refresh is shared
+  await rows.refresh();
+  assert.strictEqual(stored(), 1);
+});
+
+test('getRowStore and getReviewDb use the one handle from getServerDb', (t) => {
+  const { dbModule } = freshServerDb(t);
+  // Spied before lib/rowstore.js and lib/review-db.js load, so their destructured
+  // getServerDb is the spy.
+  const spy = t.mock.method(dbModule, 'getServerDb');
+  const { getRowStore } = require('../lib/rowstore');
+  const { getReviewDb } = require('../lib/review-db');
+  getRowStore();
+  const reviewDb = getReviewDb();
+  assert.strictEqual(spy.mock.callCount(), 2);
+  assert.strictEqual(spy.mock.calls[0].result, spy.mock.calls[1].result);
+  assert.strictEqual(reviewDb, spy.mock.calls[0].result);
+  assert.strictEqual(reviewDb, dbModule.getServerDb());
 });

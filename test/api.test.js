@@ -83,6 +83,7 @@ async function listen(t) {
   const server = startServer(t);
   t.after(() => {
     server.close();
+    require('../lib/db').closeServerDb(); // the instance the server used, before the next startServer drops it
     require('../lib/pricing').setSnapshots([]);
   });
   await new Promise((resolve) => server.once('listening', resolve));
@@ -513,6 +514,11 @@ test('a transcript that is deleted while the server is stopped still counts afte
   const firstBase = `http://127.0.0.1:${first.address().port}`;
   assert.strictEqual((await (await fetch(`${firstBase}/api/summary?days=all`)).json()).summary.totalInput, 6000);
   first.close();
+  // Both servers share lib/db's cached handle. Closing it makes the second server
+  // open transcripts.db from disk, which is what a restart does.
+  const dbModule = require('../lib/db');
+  const firstHandle = dbModule.getServerDb();
+  dbModule.closeServerDb();
 
   fs.unlinkSync(file);
   for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/store', '../server']) delete require.cache[require.resolve(mod)];
@@ -522,6 +528,7 @@ test('a transcript that is deleted while the server is stopped still counts afte
 
   const after = await (await fetch(`http://127.0.0.1:${second.address().port}/api/summary?days=all`)).json();
   assert.strictEqual(after.summary.totalInput, 6000, 'the database kept the deleted transcript across the restart');
+  assert.notStrictEqual(dbModule.getServerDb(), firstHandle, 'the second server opened transcripts.db again');
 });
 
 test('a range is aggregated again after local midnight, although no transcript changed', async (t) => {
@@ -1080,4 +1087,68 @@ test('the dismiss routes answer 500 with the reason when transcripts.db cannot b
   const res = await postJson(dismissUrl(`http://127.0.0.1:${server.address().port}`, 'sess-a', 0), { reason: 'done' });
   assert.strictEqual(res.status, 500);
   assert.ok((await res.json()).detail);
+});
+
+// A server whose transcripts.db exists in WAL mode before any request, so a child
+// process can hold its write lock (holdWriteLock in test/helpers.js).
+async function lockableServer(t) {
+  const base = await listen(t);
+  const { openDatabase, getStorePath } = require('../lib/db');
+  openDatabase().close();
+  return { base, file: getStorePath() };
+}
+
+test('a request whose row-store write meets the review lock answers 200 within 1000 ms', async (t) => {
+  const { base, file } = await lockableServer(t);
+  writeStoredTranscript(); // three days old, so the first refresh writes it
+  const release = await helpers.holdWriteLock(t, file);
+  const warn = t.mock.method(console, 'warn', () => {});
+  const started = Date.now();
+  const res = await fetch(`${base}/api/summary?days=7`);
+  const took = Date.now() - started;
+  const body = await res.json();
+  await release();
+  assert.strictEqual(res.status, 200);
+  assert.ok(took < 1000, `answered in ${took} ms`);
+  assert.strictEqual(body.summary.totalInput, 6000);
+  assert.ok(warn.mock.calls.some((c) => /\(database busy\)/.test(c.arguments[0])), 'the write met the lock');
+});
+
+const BUSY = { error: 'The review database is busy. Try again.' };
+
+test('GET /api/reviews answers 503 within 1000 ms when its first import meets the review lock, and 200 once the lock is gone', async (t) => {
+  const { base, file } = await lockableServer(t);
+  const release = await helpers.holdWriteLock(t, file);
+  const started = Date.now();
+  const res = await fetch(`${base}/api/reviews`);
+  const took = Date.now() - started;
+  assert.strictEqual(res.status, 503);
+  assert.deepStrictEqual(await res.json(), BUSY);
+  assert.ok(took < 1000, `answered in ${took} ms`);
+  await release();
+  const after = await fetch(`${base}/api/reviews`);
+  assert.strictEqual(after.status, 200);
+  assert.deepStrictEqual(await after.json(), { home: os.homedir(), reviews: [] });
+});
+
+test('the dismiss routes answer 503 within 1000 ms under the review lock, reads still answer, and a dismiss works after', async (t) => {
+  const base = await reviewServer(t);
+  assert.strictEqual((await fetch(`${base}/api/reviews`)).status, 200); // runs the import before the lock
+  const release = await helpers.holdWriteLock(t, require('../lib/db').getStorePath());
+  const sends = {
+    POST: () => postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }),
+    DELETE: () => fetch(dismissUrl(base, 'sess-a', 0), { method: 'DELETE' }),
+  };
+  for (const [method, send] of Object.entries(sends)) {
+    const started = Date.now();
+    const res = await send();
+    const took = Date.now() - started;
+    assert.strictEqual(res.status, 503, method);
+    assert.deepStrictEqual(await res.json(), BUSY, method);
+    assert.ok(took < 1000, `${method} answered in ${took} ms`);
+  }
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, null], 'GET /api/reviews reads under the lock');
+  await release();
+  assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' })).status, 200);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), ['done', null]);
 });

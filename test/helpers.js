@@ -6,6 +6,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawn } = require('child_process');
 
 // A test that chmods a folder to 000 leaves rmSync unable to list it. Making each
 // directory in the tree 0o700 again lets the second removal succeed.
@@ -108,4 +109,49 @@ function bootServer(t) {
   });
 }
 
-module.exports = { tmpDir, removeTree, withEnv, bootServer };
+// Holds the write lock on the SQLite file `file` from a child process, as
+// bin/review-session does while it records a review. Resolves once BEGIN IMMEDIATE
+// has succeeded, with release(). release() closes the child's stdin, the child
+// commits and exits, and the promise release() returns resolves on that exit.
+// t.after kills a child the test did not release. The file must exist first
+// (openDatabase(file).close()). Otherwise the child creates it empty and outside WAL
+// mode, and the test measures a different lock.
+function holdWriteLock(t, file) {
+  const script = [
+    "const { DatabaseSync } = require('node:sqlite');",
+    'const db = new DatabaseSync(process.argv[1]);',
+    "db.exec('BEGIN IMMEDIATE');",
+    "process.stdout.write('locked\\n');",
+    "process.stdin.on('end', () => { db.exec('COMMIT'); db.close(); });",
+    'process.stdin.resume();',
+  ].join('\n');
+  const child = spawn(process.execPath, ['-e', script, file], { stdio: ['pipe', 'pipe', 'ignore'] });
+  t.after(() => child.kill());
+  const exited = new Promise((resolve) => child.once('exit', resolve));
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    exited.then((code) => reject(new Error(`the lock holder exited with code ${code} before it took the lock`)));
+    child.stdout.once('data', () => resolve(() => {
+      child.stdin.end();
+      return exited;
+    }));
+  });
+}
+
+// lib/db.js keeps the server's handle at module level. lib/rowstore.js keeps the row
+// store and lib/review-db.js keeps the import flag. This points CLAUDE_CONFIG_DIR at
+// a new temp folder and drops the cached copies of those modules and of lib/store.js
+// and lib/review.js, which load lib/db.js, so the test's next require starts with no
+// handle. The handle is closed after the test, before the folder is removed.
+const SERVER_DB_MODULES = ['../lib/db', '../lib/store', '../lib/rowstore', '../lib/review', '../lib/review-db'];
+function freshServerDb(t) {
+  let dbModule = null;
+  t.after(() => dbModule && dbModule.closeServerDb());
+  const base = tmpDir(t, 'serverdb');
+  withEnv(t, { CLAUDE_CONFIG_DIR: base });
+  for (const mod of SERVER_DB_MODULES) delete require.cache[require.resolve(mod)];
+  dbModule = require('../lib/db');
+  return { dbModule, base, file: dbModule.getStorePath() };
+}
+
+module.exports = { tmpDir, removeTree, withEnv, bootServer, holdWriteLock, freshServerDb };

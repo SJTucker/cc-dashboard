@@ -6,7 +6,8 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { openStore, upgradeRows, getStorePath, SCHEMA_VERSION } = require('../lib/store');
+const { openStore, upgradeRows } = require('../lib/store');
+const { getStorePath, SCHEMA_VERSION, openDatabase, isBusy } = require('../lib/db');
 const sqlite = require('node:sqlite');
 
 const tmpDir = () => helpers.tmpDir(null, 'store');
@@ -237,4 +238,47 @@ test('loadAll skips a row whose migration throws and warns', (t) => {
   assert.deepStrictEqual(reopened.loadAll(), []);
   assert.match(warn.mock.calls[0].arguments[0], /old\.jsonl.*bad migration/);
   reopened.close();
+});
+
+test('lib/store.js exports only MIGRATIONS, upgradeRows and openStore', () => {
+  assert.deepStrictEqual(Object.keys(require('../lib/store')).sort(), ['MIGRATIONS', 'openStore', 'upgradeRows']);
+});
+
+test('store.transaction takes the write lock before fn runs', async (t) => {
+  const file = path.join(tmpDir(t, 'store'), 'transcripts.db');
+  openDatabase(file).close();
+  const store = openStore(file, () => openDatabase(file, { busyTimeoutMs: 50 }));
+  t.after(() => store.close());
+  const release = await helpers.holdWriteLock(t, file);
+  let ran = false;
+  assert.throws(() => store.transaction(() => { ran = true; }), (err) => isBusy(err));
+  await release();
+  assert.strictEqual(ran, false, 'BEGIN IMMEDIATE failed before fn ran');
+  store.transaction(() => { ran = true; });
+  assert.strictEqual(ran, true);
+});
+
+test('openStore with a getDb that throws returns null with one warning', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  assert.strictEqual(openStore('/nowhere/transcripts.db', () => { throw new Error('database is locked'); }), null);
+  assert.strictEqual(warn.mock.callCount(), 1);
+  assert.match(warn.mock.calls[0].arguments[0], /^\[store\] Could not open \/nowhere\/transcripts\.db, so usage history will not be kept: database is locked$/);
+});
+
+test('openStore leaves open a handle that getDb gave it, even when the store cannot be built', (t) => {
+  const file = path.join(tmpDir(t, 'store'), 'bare.db');
+  const handle = new sqlite.DatabaseSync(file); // no tables, so makeStore's first prepare throws
+  t.after(() => handle.close());
+  t.mock.method(console, 'warn', () => {});
+  assert.strictEqual(openStore(file, () => handle), null);
+  assert.deepStrictEqual({ ...handle.prepare('SELECT 1 AS x').get() }, { x: 1 });
+});
+
+test('store.close leaves a handle that getDb gave the store usable', (t) => {
+  const file = path.join(tmpDir(t, 'store'), 'transcripts.db');
+  const handle = openDatabase(file);
+  t.after(() => handle.close());
+  const store = openStore(file, () => handle);
+  store.close();
+  assert.deepStrictEqual({ ...handle.prepare('SELECT 1 AS x').get() }, { x: 1 });
 });
