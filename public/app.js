@@ -147,17 +147,14 @@ function axisCost(usd) {
   return '$' + usd.toFixed(2).replace(/\.00$/, '');
 }
 
-// Rounds the top of the scale up to the next 1/2/5 x 10^n tick, draws the gridlines
-// and their labels, and returns that rounded max for the bars to scale against. The
-// point is reading a value off the chart without hovering, so the ticks have to be
-// round numbers, which means the scale top follows from the tick step rather than
-// from the data max.
+// Rounds the top of the scale up to the next 1/2/5 x 10^n tick (axisScale in
+// public/chart-geometry.js), draws the gridlines and their labels, and returns that
+// rounded max for the bars to scale against. The point is reading a value off the
+// chart without hovering, so the ticks have to be round numbers, which means the
+// scale top follows from the tick step rather than from the data max. The max is
+// never 0, so a caller can divide by it.
 function drawYAxis(svg, rawMax, width, format, ticks = 4) {
-  const rough = Math.max(rawMax, 1e-9) / ticks;
-  const mag = 10 ** Math.floor(Math.log10(rough));
-  const n = rough / mag;
-  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
-  const max = Math.ceil(rawMax / step) * step;
+  const { step, max } = axisScale(rawMax, ticks);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
 
   for (let i = 1; i * step <= max * 1.0001; i++) {
@@ -192,8 +189,8 @@ function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
   const width = chartWidth(container);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
   const rawMax = Math.max(...data.map((d) => d[valueKey]), 0.0001);
-  const barGap = 3;
-  const barWidth = Math.max((width - CHART_PAD_LEFT) / data.length - barGap, 2);
+  const slots = barSlots(data.length, width - CHART_PAD_LEFT);
+  const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
   const max = drawYAxis(svg, rawMax, width, valueKey === 'cost' ? axisCost : axisTokens);
@@ -209,12 +206,12 @@ function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
   data.forEach((d, i) => {
     const value = d[valueKey];
     const barHeight = max > 0 ? (value / max) * plotHeight : 0;
-    const x = CHART_PAD_LEFT + i * (barWidth + barGap);
+    const x = CHART_PAD_LEFT + slots.x(i);
     const y = plotHeight - barHeight;
 
     const rect = svgEl('rect', {
       class: 'bar',
-      x, y, width: barWidth, height: Math.max(barHeight, value > 0 ? 1 : 0),
+      x, y, width: slots.barWidth, height: Math.max(barHeight, value > 0 ? 1 : 0),
       rx: 2,
       fill: color,
     });
@@ -222,12 +219,10 @@ function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
     rect.addEventListener('mouseleave', hideTooltip);
     svg.appendChild(rect);
 
-    // Show a date label every Nth bar so labels don't overlap on wide ranges.
-    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
         class: 'axis-label',
-        x: x + barWidth / 2, y: CHART_HEIGHT - 4,
+        x: x + slots.barWidth / 2, y: CHART_HEIGHT - 4,
         'text-anchor': 'middle',
       });
       label.textContent = shortDate(d.date);
@@ -447,8 +442,8 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
   const totals = data.map((d) => series.reduce((s, ser) => s + d[ser.key], 0));
   const rawMax = Math.max(...totals, 1);
-  const barGap = 3;
-  const barWidth = Math.max((width - CHART_PAD_LEFT) / data.length - barGap, 2);
+  const slots = barSlots(data.length, width - CHART_PAD_LEFT);
+  const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
   appendPatternDefs(svg, 'token', series);
@@ -458,7 +453,7 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
   );
 
   data.forEach((d, i) => {
-    const x = CHART_PAD_LEFT + i * (barWidth + barGap);
+    const x = CHART_PAD_LEFT + slots.x(i);
     let cursorY = plotHeight;
 
     for (const ser of series) {
@@ -468,7 +463,7 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
       const y = cursorY - segHeight;
       const rect = svgEl('rect', {
         class: 'bar',
-        x, y, width: barWidth, height: Math.max(segHeight, 0.5),
+        x, y, width: slots.barWidth, height: Math.max(segHeight, 0.5),
         fill: fillFor('token', ser.texture, ser.color),
       });
       rect.addEventListener('mousemove', (evt) =>
@@ -482,10 +477,9 @@ function drawStackedChart(container, data, series = TOKEN_SERIES) {
       cursorY = y;
     }
 
-    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
-        class: 'axis-label', x: x + barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
+        class: 'axis-label', x: x + slots.barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
       });
       label.textContent = shortDate(d.date);
       svg.appendChild(label);
@@ -642,8 +636,8 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
   const width = chartWidth(container);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
   const rawMax = Math.max(...totals, 1);
-  const barGap = 3;
-  const barWidth = Math.max((width - CHART_PAD_LEFT) / data.length - barGap, 2);
+  const slots = barSlots(data.length, width - CHART_PAD_LEFT);
+  const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
   appendPatternDefs(svg, scope, order.map((f) => ({ texture: modelTexture(f), color: modelColor(f) })));
@@ -653,7 +647,7 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
   );
 
   data.forEach((d, i) => {
-    const x = CHART_PAD_LEFT + i * (barWidth + barGap);
+    const x = CHART_PAD_LEFT + slots.x(i);
     let cursorY = plotHeight;
 
     for (const name of order) {
@@ -663,7 +657,7 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
       const y = cursorY - segHeight;
       const rect = svgEl('rect', {
         class: 'bar',
-        x, y, width: barWidth, height: Math.max(segHeight, 0.5),
+        x, y, width: slots.barWidth, height: Math.max(segHeight, 0.5),
         fill: fillFor(scope, modelTexture(name), modelColor(name)),
       });
       rect.addEventListener('mousemove', (evt) =>
@@ -677,10 +671,9 @@ function drawModelDailyChart(container, data, models, mode = 'tokens') {
       cursorY = y;
     }
 
-    const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
     if (i % labelEvery === 0) {
       const label = svgEl('text', {
-        class: 'axis-label', x: x + barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
+        class: 'axis-label', x: x + slots.barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
       });
       label.textContent = shortDate(d.date);
       svg.appendChild(label);
@@ -973,6 +966,9 @@ function drawToolBars(container, rows, scaleMax, onSelect, selectedName) {
       node.addEventListener('click', () => onSelect(row.name));
       node.tabIndex = 0;
       node.dataset.name = row.name;
+      // A screen reader hears the row as a toggle button and its pressed state.
+      node.setAttribute('role', 'button');
+      node.setAttribute('aria-pressed', String(row.name === selectedName));
       node.addEventListener('keydown', (evt) => {
         if (evt.key === 'Enter' || evt.key === ' ') {
           evt.preventDefault();
@@ -1020,6 +1016,8 @@ function drawRtkBars(container, rows, scaleMax, onSelect, selectedName) {
       node.addEventListener('click', () => onSelect(row.name));
       node.tabIndex = 0;
       node.dataset.name = row.name;
+      node.setAttribute('role', 'button');
+      node.setAttribute('aria-pressed', String(row.name === selectedName));
       node.addEventListener('keydown', (evt) => {
         if (evt.key === 'Enter' || evt.key === ' ') {
           evt.preventDefault();
@@ -1191,6 +1189,26 @@ function requestLimits() {
   return fetch('/api/limits').then((res) => res.json()).catch(() => null);
 }
 
+// The last drawn state of the four panels that renderPayload draws on every
+// settled response: Plan usage, Live sessions, Session reviews and the limits
+// banner. Each renderer skips its rebuild when its inputs and the clock minute
+// are unchanged, so a 5 s poll does not replace rows the reader is selecting text
+// in. The minute is in the key because formatAgo and the "may be stale" suffix
+// change with the clock at minute resolution. redrawCharts leaves these keys
+// alone, because a change of width does not change a table. reportDrawError
+// clears them, because a renderer that threw after storing its key drew only part
+// of its panel.
+const panelSignatures = new Map();
+
+// True when name was last drawn from the same parts in the same clock minute.
+// Otherwise stores the new key and returns false.
+function panelUnchanged(name, parts) {
+  const signature = JSON.stringify([parts, Math.floor(Date.now() / 60_000)]);
+  if (panelSignatures.get(name) === signature) return true;
+  panelSignatures.set(name, signature);
+  return false;
+}
+
 // Today's share of the weekly limit, as a row in the Plan usage panel. The bar fills
 // against 100% of the week, like the weekly rows above it, so the two scales match.
 // On a workday a tick marks the day's budget. A weekend has no budget and no tick.
@@ -1230,6 +1248,7 @@ function renderLimits(limits) {
   const panel = document.getElementById('limitsPanel');
   panel.hidden = !limits || currentDays !== 'today';
   if (panel.hidden) return;
+  if (panelUnchanged('limits', limits)) return;
   const rows = document.getElementById('limitsRows');
   rows.replaceChildren();
   for (const limit of limits.limits) {
@@ -1276,15 +1295,18 @@ let lastLiveSessions = null;
 // uses this map to move keyboard focus to the new button for the same project.
 let sessionToggles = new Map();
 
-// Runs on every loadAndRender, like renderLimits, because "Last active" moves
-// with the clock even when the payload does not. Hidden off Today and when no
-// session has a snapshot, for example with no statusline hook set up. The Running now
-// table hides when no session is live.
+// Runs on every renderPayload, like renderLimits, and rebuilds when the payload,
+// the expanded groups or the clock minute changed. The minute is there because
+// "Last active" moves with the clock even when the payload does not. Hidden off
+// Today and when no session has a snapshot, for example with no statusline hook
+// set up. The Running now table hides when no session is live.
 function renderSessions(live) {
   const panel = document.getElementById('sessionsPanel');
   panel.hidden = !live || !live.sessions.length || currentDays !== 'today';
   if (panel.hidden) return;
   lastLiveSessions = live;
+  // expandedProjects is in the key, so a group toggle's own call redraws.
+  if (panelUnchanged('sessions', [live, [...expandedProjects]])) return;
   const focused = [...sessionToggles].find(([, button]) => button === document.activeElement);
   const toggles = new Map();
 
@@ -1574,9 +1596,9 @@ function reviewTime(ms, now) {
 // The last reviews payload shown. Dismiss and undo change it in place and redraw
 // without a request.
 let lastReviews = null;
-// Counts local dismiss and undo actions. loadAndRender skips a response that was
-// requested before the latest action, so a slow poll cannot put a dismissed
-// suggestion back on screen. The next poll shows the saved state.
+// Counts local dismiss and undo actions. fetchAll swaps a response that was
+// requested before the latest action for lastReviews, so a slow poll cannot put a
+// dismissed suggestion back on screen. The next poll shows the saved state.
 let reviewMutations = 0;
 // Session ids whose "N dismissed" list is showing, and session ids whose collapsed
 // all-dismissed review is expanded. The 5 s redraw reads both.
@@ -1712,6 +1734,9 @@ function collapsedReview(r, now) {
 // A server error shows its text in place of the list.
 function renderReviews(data) {
   lastReviews = data;
+  // The key holds every input of the draw, so a dismiss, an undo, a Show or Hide
+  // toggle and a failed action each redraw from their own call.
+  if (panelUnchanged('reviews', [data, reviewMutations, [...reviewDismissedShown], [...reviewExpanded], reviewActionError])) return;
   const panel = document.getElementById('reviewsPanel');
   const status = document.getElementById('reviewsStatus');
   const list = document.getElementById('reviewsList');
@@ -1765,6 +1790,7 @@ function renderReviews(data) {
 const LIMIT_WARN_PERCENT = 75;
 
 function renderLimitsBanner(limits) {
+  if (panelUnchanged('limitsBanner', limits)) return;
   const banner = document.getElementById('limitsBanner');
   const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
   // dailyWarning (public/hud.js) compares today's share with the rolling budget.
@@ -1783,10 +1809,13 @@ function renderLimitsBanner(limits) {
 
 // The Record day card's all-time value. Fetched once on load and once on
 // Refresh, not on the 5s live poll or a range switch: /api/records reads the all-time
-// and 7-day aggregates, so polling it on every tick would buy nothing. A failure resolves
-// to null, same as requestLimits.
+// and 7-day aggregates, so polling it on every tick would buy nothing. A failure,
+// including a 500 whose body is { error }, resolves to null, same as requestSessions.
 function requestRecords() {
-  return fetch('/api/records').then((res) => res.json()).catch(() => null);
+  return fetch('/api/records')
+    .then((res) => res.json())
+    .then((payload) => (payload && payload.error ? null : payload))
+    .catch(() => null);
 }
 
 // Kept so /api/records resolving after the first render can redraw the card
@@ -1797,12 +1826,29 @@ let recordsData = null;
 // The local date the last /api/records request was made on. recentDays holds the
 // 6 days before that date, so after midnight it is missing yesterday.
 let recordsDay = null;
+// The local date recordsData was fetched for. renderWeekTotals ignores recentDays
+// from an earlier date, because rollingWeek would sum the wrong 6 days.
+let recordsDataDay = null;
+// Numbers each /api/records request. A response is dropped unless its number is
+// still the newest, so a slow first load cannot overwrite a later Refresh.
+let recordsSeq = 0;
 
+// renderWeekTotals calls this on Today whenever recordsDay is not today's date.
+// The early return below leaves recordsDay unset on purpose: while every consumer
+// of /api/records is hidden nothing is fetched, and the next renderWeekTotals
+// after one shows again tries once more.
 function refreshRecords() {
   if (!neededRequests(hiddenKeys, currentDays).has('records')) return;
-  recordsDay = localDateStr(new Date());
+  const day = localDateStr(new Date());
+  recordsDay = day;
+  const seq = ++recordsSeq;
   requestRecords().then((data) => {
-    recordsData = data;
+    if (seq !== recordsSeq) return;
+    // A failed request keeps the last good records, so the card keeps its value.
+    if (data) {
+      recordsData = data;
+      recordsDataDay = day;
+    }
     if (lastRecordDaily && shown('card-record')) renderRecord(lastRecordDaily);
     if (lastSummary) renderWeekTotals(lastSummary);
   });
@@ -1819,8 +1865,9 @@ function renderWeekTotals(summary) {
   // the new day. Refresh is hidden on Today, so nothing else would refetch.
   if (currentDays === 'today' && recordsDay !== localDateStr(new Date())) refreshRecords();
   const today = currentDays === 'today';
+  const recentDays = recordsDataDay === localDateStr(new Date()) ? recordsData?.recentDays ?? null : null;
   const week = today
-    ? rollingWeek(recordsData?.recentDays ?? null, localDateStr(new Date()), { cost: summary.totalCost, tokens: summary.totalTokens })
+    ? rollingWeek(recentDays, localDateStr(new Date()), { cost: summary.totalCost, tokens: summary.totalTokens })
     : null;
   const title = today ? 'today and the 6 days before it' : '';
   const cost = document.getElementById('cardCostWeek');
@@ -2584,17 +2631,25 @@ function showChangesLoading() {
   }
 }
 
+// Numbers each /api/changes request, like recordsSeq.
+let changesSeq = 0;
+
 // The fetch does not depend on the range picker, so it loads once and again on
-// Refresh. A range change only redraws from the loaded report.
+// Refresh. A range change only redraws from the loaded report. A response that is
+// not from the newest request is dropped, whether it succeeded or failed, because
+// the newest request draws both panels when it settles.
 async function loadChanges() {
   if (!neededRequests(hiddenKeys, currentDays).has('changes')) return;
+  const seq = ++changesSeq;
   showChangesLoading();
   try {
     const res = await fetch('/api/changes');
     const report = await res.json();
+    if (seq !== changesSeq) return;
     if (report.error) throw new Error(report.detail || report.error);
     renderChanges(report);
   } catch (err) {
+    if (seq !== changesSeq) return;
     // A spinner that never stops reads as still loading, so it goes, and the
     // before/after panel has nothing to show without a report.
     for (const id of CHANGES_CHARTS) document.getElementById(id).replaceChildren();
@@ -2718,9 +2773,18 @@ function setupRowDrag(onDrop) {
     const handle = el('span', { class: 'row-handle', title: 'Drag to move', 'aria-hidden': 'true' });
     // A release anywhere clears draggable. Some browsers send a release off the
     // handle to the element under the pointer, so the handle's own listener would miss it.
+    // A cancelled pointer (a touch the browser takes over for scrolling, say) sends
+    // pointercancel and no pointerup, so either event clears it, and the one
+    // AbortController removes both listeners together.
     handle.addEventListener('pointerdown', () => {
       row.draggable = true;
-      document.addEventListener('pointerup', () => { row.draggable = false; }, { once: true });
+      const release = new AbortController();
+      const end = () => {
+        row.draggable = false;
+        release.abort();
+      };
+      document.addEventListener('pointerup', end, { signal: release.signal });
+      document.addEventListener('pointercancel', end, { signal: release.signal });
     });
     row.querySelector('.panel-head h2').prepend(handle);
 
@@ -2829,9 +2893,8 @@ function setupCollapsibleRows() {
       else collapsed.delete(key);
       saveCollapsedRows(collapsed);
       // A chart drawn while hidden has the 200px fallback width, so an expand
-      // needs a redraw. Only the changes charts belong to this row when it's
-      // Setup changes (session-start or before/after); other rows' redraw covers
-      // only their own charts, via loadAndRender.
+      // needs a redraw. redrawCharts draws the payload charts from lastPayload;
+      // the changes charts are redrawn only when this row holds them.
       if (!isCollapsed) redrawCharts({ changes: row.id === 'sessionStartPanel' || row.id === 'beforeAfterPanel' });
     });
     headings[0].prepend(toggle);
@@ -2928,7 +2991,8 @@ function hideKey(key) {
 
 // A hidden panel was not drawn, so showing one redraws the page. A request that
 // was skipped because all its panels were hidden runs again here. rtk, sessions
-// and reviews are made by loadAndRender, which redrawCharts calls.
+// and reviews come from fetchAll, and lastPayload holds null for a skipped one, so
+// when one of those three resumes, redrawCharts loads the page again.
 function showKeys(keys) {
   const before = neededRequests(hiddenKeys, currentDays);
   for (const key of keys) hiddenKeys.delete(key);
@@ -2940,7 +3004,7 @@ function showKeys(keys) {
   if (resumed('prices')) loadPricesSource();
   // loadChanges renders both changes panels itself when it finishes.
   if (resumed('changes')) loadChanges();
-  redrawCharts({ changes: !resumed('changes') });
+  redrawCharts({ changes: !resumed('changes'), refetch: ['rtk', 'sessions', 'reviews'].some(resumed) });
 }
 
 // One button per hidden element, in page order, then Show all when two or more
@@ -3001,7 +3065,10 @@ function setupHiding() {
 let currentDays = 'today';
 
 const LIVE_POLL_MS = 5000;
-let liveTimer = null;
+// While live, runLoad runs LIVE_POLL_MS after the previous run finished
+// (createPoller in public/poll.js), so a slow scan delays the next poll instead of
+// overlapping it.
+const livePoller = createPoller(() => runLoad(), LIVE_POLL_MS);
 // Signature of the last rendered payload. A 5s poll that redraws unconditionally
 // would tear down the SVG under the cursor and kill any open tooltip, so an
 // unchanged payload skips rendering entirely.
@@ -3010,13 +3077,18 @@ let lastSignature = null;
 // so a 30d request issued before a Today click lands after it. Every request takes a
 // number, and a response is dropped unless its number is still the newest one.
 let requestSeq = 0;
+// The newest payload fetchAll returned. redrawCharts draws from it after a resize,
+// a hide or an expand, so a change of width makes no request. The range picker
+// sets it to null, because renderPayload reads currentDays and would draw the old
+// range's buckets with the new range's rules.
+let lastPayload = null;
 
 // Time of the last successful summary load, shown as Sync in the status strip.
 let lastLoadedAt = null;
 
 // Fills the status strip under the title. loadAndRender calls it on every
-// successful summary load, before its unchanged-payload check, so Sync moves on a
-// quiet poll too. While live, the ring pulses once per call.
+// successful summary load, before renderPayload's unchanged-payload check, so Sync
+// moves on a quiet poll too. While live, the ring pulses once per call.
 function renderStatusStrip(summary) {
   const active = document.querySelector('#rangePicker button.active');
   const status = formatStatus({
@@ -3029,7 +3101,7 @@ function renderStatusStrip(summary) {
   document.getElementById('stripRange').textContent = status.range;
   document.getElementById('stripSessions').textContent = status.sessions;
   document.getElementById('stripCalls').textContent = status.apiCalls;
-  if (!liveTimer) return;
+  if (!livePoller.running) return;
   const ring = document.querySelector('#liveDot .live-ring');
   ring.classList.remove('ping');
   void ring.offsetWidth; // restarts the animation on the next add
@@ -3065,8 +3137,8 @@ function setBusy(on) {
 }
 
 function setLive(on) {
-  clearInterval(liveTimer);
-  liveTimer = on ? setInterval(() => loadAndRender(), LIVE_POLL_MS) : null;
+  if (on) livePoller.start();
+  else livePoller.stop();
   document.getElementById('liveDot').classList.toggle('is-off', !on);
   document.querySelector('#liveDot .live-text').textContent = on ? 'Link live' : 'Paused';
   // A live range re-scans every 5 seconds, so a manual refresh has nothing to do.
@@ -3076,7 +3148,7 @@ function setLive(on) {
 // On Today the summary cards sit in the sticky header in a compact form, so they
 // stay in view while scrolling. Other ranges show them as full cards in the page.
 // The one #summaryCards element moves between the two slots, so every card id
-// stays unique and loadAndRender fills it the same way wherever it is.
+// stays unique and renderPayload fills it the same way wherever it is.
 function placeSummaryCards() {
   const cards = document.getElementById('summaryCards');
   const today = currentDays === 'today';
@@ -3084,7 +3156,7 @@ function placeSummaryCards() {
   cards.classList.toggle('cards-compact', today);
   // Hidden off Today, so the empty slot cannot wrap onto a line of its own.
   document.getElementById('headerCards').hidden = !today;
-  // loadAndRender hides these two on Today too, but only once the load finishes.
+  // renderPayload hides these two on Today too, but only once the load finishes.
   // Hiding them here keeps the old range's values out of the header meanwhile.
   if (today) {
     document.getElementById('burnCard').hidden = true;
@@ -3092,9 +3164,9 @@ function placeSummaryCards() {
   }
 }
 
-async function loadAndRender({ busy = false } = {}) {
-  const banner = document.getElementById('statusBanner');
-
+// Issues the five requests and waits for all of them. Returns { data, rtk, limits,
+// sessions, reviews }, or null when a newer load started while this one waited.
+async function fetchAll({ busy = false } = {}) {
   const seq = ++requestSeq;
 
   // Only user-started loads show the busy state. Whichever request is newest
@@ -3105,8 +3177,8 @@ async function loadAndRender({ busy = false } = {}) {
   // Every request is issued before any is awaited, so the summary never
   // waits on the others. None of the promises rejects. rtk and limits
   // are optional and resolve to null on failure, so an absent or unreadable source
-  // hides its panel. A failed summary resolves to an error payload, which becomes
-  // the error banner below after limits have rendered.
+  // hides its panel. A failed summary resolves to an error payload, which
+  // renderPayload turns into the error banner after limits have rendered.
   const summaryRequest = fetch(`/api/summary?days=${currentDays}`)
     .then((res) => res.json())
     .catch((err) => ({ error: err.message }));
@@ -3128,8 +3200,23 @@ async function loadAndRender({ busy = false } = {}) {
   const reviewsRequest = needed.has('reviews') ? requestReviews() : Promise.resolve(null);
 
   const [data, rtk, limits, sessions, reviews] = await Promise.all([summaryRequest, rtkRequest, limitsRequest, sessionsRequest, reviewsRequest]);
-  if (seq !== requestSeq) return; // a newer request superseded this response
+  if (seq !== requestSeq) return null; // a newer request superseded this response
   setBusy(false);
+  if (!data.error) lastLoadedAt = Date.now();
+  // A dismiss or undo during the request makes its reviews older than the page.
+  // The payload then carries lastReviews, the reviews on screen, which the action
+  // changed in place, so this load cannot put a dismissed suggestion back. The
+  // next poll shows the saved state.
+  const reviewsNow = reviewMutations === reviewMutationsAtStart ? reviews : lastReviews;
+  lastPayload = { data, rtk, limits, sessions, reviews: reviewsNow };
+  return lastPayload;
+}
+
+// Draws a payload from fetchAll. lastSignature is set on the last line, after every
+// renderer has run. A renderer that throws therefore leaves the previous signature,
+// and reportDrawError clears that one.
+function renderPayload({ data, rtk, limits, sessions, reviews }) {
+  const banner = document.getElementById('statusBanner');
 
   // Plan usage describes right now: its "stale" suffix and its reset wording
   // (today vs. a dated form) depend on the clock, not on the fetched numbers, so
@@ -3143,7 +3230,7 @@ async function loadAndRender({ busy = false } = {}) {
   if (shown('limits')) renderLimits(limits);
   if (shown('sessions')) renderSessions(sessions);
   if (shown('timeline')) renderTimeline(sessions);
-  if (shown('reviews') && reviewMutations === reviewMutationsAtStart) renderReviews(reviews);
+  if (shown('reviews')) renderReviews(reviews);
   renderLimitsBanner(limits);
 
   if (data.error) {
@@ -3153,12 +3240,8 @@ async function loadAndRender({ busy = false } = {}) {
     return;
   }
 
-  lastLoadedAt = Date.now();
-  renderStatusStrip(data.summary);
-
   const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
   if (signature === lastSignature) return;
-  lastSignature = signature;
   banner.hidden = true;
 
   if (!data.meta.dirExists) {
@@ -3285,6 +3368,34 @@ async function loadAndRender({ busy = false } = {}) {
   }
 
   renderRtk(rtk);
+  lastSignature = signature;
+}
+
+async function loadAndRender(options) {
+  const payload = await fetchAll(options);
+  if (!payload) return;
+  // Sync moves on every successful load, a quiet poll included, so the strip is
+  // filled before renderPayload's unchanged-payload check.
+  if (!payload.data.error) renderStatusStrip(payload.data.summary);
+  renderPayload(payload);
+}
+
+// A renderer that throws would otherwise reject loadAndRender with nothing to catch
+// it, and leave the page half drawn with no message. The banner names the error,
+// and clearing lastSignature makes the next poll draw every panel again.
+function reportDrawError(err) {
+  console.error(err);
+  const banner = document.getElementById('statusBanner');
+  banner.hidden = false;
+  banner.textContent = `Couldn't draw the page: ${err?.message ?? err}`;
+  lastSignature = null;
+  timelineSignature = null;
+  panelSignatures.clear();
+}
+
+// Every load goes through runLoad, so no caller leaves a rejection unhandled.
+function runLoad(options) {
+  return loadAndRender(options).catch(reportDrawError);
 }
 
 document.getElementById('rangePicker').addEventListener('click', (evt) => {
@@ -3296,9 +3407,10 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   currentDays = value === 'all' || value === 'today' ? value : Number(value);
   placeSummaryCards();
   lastSignature = null; // the bucket keys change, so force a redraw
+  lastPayload = null;
   setLive(currentDays === 'today');
   if (changesReport) renderChanges(changesReport);
-  loadAndRender({ busy: true });
+  runLoad({ busy: true });
 });
 
 // Everything the Refresh button re-fetches. Applying prices calls it too, because
@@ -3306,22 +3418,33 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
 function reloadAll() {
   lastSignature = null;
   refreshRecords();
-  loadAndRender({ busy: true });
+  runLoad({ busy: true });
   loadChanges();
 }
 
 document.getElementById('refreshBtn').addEventListener('click', async () => {
   setBusy(true);
-  // A rejected refresh (e.g. the server is down) must not skip loadAndRender below:
+  // A rejected refresh (e.g. the server is down) must not skip runLoad in reloadAll:
   // its failed summary request is what clears busy and shows the error banner.
   await fetch('/api/refresh', { method: 'POST' }).catch(() => {});
   reloadAll();
 });
 
-function redrawCharts({ changes = true } = {}) {
+// Draws every chart again at the current widths, from lastPayload and with no
+// request. It loads instead when there is no payload yet, or when showKeys passes
+// refetch because a request skipped at the last load is needed again.
+function redrawCharts({ changes = true, refetch = false } = {}) {
   lastSignature = null; // the width changed, so the same data still needs redrawing
   timelineSignature = null;
-  loadAndRender();
+  if (refetch || !lastPayload) {
+    runLoad();
+  } else {
+    try {
+      renderPayload(lastPayload);
+    } catch (err) {
+      reportDrawError(err);
+    }
+  }
   if (changes && changesReport) renderChanges(changesReport);
 }
 
@@ -3339,7 +3462,7 @@ setupUsageGroupToggles();
 placeSummaryCards();
 setLive(currentDays === 'today');
 refreshRecords();
-loadAndRender({ busy: true });
+runLoad({ busy: true });
 loadChanges();
 loadPricesSource();
 

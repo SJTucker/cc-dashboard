@@ -11,6 +11,34 @@ function labelStep(count, plotWidth, minGap = 44) {
   return Math.max(1, Math.ceil(count / fit));
 }
 
+// Where each of n bars sits in a plot plotWidth px wide. Every bar gets an equal
+// step of plotWidth / n, so the last bar's right edge stays inside the plot for any
+// n. The gap between bars is 3px, or a quarter of the step when the step is under
+// 12px, so a narrow bar keeps three quarters of its slot. There is no minimum bar
+// width: 2000 buckets on 554px give bars 0.21px wide. The chart textures are SVG
+// patterns in user space (appendPatternDefs in app.js), so the pattern lines up
+// from one thin bar to the next and still reads across a run of bars. x(i) is the
+// left edge of bar i, measured from the plot's left edge.
+function barSlots(n, plotWidth) {
+  const step = plotWidth / Math.max(n, 1);
+  const gap = Math.min(3, step * 0.25);
+  return { step, barWidth: step - gap, x: (i) => i * step + gap / 2 };
+}
+
+// The top of a y axis and the step between its gridlines. The step is 1, 2 or 5
+// x 10^n, sized so about `ticks` gridlines fit, and the top is rawMax rounded up to
+// a whole step, so every gridline reads as a round number. A rawMax that is not a
+// positive finite number is treated as 1. Without that, a range whose values are
+// all 0 gives a top of 0, and every chart that divides by the top draws NaN.
+function axisScale(rawMax, ticks = 4) {
+  const top = Number.isFinite(rawMax) && rawMax > 0 ? rawMax : 1;
+  const rough = top / ticks;
+  const mag = 10 ** Math.floor(Math.log10(rough));
+  const n = rough / mag;
+  const step = (n <= 1 ? 1 : n <= 2 ? 2 : n <= 5 ? 5 : 10) * mag;
+  return { step, max: Math.ceil(top / step) * step };
+}
+
 // Where to put a tooltip of width x height for a pointer at (x, y) in a viewport of
 // viewWidth x viewHeight. The tooltip sits 14px below and right of the pointer. It
 // moves to the left of the pointer when it would cross the right edge, and above the
@@ -135,4 +163,4 @@ function stackGlyphs(xs, gap = 12, cap = 5) {
   return { glyphs, overflows, rows };
 }
 
-if (typeof module === 'object') module.exports = { labelStep, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs };
+if (typeof module === 'object') module.exports = { labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs };
