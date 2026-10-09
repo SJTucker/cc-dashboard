@@ -85,12 +85,12 @@ function dayNoon(dateKey) {
 // Both charts share one time axis so a marker sits at the same x in each. This is
 // the all-history axis; chartDomain narrows it to the range picker. Built from
 // sessions and the daily series named by keys (the transcript rows of the
-// before/after table) only. Markers and rtk days are left out. Claude Code deletes transcripts after cleanupPeriodDays (30 by
-// default), so history has a sliding start, while rtk keeps every row. A marker or
-// an rtk day from before the earliest surviving transcript would stretch the axis
-// with an empty strip on one side. Markers outside the resulting domain are
-// filtered out where each chart draws them (see markerInDomain below), and rtk
-// days in drawMetricChart.
+// before/after table) only. Markers and rtk days are left out. Claude Code
+// deletes transcripts after cleanupPeriodDays (30 by default), so history has a
+// sliding start, while rtk keeps every row. A marker or an rtk day from before
+// the earliest surviving transcript would stretch the axis with an empty strip on
+// one side. Markers outside the resulting domain are filtered out where each
+// chart draws them (see markerInDomain below), and rtk days in drawMetricChart.
 export function timeDomain(report, keys) {
   const times = [
     ...report.sessions.map((s) => s.t),
