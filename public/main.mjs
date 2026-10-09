@@ -1,87 +1,11 @@
 import { state, shown } from './state.mjs';
+import {
+  formatCost, formatTokens, formatPercent, formatDuration, formatAgo, localDateStr, costPerDay,
+  shortDate, fullDate, shortModel, axisTokens, axisCost, escapeHtml,
+} from './format.mjs';
+import { DETAIL_LIMIT, LIVE_WINDOW_MS, REVIEW_DAYS, LIMIT_WARN_PERCENT } from './constants.mjs';
 
 // #region utils
-
-function formatCost(usd) {
-  if (usd == null) return '—';
-  if (usd === 0) return '$0.00';
-  if (usd < 0.01) return '<$0.01';
-  return '$' + usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-}
-
-function formatTokens(n) {
-  if (n == null) return '—';
-  if (n >= 1_000_000_000) return (n / 1_000_000_000).toFixed(2) + 'B';
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(2) + 'M';
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
-  return String(n);
-}
-
-function formatPercent(x) {
-  if (x == null) return '—';
-  return (x * 100).toFixed(1) + '%';
-}
-
-// Wall and API durations for the Live sessions panel.
-function formatDuration(ms) {
-  const s = Math.round(ms / 1000);
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h ${m % 60}m`;
-}
-
-// How long ago a session last wrote to its transcript. After an hour the clock
-// time reads better than "137m ago".
-function formatAgo(ms, now = Date.now()) {
-  const m = Math.floor((now - ms) / 60_000);
-  if (m < 1) return 'just now';
-  if (m < 60) return `${m}m ago`;
-  return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-}
-
-// Mirrors localDateStr in lib/dates.js so the front end can tell which bucket is
-// today without parsing a locale-formatted string.
-function localDateStr(d) {
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
-  return `${d.getFullYear()}-${m}-${day}`;
-}
-
-// Average cost per COMPLETE day. Today is excluded because it is partial and
-// would drag the average down. The divisor is the calendar span between the
-// first and last complete bucket, not the bucket count. aggregate (lib/aggregate.js) fills idle
-// days with zero buckets, so the two are equal for its output. The span still
-// gives the right rate for a daily list with days missing.
-function costPerDay(daily) {
-  const today = localDateStr(new Date());
-  const complete = daily.filter((d) => d.date !== today);
-  if (!complete.length) return null;
-  const first = new Date(complete[0].date + 'T00:00:00');
-  const last = new Date(complete[complete.length - 1].date + 'T00:00:00');
-  const span = Math.round((last - first) / 86400000) + 1;
-  // Hour keys ('2026-09-21T14') do not parse as a date, which would make span
-  // NaN. Only the daily ranges call this today, but nothing in the signature
-  // says so.
-  if (!Number.isFinite(span) || span <= 0) return null;
-  const total = complete.reduce((sum, d) => sum + d.cost, 0);
-  return total / span;
-}
-
-// Bucket keys are either '2026-09-21' (day) or '2026-09-21T14' (hour).
-function shortDate(key) {
-  if (key.includes('T')) return key.slice(-2) + ':00';
-  const [, m, d] = key.split('-');
-  return `${Number(m)}/${Number(d)}`;
-}
-
-function fullDate(key) {
-  if (key.includes('T')) {
-    const [date, hour] = key.split('T');
-    return `${date} ${hour}:00`;
-  }
-  return key;
-}
 
 function el(tag, attrs = {}, children = []) {
   const node = document.createElement(tag);
@@ -116,12 +40,6 @@ function hideTooltip() {
   tooltip.hidden = true;
 }
 
-// Model names come from log files on disk, so they are escaped before reaching
-// innerHTML. Dates and fixed labels elsewhere in the tooltips are generated here.
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-}
-
 // #endregion
 
 // #region charts (plain SVG bars - no chart library, nothing loaded from a CDN)
@@ -129,23 +47,6 @@ function escapeHtml(s) {
 const CHART_HEIGHT = 180;
 const CHART_PAD_LEFT = 46;
 const CHART_PAD_BOTTOM = 20;
-
-// Axis ticks are round by construction, so formatTokens' fixed 2 decimals only adds
-// "200.00M" where "200M" says the same thing in less width.
-function axisTokens(n) {
-  return formatTokens(n).replace(/\.0+(?=[kMB]$)/, '');
-}
-
-// A compact cost for the y axis: formatCost's grouped "$1,200.00" is wider than the
-// axis gutter.
-// Gridline values are round by construction but not whole: drawYAxis picks a
-// step of 0.5 whenever the max lands in (0.80, 2.00], so dropping the cents
-// labelled the $1.50 line "$2" and left two ticks reading the same number.
-function axisCost(usd) {
-  if (usd >= 1000) return '$' + (usd / 1000).toFixed(1) + 'k';
-  if (usd >= 10) return '$' + usd.toFixed(0);
-  return '$' + usd.toFixed(2).replace(/\.00$/, '');
-}
 
 // Rounds the top of the scale up to the next 1/2/5 x 10^n tick (axisScale in
 // public/chart-geometry.js), draws the gridlines and their labels, and returns that
@@ -1042,7 +943,7 @@ function renderTools(tools) {
   if (!tools.some((t) => t.name === selectedTool)) selectedTool = tools[0].name;
   const current = tools.find((t) => t.name === selectedTool);
 
-  const shown = tools.slice(0, 12);
+  const shown = tools.slice(0, DETAIL_LIMIT);
   drawToolBars(
     document.getElementById('toolBars'),
     shown,
@@ -1081,7 +982,7 @@ function renderRtkCommands(commands) {
   }
   const current = commands.find((c) => c.name === selectedRtkCommand);
 
-  const shown = commands.slice(0, 12);
+  const shown = commands.slice(0, DETAIL_LIMIT);
   drawRtkBars(
     document.getElementById('rtkCommandBars'),
     shown,
@@ -1094,7 +995,7 @@ function renderRtkCommands(commands) {
   );
 
   document.getElementById('rtkDetailTitle').textContent = `Inside rtk ${current.name}`;
-  const details = current.details.slice(0, 12);
+  const details = current.details.slice(0, DETAIL_LIMIT);
   drawRtkBars(
     document.getElementById('rtkDetailBars'),
     details,
@@ -1444,7 +1345,7 @@ function renderTimeline(live) {
   const domain = [ticks[0], ticks[ticks.length - 1]];
   const gutter = Math.min(TIMELINE_GUTTER, Math.round(width * 0.4));
   const xOf = (t) => gutter + ((t - domain[0]) / (domain[1] - domain[0])) * (width - gutter - TIMELINE_RIGHT_PAD);
-  const lanes = laneLayout(live.sessions, xOf, now);
+  const lanes = laneLayout(live.sessions, xOf, now, 3, LIVE_WINDOW_MS);
   const plotHeight = lanes.length * TIMELINE_LANE_HEIGHT;
   const height = plotHeight + TIMELINE_AXIS_HEIGHT;
 
@@ -1720,15 +1621,13 @@ function renderReviews(data) {
   if (focusKey) [...list.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus();
 
   document.getElementById('reviewsNote').textContent =
-    `${data.reviews.length} in the last 7 days · ${countWithOpen(data.reviews)} with open suggestions`;
+    `${data.reviews.length} in the last ${REVIEW_DAYS} days · ${countWithOpen(data.reviews)} with open suggestions`;
 }
 
 // Warn once either window reaches 75%, on every range. Within a window the percent
 // only rises, and readLimits() drops a window past its reset, so a stale cache
 // understates usage and never raises a false warning. The rounded percent is
 // compared so the banner agrees with the "N% used" the panel shows.
-const LIMIT_WARN_PERCENT = 75;
-
 function renderLimitsBanner(limits) {
   if (panelUnchanged('limitsBanner', limits)) return;
   const banner = document.getElementById('limitsBanner');
@@ -2006,12 +1905,6 @@ document.getElementById('checkPricesBtn').addEventListener('click', async (event
   btn.textContent = 'Check prices';
   renderPricesCheck(result);
 });
-
-function shortModel(name) {
-  // e.g. "claude-sonnet-4-6-20260115" -> "sonnet-4-6"
-  const m = name.match(/claude-([a-z]+)-(\d[\d.-]*\d)/i);
-  return m ? `${m[1]}-${m[2]}` : name;
-}
 
 // #endregion
 
