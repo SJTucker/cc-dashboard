@@ -5,44 +5,10 @@ import {
   formatCost, formatTokens, formatPercent, formatDuration, formatAgo, localDateStr, costPerDay,
   shortDate, fullDate, shortModel, axisTokens, axisCost, escapeHtml,
 } from './format.mjs';
+import {
+  el, svgEl, showTooltip, hideTooltip, withTooltip, withFocusTooltip, chartWidth, focusedRowName, spinnerNode,
+} from './dom.mjs';
 import { DETAIL_LIMIT, LIVE_WINDOW_MS, REVIEW_DAYS, LIMIT_WARN_PERCENT } from './constants.mjs';
-
-// #region utils
-
-function el(tag, attrs = {}, children = []) {
-  const node = document.createElement(tag);
-  for (const [k, v] of Object.entries(attrs)) {
-    if (k === 'class') node.className = v;
-    else if (k === 'text') node.textContent = v;
-    else node.setAttribute(k, v);
-  }
-  for (const child of children) node.appendChild(child);
-  return node;
-}
-
-function svgEl(tag, attrs = {}) {
-  const node = document.createElementNS('http://www.w3.org/2000/svg', tag);
-  for (const [k, v] of Object.entries(attrs)) node.setAttribute(k, v);
-  return node;
-}
-
-const tooltip = document.getElementById('tooltip');
-
-// The tooltip is measured after its content is set, so tooltipPosition can keep
-// the whole of it inside the viewport.
-function showTooltip(evt, html) {
-  tooltip.innerHTML = html;
-  tooltip.hidden = false;
-  const pos = tooltipPosition(evt.clientX, evt.clientY, tooltip.offsetWidth, tooltip.offsetHeight, innerWidth, innerHeight);
-  tooltip.style.left = pos.left + 'px';
-  tooltip.style.top = pos.top + 'px';
-}
-
-function hideTooltip() {
-  tooltip.hidden = true;
-}
-
-// #endregion
 
 // #region charts (plain SVG bars - no chart library, nothing loaded from a CDN)
 
@@ -71,10 +37,6 @@ function drawYAxis(svg, rawMax, width, format, ticks = 4) {
     svg.appendChild(label);
   }
   return max;
-}
-
-function chartWidth(container) {
-  return Math.max(container.clientWidth, 200);
 }
 
 function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
@@ -764,15 +726,6 @@ function drawUsageBars(container, rows, total, scaleMax) {
 // so the basename is displayed and the full path goes in the tooltip.
 function toolRowLabel(name) {
   return name.startsWith('/') ? name.split('/').pop() || name : name;
-}
-
-// The name of the row in container that has keyboard focus, or null.
-// drawToolBars and drawRtkBars rebuild every row on a selection and on each live
-// poll, which drops focus to <body>. They call this first, then refocus the row
-// with the same name after the rebuild.
-function focusedRowName(container) {
-  const active = document.activeElement;
-  return active && active !== container && container.contains(active) ? active.dataset.name || null : null;
 }
 
 function drawToolBars(container, rows, scaleMax, onSelect, selectedName) {
@@ -2039,23 +1992,6 @@ function drawTimeAxis(svg, domain, xOf) {
   }
 }
 
-// Keyboard focus has no mouse position, so the tooltip is placed at the focused
-// element's bounding box.
-function withFocusTooltip(node, html) {
-  node.addEventListener('focus', () => {
-    const rect = node.getBoundingClientRect();
-    showTooltip({ clientX: rect.left + rect.width / 2, clientY: rect.bottom }, html);
-  });
-  node.addEventListener('blur', hideTooltip);
-  return node;
-}
-
-function withTooltip(node, html) {
-  node.addEventListener('mousemove', (evt) => showTooltip(evt, html));
-  node.addEventListener('mouseleave', hideTooltip);
-  return node;
-}
-
 const MARKER_SOURCES = {
   file: 'from changes.json',
   plugin: 'detected from the plugin list',
@@ -2933,10 +2869,6 @@ function renderStatusStrip(summary) {
   ring.classList.add('ping');
 }
 
-function spinnerNode() {
-  return el('span', { class: 'spinner', 'aria-hidden': 'true' });
-}
-
 // A range switch, Refresh or first load can take seconds (a cold 30d scan takes
 // ~1.9s, All longer), and the previous range's numbers stay on screen meanwhile.
 // Those loads mark the page busy, but only after 250ms, so a ~0.17s Today load
@@ -3268,10 +3200,11 @@ function redrawCharts({ changes = true, refetch = false } = {}) {
   if (changes && changesReport) renderChanges(changesReport);
 }
 
+// A resize redraws the charts at the new width, 150 ms after the last resize event.
+let resizeTimer = null;
 window.addEventListener('resize', () => {
-  // Redraw charts on resize so the SVG bars stay full-width (debounced lightly).
-  clearTimeout(window.__resizeTimer);
-  window.__resizeTimer = setTimeout(redrawCharts, 150);
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(redrawCharts, 150);
 });
 
 setupRowOrder();
