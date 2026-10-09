@@ -205,7 +205,7 @@ function renderChanges(report) {
   renderChangesFileNote(report.changesFile);
   if (shown('sessionStart')) drawSessionStartChart(document.getElementById('sessionStartChart'), document.getElementById('sessionStartLegend'), report, chartDomain(report));
   // The marker list, the Bash chart and the table all belong to the before/after panel.
-  // Showing the panel again re-runs renderChanges through showKeys (via redrawCharts or loadChanges).
+  // Showing the panel again re-runs renderChanges: resumeRequests in main.mjs calls loadChanges or redrawCharts, which calls redrawChanges.
   if (!shown('beforeAfter')) return;
 
   const list = document.getElementById('markerList');
@@ -244,7 +244,7 @@ function showChangesLoading() {
   }
 }
 
-// Numbers each /api/changes request, like recordsLoads.
+// Numbers each /api/changes request, as recordsLoads does in records.mjs.
 const changesLoads = createSequence();
 
 // The fetch does not depend on the range picker, so it loads once and again on

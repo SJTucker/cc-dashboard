@@ -2,7 +2,7 @@ import { state, shown } from './state.mjs';
 import { getJson } from './api.mjs';
 import { createSequence } from './guards.mjs';
 import { escapeHtml } from './format.mjs';
-import { el, spinnerNode } from './dom.mjs';
+import { spinnerNode } from './dom.mjs';
 
 import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
@@ -17,400 +17,10 @@ import { loadChanges, redrawChanges } from './panels/changes.mjs';
 import { renderCards } from './panels/cards.mjs';
 import { renderUsageCharts } from './panels/usage.mjs';
 import { renderAttribution } from './panels/attribution.mjs';
-
-// #region panel light
-
-// Lights the border of the panel under the pointer in cyan, near the pointer (see
-// .panel::before in style.css). One pointermove listener on #app serves every
-// panel, throttled to one update per frame. It runs only for a pointer that can
-// hover and when reduced motion is off. The header cards are not .panel, so they
-// never light.
-function setupPanelLight() {
-  if (!matchMedia('(hover: hover) and (prefers-reduced-motion: no-preference)').matches) return;
-  const app = document.getElementById('app');
-  let lit = null;
-  let frame = 0;
-  let last = null;
-  app.addEventListener('pointermove', (e) => {
-    last = e;
-    if (frame) return;
-    frame = requestAnimationFrame(() => {
-      frame = 0;
-      if (!last) return;
-      const panel = last.target.closest ? last.target.closest('#app .panel') : null;
-      if (panel !== lit) {
-        if (lit) lit.classList.remove('lit');
-        lit = panel;
-        if (lit) lit.classList.add('lit');
-      }
-      if (!lit) return;
-      const box = lit.getBoundingClientRect();
-      lit.style.setProperty('--x', `${last.clientX - box.left}px`);
-      lit.style.setProperty('--y', `${last.clientY - box.top}px`);
-    });
-  });
-  app.addEventListener('pointerleave', () => {
-    // A fast exit can land pointermove and pointerleave in one frame. Cancelling
-    // the pending frame stops it from lighting the panel again after the leave.
-    cancelAnimationFrame(frame);
-    frame = 0;
-    last = null;
-    if (lit) lit.classList.remove('lit');
-    lit = null;
-  });
-}
-
-// #endregion
-
-// #region row order
-
-// Each row of panels (a full-width panel or a .panel-row pair) can be moved. The
-// order is kept in localStorage as a list of row keys, so the page reopens as it
-// was left. A row's key is its first heading's text, stored in data-row-key before
-// any control is added to the heading. The collapsed-rows code reads the same key.
-// Storage can throw (a private window, blocked site data), and then the page keeps
-// the order in index.html.
-const ROW_ORDER_KEY = 'cc-dashboard:row-order';
-
-function assignRowKeys() {
-  for (const row of document.querySelectorAll('#app > .panel-row, #app > .panel')) {
-    const heading = row.querySelector('.panel-head h2');
-    if (heading) row.dataset.rowKey = heading.textContent;
-  }
-}
-
-function panelRows() {
-  return [...document.querySelectorAll('#app > .panel-row[data-row-key], #app > .panel[data-row-key]')];
-}
-
-function currentRowKeys() {
-  return panelRows().map((row) => row.dataset.rowKey);
-}
-
-function loadRowOrder() {
-  try {
-    return JSON.parse(localStorage.getItem(ROW_ORDER_KEY));
-  } catch {
-    return null;
-  }
-}
-
-function saveRowOrder(keys) {
-  try {
-    if (keys) localStorage.setItem(ROW_ORDER_KEY, JSON.stringify(keys));
-    else localStorage.removeItem(ROW_ORDER_KEY);
-  } catch {
-    // Not saved. The rows keep their new order for this page view.
-  }
-}
-
-// Re-appends the rows to #app in the order of keys. The banners and #mainCards
-// come before every row in index.html, so they stay first.
-function applyRowOrder(keys) {
-  const app = document.getElementById('app');
-  const byKey = new Map(panelRows().map((row) => [row.dataset.rowKey, row]));
-  for (const key of keys) app.appendChild(byKey.get(key));
-}
-
-function clearDropMarks(row) {
-  row.classList.remove('drop-before', 'drop-after');
-}
-
-// Adds a handle to each row's first heading. Pressing the handle makes that row
-// draggable, so a drag that starts anywhere else in the row selects text as
-// before. The row under the pointer marks the drop point as a line on its top or
-// bottom edge, whichever half the pointer is in. onDrop runs after each move.
-// The handle's glyph is CSS content, so the heading's textContent is unchanged.
-function setupRowDrag(onDrop) {
-  let dragged = null;
-  for (const row of panelRows()) {
-    const handle = el('span', { class: 'row-handle', title: 'Drag to move', 'aria-hidden': 'true' });
-    // A release anywhere clears draggable. Some browsers send a release off the
-    // handle to the element under the pointer, so the handle's own listener would miss it.
-    // A cancelled pointer (a touch the browser takes over for scrolling, say) sends
-    // pointercancel and no pointerup, so either event clears it, and the one
-    // AbortController removes both listeners together.
-    handle.addEventListener('pointerdown', () => {
-      row.draggable = true;
-      const release = new AbortController();
-      const end = () => {
-        row.draggable = false;
-        release.abort();
-      };
-      document.addEventListener('pointerup', end, { signal: release.signal });
-      document.addEventListener('pointercancel', end, { signal: release.signal });
-    });
-    row.querySelector('.panel-head h2').prepend(handle);
-
-    // A drag of selected text, a link or an image inside the row targets that
-    // element, not the row, so only a drag from the handle moves the row.
-    row.addEventListener('dragstart', (e) => {
-      if (e.target !== row) return;
-      dragged = row;
-      row.classList.add('row-dragging');
-      e.dataTransfer.effectAllowed = 'move';
-      e.dataTransfer.setData('text/plain', row.dataset.rowKey);
-    });
-    // A drag that did not start from a handle, such as a file from the desktop,
-    // leaves dragged null, so no row accepts the drop.
-    row.addEventListener('dragover', (e) => {
-      if (!dragged || dragged === row) return;
-      e.preventDefault();
-      const box = row.getBoundingClientRect();
-      const after = e.clientY > box.top + box.height / 2;
-      row.classList.toggle('drop-before', !after);
-      row.classList.toggle('drop-after', after);
-    });
-    row.addEventListener('dragleave', (e) => {
-      if (!row.contains(e.relatedTarget)) clearDropMarks(row);
-    });
-    row.addEventListener('drop', (e) => {
-      e.preventDefault();
-      const after = row.classList.contains('drop-after');
-      clearDropMarks(row);
-      row.parentNode.insertBefore(dragged, after ? row.nextSibling : row);
-      onDrop();
-    });
-    row.addEventListener('dragend', () => {
-      row.draggable = false;
-      row.classList.remove('row-dragging');
-      dragged = null;
-    });
-  }
-}
-
-// Runs before setupCollapsibleRows, which reads data-row-key.
-function setupRowOrder() {
-  assignRowKeys();
-  const defaultKeys = currentRowKeys();
-  const saved = loadRowOrder();
-  applyRowOrder(orderRowKeys(defaultKeys, saved));
-
-  const resetBtn = document.getElementById('resetLayoutBtn');
-  resetBtn.hidden = saved == null;
-  resetBtn.addEventListener('click', () => {
-    applyRowOrder(defaultKeys);
-    saveRowOrder(null);
-    resetBtn.hidden = true;
-  });
-
-  setupRowDrag(() => {
-    saveRowOrder(currentRowKeys());
-    resetBtn.hidden = false;
-  });
-}
-
-// #endregion
-
-// #region collapsible rows
-
-// Each visual row of panels collapses to its headings. A two-panel row collapses
-// as one, and a full-width panel is a row of its own. Collapsed rows are kept in
-// localStorage, keyed by data-row-key (see the row order region), so the page
-// reopens as it was left. Storage can throw (a private window, blocked site data),
-// and then every row starts expanded.
-const COLLAPSED_ROWS_KEY = 'cc-dashboard:collapsed-rows';
-
-function loadCollapsedRows() {
-  try {
-    return new Set(JSON.parse(localStorage.getItem(COLLAPSED_ROWS_KEY)) || []);
-  } catch {
-    return new Set();
-  }
-}
-
-function saveCollapsedRows(keys) {
-  try {
-    localStorage.setItem(COLLAPSED_ROWS_KEY, JSON.stringify([...keys]));
-  } catch {
-    // Not saved. The row still toggles for this page view.
-  }
-}
-
-function setupCollapsibleRows() {
-  const collapsed = loadCollapsedRows();
-  for (const row of document.querySelectorAll('#app > .panel-row, #app > .panel')) {
-    const headings = [...row.querySelectorAll('.panel-head h2')];
-    if (!headings.length) continue;
-    const key = row.dataset.rowKey;
-    const names = headings.map((h) => h.textContent).join(' and ');
-    const toggle = el('button', { type: 'button', class: 'row-toggle' });
-    const setCollapsed = (isCollapsed) => {
-      row.classList.toggle('row-collapsed', isCollapsed);
-      toggle.setAttribute('aria-expanded', String(!isCollapsed));
-      toggle.setAttribute('aria-label', `${isCollapsed ? 'Expand' : 'Collapse'} ${names}`);
-    };
-    toggle.addEventListener('click', () => {
-      const isCollapsed = !row.classList.contains('row-collapsed');
-      setCollapsed(isCollapsed);
-      if (isCollapsed) collapsed.add(key);
-      else collapsed.delete(key);
-      saveCollapsedRows(collapsed);
-      // A chart drawn while hidden has the 200px fallback width, so an expand
-      // needs a redraw. redrawCharts draws the payload charts from lastPayload;
-      // the changes charts are redrawn only when this row holds them.
-      if (!isCollapsed) redrawCharts({ changes: row.id === 'sessionStartPanel' || row.id === 'beforeAfterPanel' });
-    });
-    headings[0].prepend(toggle);
-    setCollapsed(collapsed.has(key));
-  }
-}
-
-// The Skills and Subagents lists in Where usage goes each collapse to their title.
-// They start collapsed from the markup on every load, and the state is not saved.
-// The toggles sit outside #skillBars and #subagentBars, which drawHBars
-// rebuilds on every render, so a re-render leaves an open list open.
-function setupUsageGroupToggles() {
-  for (const toggle of document.querySelectorAll('#attributionPanel .group-toggle')) {
-    const group = toggle.closest('.usage-group');
-    toggle.addEventListener('click', () => {
-      const isCollapsed = !group.classList.contains('group-collapsed');
-      group.classList.toggle('group-collapsed', isCollapsed);
-      toggle.setAttribute('aria-expanded', String(!isCollapsed));
-      toggle.setAttribute('aria-label', `${isCollapsed ? 'Expand' : 'Collapse'} ${toggle.dataset.name}`);
-    });
-  }
-}
-
-// #endregion
-
-// #region hidden panels
-
-// Any panel or summary card can be hidden with its "x" button and shown again
-// from the ☰ menu in the header. The hidden keys (data-hide-key in index.html)
-// are kept in localStorage. A hidden element gets data-user-hidden, which
-// style.css hides with !important, so a renderer setting `panel.hidden = false`
-// cannot show it. Storage can throw (a private window, blocked site data), and
-// then nothing starts hidden.
-const HIDDEN_KEY = 'cc-dashboard:hidden';
-
-function loadHidden() {
-  try {
-    return new Set(parseHidden(localStorage.getItem(HIDDEN_KEY)));
-  } catch {
-    return new Set();
-  }
-}
-
-function saveHidden() {
-  try {
-    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...state.hiddenKeys]));
-  } catch {
-    // Not saved. The change holds for this page view.
-  }
-}
-
-state.hiddenKeys = loadHidden();
-
-// The name in the menu and in the "x" button's label: the panel's heading or the
-// card's label. The row handle and toggle in a heading add no text.
-function hideName(element) {
-  const label = element.querySelector('.panel-head h2, .card-label');
-  return label ? label.textContent.trim() : element.dataset.hideKey;
-}
-
-// setupRowDrag and setupCollapsibleRows put a row's handle and toggle in its first
-// heading. When the first panel of a pair is hidden, they move to the heading of
-// the panel still showing, and back when the first panel returns.
-function placeRowControls(row, panel) {
-  const heading = panel.querySelector(':scope > .panel-head > h2');
-  const toggle = row.querySelector(':scope > .panel > .panel-head > h2 > .row-toggle');
-  const handle = row.querySelector(':scope > .panel > .panel-head > h2 > .row-handle');
-  if (heading && toggle && toggle.parentElement !== heading) heading.prepend(...[toggle, handle].filter(Boolean));
-}
-
-function applyHidden() {
-  for (const element of document.querySelectorAll('[data-hide-key]')) {
-    element.toggleAttribute('data-user-hidden', state.hiddenKeys.has(element.dataset.hideKey));
-  }
-  for (const row of document.querySelectorAll('#app > .panel-row')) {
-    const panels = [...row.querySelectorAll(':scope > .panel')];
-    const visible = panels.filter((panel) => !panel.hasAttribute('data-user-hidden'));
-    row.toggleAttribute('data-user-hidden', visible.length === 0);
-    placeRowControls(row, visible[0] || panels[0]);
-  }
-  renderHiddenMenu();
-}
-
-function hideKey(key) {
-  state.hiddenKeys.add(key);
-  saveHidden();
-  applyHidden();
-  const element = document.querySelector(`[data-hide-key="${key}"]`);
-  // The other panel of a pair widens to the full row, so its SVG needs a redraw at the new width.
-  if (element && element.closest('.panel-row')) redrawCharts({ changes: false });
-}
-
-// A hidden panel was not drawn, so showing one redraws the page. A request that
-// was skipped because all its panels were hidden runs again here. rtk, sessions
-// and reviews come from fetchAll, and lastPayload holds null for a skipped one, so
-// when one of those three resumes, redrawCharts loads the page again.
-function showKeys(keys) {
-  const before = neededRequests(state.hiddenKeys, state.currentDays);
-  for (const key of keys) state.hiddenKeys.delete(key);
-  saveHidden();
-  applyHidden();
-  const after = neededRequests(state.hiddenKeys, state.currentDays);
-  const resumed = (request) => after.has(request) && !before.has(request);
-  if (resumed('records')) refreshRecords();
-  if (resumed('prices')) loadPricesSource();
-  // loadChanges renders both changes panels itself when it finishes.
-  if (resumed('changes')) loadChanges();
-  redrawCharts({ changes: !resumed('changes'), refetch: ['rtk', 'sessions', 'reviews'].some(resumed) });
-}
-
-// One button per hidden element, in page order, then Show all when two or more
-// are hidden. Choosing one closes the menu, and the popover returns focus to ☰.
-function renderHiddenMenu() {
-  const menu = document.getElementById('hiddenMenu');
-  const hidden = [...document.querySelectorAll('[data-hide-key][data-user-hidden]')];
-  menu.replaceChildren();
-  if (!hidden.length) {
-    menu.appendChild(el('p', { class: 'hidden-menu-empty', text: 'Nothing hidden' }));
-    return;
-  }
-  const choose = (keys) => {
-    menu.hidePopover();
-    showKeys(keys);
-  };
-  for (const element of hidden) {
-    const name = hideName(element) + (element.classList.contains('card') ? ' · card' : '');
-    const item = el('button', { type: 'button', class: 'hidden-menu-item', text: name });
-    item.addEventListener('click', () => choose([element.dataset.hideKey]));
-    menu.appendChild(item);
-  }
-  if (hidden.length >= 2) {
-    const all = el('button', { type: 'button', class: 'hidden-menu-item hidden-menu-all', text: 'Show all' });
-    all.addEventListener('click', () => choose(hidden.map((element) => element.dataset.hideKey)));
-    menu.appendChild(all);
-  }
-}
-
-// Adds the "x" to each panel's head and each card, and places the menu under ☰
-// each time it opens. Hiding moves focus to ☰, because the focused "x" has just
-// disappeared with its panel.
-function setupHiding() {
-  const menuBtn = document.getElementById('hiddenMenuBtn');
-  for (const element of document.querySelectorAll('[data-hide-key]')) {
-    const name = hideName(element);
-    const btn = el('button', { type: 'button', class: 'hide-btn', 'aria-label': `Hide ${name}`, title: `Hide ${name}`, text: '×' });
-    btn.addEventListener('click', () => {
-      hideKey(element.dataset.hideKey);
-      menuBtn.focus();
-    });
-    (element.querySelector(':scope > .panel-head') || element).appendChild(btn);
-  }
-  const menu = document.getElementById('hiddenMenu');
-  menu.addEventListener('beforetoggle', (e) => {
-    if (e.newState !== 'open') return;
-    const box = menuBtn.getBoundingClientRect();
-    menu.style.top = `${box.bottom + 6}px`;
-    menu.style.right = `${document.documentElement.clientWidth - box.right}px`;
-  });
-  applyHidden();
-}
-
-// #endregion
+import { setupRowOrder } from './ui/row-order.mjs';
+import { setupCollapsibleRows, setupUsageGroupToggles } from './ui/collapse.mjs';
+import { setupHiding } from './ui/hidden.mjs';
+import { setupPanelLight } from './ui/panel-light.mjs';
 
 // #region app state + rendering
 
@@ -508,6 +118,10 @@ function placeSummaryCards() {
     document.getElementById('projectionCard').hidden = true;
   }
 }
+
+// The optional requests fetchAll makes. resumeRequests loads the page again when
+// one of them was skipped at the last load and is needed again.
+const FETCH_ALL_OPTIONAL = ['rtk', 'sessions', 'reviews'];
 
 // Issues the five requests and waits for all of them. Returns { data, rtk, limits,
 // sessions, reviews }, or null when a newer load started while this one waited.
@@ -664,7 +278,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 });
 
 // Draws every chart again at the current widths, from lastPayload and with no
-// request. It loads instead when there is no payload yet, or when showKeys passes
+// request. It loads instead when there is no payload yet, or when resumeRequests passes
 // refetch because a request skipped at the last load is needed again.
 function redrawCharts({ changes = true, refetch = false } = {}) {
   lastSignature = null; // the width changed, so the same data still needs redrawing
@@ -688,9 +302,26 @@ window.addEventListener('resize', () => {
   resizeTimer = setTimeout(redrawCharts, 150);
 });
 
+// What to load after showing panels whose requests hiding had skipped. rtk,
+// sessions and reviews come from fetchAll, and lastPayload holds null for a
+// skipped one, so when one of those resumes, redrawCharts loads the page again.
+function resumeRequests(resumed) {
+  if (resumed('records')) refreshRecords();
+  if (resumed('prices')) loadPricesSource();
+  // loadChanges renders both changes panels itself when it finishes.
+  if (resumed('changes')) loadChanges();
+  redrawCharts({ changes: !resumed('changes'), refetch: FETCH_ALL_OPTIONAL.some(resumed) });
+}
+
+// setupRowOrder runs first: setupCollapsibleRows reads the data-row-key it sets.
 setupRowOrder();
-setupCollapsibleRows();
-setupHiding();
+// A chart drawn while its row was collapsed has the 200px fallback width. The
+// changes charts are redrawn only when the expanded row holds them.
+setupCollapsibleRows({
+  onExpand: (row) => redrawCharts({ changes: row.id === 'sessionStartPanel' || row.id === 'beforeAfterPanel' }),
+});
+// The other panel of a pair widens to the full row.
+setupHiding({ onWidthChange: () => redrawCharts({ changes: false }), onResume: resumeRequests });
 setupPanelLight();
 setupUsageGroupToggles();
 setupPrices({ onApplied: reloadAll });
