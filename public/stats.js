@@ -1,7 +1,7 @@
 'use strict';
 
 // Loaded two ways, so the server and the browser compute the same numbers:
-// index.html loads it as a script before app.js, which makes these functions
+// index.html loads it as a script before main.mjs, which makes these functions
 // globals, and lib/efficiency.js loads it with require(). server.js's
 // /api/records route also requires it directly.
 

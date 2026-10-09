@@ -1,6 +1,6 @@
 'use strict';
 
-// Loaded two ways: index.html loads it as a script before app.js, which makes
+// Loaded two ways: index.html loads it as a script before main.mjs, which makes
 // createPoller a global, and the tests load it with require().
 
 // Calls run() every ms milliseconds between start() and stop(). The wait starts

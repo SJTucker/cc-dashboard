@@ -1,6 +1,6 @@
 'use strict';
 
-// Loaded two ways: index.html loads it as a script before app.js, which makes these
+// Loaded two ways: index.html loads it as a script before main.mjs, which makes these
 // functions globals, and the tests load it with require().
 
 // The status strip's display strings. loadedAt is the time of the last successful

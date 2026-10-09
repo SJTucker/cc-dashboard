@@ -1,6 +1,6 @@
 'use strict';
 
-// Loaded two ways: index.html loads it as a script before app.js, which makes these
+// Loaded two ways: index.html loads it as a script before main.mjs, which makes these
 // functions globals, and the tests load them with require().
 
 const GROUP_SUMS = ['costUsd', 'costTodayUsd', 'durationMs', 'linesAdded', 'linesRemoved', 'tokens', 'prompts'];

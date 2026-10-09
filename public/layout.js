@@ -1,6 +1,6 @@
 'use strict';
 
-// Loaded two ways: index.html loads it as a script before app.js, which makes
+// Loaded two ways: index.html loads it as a script before main.mjs, which makes
 // orderRowKeys a global, and the tests load it with require().
 
 // The panel rows' keys in the order to show them. defaultKeys is the order in

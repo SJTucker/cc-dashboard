@@ -1,4 +1,4 @@
-'use strict';
+import { state, shown } from './state.mjs';
 
 // #region utils
 
@@ -429,66 +429,6 @@ function segmentTexture(family) {
   return `background:${textureCss(texture, color)}`;
 }
 
-function drawStackedChart(container, data, series = TOKEN_SERIES) {
-  hideTooltip();
-  container.innerHTML = '';
-  const seriesTotal = (d) => series.reduce((s, ser) => s + d[ser.key], 0);
-  if (!data.length || data.every((d) => !seriesTotal(d))) {
-    container.appendChild(el('div', { class: 'bar-empty', text: 'No usage in this range.' }));
-    return;
-  }
-
-  const width = chartWidth(container);
-  const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
-  const totals = data.map((d) => series.reduce((s, ser) => s + d[ser.key], 0));
-  const rawMax = Math.max(...totals, 1);
-  const slots = barSlots(data.length, width - CHART_PAD_LEFT);
-  const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
-
-  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
-  appendPatternDefs(svg, 'token', series);
-  const max = drawYAxis(svg, rawMax, width, axisTokens);
-  svg.appendChild(
-    svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)', 'stroke-width': 1 })
-  );
-
-  data.forEach((d, i) => {
-    const x = CHART_PAD_LEFT + slots.x(i);
-    let cursorY = plotHeight;
-
-    for (const ser of series) {
-      const value = d[ser.key];
-      if (!value) continue;
-      const segHeight = (value / max) * plotHeight;
-      const y = cursorY - segHeight;
-      const rect = svgEl('rect', {
-        class: 'bar',
-        x, y, width: slots.barWidth, height: Math.max(segHeight, 0.5),
-        fill: fillFor('token', ser.texture, ser.color),
-      });
-      rect.addEventListener('mousemove', (evt) =>
-        showTooltip(
-          evt,
-          `<b>${fullDate(d.date)}</b><br>${ser.label}: ${formatTokens(value)} tokens (${((value / totals[i]) * 100).toFixed(1)}%)<br>Bucket total: ${formatTokens(totals[i])} tokens`
-        )
-      );
-      rect.addEventListener('mouseleave', hideTooltip);
-      svg.appendChild(rect);
-      cursorY = y;
-    }
-
-    if (i % labelEvery === 0) {
-      const label = svgEl('text', {
-        class: 'axis-label', x: x + slots.barWidth / 2, y: CHART_HEIGHT - 4, 'text-anchor': 'middle',
-      });
-      label.textContent = shortDate(d.date);
-      svg.appendChild(label);
-    }
-  });
-
-  container.appendChild(svg);
-}
-
 // Daily tokens for all four types in one plot. The four span six orders of
 // magnitude on a typical range - 78 input tokens against 452M cache reads - which
 // a linear axis cannot show: input and output sit below one pixel. A log axis can,
@@ -610,8 +550,8 @@ function drawLogLineChart(container, data, series = TOKEN_SERIES) {
   container.appendChild(svg);
 }
 
-// Same geometry as drawStackedChart, but the segments are models rather than token
-// types. Series order is fixed across buckets so a model keeps its vertical position
+// Stacked bars, one segment per model family. Series order is fixed across
+// buckets so a model keeps its vertical position
 // and its colour from day to day. mode picks whether the segments measure tokens or
 // dollars; the two differ sharply because an Opus token costs five Haiku tokens.
 function drawModelDailyChart(container, data, models, mode = 'tokens') {
@@ -1246,7 +1186,7 @@ function dailyShareRow(today) {
 
 function renderLimits(limits) {
   const panel = document.getElementById('limitsPanel');
-  panel.hidden = !limits || currentDays !== 'today';
+  panel.hidden = !limits || state.currentDays !== 'today';
   if (panel.hidden) return;
   if (panelUnchanged('limits', limits)) return;
   const rows = document.getElementById('limitsRows');
@@ -1302,7 +1242,7 @@ let sessionToggles = new Map();
 // set up. The Running now table hides when no session is live.
 function renderSessions(live) {
   const panel = document.getElementById('sessionsPanel');
-  panel.hidden = !live || !live.sessions.length || currentDays !== 'today';
+  panel.hidden = !live || !live.sessions.length || state.currentDays !== 'today';
   if (panel.hidden) return;
   lastLiveSessions = live;
   // expandedProjects is in the key, so a group toggle's own call redraws.
@@ -1482,7 +1422,7 @@ function timelineTooltip(s, bar) {
 
 function renderTimeline(live) {
   const panel = document.getElementById('timelinePanel');
-  panel.hidden = !live || !live.sessions.some((s) => s.spans.length) || currentDays !== 'today';
+  panel.hidden = !live || !live.sessions.some((s) => s.spans.length) || state.currentDays !== 'today';
   if (panel.hidden) {
     timelineSignature = null;
     return;
@@ -1838,7 +1778,7 @@ let recordsSeq = 0;
 // of /api/records is hidden nothing is fetched, and the next renderWeekTotals
 // after one shows again tries once more.
 function refreshRecords() {
-  if (!neededRequests(hiddenKeys, currentDays).has('records')) return;
+  if (!neededRequests(state.hiddenKeys, state.currentDays).has('records')) return;
   const day = localDateStr(new Date());
   recordsDay = day;
   const seq = ++recordsSeq;
@@ -1863,8 +1803,8 @@ function renderWeekTotals(summary) {
   lastSummary = summary;
   // A page left open on Today past midnight refetches once, on the first poll of
   // the new day. Refresh is hidden on Today, so nothing else would refetch.
-  if (currentDays === 'today' && recordsDay !== localDateStr(new Date())) refreshRecords();
-  const today = currentDays === 'today';
+  if (state.currentDays === 'today' && recordsDay !== localDateStr(new Date())) refreshRecords();
+  const today = state.currentDays === 'today';
   const recentDays = recordsDataDay === localDateStr(new Date()) ? recordsData?.recentDays ?? null : null;
   const week = today
     ? rollingWeek(recentDays, localDateStr(new Date()), { cost: summary.totalCost, tokens: summary.totalTokens })
@@ -1905,7 +1845,7 @@ function renderRecord(daily) {
   // On Today the range record is today itself, and Total tokens already shows
   // that number, so the note stays empty.
   let note = '';
-  if (currentDays !== 'today' && rangeRecord) {
+  if (state.currentDays !== 'today' && rangeRecord) {
     note = shownAllTime && rangeRecord.date === shownAllTime.date
       ? 'this range holds the record'
       : `this range: ${formatTokens(rangeRecord.tokens)} · ${formatCost(rangeRecord.cost)} · ${shortDate(rangeRecord.date)}`;
@@ -1997,7 +1937,7 @@ async function postJson(url, body) {
 let lastAppliedDate = null;
 
 async function loadPricesSource() {
-  if (!neededRequests(hiddenKeys, currentDays).has('prices')) return;
+  if (!neededRequests(state.hiddenKeys, state.currentDays).has('prices')) return;
   const note = document.getElementById('pricesSource');
   const source = await fetch('/api/prices').then((r) => r.json()).catch(() => null);
   if (!source) {
@@ -2176,8 +2116,8 @@ function timeDomain(report) {
 // show 14 days, since a day or a week holds too few sessions to read a trend.
 // null is all history.
 function visibleDays() {
-  if (currentDays === 'all') return null;
-  return currentDays === 'today' || currentDays === 7 ? 14 : currentDays;
+  if (state.currentDays === 'all') return null;
+  return state.currentDays === 'today' || state.currentDays === 7 ? 14 : state.currentDays;
 }
 
 function chartDomain(report) {
@@ -2639,7 +2579,7 @@ let changesSeq = 0;
 // not from the newest request is dropped, whether it succeeded or failed, because
 // the newest request draws both panels when it settles.
 async function loadChanges() {
-  if (!neededRequests(hiddenKeys, currentDays).has('changes')) return;
+  if (!neededRequests(state.hiddenKeys, state.currentDays).has('changes')) return;
   const seq = ++changesSeq;
   showChangesLoading();
   try {
@@ -2940,15 +2880,13 @@ function loadHidden() {
 
 function saveHidden() {
   try {
-    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...hiddenKeys]));
+    localStorage.setItem(HIDDEN_KEY, JSON.stringify([...state.hiddenKeys]));
   } catch {
     // Not saved. The change holds for this page view.
   }
 }
 
-let hiddenKeys = loadHidden();
-
-const shown = (key) => !hiddenKeys.has(key);
+state.hiddenKeys = loadHidden();
 
 // The name in the menu and in the "x" button's label: the panel's heading or the
 // card's label. The row handle and toggle in a heading add no text.
@@ -2969,7 +2907,7 @@ function placeRowControls(row, panel) {
 
 function applyHidden() {
   for (const element of document.querySelectorAll('[data-hide-key]')) {
-    element.toggleAttribute('data-user-hidden', hiddenKeys.has(element.dataset.hideKey));
+    element.toggleAttribute('data-user-hidden', state.hiddenKeys.has(element.dataset.hideKey));
   }
   for (const row of document.querySelectorAll('#app > .panel-row')) {
     const panels = [...row.querySelectorAll(':scope > .panel')];
@@ -2981,7 +2919,7 @@ function applyHidden() {
 }
 
 function hideKey(key) {
-  hiddenKeys.add(key);
+  state.hiddenKeys.add(key);
   saveHidden();
   applyHidden();
   const element = document.querySelector(`[data-hide-key="${key}"]`);
@@ -2994,11 +2932,11 @@ function hideKey(key) {
 // and reviews come from fetchAll, and lastPayload holds null for a skipped one, so
 // when one of those three resumes, redrawCharts loads the page again.
 function showKeys(keys) {
-  const before = neededRequests(hiddenKeys, currentDays);
-  for (const key of keys) hiddenKeys.delete(key);
+  const before = neededRequests(state.hiddenKeys, state.currentDays);
+  for (const key of keys) state.hiddenKeys.delete(key);
   saveHidden();
   applyHidden();
-  const after = neededRequests(hiddenKeys, currentDays);
+  const after = neededRequests(state.hiddenKeys, state.currentDays);
   const resumed = (request) => after.has(request) && !before.has(request);
   if (resumed('records')) refreshRecords();
   if (resumed('prices')) loadPricesSource();
@@ -3062,8 +3000,6 @@ function setupHiding() {
 
 // #region app state + rendering
 
-let currentDays = 'today';
-
 const LIVE_POLL_MS = 5000;
 // While live, runLoad runs LIVE_POLL_MS after the previous run finished
 // (createPoller in public/poll.js), so a slow scan delays the next poll instead of
@@ -3079,7 +3015,7 @@ let lastSignature = null;
 let requestSeq = 0;
 // The newest payload fetchAll returned. redrawCharts draws from it after a resize,
 // a hide or an expand, so a change of width makes no request. The range picker
-// sets it to null, because renderPayload reads currentDays and would draw the old
+// sets it to null, because renderPayload reads state.currentDays and would draw the old
 // range's buckets with the new range's rules.
 let lastPayload = null;
 
@@ -3151,7 +3087,7 @@ function setLive(on) {
 // stays unique and renderPayload fills it the same way wherever it is.
 function placeSummaryCards() {
   const cards = document.getElementById('summaryCards');
-  const today = currentDays === 'today';
+  const today = state.currentDays === 'today';
   document.getElementById(today ? 'headerCards' : 'mainCards').appendChild(cards);
   cards.classList.toggle('cards-compact', today);
   // Hidden off Today, so the empty slot cannot wrap onto a line of its own.
@@ -3179,14 +3115,14 @@ async function fetchAll({ busy = false } = {}) {
   // are optional and resolve to null on failure, so an absent or unreadable source
   // hides its panel. A failed summary resolves to an error payload, which
   // renderPayload turns into the error banner after limits have rendered.
-  const summaryRequest = fetch(`/api/summary?days=${currentDays}`)
+  const summaryRequest = fetch(`/api/summary?days=${state.currentDays}`)
     .then((res) => res.json())
     .catch((err) => ({ error: err.message }));
   // A request whose every panel is hidden is skipped (see neededRequests in
   // visibility.js), and its panels render from null, as on a failed request.
-  const needed = neededRequests(hiddenKeys, currentDays);
+  const needed = neededRequests(state.hiddenKeys, state.currentDays);
   const rtkRequest = needed.has('rtk')
-    ? fetch(`/api/rtk?days=${currentDays}`)
+    ? fetch(`/api/rtk?days=${state.currentDays}`)
       .then((res) => res.json())
       .then((payload) => (payload && payload.error ? null : payload))
       .catch(() => null)
@@ -3224,7 +3160,7 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
   // failed, and one the signature below would otherwise treat as unchanged.
   // These three panels show on Today only. Their renderers set that, but a hidden
   // panel's renderer is skipped, so the range rule is applied here too.
-  if (currentDays !== 'today') {
+  if (state.currentDays !== 'today') {
     for (const id of ['limitsPanel', 'sessionsPanel', 'timelinePanel']) document.getElementById(id).hidden = true;
   }
   if (shown('limits')) renderLimits(limits);
@@ -3261,7 +3197,7 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
       ? `${formatTokens(s.unpricedTokens)} tokens from unrecognized models not priced`
       : '';
     const costNote = document.getElementById('cardCostNote');
-    const compact = currentDays === 'today';
+    const compact = state.currentDays === 'today';
     costNote.textContent = compact && s.unpricedTokens
       ? `${formatTokens(s.unpricedTokens)} unpriced`
       : unpricedNote;
@@ -3313,7 +3249,7 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
   if (shown('cumulativeCost')) drawCumulativeChart(document.getElementById('cumulativeChart'), data.daily);
 
   // Hourly buckets on the Today range, where a daily rate has no meaning.
-  const perDay = currentDays === 'today' ? null : costPerDay(data.daily);
+  const perDay = state.currentDays === 'today' ? null : costPerDay(data.daily);
   document.getElementById('burnCard').hidden = perDay == null;
   document.getElementById('projectionCard').hidden = perDay == null;
   if (perDay != null && shown('card-burn')) document.getElementById('cardBurn').textContent = formatCost(perDay);
@@ -3357,7 +3293,7 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
 
   // An hourly model split is noise, so the over-time view is multi-day only. The mix
   // donut and the Cost by model panel stay on every range, Today included.
-  const multiDay = currentDays !== 'today';
+  const multiDay = state.currentDays !== 'today';
   document.getElementById('modelDailyPanel').hidden = !multiDay;
   document.getElementById('modelCostDailyPanel').hidden = !multiDay;
   document.getElementById('activityPanel').hidden = !multiDay;
@@ -3404,11 +3340,11 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   document.querySelectorAll('#rangePicker button').forEach((b) => b.classList.remove('active'));
   btn.classList.add('active');
   const value = btn.dataset.days;
-  currentDays = value === 'all' || value === 'today' ? value : Number(value);
+  state.currentDays = value === 'all' || value === 'today' ? value : Number(value);
   placeSummaryCards();
   lastSignature = null; // the bucket keys change, so force a redraw
   lastPayload = null;
-  setLive(currentDays === 'today');
+  setLive(state.currentDays === 'today');
   if (changesReport) renderChanges(changesReport);
   runLoad({ busy: true });
 });
@@ -3460,7 +3396,7 @@ setupHiding();
 setupPanelLight();
 setupUsageGroupToggles();
 placeSummaryCards();
-setLive(currentDays === 'today');
+setLive(state.currentDays === 'today');
 refreshRecords();
 runLoad({ busy: true });
 loadChanges();

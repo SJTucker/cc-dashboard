@@ -1,6 +1,6 @@
 'use strict';
 
-// Loaded two ways: index.html loads it as a script before app.js, which makes
+// Loaded two ways: index.html loads it as a script before main.mjs, which makes
 // these names globals, and the tests load it with require().
 
 // The optional requests and the hide keys of the panels and cards each one feeds.
