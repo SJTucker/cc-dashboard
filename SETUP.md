@@ -14,6 +14,30 @@ what each panel shows.
 - **Claude Code.** The mod uses Claude Code's function hooks, which are early access.
   No minimum version is known. The mod was last run on 2.1.294.
 
+## Quick setup
+
+From a fresh clone:
+
+```bash
+git clone <this repository's URL> cc-dashboard
+cd cc-dashboard
+bin/setup
+npm start
+```
+
+Then open **http://localhost:3600**.
+
+`bin/setup` checks for Node 22.13 or later, `npm` and `claude` on your PATH, and
+stops before changing anything if one is missing. Then it runs `npm install`,
+links `mod/` to `~/.claude/skills/cc-dashboard` (under `CLAUDE_CONFIG_DIR` when that
+is set), and runs `claude plugin validate`. It is safe to run again. It never
+replaces a file, folder or link that already sits at the link path. It stops and
+names that path instead.
+
+`bin/setup` does not start the server or edit `settings.json`. The sections below
+are the same steps by hand, and the "Without the mod" route, which the script does
+not offer.
+
 ## Run the server
 
 ```bash
@@ -46,6 +70,8 @@ clone:
 ln -s "$PWD/mod" ~/.claude/skills/cc-dashboard
 claude plugin validate "$PWD/mod"
 ```
+
+`bin/setup` runs both lines.
 
 Every Claude Code session started after that loads the mod. It needs no change to
 your statusline script or to `settings.json`.
@@ -207,7 +233,7 @@ The mod also reads these files to record setup changes. It writes none of them.
    http://localhost:3600`. The page loads at that address.
 2. **The database.** After the first page load, the server's output has no `[store]`
    warning and `~/.claude/cc-dashboard/transcripts.db` exists.
-3. **The mod.** `claude plugin validate "$PWD/mod"` passes, run from the clone.
+3. **The mod.** `claude plugin validate "$PWD/mod"` passes, run from the clone. `bin/setup` runs this check.
 4. **The recorder.** Start a Claude Code session and send one prompt. A file named
    after the session id appears in `~/.claude/cc-dashboard/sessions/`, and the Plan
    usage panel's "as of" time is a moment ago.

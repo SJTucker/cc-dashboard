@@ -1,8 +1,7 @@
 # Docker for the dashboard
 
 Check whether a Docker image makes the dashboard easier to ship and run. Asked for on
-2026-10-08, as one of two steps toward getting the project ready to ship. The other
-is [a setup script](setup-script.md).
+2026-10-08, as one of two steps toward getting the project ready to ship. The other, a setup script, shipped as `bin/setup`.
 
 ## What exists
 
@@ -22,7 +21,7 @@ is [a setup script](setup-script.md).
 
 - **What the image is for.** The server only, with the mod and `bin/` scripts still
   on the host. Decide whether that saves a new user any step, given the host still
-  needs Node for the mod.
+  needs Node for the mod. `bin/setup` already does the host side in one command.
 - **SQLite WAL across the container boundary.** On macOS, Docker Desktop runs
   containers in a VM and shares host folders over a file-sharing layer. WAL needs
   shared memory (`transcripts.db-shm`) that every writer maps. A host
@@ -41,4 +40,4 @@ is [a setup script](setup-script.md).
 - **Base image and size.** For example `node:22-alpine`, `npm ci --omit=dev`, and no
   build step.
 - **Whether to ship it.** If the WAL question has no safe answer, record that here and
-  close the idea in favour of the setup script.
+  close the idea in favour of `bin/setup`.

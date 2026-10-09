@@ -9,7 +9,6 @@ then on.
 
 | Idea | Status |
 |---|---|
-| [Setup script](setup-script.md) | Next, toward shipping: one command from clone to working dashboard and mod; language, what it changes, re-runs, launchd and uninstall open |
 | [Docker](docker.md) | Next, toward shipping: test SQLite WAL across the container boundary first; binding, mounts and whether it saves a step open |
 | [Better session titles](better-session-titles.md) | Open: branch line and first-prompt fallback shipped; decide around 2026-10-14 whether a model-written title is still needed |
 | [Subagent permission prompts](subagent-permission-prompts.md) | Open: a subagent waiting on a permission prompt shows as working; needs a way to read the permission mode first |
