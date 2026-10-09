@@ -2,6 +2,7 @@
 'use strict';
 
 const express = require('express');
+const http = require('http');
 const os = require('os');
 const path = require('path');
 const { loadConfig } = require('./lib/config-dir');
@@ -27,8 +28,6 @@ const { currentRows } = require('./lib/pricing');
 const { loadPriceFile, pricesSource, appendSnapshot, getPricesPath } = require('./lib/price-store');
 const { PRICING_URL, PriceParseError, fetchPricingPage, parsePricingPage, diffPrices } = require('./lib/price-fetch');
 
-const config = loadConfig();
-
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
   if (idx === -1) return null;
@@ -40,8 +39,8 @@ function getArg(name) {
 // handler below is attached, so an unusable value has to be rejected here or the
 // friendly message never prints. `--port` with no value takes the next argv
 // token, which is how `--port --open` used to become NaN.
-function getPort() {
-  const raw = getArg('port') || config.port;
+function getPort(configPort) {
+  const raw = getArg('port') || configPort;
   if (raw == null) return 3600;
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -51,7 +50,6 @@ function getPort() {
   return port;
 }
 
-const PORT = getPort();
 const HOST = '127.0.0.1'; // intentionally not configurable - see lib/net-guard.js
 
 // Every modern browser sends Sec-Fetch-Site. Any value other than same-origin or
@@ -69,36 +67,6 @@ function sameOriginOnly(req, res, next) {
   }
   next();
 }
-
-const app = express();
-// Express names itself in every response unless told not to.
-app.disable('x-powered-by');
-app.use(hostGuard);
-app.use(securityHeaders);
-app.use(express.static(path.join(__dirname, 'public')));
-// GET routes are guarded too, because each scan costs seconds of CPU. Another
-// page could otherwise run scans here with <img src> tags.
-app.use('/api', sameOriginOnly);
-
-// Before the first scan, so every cost uses the applied price history.
-const pricesPath = getPricesPath(config.configDir);
-loadPriceFile(pricesPath);
-
-// One transcripts.db handle for the row store and the reviews (lib/db.js). It closes
-// when the server closes.
-const projectsDir = getProjectsDir(config.configDir);
-const storePath = getStorePath(config.configDir);
-const serverDb = createServerDb(storePath);
-const getReviewDb = createReviewDbGetter(serverDb.get, legacyReviewsDir(config.configDir));
-
-// Opened on the first scan, not at start, the same as before the factory.
-let rowStore = null;
-function getRowStore() {
-  if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, store: openStore(storePath, serverDb.get) });
-  return rowStore;
-}
-
-const { scan, clear: clearScans } = createScanMemo({ getRowStore, aggregate, getProjectsDir: () => projectsDir });
 
 // The per-call records feed /api/changes only. Sent here they would add a few
 // megabytes to every summary request, and to every 5s poll on the Today range.
@@ -124,109 +92,6 @@ function parseDays(raw) {
   return RANGE_DAYS.has(n) ? { days: n } : { error: INVALID_DAYS(raw) };
 }
 
-app.get('/api/summary', async (req, res) => {
-  const { days, error } = parseDays(req.query.days);
-  if (error) {
-    res.status(400).json({ error });
-    return;
-  }
-  try {
-    const data = days === 'today' ? await scan('today', 'hour') : await scan(days);
-    res.json(publicSummary(data));
-  } catch (err) {
-    console.error('[API] /api/summary failed:', err);
-    res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
-  }
-});
-
-// No cache. A full read of the reference database - 21,867 rows, both GROUP BYs,
-// open and close - measured 13ms, against ~1.9s for a 30-day read of every transcript. Putting
-// this behind the aggregate memo above would either serve stale savings or force every
-// rtk request to clear a memo that exists to avoid re-aggregating the transcripts.
-app.get('/api/rtk', (req, res) => {
-  const { days, error } = parseDays(req.query.days);
-  if (error) {
-    res.status(400).json({ error });
-    return;
-  }
-  try {
-    res.json(days === 'today' ? readRtkUsage({ days, bucket: 'hour', dbPath: config.rtkDb }) : readRtkUsage({ days, dbPath: config.rtkDb }));
-  } catch (err) {
-    console.error('[API] /api/rtk failed:', err);
-    res.status(500).json({ error: 'Failed to read rtk history', detail: err.message });
-  }
-});
-
-// Plan usage changes every few minutes while Claude Code runs, and reading the
-// ~70KB .claude.json takes about 1ms, so it is read on every request, uncached.
-// readLimits() and readDailyShare() return null rather than throwing, so there is
-// no error branch.
-app.get('/api/limits', (req, res) => {
-  const limits = readLimits({ claudeJson: config.claudeJsonPath, rateLimits: getRateLimitsPath(config.configDir) });
-  res.json(limits && { ...limits, today: readDailyShare({ rateLimits: getRateLimitsPath(config.configDir) }) });
-});
-
-// All history, whatever range the page shows: a before/after needs data on both
-// sides of a change. It reads the all-time aggregate, the same one
-// the "all" range uses. The marker files are read on every request, so an edit to
-// changes.json shows on the next refresh instead of up to 60s later. `daily` holds
-// one series per before/after row; the two rtk series are added here because they
-// come from rtk's database, not the scan.
-app.get('/api/changes', async (req, res) => {
-  try {
-    const data = await scan(null);
-    const { markers, changesFile } = collectMarkers(data.efficiency.calls, config);
-    const rtkWindows = readRtkWindows(windowRanges(markers), config.rtkDb);
-    const report = buildReport(data.efficiency, markers, rtkWindows, changesFile);
-    // The two rtk rows' daily series come from rtk's own history, not the scan.
-    const rtkDaily = readRtkDaily(config.rtkDb);
-    if (rtkDaily) Object.assign(report.daily, rtkDaily);
-    res.json(report);
-  } catch (err) {
-    console.error('[API] /api/changes failed:', err);
-    res.status(500).json({ error: 'Failed to build the setup changes report', detail: err.message });
-  }
-});
-
-// The Record day card's all-time value: the day with the most tokens, with its
-// token total and cost, from the all-time aggregate. recentDays is the per-day totals
-// for the 6 days before today (not today), which the Today range adds to its live
-// totals for the rolling 7-day lines. It reads the 7-day aggregate, the one the 7d
-// range also uses.
-app.get('/api/records', async (req, res) => {
-  try {
-    const todayStr = localDateStr(new Date());
-    const weekStart = localDateStr(new Date(windowStart(7)));
-    const [all, week] = await Promise.all([scan(null), scan(7)]);
-    const allTime = busiestDay(all.daily);
-    const recentDays = dayTotals(week.daily).filter((d) => d.date >= weekStart && d.date < todayStr);
-    res.json({ allTime, recentDays });
-  } catch (err) {
-    console.error('[API] /api/records failed:', err);
-    res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
-  }
-});
-
-// Today's sessions from the snapshots in cc-dashboard/sessions/ (lib/sessions.js),
-// each with its tokens, cost today and lines changed from the Today scan. Read-only:
-// bin/record-statusline writes the snapshots, run by the mod in mod/ or by a
-// statusline script. Each session's `activity` comes from cc-dashboard/activity/
-// (lib/activity.js), written by the mod. Session ids stay on the server.
-app.get('/api/sessions/live', async (req, res) => {
-  try {
-    const data = await scan('today', 'hour');
-    const { efficiency } = data;
-    res.json(buildLiveSessions(readSessions(getSessionsDir(config.configDir)), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(getActivityDir(config.configDir)), {
-      branchesBySession: efficiency.branchesBySession,
-      branchBySession: efficiency.branchBySession,
-      firstPromptBySession: efficiency.firstPromptBySession,
-    }));
-  } catch (err) {
-    console.error('[API] /api/sessions/live failed:', err);
-    res.status(500).json({ error: 'Failed to read live sessions', detail: err.message });
-  }
-});
-
 // bin/review-session holds the write lock while it records a review. The server
 // waits SERVER_BUSY_TIMEOUT_MS (250 ms, lib/db.js) for it and then answers 503 with
 // this text. The Session reviews panel shows it as text.
@@ -238,25 +103,6 @@ function sendBusy(res, err) {
   res.status(503).json({ error: DB_BUSY });
   return true;
 }
-
-// Reviews of ended sessions from the reviews and suggestions tables in
-// transcripts.db (lib/review.js), finished in the last 7 days. bin/review-session
-// writes the reviews, run by the mod in mod/. The dismiss routes below write the
-// dismissals. Each review includes its session id and transcript path, because the
-// user pastes them into a prompt for another model. Only this machine can reach the
-// API: the server listens on HOST (127.0.0.1). home lets the page shorten the
-// transcript path. When transcripts.db cannot be opened the answer is a 500 with the
-// reason. When the one-time import (getReviewDb) or a write meets the lock of
-// bin/review-session the answer is a 503 with DB_BUSY. The panel shows either as text.
-app.get('/api/reviews', (req, res) => {
-  try {
-    res.json({ home: os.homedir(), reviews: readReviews(getReviewDb(), projectsDir) });
-  } catch (err) {
-    if (sendBusy(res, err)) return;
-    console.error('[API] /api/reviews failed:', err);
-    res.status(500).json({ error: 'Failed to read session reviews', detail: err.message });
-  }
-});
 
 // The one write the page makes to a review. app.use('/api', sameOriginOnly) above
 // covers both methods, so a cross-site page cannot dismiss or undo, the same
@@ -273,124 +119,290 @@ function suggestionTarget(req, res) {
   return { sessionId, idx: Number(idx) };
 }
 
-// Sets or clears the dismissal and answers. reason null clears it.
-function changeDismissal(res, target, reason) {
-  try {
-    const dismissedAt = reason ? Date.now() : null;
-    if (!setDismissal(getReviewDb(), target.sessionId, target.idx, reason, dismissedAt ?? undefined)) {
-      res.status(404).json({ error: 'No such suggestion.' });
+// Builds the dashboard for one config (lib/config-dir.js) and returns an
+// http.Server that is not listening yet. Everything that keeps state lives in
+// here: the transcripts.db handle, the row store, the reviews import flag, the
+// aggregate memo and the pending price check. The handle closes when the server
+// closes.
+function createServer(config) {
+  const projectsDir = getProjectsDir(config.configDir);
+  const storePath = getStorePath(config.configDir);
+  const pricesPath = getPricesPath(config.configDir);
+  const rateLimitsPath = getRateLimitsPath(config.configDir);
+
+  // One transcripts.db handle for the row store and the reviews (lib/db.js).
+  const serverDb = createServerDb(storePath);
+  const getReviewDb = createReviewDbGetter(serverDb.get, legacyReviewsDir(config.configDir));
+  let rowStore = null;
+  // Opened on the first scan, so a transcripts.db that cannot be opened is reported
+  // by the request that needs it.
+  function getRowStore() {
+    if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, store: openStore(storePath, serverDb.get) });
+    return rowStore;
+  }
+
+  // Before the first scan, so every cost uses the applied price history.
+  loadPriceFile(pricesPath);
+  const { scan, clear: clearScans } = createScanMemo({ getRowStore, aggregate, getProjectsDir: () => projectsDir });
+
+  const app = express();
+  // Express names itself in every response unless told not to.
+  app.disable('x-powered-by');
+  app.use(hostGuard);
+  app.use(securityHeaders);
+  app.use(express.static(path.join(__dirname, 'public')));
+  // GET routes are guarded too, because each scan costs seconds of CPU. Another
+  // page could otherwise run scans here with <img src> tags.
+  app.use('/api', sameOriginOnly);
+
+  app.get('/api/summary', async (req, res) => {
+    const { days, error } = parseDays(req.query.days);
+    if (error) {
+      res.status(400).json({ error });
       return;
     }
-    res.json({ ok: true, sessionId: target.sessionId, idx: target.idx, dismissedAt, reason });
-  } catch (err) {
-    if (sendBusy(res, err)) return;
-    console.error('[API] dismiss failed:', err);
-    res.status(500).json({ error: 'Failed to save the dismissal', detail: err.message });
+    try {
+      const data = days === 'today' ? await scan('today', 'hour') : await scan(days);
+      res.json(publicSummary(data));
+    } catch (err) {
+      console.error('[API] /api/summary failed:', err);
+      res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
+    }
+  });
+
+  // No cache. A full read of the reference database - 21,867 rows, both GROUP BYs,
+  // open and close - measured 13ms, against ~1.9s for a 30-day read of every transcript. Putting
+  // this behind the aggregate memo above would either serve stale savings or force every
+  // rtk request to clear a memo that exists to avoid re-aggregating the transcripts.
+  app.get('/api/rtk', (req, res) => {
+    const { days, error } = parseDays(req.query.days);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+    try {
+      res.json(days === 'today' ? readRtkUsage({ days, bucket: 'hour', dbPath: config.rtkDb }) : readRtkUsage({ days, dbPath: config.rtkDb }));
+    } catch (err) {
+      console.error('[API] /api/rtk failed:', err);
+      res.status(500).json({ error: 'Failed to read rtk history', detail: err.message });
+    }
+  });
+
+  // Plan usage changes every few minutes while Claude Code runs, and reading the
+  // ~70KB .claude.json takes about 1ms, so it is read on every request, uncached.
+  // readLimits() and readDailyShare() return null rather than throwing, so there is
+  // no error branch.
+  app.get('/api/limits', (req, res) => {
+    const limits = readLimits({ claudeJson: config.claudeJsonPath, rateLimits: rateLimitsPath });
+    res.json(limits && { ...limits, today: readDailyShare({ rateLimits: rateLimitsPath }) });
+  });
+
+  // All history, whatever range the page shows: a before/after needs data on both
+  // sides of a change. It reads the all-time aggregate, the same one
+  // the "all" range uses. The marker files are read on every request, so an edit to
+  // changes.json shows on the next refresh instead of up to 60s later. `daily` holds
+  // one series per before/after row; the two rtk series are added here because they
+  // come from rtk's database, not the scan.
+  app.get('/api/changes', async (req, res) => {
+    try {
+      const data = await scan(null);
+      const { markers, changesFile } = collectMarkers(data.efficiency.calls, config);
+      const rtkWindows = readRtkWindows(windowRanges(markers), config.rtkDb);
+      const report = buildReport(data.efficiency, markers, rtkWindows, changesFile);
+      // The two rtk rows' daily series come from rtk's own history, not the scan.
+      const rtkDaily = readRtkDaily(config.rtkDb);
+      if (rtkDaily) Object.assign(report.daily, rtkDaily);
+      res.json(report);
+    } catch (err) {
+      console.error('[API] /api/changes failed:', err);
+      res.status(500).json({ error: 'Failed to build the setup changes report', detail: err.message });
+    }
+  });
+
+  // The Record day card's all-time value: the day with the most tokens, with its
+  // token total and cost, from the all-time aggregate. recentDays is the per-day totals
+  // for the 6 days before today (not today), which the Today range adds to its live
+  // totals for the rolling 7-day lines. It reads the 7-day aggregate, the one the 7d
+  // range also uses.
+  app.get('/api/records', async (req, res) => {
+    try {
+      const todayStr = localDateStr(new Date());
+      const weekStart = localDateStr(new Date(windowStart(7)));
+      const [all, week] = await Promise.all([scan(null), scan(7)]);
+      const allTime = busiestDay(all.daily);
+      const recentDays = dayTotals(week.daily).filter((d) => d.date >= weekStart && d.date < todayStr);
+      res.json({ allTime, recentDays });
+    } catch (err) {
+      console.error('[API] /api/records failed:', err);
+      res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
+    }
+  });
+
+  // Today's sessions from the snapshots in cc-dashboard/sessions/ (lib/sessions.js),
+  // each with its tokens, cost today and lines changed from the Today scan. Read-only:
+  // bin/record-statusline writes the snapshots, run by the mod in mod/ or by a
+  // statusline script. Each session's `activity` comes from cc-dashboard/activity/
+  // (lib/activity.js), written by the mod. Session ids stay on the server.
+  app.get('/api/sessions/live', async (req, res) => {
+    try {
+      const data = await scan('today', 'hour');
+      const { efficiency } = data;
+      res.json(buildLiveSessions(readSessions(getSessionsDir(config.configDir)), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(getActivityDir(config.configDir)), {
+        branchesBySession: efficiency.branchesBySession,
+        branchBySession: efficiency.branchBySession,
+        firstPromptBySession: efficiency.firstPromptBySession,
+      }));
+    } catch (err) {
+      console.error('[API] /api/sessions/live failed:', err);
+      res.status(500).json({ error: 'Failed to read live sessions', detail: err.message });
+    }
+  });
+
+  // Reviews of ended sessions from the reviews and suggestions tables in
+  // transcripts.db (lib/review.js), finished in the last 7 days. bin/review-session
+  // writes the reviews, run by the mod in mod/. The dismiss routes below write the
+  // dismissals. Each review includes its session id and transcript path, because the
+  // user pastes them into a prompt for another model. Only this machine can reach the
+  // API: the server listens on HOST (127.0.0.1). home lets the page shorten the
+  // transcript path. When transcripts.db cannot be opened the answer is a 500 with the
+  // reason. When the one-time import (getReviewDb) or a write meets the lock of
+  // bin/review-session the answer is a 503 with DB_BUSY. The panel shows either as text.
+  app.get('/api/reviews', (req, res) => {
+    try {
+      res.json({ home: os.homedir(), reviews: readReviews(getReviewDb(), projectsDir) });
+    } catch (err) {
+      if (sendBusy(res, err)) return;
+      console.error('[API] /api/reviews failed:', err);
+      res.status(500).json({ error: 'Failed to read session reviews', detail: err.message });
+    }
+  });
+
+  // Sets or clears the dismissal and answers. reason null clears it.
+  function changeDismissal(res, target, reason) {
+    try {
+      const dismissedAt = reason ? Date.now() : null;
+      if (!setDismissal(getReviewDb(), target.sessionId, target.idx, reason, dismissedAt ?? undefined)) {
+        res.status(404).json({ error: 'No such suggestion.' });
+        return;
+      }
+      res.json({ ok: true, sessionId: target.sessionId, idx: target.idx, dismissedAt, reason });
+    } catch (err) {
+      if (sendBusy(res, err)) return;
+      console.error('[API] dismiss failed:', err);
+      res.status(500).json({ error: 'Failed to save the dismissal', detail: err.message });
+    }
   }
+
+  app.post(DISMISS_PATH, express.json({ limit: '1kb' }), (req, res) => {
+    const target = suggestionTarget(req, res);
+    if (!target) return;
+    const reason = req.body ? req.body.reason : undefined;
+    if (!DISMISS_REASONS.includes(reason)) {
+      res.status(400).json({ error: `reason must be "${DISMISS_REASONS.join('" or "')}".` });
+      return;
+    }
+    changeDismissal(res, target, reason);
+  });
+
+  app.delete(DISMISS_PATH, (req, res) => {
+    const target = suggestionTarget(req, res);
+    if (target) changeDismissal(res, target, null);
+  });
+
+  app.post('/api/refresh', (req, res) => {
+    clearScans();
+    res.json({ ok: true });
+  });
+
+  // The rows the last check found new or changed. Apply saves exactly these, so what
+  // the panel showed is what gets saved, and the browser never sends prices.
+  let pendingCheck = null;
+
+  app.get('/api/prices', (req, res) => {
+    res.json(pricesSource());
+  });
+
+  // The dashboard's only outbound request. It runs when someone clicks Check prices.
+  app.post('/api/prices/check', async (req, res) => {
+    pendingCheck = null;
+    let page;
+    try {
+      page = await fetchPricingPage();
+    } catch (err) {
+      res.status(502).json({ error: `Could not fetch ${PRICING_URL}: ${err.message}` });
+      return;
+    }
+    try {
+      const { rows, skipped } = parsePricingPage(page);
+      const diff = diffPrices(rows, currentRows());
+      pendingCheck = [...diff.added, ...diff.changed.map((c) => c.after)];
+      res.json({ ...diff, skipped, checkedAt: new Date().toISOString() });
+    } catch (err) {
+      if (err instanceof PriceParseError) {
+        res.status(422).json({ error: `The pricing page did not parse, so prices are unchanged: ${err.message}` });
+        return;
+      }
+      console.error('[API] /api/prices/check failed:', err);
+      res.status(500).json({ error: 'Failed to check prices', detail: err.message });
+    }
+  });
+
+  app.post('/api/prices/apply', express.json({ limit: '1kb' }), (req, res) => {
+    if (!pendingCheck || !pendingCheck.length) {
+      res.status(409).json({ error: 'Nothing to apply. Check prices first.' });
+      return;
+    }
+    const effectiveFrom = req.body ? req.body.effectiveFrom : undefined;
+    const result = appendSnapshot({ effectiveFrom, rows: pendingCheck, source: PRICING_URL, file: pricesPath });
+    if (result.error) {
+      res.status(400).json({ error: result.error });
+      return;
+    }
+    pendingCheck = null;
+    clearScans();
+    res.json(result.source);
+  });
+
+  const server = http.createServer(app);
+  server.on('close', () => serverDb.close());
+  return server;
 }
 
-app.post(DISMISS_PATH, express.json({ limit: '1kb' }), (req, res) => {
-  const target = suggestionTarget(req, res);
-  if (!target) return;
-  const reason = req.body ? req.body.reason : undefined;
-  if (!DISMISS_REASONS.includes(reason)) {
-    res.status(400).json({ error: `reason must be "${DISMISS_REASONS.join('" or "')}".` });
-    return;
-  }
-  changeDismissal(res, target, reason);
-});
-
-app.delete(DISMISS_PATH, (req, res) => {
-  const target = suggestionTarget(req, res);
-  if (target) changeDismissal(res, target, null);
-});
-
-app.post('/api/refresh', (req, res) => {
-  clearScans();
-  res.json({ ok: true });
-});
-
-// The rows the last check found new or changed. Apply saves exactly these, so what
-// the panel showed is what gets saved, and the browser never sends prices.
-let pendingCheck = null;
-
-app.get('/api/prices', (req, res) => {
-  res.json(pricesSource());
-});
-
-// The dashboard's only outbound request. It runs when someone clicks Check prices.
-app.post('/api/prices/check', async (req, res) => {
-  pendingCheck = null;
-  let page;
-  try {
-    page = await fetchPricingPage();
-  } catch (err) {
-    res.status(502).json({ error: `Could not fetch ${PRICING_URL}: ${err.message}` });
-    return;
-  }
-  try {
-    const { rows, skipped } = parsePricingPage(page);
-    const diff = diffPrices(rows, currentRows());
-    pendingCheck = [...diff.added, ...diff.changed.map((c) => c.after)];
-    res.json({ ...diff, skipped, checkedAt: new Date().toISOString() });
-  } catch (err) {
-    if (err instanceof PriceParseError) {
-      res.status(422).json({ error: `The pricing page did not parse, so prices are unchanged: ${err.message}` });
-      return;
-    }
-    console.error('[API] /api/prices/check failed:', err);
-    res.status(500).json({ error: 'Failed to check prices', detail: err.message });
-  }
-});
-
-app.post('/api/prices/apply', express.json({ limit: '1kb' }), (req, res) => {
-  if (!pendingCheck || !pendingCheck.length) {
-    res.status(409).json({ error: 'Nothing to apply. Check prices first.' });
-    return;
-  }
-  const effectiveFrom = req.body ? req.body.effectiveFrom : undefined;
-  const result = appendSnapshot({ effectiveFrom, rows: pendingCheck, source: PRICING_URL, file: pricesPath });
-  if (result.error) {
-    res.status(400).json({ error: result.error });
-    return;
-  }
-  pendingCheck = null;
-  clearScans();
-  res.json(result.source);
-});
-
-const server = app.listen(PORT, HOST, () => {
-  console.log(`\nClaude Code Dashboard running at http://localhost:${PORT}`);
-  console.log(`Reading logs from: ${projectsDir}`);
-  console.log('Bound to localhost only. The one outbound request is Check prices, to platform.claude.com.\n');
-  if (process.argv.includes('--open')) {
-    import('open').then((mod) => mod.default(`http://localhost:${PORT}`)).catch(() => {});
-  }
-});
-
-server.on('close', () => serverDb.close());
-
-server.on('error', (err) => {
-  if (err.code === 'EADDRINUSE') {
-    console.error(`Port ${PORT} is already in use. Try: node server.js --port 3601`);
-    process.exit(1);
-  }
-  throw err;
-});
-
-// Ctrl-C (SIGINT) or a service stop (SIGTERM) closes the listener, then the one
-// transcripts.db handle. Closing the last connection checkpoints the WAL into
-// transcripts.db and removes transcripts.db-wal. The handlers are registered only
-// when server.js is the program. test/api.test.js loads it once per test server, and
-// a pair of listeners per load would pile up on the test process.
+// Started as a program (npm start, node server.js): read the environment once,
+// check the port, listen, and close cleanly on Ctrl-C (SIGINT) or a service stop
+// (SIGTERM). Required as a module (the tests), nothing starts.
 if (require.main === module) {
+  const config = loadConfig();
+  const port = getPort(config.port);
+  const server = createServer(config);
+
+  server.listen(port, HOST, () => {
+    console.log(`\nClaude Code Dashboard running at http://localhost:${port}`);
+    console.log(`Reading logs from: ${getProjectsDir(config.configDir)}`);
+    console.log('Bound to localhost only. The one outbound request is Check prices, to platform.claude.com.\n');
+    if (process.argv.includes('--open')) {
+      import('open').then((mod) => mod.default(`http://localhost:${port}`)).catch(() => {});
+    }
+  });
+
+  server.on('error', (err) => {
+    if (err.code === 'EADDRINUSE') {
+      console.error(`Port ${port} is already in use. Try: node server.js --port 3601`);
+      process.exit(1);
+    }
+    throw err;
+  });
+
+  // close() waits for open connections, and a browser tab holds a keep-alive one,
+  // so they are closed too. The server's close event closes the transcripts.db
+  // handle, which checkpoints the WAL into transcripts.db and removes
+  // transcripts.db-wal, and then the process exits.
   const shutdown = () => {
-    server.close();
-    serverDb.close();
-    process.exit(0);
+    server.close(() => process.exit(0));
+    server.closeAllConnections();
   };
   process.once('SIGINT', shutdown);
   process.once('SIGTERM', shutdown);
 }
 
-module.exports = server;
+module.exports = { createServer };

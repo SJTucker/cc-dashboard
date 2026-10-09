@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
+const http = require('http');
 const net = require('net');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
@@ -62,13 +63,15 @@ async function startServerProcess(t) {
   });
   t.after(() => child.kill('SIGKILL'));
   const exited = new Promise((resolve) => child.once('exit', (code, signal) => resolve({ code, signal })));
+  let err = '';
+  child.stderr.on('data', (chunk) => { err += chunk; });
   await new Promise((resolve, reject) => {
     let out = '';
     child.stdout.on('data', (chunk) => {
       out += chunk;
       if (out.includes('running at')) resolve();
     });
-    exited.then(({ code }) => reject(new Error(`the server exited with code ${code} before it listened`)));
+    exited.then(({ code }) => reject(new Error(`the server exited with code ${code} before it listened. stderr: ${err}`)));
   });
   return { child, exited, url: `http://127.0.0.1:${port}`, wal: path.join(base, 'cc-dashboard', 'transcripts.db-wal') };
 }
@@ -83,6 +86,31 @@ for (const signal of ['SIGTERM', 'SIGINT']) {
     server.child.kill(signal);
     assert.deepStrictEqual(await within(server.exited, 2000), { code: 0, signal: null });
     assert.ok(!fs.existsSync(server.wal) || fs.statSync(server.wal).size === 0, 'the WAL was folded into transcripts.db');
+  });
+}
+
+// Two requests on one keep-alive agent, so the row store (/api/summary) and the
+// reviews (/api/reviews) have both used the transcripts.db handle. The connection
+// stays open when the signal arrives.
+for (const signal of ['SIGINT', 'SIGTERM']) {
+  test(`${signal} with an open keep-alive connection exits 0 and leaves no WAL file`, async (t) => {
+    const server = await startServerProcess(t);
+    const { port } = new URL(server.url);
+    const agent = new http.Agent({ keepAlive: true });
+    t.after(() => agent.destroy());
+    const get = (route) => new Promise((resolve, reject) => {
+      http.get({ host: '127.0.0.1', port, path: route, agent }, (res) => {
+        res.resume();
+        res.on('end', () => resolve(res.statusCode));
+      }).on('error', reject);
+    });
+    assert.strictEqual(await get('/api/summary?days=7'), 200);
+    assert.strictEqual(await get('/api/reviews'), 200);
+    const started = Date.now();
+    server.child.kill(signal);
+    assert.deepStrictEqual(await within(server.exited, 3000), { code: 0, signal: null });
+    assert.ok(Date.now() - started < 3000, `exit took ${Date.now() - started} ms`);
+    assert.ok(!fs.existsSync(server.wal), 'transcripts.db-wal is gone');
   });
 }
 

@@ -64,31 +64,6 @@ function tmpDir(t, name) {
   return dir;
 }
 
-// t.after hooks run in registration order. Restoring each call's own saved value in
-// that order would leave the second call's stale value in place. So the first call
-// for a test records the original of each key, and later calls only add keys.
-const savedByTest = new WeakMap();
-
-function setOrDelete(key, value) {
-  if (value === undefined) delete process.env[key];
-  else process.env[key] = String(value);
-}
-
-function withEnv(t, vars) {
-  let saved = savedByTest.get(t);
-  if (!saved) {
-    saved = new Map();
-    savedByTest.set(t, saved);
-    t.after(() => {
-      for (const [key, value] of saved) setOrDelete(key, value);
-    });
-  }
-  for (const [key, value] of Object.entries(vars)) {
-    if (!saved.has(key)) saved.set(key, process.env[key]);
-    setOrDelete(key, value);
-  }
-}
-
 // A config for one test, built by loadConfig, with every path in a fresh temp
 // folder. projects/demo exists, so the server has a transcript folder to walk.
 // rtkDb names a file that does not exist, so no test reads the developer's rtk
@@ -104,21 +79,12 @@ function testConfig(t, name = 'cfg') {
   });
 }
 
-// The modules that hold server state or read the environment when loaded. Until
-// server.js exports a factory (B2 Task 13), each boot reloads them, so every server
-// starts from fresh copies.
-const SERVER_MODULES = [
-  '../server', '../lib/aggregate', '../lib/rowstore', '../lib/store', '../lib/db', '../lib/review-db',
-  '../lib/review', '../lib/sessions', '../lib/updates', '../lib/changes', '../lib/efficiency',
-];
-
-// Boots server.js on an ephemeral port with `config`, and resolves once it listens.
-// Write fixtures under config.configDir before the first request, not before the
-// boot: the row store opens on the first scan.
+// Builds the server for `config` (createServer in server.js), listens on an
+// ephemeral port, and resolves once it listens. Fixtures can be written under
+// config.configDir until the first request: the row store opens on the first scan.
 async function bootServer(t, config = testConfig(t, 'boot')) {
-  withEnv(t, { CLAUDE_CONFIG_DIR: config.configDir, CHANGES_FILE: config.changesFile, RTK_DB: config.rtkDb, PORT: '0' });
-  for (const mod of SERVER_MODULES) delete require.cache[require.resolve(mod)];
-  const server = require('../server');
+  const { createServer } = require('../server');
+  const server = createServer(config);
   t.after(async () => {
     await new Promise((resolve) => {
       server.close(() => resolve());
@@ -126,7 +92,10 @@ async function bootServer(t, config = testConfig(t, 'boot')) {
     });
     require('../lib/pricing').setSnapshots([]);
   });
-  await new Promise((resolve) => server.once('listening', resolve));
+  await new Promise((resolve, reject) => {
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', resolve);
+  });
   const port = server.address().port;
   return { server, config, port, url: `http://127.0.0.1:${port}` };
 }
@@ -170,4 +139,4 @@ function freshServerDb(t) {
   return { serverDb, base, file };
 }
 
-module.exports = { tmpDir, removeTree, withEnv, testConfig, bootServer, holdWriteLock, freshServerDb };
+module.exports = { tmpDir, removeTree, testConfig, bootServer, holdWriteLock, freshServerDb };

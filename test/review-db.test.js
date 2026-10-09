@@ -111,7 +111,8 @@ test('openReviewDb throws for a database it cannot open', () => {
 
 test('loading lib/review-db.js does not load the row store', () => {
   const { spawnSync } = require('child_process');
-  const script = "require('./lib/review-db'); const loaded = Object.keys(require.cache).map((p) => require('path').basename(p)); process.stdout.write(JSON.stringify(loaded.filter((n) => ['rowstore.js', 'store.js'].includes(n))));";
+  // require('module')._cache is the module cache object that the require function exposes.
+  const script = "require('./lib/review-db'); const loaded = Object.keys(require('module')._cache).map((p) => require('path').basename(p)); process.stdout.write(JSON.stringify(loaded.filter((n) => ['rowstore.js', 'store.js'].includes(n))));";
   const res = spawnSync(process.execPath, ['-e', script], { cwd: path.join(__dirname, '..'), encoding: 'utf8' });
   assert.strictEqual(res.stdout, '[]');
 });

@@ -6,7 +6,7 @@ const assert = require('node:assert');
 const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
-const { DatabaseSync } = require('node:sqlite');
+const { DatabaseSync } = require('../lib/sqlite');
 
 const SCRIPT = path.join(__dirname, '..', 'bin', 'review-session');
 

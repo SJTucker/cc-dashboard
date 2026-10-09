@@ -465,8 +465,7 @@ test('a weekly reset since a same-day previous reading, with no baseline, starts
 });
 
 test('loading lib/limits.js loads neither the transcript reader nor the price table', () => {
-  // require('module')._cache is the object require.cache refers to. The load runs in
-  // a fresh process, so modules other tests loaded do not count.
+  // The load runs in a fresh process, so modules other tests loaded do not count.
   const script = "require('./lib/limits'); process.stdout.write(JSON.stringify(Object.keys(require('module')._cache).filter((k) => /lib\\/(extract|aggregate|pricing)\\.js$/.test(k))));";
   const out = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, encoding: 'utf8' });
   assert.strictEqual(out.status, 0, out.stderr);

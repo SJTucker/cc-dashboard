@@ -58,6 +58,31 @@ async function listen(t) { return (await startServer(t)).url; }
 const post = (url, body) =>
   fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: body ? JSON.stringify(body) : undefined });
 
+test('createServer returns a server that is not listening yet', (t) => {
+  const { createServer } = require('../server');
+  const server = createServer(helpers.testConfig(t, 'factory'));
+  assert.strictEqual(server.listening, false);
+  t.after(() => server.emit('close'));
+});
+
+test('two servers in one process each read their own config folder', async (t) => {
+  const one = helpers.testConfig(t, 'one');
+  const two = helpers.testConfig(t, 'two');
+  const call = (input) => JSON.stringify({
+    timestamp: new Date().toISOString(),
+    requestId: `req-${input}`,
+    message: { id: `msg-${input}`, model: 'claude-sonnet-4-6-20260115', usage: { input_tokens: input, output_tokens: 1 } },
+  }) + '\n';
+  fs.writeFileSync(path.join(one.configDir, 'projects', 'demo', 'a.jsonl'), call(111));
+  fs.writeFileSync(path.join(two.configDir, 'projects', 'demo', 'a.jsonl'), call(222));
+  const [a, b] = await Promise.all([helpers.bootServer(t, one), helpers.bootServer(t, two)]);
+  const [sa, sb] = await Promise.all([a, b].map(async (s) => (await fetch(`${s.url}/api/summary?days=all`)).json()));
+  assert.strictEqual(sa.summary.totalInput, 111);
+  assert.strictEqual(sb.summary.totalInput, 222);
+  assert.ok(fs.existsSync(path.join(one.configDir, 'cc-dashboard', 'transcripts.db')));
+  assert.ok(fs.existsSync(path.join(two.configDir, 'cc-dashboard', 'transcripts.db')));
+});
+
 test('GET /api/summary?days=today returns one bucket per local hour', async (t) => {
   const { url } = await startServer(t);
   const res = await fetch(`${url}/api/summary?days=today`);

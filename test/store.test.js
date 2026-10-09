@@ -7,7 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { openStore, upgradeRows } = require('../lib/store');
 const { getStorePath, SCHEMA_VERSION, openDatabase, isBusy } = require('../lib/db');
-const sqlite = require('node:sqlite');
+const sqlite = require('../lib/sqlite');
 
 const tmpDir = () => helpers.tmpDir(null, 'store');
 
