@@ -6,13 +6,14 @@ import {
   shortDate, fullDate, shortModel, axisTokens, axisCost, escapeHtml,
 } from './format.mjs';
 import {
-  el, svgEl, showTooltip, hideTooltip, withTooltip, withFocusTooltip, chartWidth, focusedRowName, spinnerNode,
+  el, svgEl, showTooltip, hideTooltip, withTooltip, withFocusTooltip, chartWidth, spinnerNode,
 } from './dom.mjs';
 import { DETAIL_LIMIT, LIVE_WINDOW_MS, REVIEW_DAYS, LIMIT_WARN_PERCENT } from './constants.mjs';
 import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawYAxis } from './charts/axes.mjs';
 import {
   TOKEN_SERIES, modelColor, modelTexture, textureCss, appendPatternDefs, fillFor, segmentTexture,
 } from './charts/palette.mjs';
+import { drawHBars } from './charts/hbars.mjs';
 
 // #region charts (plain SVG bars - no chart library, nothing loaded from a CDN)
 
@@ -539,144 +540,11 @@ function drawSplitBar(container, rows) {
   container.appendChild(legend);
 }
 
-// Horizontal bars for the attribution breakdowns. Every bar is scaled against
-// one `scaleMax` so lengths stay comparable across groups; the number beside it
-// is always the true share of total cost. Row identity comes from the label, so
-// a single fill colour is enough and no texture is needed.
-function drawUsageBars(container, rows, total, scaleMax) {
-  container.innerHTML = '';
-  if (!rows.length) {
-    container.appendChild(el('div', { class: 'bar-empty', text: 'Nothing attributed in this range.' }));
-    return;
-  }
-
-  for (const row of rows) {
-    const pct = total > 0 ? (row.cost / total) * 100 : 0;
-    const fill = el('i');
-    fill.style.width = (scaleMax > 0 ? (row.cost / scaleMax) * 100 : 0) + '%';
-
-    const node = el('div', { class: 'usage-row' }, [
-      el('span', { class: 'usage-name', text: row.name, title: row.name }),
-      el('span', { class: 'usage-track' }, [fill]),
-      el('span', { class: 'usage-pct', text: pct.toFixed(1) + '%' }),
-    ]);
-    // Skill and subagent names come from log files, so they are escaped here.
-    node.addEventListener('mousemove', (evt) =>
-      showTooltip(evt, `<b>${escapeHtml(row.name)}</b><br>${formatCost(row.cost)} &middot; ${pct.toFixed(1)}% of total`)
-    );
-    node.addEventListener('mouseleave', hideTooltip);
-    container.appendChild(node);
-  }
-}
-
-// Tool call counts, and the same list one level down. Kept separate from
-// drawUsageBars rather than adding options to it: these rows are counts not cost,
-// they carry an error rate, and one of them is selected. Folding four behaviours
-// into one function costs more than the twenty lines repeated here.
-//
 // A detail row for Read, Write or Edit is an absolute file path. The name cell
 // truncates from the right, which on a path shows the part every row has in common,
 // so the basename is displayed and the full path goes in the tooltip.
 function toolRowLabel(name) {
   return name.startsWith('/') ? name.split('/').pop() || name : name;
-}
-
-function drawToolBars(container, rows, scaleMax, onSelect, selectedName) {
-  const refocus = focusedRowName(container);
-  container.innerHTML = '';
-  if (!rows.length) {
-    container.appendChild(el('div', { class: 'bar-empty', text: 'No tool calls in this range.' }));
-    return;
-  }
-
-  for (const row of rows) {
-    const fill = el('i');
-    fill.style.width = (scaleMax > 0 ? (row.calls / scaleMax) * 100 : 0) + '%';
-
-    const value = row.errors
-      ? `${row.calls.toLocaleString('en-US')} · ${((row.errors / row.calls) * 100).toFixed(1)}% err`
-      : row.calls.toLocaleString('en-US');
-
-    // Tool and file names come from log files, so they are escaped before use.
-    const node = el('div', { class: 'usage-row' + (onSelect ? ' selectable' : '') + (row.name === selectedName ? ' selected' : '') }, [
-      el('span', { class: 'usage-name', text: toolRowLabel(row.name), title: row.name }),
-      el('span', { class: 'usage-track' }, [fill]),
-      el('span', { class: 'usage-pct usage-count', text: value }),
-    ]);
-    node.addEventListener('mousemove', (evt) =>
-      showTooltip(
-        evt,
-        `<b>${escapeHtml(row.name)}</b><br>${row.calls.toLocaleString('en-US')} calls` +
-          (row.errors ? `<br>${row.errors.toLocaleString('en-US')} returned an error` : '')
-      )
-    );
-    node.addEventListener('mouseleave', hideTooltip);
-    if (onSelect) {
-      node.addEventListener('click', () => onSelect(row.name));
-      node.tabIndex = 0;
-      node.dataset.name = row.name;
-      // A screen reader hears the row as a toggle button and its pressed state.
-      node.setAttribute('role', 'button');
-      node.setAttribute('aria-pressed', String(row.name === selectedName));
-      node.addEventListener('keydown', (evt) => {
-        if (evt.key === 'Enter' || evt.key === ' ') {
-          evt.preventDefault();
-          onSelect(row.name);
-        }
-      });
-    }
-    container.appendChild(node);
-    if (refocus !== null && row.name === refocus) node.focus({ preventScroll: true });
-  }
-}
-
-// Same two-column shape as drawToolBars, but scaled by tokens saved rather than by
-// call count, because "which commands is rtk helping with" is a question about
-// tokens. A command with 15,000 cheap calls and one with 127 expensive ones both
-// show up honestly this way.
-function drawRtkBars(container, rows, scaleMax, onSelect, selectedName) {
-  const refocus = focusedRowName(container);
-  container.innerHTML = '';
-  if (!rows.length) {
-    container.appendChild(el('div', { class: 'bar-empty', text: 'No rtk commands in this range.' }));
-    return;
-  }
-
-  for (const row of rows) {
-    const fill = el('i');
-    fill.style.width = (scaleMax > 0 ? (row.saved / scaleMax) * 100 : 0) + '%';
-
-    // Command strings come from a file on disk, so el() sets them as text and
-    // escapeHtml() guards the tooltip, which is assigned as HTML.
-    const node = el('div', { class: 'usage-row' + (onSelect ? ' selectable' : '') + (row.name === selectedName ? ' selected' : '') }, [
-      el('span', { class: 'usage-name', text: row.name, title: row.name }),
-      el('span', { class: 'usage-track' }, [fill]),
-      el('span', { class: 'usage-pct usage-count', text: formatTokens(row.saved) }),
-    ]);
-    node.addEventListener('mousemove', (evt) =>
-      showTooltip(
-        evt,
-        `<b>${escapeHtml(row.name)}</b><br>${formatTokens(row.saved)} filtered out` +
-          `<br>${row.calls.toLocaleString('en-US')} ${row.calls === 1 ? 'call' : 'calls'}`
-      )
-    );
-    node.addEventListener('mouseleave', hideTooltip);
-    if (onSelect) {
-      node.addEventListener('click', () => onSelect(row.name));
-      node.tabIndex = 0;
-      node.dataset.name = row.name;
-      node.setAttribute('role', 'button');
-      node.setAttribute('aria-pressed', String(row.name === selectedName));
-      node.addEventListener('keydown', (evt) => {
-        if (evt.key === 'Enter' || evt.key === ' ') {
-          evt.preventDefault();
-          onSelect(row.name);
-        }
-      });
-    }
-    container.appendChild(node);
-    if (refocus !== null && row.name === refocus) node.focus({ preventScroll: true });
-  }
 }
 
 // Which tool the detail column is showing. Held across renders so a range switch
@@ -743,6 +611,20 @@ function renderToolErrors(tool) {
   }
 }
 
+// How the tool lists draw a row: call counts, with the error rate beside a tool
+// that had errors.
+const TOOL_BARS = {
+  size: (row) => row.calls,
+  label: (row) => toolRowLabel(row.name),
+  value: (row) => (row.errors
+    ? `${row.calls.toLocaleString('en-US')} · ${((row.errors / row.calls) * 100).toFixed(1)}% err`
+    : row.calls.toLocaleString('en-US')),
+  tooltip: (row) => `<b>${escapeHtml(row.name)}</b><br>${row.calls.toLocaleString('en-US')} calls`
+    + (row.errors ? `<br>${row.errors.toLocaleString('en-US')} returned an error` : ''),
+  valueClass: 'usage-pct usage-count',
+  empty: 'No tool calls in this range.',
+};
+
 function renderTools(tools) {
   const panel = document.getElementById('toolPanel');
   panel.hidden = !tools.length;
@@ -752,24 +634,22 @@ function renderTools(tools) {
   const current = tools.find((t) => t.name === selectedTool);
 
   const shown = tools.slice(0, DETAIL_LIMIT);
-  drawToolBars(
-    document.getElementById('toolBars'),
-    shown,
-    Math.max(...shown.map((t) => t.calls)),
-    (name) => {
+  drawHBars(document.getElementById('toolBars'), shown, {
+    ...TOOL_BARS,
+    scaleMax: Math.max(...shown.map((t) => t.calls)),
+    onSelect: (name) => {
       selectedTool = name;
       renderTools(tools);
     },
-    selectedTool
-  );
+    selectedName: selectedTool,
+  });
 
   document.getElementById('toolDetailTitle').textContent = `Inside ${toolRowLabel(current.name)}`;
   const details = current.details;
-  drawToolBars(
-    document.getElementById('toolDetailBars'),
-    details,
-    details.length ? Math.max(...details.map((d) => d.calls)) : 0
-  );
+  drawHBars(document.getElementById('toolDetailBars'), details, {
+    ...TOOL_BARS,
+    scaleMax: details.length ? Math.max(...details.map((d) => d.calls)) : 0,
+  });
   document.getElementById('toolDetailNote').textContent = details.length
     ? ''
     : 'No breakdown for this tool.';
@@ -784,6 +664,19 @@ function renderTools(tools) {
 // poll should not throw the reader back to the first command.
 let selectedRtkCommand = null;
 
+// How the rtk lists draw a row: scaled by tokens saved rather than by call count,
+// because "which commands is rtk helping with" is a question about tokens. A
+// command with 15,000 cheap calls and one with 127 expensive ones both show up
+// honestly this way.
+const RTK_BARS = {
+  size: (row) => row.saved,
+  value: (row) => formatTokens(row.saved),
+  tooltip: (row) => `<b>${escapeHtml(row.name)}</b><br>${formatTokens(row.saved)} filtered out`
+    + `<br>${row.calls.toLocaleString('en-US')} ${row.calls === 1 ? 'call' : 'calls'}`,
+  valueClass: 'usage-pct usage-count',
+  empty: 'No rtk commands in this range.',
+};
+
 function renderRtkCommands(commands) {
   if (!commands.some((c) => c.name === selectedRtkCommand)) {
     selectedRtkCommand = commands[0].name;
@@ -791,24 +684,22 @@ function renderRtkCommands(commands) {
   const current = commands.find((c) => c.name === selectedRtkCommand);
 
   const shown = commands.slice(0, DETAIL_LIMIT);
-  drawRtkBars(
-    document.getElementById('rtkCommandBars'),
-    shown,
-    Math.max(...shown.map((c) => c.saved)),
-    (name) => {
+  drawHBars(document.getElementById('rtkCommandBars'), shown, {
+    ...RTK_BARS,
+    scaleMax: Math.max(...shown.map((c) => c.saved)),
+    onSelect: (name) => {
       selectedRtkCommand = name;
       renderRtkCommands(commands);
     },
-    selectedRtkCommand
-  );
+    selectedName: selectedRtkCommand,
+  });
 
   document.getElementById('rtkDetailTitle').textContent = `Inside rtk ${current.name}`;
   const details = current.details.slice(0, DETAIL_LIMIT);
-  drawRtkBars(
-    document.getElementById('rtkDetailBars'),
-    details,
-    details.length ? Math.max(...details.map((d) => d.saved)) : 0
-  );
+  drawHBars(document.getElementById('rtkDetailBars'), details, {
+    ...RTK_BARS,
+    scaleMax: details.length ? Math.max(...details.map((d) => d.saved)) : 0,
+  });
 }
 
 // "Resets 5:20pm" today, "Resets Oct 4 at 5am" on another day, worded the way
@@ -2523,7 +2414,7 @@ function setupCollapsibleRows() {
 
 // The Skills and Subagents lists in Where usage goes each collapse to their title.
 // They start collapsed from the markup on every load, and the state is not saved.
-// The toggles sit outside #skillBars and #subagentBars, which drawUsageBars
+// The toggles sit outside #skillBars and #subagentBars, which drawHBars
 // rebuilds on every render, so a re-render leaves an open list open.
 function setupUsageGroupToggles() {
   for (const toggle of document.querySelectorAll('#attributionPanel .group-toggle')) {
@@ -2937,6 +2828,20 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
 
   // Every bar in the panel shares one scale. Groups on separate scales made a
   // 30.8% subagent bar draw longer than a 68.2% thread bar.
+  // The two split bars are self-scaling, so only the skill and subagent lists
+  // share this one, which is what keeps their lengths comparable to each other.
+  const attributionScale = [...data.skills, ...data.subagents].reduce((max, r) => Math.max(max, r.cost), 0);
+  const totalCost = data.summary.totalCost;
+  // Skill and subagent rows: the bar against the shared scale, the text the true
+  // share of total cost.
+  const shareOfTotal = (row) => `${(totalCost > 0 ? (row.cost / totalCost) * 100 : 0).toFixed(1)}%`;
+  const usageBars = {
+    size: (row) => row.cost,
+    scaleMax: attributionScale,
+    value: shareOfTotal,
+    tooltip: (row) => `<b>${escapeHtml(row.name)}</b><br>${formatCost(row.cost)} &middot; ${shareOfTotal(row)} of total`,
+    empty: 'Nothing attributed in this range.',
+  };
   const threadRows = [
     { name: 'Main thread', cost: data.threads.main },
     { name: 'Subagents', cost: data.threads.subagent },
@@ -2945,16 +2850,12 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
     { name: `Over ${axisTokens(data.contextThreshold)} context`, cost: data.context.over },
     { name: `Under ${axisTokens(data.contextThreshold)} context`, cost: data.context.under },
   ];
-  // The two split bars are self-scaling, so only the skill and subagent lists
-  // share this one, which is what keeps their lengths comparable to each other.
-  const attributionScale = [...data.skills, ...data.subagents].reduce((max, r) => Math.max(max, r.cost), 0);
-  const totalCost = data.summary.totalCost;
   document.getElementById('attributionPanel').hidden = totalCost <= 0;
   if (shown('attribution')) {
     drawSplitBar(document.getElementById('threadBars'), threadRows);
     drawSplitBar(document.getElementById('contextBars'), contextRows);
-    drawUsageBars(document.getElementById('skillBars'), data.skills.slice(0, 8), totalCost, attributionScale);
-    drawUsageBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), totalCost, attributionScale);
+    drawHBars(document.getElementById('skillBars'), data.skills.slice(0, 8), usageBars);
+    drawHBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), usageBars);
   }
 
   if (shown('tools')) renderTools(data.tools || []);
