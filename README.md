@@ -441,7 +441,7 @@ only. History then starts at the oldest transcript on disk. Raising
   startup. The URL is a constant in `lib/price-fetch.js`. The page's
   Content-Security-Policy blocks the browser from contacting any other host, so
   the request always comes from the server. The bar charts are hand-drawn SVG (see
-  `public/app.js`), so no charting library comes from a CDN.
+  `public/charts/`), so no charting library comes from a CDN.
 
   Separately, the Claude Code mod fetches the Claude Code changelog from
   `raw.githubusercontent.com` and makes one Haiku call per 20 versions, only when
@@ -495,7 +495,16 @@ bin/review-session     Lists ended sessions to review and records Haiku's sugges
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/index.html      Page shell
 public/style.css       All styling
-public/app.js          Fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live, /api/reviews, /api/changes, /api/records and /api/prices, draws the SVG charts, has the Check prices / Apply controls, no dependencies
+public/main.mjs        Starts the page: fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live and /api/reviews, draws every panel, runs the live poll and the range picker
+public/state.mjs       The selected range and the hidden panels, shared by the modules
+public/format.mjs      Text formatting for costs, token counts, dates and model names
+public/constants.mjs   Numbers the page shares with the server; test/front-end-constants.test.js keeps them equal
+public/api.mjs         getJson: one GET and what each kind of failure resolves to
+public/guards.mjs      Request sequence numbers and per-panel redraw guards
+public/dom.mjs         Element builders and the tooltip
+public/charts/         Hand-drawn SVG and HTML charts, one module per chart type, no dependencies
+public/panels/         One module per panel; changes.mjs fetches /api/changes, records.mjs /api/records, and prices.mjs /api/prices with the Check prices / Apply controls
+public/ui/             Row drag and order, collapsible rows, hidden panels, the panel border light
 public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
 public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, donut slices and the Session timeline's hour ticks, lane layout, range domain and stack glyphs
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need

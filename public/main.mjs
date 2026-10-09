@@ -1,28 +1,31 @@
 import { state, shown } from './state.mjs';
-import { getJson } from './api.mjs';
+
 import { createSequence } from './guards.mjs';
+
+import { getJson } from './api.mjs';
+
 import { escapeHtml } from './format.mjs';
+
 import { spinnerNode } from './dom.mjs';
 
+import { renderAttribution } from './panels/attribution.mjs';
+import { renderCards } from './panels/cards.mjs';
+import { loadChanges, redrawChanges } from './panels/changes.mjs';
 import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits.mjs';
+import { renderModels } from './panels/models.mjs';
+import { loadPricesSource, setupPrices } from './panels/prices.mjs';
+import { refreshRecords } from './panels/records.mjs';
+import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
+import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderTimeline, resetTimeline } from './panels/timeline.mjs';
-import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
-import { refreshRecords } from './panels/records.mjs';
 import { renderTools } from './panels/tools.mjs';
-import { renderRtk } from './panels/rtk.mjs';
-import { loadPricesSource, setupPrices } from './panels/prices.mjs';
-import { renderModels } from './panels/models.mjs';
-import { loadChanges, redrawChanges } from './panels/changes.mjs';
-import { renderCards } from './panels/cards.mjs';
 import { renderUsageCharts } from './panels/usage.mjs';
-import { renderAttribution } from './panels/attribution.mjs';
-import { setupRowOrder } from './ui/row-order.mjs';
+
 import { setupCollapsibleRows, setupUsageGroupToggles } from './ui/collapse.mjs';
 import { setupHiding } from './ui/hidden.mjs';
 import { setupPanelLight } from './ui/panel-light.mjs';
-
-// #region app state + rendering
+import { setupRowOrder } from './ui/row-order.mjs';
 
 const LIVE_POLL_MS = 5000;
 // While live, runLoad runs LIVE_POLL_MS after the previous run finished
@@ -241,6 +244,9 @@ function reportDrawError(err) {
 }
 
 // Every load goes through runLoad, so no caller leaves a rejection unhandled.
+// runLoad never rejects, which createPoller requires (public/poll.js): a
+// rejected run would end the live poll chain. reportDrawError only writes text
+// to #statusBanner, which index.html always has, so the catch cannot throw.
 function runLoad(options) {
   return loadAndRender(options).catch(reportDrawError);
 }
@@ -331,5 +337,3 @@ refreshRecords();
 runLoad({ busy: true });
 loadChanges();
 loadPricesSource();
-
-// #endregion
