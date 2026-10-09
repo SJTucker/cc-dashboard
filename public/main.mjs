@@ -1,5 +1,6 @@
 import { state, shown } from './state.mjs';
 import { getJson } from './api.mjs';
+import { createSequence, createDrawGuard } from './guards.mjs';
 import {
   formatCost, formatTokens, formatPercent, formatDuration, formatAgo, localDateStr, costPerDay,
   shortDate, fullDate, shortModel, axisTokens, axisCost, escapeHtml,
@@ -1031,25 +1032,14 @@ function requestLimits() {
   return getJson('/api/limits', { optional: true });
 }
 
-// The last drawn state of the four panels that renderPayload draws on every
-// settled response: Plan usage, Live sessions, Session reviews and the limits
-// banner. Each renderer skips its rebuild when its inputs and the clock minute
-// are unchanged, so a 5 s poll does not replace rows the reader is selecting text
-// in. The minute is in the key because formatAgo and the "may be stale" suffix
-// change with the clock at minute resolution. redrawCharts leaves these keys
-// alone, because a change of width does not change a table. reportDrawError
-// clears them, because a renderer that threw after storing its key drew only part
-// of its panel.
-const panelSignatures = new Map();
-
-// True when name was last drawn from the same parts in the same clock minute.
-// Otherwise stores the new key and returns false.
-function panelUnchanged(name, parts) {
-  const signature = JSON.stringify([parts, Math.floor(Date.now() / 60_000)]);
-  if (panelSignatures.get(name) === signature) return true;
-  panelSignatures.set(name, signature);
-  return false;
-}
+// One draw guard per panel that renderPayload draws on every settled response:
+// Plan usage, the limits banner, Live sessions and Session reviews.
+// redrawCharts leaves them alone, because a change of width does not change a
+// table.
+const limitsGuard = createDrawGuard();
+const bannerGuard = createDrawGuard();
+const sessionsGuard = createDrawGuard();
+const reviewsGuard = createDrawGuard();
 
 // Today's share of the weekly limit, as a row in the Plan usage panel. The bar fills
 // against 100% of the week, like the weekly rows above it, so the two scales match.
@@ -1090,7 +1080,10 @@ function renderLimits(limits) {
   const panel = document.getElementById('limitsPanel');
   panel.hidden = !limits || state.currentDays !== 'today';
   if (panel.hidden) return;
-  if (panelUnchanged('limits', limits)) return;
+  limitsGuard.draw(limits, () => drawLimits(limits));
+}
+
+function drawLimits(limits) {
   const rows = document.getElementById('limitsRows');
   rows.replaceChildren();
   for (const limit of limits.limits) {
@@ -1144,7 +1137,10 @@ function renderSessions(live) {
   if (panel.hidden) return;
   lastLiveSessions = live;
   // expandedProjects is in the key, so a group toggle's own call redraws.
-  if (panelUnchanged('sessions', [live, [...expandedProjects]])) return;
+  sessionsGuard.draw([live, [...expandedProjects]], () => drawSessions(live));
+}
+
+function drawSessions(live) {
   const focused = [...sessionToggles].find(([, button]) => button === document.activeElement);
   const toggles = new Map();
 
@@ -1571,7 +1567,13 @@ function renderReviews(data) {
   lastReviews = data;
   // The key holds every input of the draw, so a dismiss, an undo, a Show or Hide
   // toggle and a failed action each redraw from their own call.
-  if (panelUnchanged('reviews', [data, reviewMutations, [...reviewDismissedShown], [...reviewExpanded], reviewActionError])) return;
+  reviewsGuard.draw(
+    [data, reviewMutations, [...reviewDismissedShown], [...reviewExpanded], reviewActionError],
+    () => drawReviews(data)
+  );
+}
+
+function drawReviews(data) {
   const panel = document.getElementById('reviewsPanel');
   const status = document.getElementById('reviewsStatus');
   const list = document.getElementById('reviewsList');
@@ -1623,7 +1625,10 @@ function renderReviews(data) {
 // understates usage and never raises a false warning. The rounded percent is
 // compared so the banner agrees with the "N% used" the panel shows.
 function renderLimitsBanner(limits) {
-  if (panelUnchanged('limitsBanner', limits)) return;
+  bannerGuard.draw(limits, () => drawLimitsBanner(limits));
+}
+
+function drawLimitsBanner(limits) {
   const banner = document.getElementById('limitsBanner');
   const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
   // dailyWarning (public/hud.js) compares today's share with the rolling budget.
@@ -1659,9 +1664,9 @@ let recordsDay = null;
 // The local date recordsData was fetched for. renderWeekTotals ignores recentDays
 // from an earlier date, because rollingWeek would sum the wrong 6 days.
 let recordsDataDay = null;
-// Numbers each /api/records request. A response is dropped unless its number is
-// still the newest, so a slow first load cannot overwrite a later Refresh.
-let recordsSeq = 0;
+// Numbers each /api/records request, so a slow first load cannot overwrite a
+// later Refresh.
+const recordsLoads = createSequence();
 
 // renderWeekTotals calls this on Today whenever recordsDay is not today's date.
 // The early return below leaves recordsDay unset on purpose: while every consumer
@@ -1671,9 +1676,9 @@ function refreshRecords() {
   if (!neededRequests(state.hiddenKeys, state.currentDays).has('records')) return;
   const day = localDateStr(new Date());
   recordsDay = day;
-  const seq = ++recordsSeq;
+  const isLatest = recordsLoads.next();
   requestRecords().then((data) => {
-    if (seq !== recordsSeq) return;
+    if (!isLatest()) return;
     // A failed request keeps the last good records, so the card keeps its value.
     if (data) {
       recordsData = data;
@@ -2458,8 +2463,8 @@ function showChangesLoading() {
   }
 }
 
-// Numbers each /api/changes request, like recordsSeq.
-let changesSeq = 0;
+// Numbers each /api/changes request, like recordsLoads.
+const changesLoads = createSequence();
 
 // The fetch does not depend on the range picker, so it loads once and again on
 // Refresh. A range change only redraws from the loaded report. A response that is
@@ -2467,10 +2472,10 @@ let changesSeq = 0;
 // the newest request draws both panels when it settles.
 async function loadChanges() {
   if (!neededRequests(state.hiddenKeys, state.currentDays).has('changes')) return;
-  const seq = ++changesSeq;
+  const isLatest = changesLoads.next();
   showChangesLoading();
   const report = await getJson('/api/changes');
-  if (seq !== changesSeq) return;
+  if (!isLatest()) return;
   try {
     if (report.error) throw new Error(report.error);
     renderChanges(report);
@@ -2894,10 +2899,9 @@ const livePoller = createPoller(() => runLoad(), LIVE_POLL_MS);
 // would tear down the SVG under the cursor and kill any open tooltip, so an
 // unchanged payload skips rendering entirely.
 let lastSignature = null;
-// Responses can arrive out of order: a 30d scan takes ~1.9s and a today scan ~0.17s,
-// so a 30d request issued before a Today click lands after it. Every request takes a
-// number, and a response is dropped unless its number is still the newest one.
-let requestSeq = 0;
+// Numbers each fetchAll (see createSequence). A 30d request issued before a
+// Today click lands after it, and is dropped.
+const loads = createSequence();
 // The newest payload fetchAll returned. redrawCharts draws from it after a resize,
 // a hide or an expand, so a change of width makes no request. The range picker
 // sets it to null, because renderPayload reads state.currentDays and would draw the old
@@ -2988,7 +2992,7 @@ function placeSummaryCards() {
 // Issues the five requests and waits for all of them. Returns { data, rtk, limits,
 // sessions, reviews }, or null when a newer load started while this one waited.
 async function fetchAll({ busy = false } = {}) {
-  const seq = ++requestSeq;
+  const isLatest = loads.next();
 
   // Only user-started loads show the busy state. Whichever request is newest
   // clears it when it settles, even a quiet poll, because an older busy request's
@@ -3016,7 +3020,7 @@ async function fetchAll({ busy = false } = {}) {
   const reviewsRequest = needed.has('reviews') ? requestReviews() : Promise.resolve(null);
 
   const [data, rtk, limits, sessions, reviews] = await Promise.all([summaryRequest, rtkRequest, limitsRequest, sessionsRequest, reviewsRequest]);
-  if (seq !== requestSeq) return null; // a newer request superseded this response
+  if (!isLatest()) return null; // a newer request superseded this response
   setBusy(false);
   if (!data.error) lastLoadedAt = Date.now();
   // A dismiss or undo during the request makes its reviews older than the page.
@@ -3030,7 +3034,8 @@ async function fetchAll({ busy = false } = {}) {
 
 // Draws a payload from fetchAll. lastSignature is set on the last line, after every
 // renderer has run. A renderer that throws therefore leaves the previous signature,
-// and reportDrawError clears that one.
+// and reportDrawError clears that one. The four panel guards keep no key for a
+// draw that threw, so those panels need no clearing.
 function renderPayload({ data, rtk, limits, sessions, reviews }) {
   const banner = document.getElementById('statusBanner');
 
@@ -3206,7 +3211,6 @@ function reportDrawError(err) {
   banner.textContent = `Couldn't draw the page: ${err?.message ?? err}`;
   lastSignature = null;
   timelineSignature = null;
-  panelSignatures.clear();
 }
 
 // Every load goes through runLoad, so no caller leaves a rejection unhandled.
