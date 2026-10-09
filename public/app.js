@@ -1826,6 +1826,9 @@ let recordsData = null;
 // The local date the last /api/records request was made on. recentDays holds the
 // 6 days before that date, so after midnight it is missing yesterday.
 let recordsDay = null;
+// The local date recordsData was fetched for. renderWeekTotals ignores recentDays
+// from an earlier date, because rollingWeek would sum the wrong 6 days.
+let recordsDataDay = null;
 // Numbers each /api/records request. A response is dropped unless its number is
 // still the newest, so a slow first load cannot overwrite a later Refresh.
 let recordsSeq = 0;
@@ -1836,12 +1839,16 @@ let recordsSeq = 0;
 // after one shows again tries once more.
 function refreshRecords() {
   if (!neededRequests(hiddenKeys, currentDays).has('records')) return;
-  recordsDay = localDateStr(new Date());
+  const day = localDateStr(new Date());
+  recordsDay = day;
   const seq = ++recordsSeq;
   requestRecords().then((data) => {
     if (seq !== recordsSeq) return;
     // A failed request keeps the last good records, so the card keeps its value.
-    if (data) recordsData = data;
+    if (data) {
+      recordsData = data;
+      recordsDataDay = day;
+    }
     if (lastRecordDaily && shown('card-record')) renderRecord(lastRecordDaily);
     if (lastSummary) renderWeekTotals(lastSummary);
   });
@@ -1858,8 +1865,9 @@ function renderWeekTotals(summary) {
   // the new day. Refresh is hidden on Today, so nothing else would refetch.
   if (currentDays === 'today' && recordsDay !== localDateStr(new Date())) refreshRecords();
   const today = currentDays === 'today';
+  const recentDays = recordsDataDay === localDateStr(new Date()) ? recordsData?.recentDays ?? null : null;
   const week = today
-    ? rollingWeek(recordsData?.recentDays ?? null, localDateStr(new Date()), { cost: summary.totalCost, tokens: summary.totalTokens })
+    ? rollingWeek(recentDays, localDateStr(new Date()), { cost: summary.totalCost, tokens: summary.totalTokens })
     : null;
   const title = today ? 'today and the 6 days before it' : '';
   const cost = document.getElementById('cardCostWeek');
@@ -3379,8 +3387,9 @@ function reportDrawError(err) {
   console.error(err);
   const banner = document.getElementById('statusBanner');
   banner.hidden = false;
-  banner.textContent = `Couldn't draw the page: ${err.message}`;
+  banner.textContent = `Couldn't draw the page: ${err?.message ?? err}`;
   lastSignature = null;
+  timelineSignature = null;
   panelSignatures.clear();
 }
 
