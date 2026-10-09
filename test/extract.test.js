@@ -6,7 +6,10 @@ const assert = require('node:assert');
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { extractFile, EXTRACT_VERSION } = require('../lib/extract');
+
+const ROOT = path.join(__dirname, '..');
 
 // Writes one transcript from line objects and returns its path.
 function writeTranscript(lines) {
@@ -216,4 +219,48 @@ test('a sessionId named like an Object.prototype member is an ordinary session',
   assert.strictEqual(Object.getPrototypeOf(rows.sessions), null);
   assert.strictEqual({}.branches, undefined);
   assert.strictEqual(Object.keys(Object.prototype).length, 0);
+});
+
+// The warning prints once per process, so each case extracts in a fresh child
+// process and returns what it printed on stderr.
+function extractInChild(files) {
+  const script = `const { extractFile } = require('./lib/extract');
+    (async () => { for (const f of ${JSON.stringify(files)}) await extractFile(f); })();`;
+  const out = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, encoding: 'utf8' });
+  assert.strictEqual(out.status, 0, out.stderr);
+  return out.stderr;
+}
+
+const untagged = (text) => ({ type: 'user', sessionId: 's1', timestamp: T0, message: { role: 'user', content: text } });
+const typedPrompt = (text) => ({ ...untagged(text), origin: { kind: 'human' }, promptSource: 'typed' });
+
+test('a file whose prompts carry no origin prints one warning, once per process', () => {
+  const first = writeTranscript([untagged('hello'), assistant()]);
+  const second = writeTranscript([untagged('again')]);
+  const stderr = extractInChild([first, second]);
+  assert.strictEqual(stderr.match(/\[extract\]/g)?.length, 1, stderr);
+  assert.ok(stderr.includes(`[extract] ${first} has user prompts without origin or promptSource. Prompt counts and session reviews leave them out.`), stderr);
+});
+
+test('subagent task prompts, commands and meta lines print nothing', () => {
+  const file = writeTranscript([
+    { ...untagged('do the task'), origin: null, isSidechain: true },
+    untagged('<command-name>/clear</command-name>'),
+    { ...untagged('caveat'), isMeta: true },
+    { ...untagged('sidechain without origin'), isSidechain: true },
+  ]);
+  assert.strictEqual(extractInChild([file]), '');
+});
+
+test('a file with a typed prompt prints nothing, even beside an untagged line', () => {
+  const file = writeTranscript([typedPrompt('typed'), untagged('untagged')]);
+  assert.strictEqual(extractInChild([file]), '');
+});
+
+test('the warning adds nothing to the extracted rows', async (t) => {
+  t.mock.method(console, 'warn', () => {}); // this process's one warning, kept off the test output
+  const file = writeTranscript([untagged('hello')]);
+  const rows = await extractFile(file);
+  assert.deepStrictEqual(rows.prompts, []);
+  assert.strictEqual(EXTRACT_VERSION, 1);
 });
