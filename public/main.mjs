@@ -6,14 +6,11 @@ import {
   shortDate, fullDate, axisTokens, axisCost, escapeHtml,
 } from './format.mjs';
 import { el, spinnerNode } from './dom.mjs';
-import { DETAIL_LIMIT } from './constants.mjs';
-import { TOKEN_SERIES, segmentTexture } from './charts/palette.mjs';
+import { TOKEN_SERIES } from './charts/palette.mjs';
 import { drawHBars } from './charts/hbars.mjs';
 import { drawBarChart, drawCumulativeChart } from './charts/bar.mjs';
-import { drawModelDailyChart } from './charts/stacked.mjs';
 import { drawLogLineChart, drawTokenLegend } from './charts/line.mjs';
 import { drawActivityHeatmap } from './charts/heatmap.mjs';
-import { drawModelMix } from './charts/donut.mjs';
 import { drawSplitBar } from './charts/split.mjs';
 import {
   WEEK_MS, markerDate, markerIcon, timeDomain, drawSessionStartChart, drawMetricChart,
@@ -24,325 +21,10 @@ import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderTimeline, resetTimeline } from './panels/timeline.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
 import { refreshRecords, renderWeekTotals, renderRecord } from './panels/records.mjs';
-
-// A detail row for Read, Write or Edit is an absolute file path. The name cell
-// truncates from the right, which on a path shows the part every row has in common,
-// so the basename is displayed and the full path goes in the tooltip.
-function toolRowLabel(name) {
-  return name.startsWith('/') ? name.split('/').pop() || name : name;
-}
-
-// Which tool the detail column is showing. Held across renders so a range switch
-// or a live poll does not throw the reader back to the first tool; it falls back
-// to the busiest tool when the selected one has no calls in the new range.
-let selectedTool = null;
-
-// Name of the tool renderToolErrors last drew the error list for. A 5s poll on the
-// Today range calls renderToolErrors again for the same tool and must not close a
-// group the reader opened; clicking a different tool in the bars above is a real
-// change of subject and starts closed. Paired with errorGroupKey below, which is
-// stored on each <details> so a rebuilt element can be matched back to its group.
-let toolErrorsFor = null;
-
-function errorGroupKey(g) {
-  return `${g.cause}\n${g.message}`;
-}
-
-// The keys of currently open groups, or an empty set when the tool just changed.
-// A poll rebuilds the whole list every time (see renderToolErrors), so "open" has
-// to be read off the DOM before the old elements are replaced.
-function openErrorKeys(list, tool) {
-  if (toolErrorsFor !== tool.name) {
-    toolErrorsFor = tool.name;
-    return new Set();
-  }
-  return new Set([...list.querySelectorAll('details[open]')].map((d) => d.dataset.key));
-}
-
-// Error text comes from tool results on disk, so it only ever reaches the page
-// through textContent. Each group is a <details> so the full example opens on
-// click or keyboard, which a hover tooltip cannot do on a touch screen.
-function renderToolErrors(tool) {
-  const title = document.getElementById('toolErrorTitle');
-  const causes = document.getElementById('toolErrorCauses');
-  const list = document.getElementById('toolErrorList');
-  const openKeys = openErrorKeys(list, tool);
-  causes.replaceChildren();
-  list.replaceChildren();
-  title.hidden = !tool.errors;
-  if (!tool.errors) return;
-
-  title.textContent = `Errors · ${tool.errors.toLocaleString('en-US')}`;
-  for (const { cause, count } of tool.errorCauses) {
-    causes.appendChild(el('span', { class: 'error-cause' }, [
-      document.createTextNode(cause),
-      el('b', { text: count.toLocaleString('en-US') }),
-    ]));
-  }
-  for (const g of tool.errorGroups) {
-    const key = errorGroupKey(g);
-    const summary = el('summary', {}, [
-      el('span', { class: 'error-count', text: g.count.toLocaleString('en-US') }),
-      el('span', { class: 'error-message', text: g.message }),
-    ]);
-    const when = el('div', { class: 'error-when', text: `${g.cause} · latest ${new Date(g.t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })}` });
-    const group = el('details', { class: 'error-group', 'data-key': key }, [summary, when, el('pre', { class: 'error-example', text: g.example })]);
-    group.open = openKeys.has(key);
-    list.appendChild(group);
-  }
-  const shown = tool.errorGroups.reduce((n, g) => n + g.count, 0);
-  if (shown < tool.errors) {
-    list.appendChild(el('div', { class: 'panel-note', text: `${(tool.errors - shown).toLocaleString('en-US')} more in smaller groups.` }));
-  }
-}
-
-// How the tool lists draw a row: call counts, with the error rate beside a tool
-// that had errors.
-const TOOL_BARS = {
-  size: (row) => row.calls,
-  label: (row) => toolRowLabel(row.name),
-  value: (row) => (row.errors
-    ? `${row.calls.toLocaleString('en-US')} · ${((row.errors / row.calls) * 100).toFixed(1)}% err`
-    : row.calls.toLocaleString('en-US')),
-  tooltip: (row) => `<b>${escapeHtml(row.name)}</b><br>${row.calls.toLocaleString('en-US')} calls`
-    + (row.errors ? `<br>${row.errors.toLocaleString('en-US')} returned an error` : ''),
-  valueClass: 'usage-pct usage-count',
-  empty: 'No tool calls in this range.',
-};
-
-function renderTools(tools) {
-  const panel = document.getElementById('toolPanel');
-  panel.hidden = !tools.length;
-  if (!tools.length) return;
-
-  if (!tools.some((t) => t.name === selectedTool)) selectedTool = tools[0].name;
-  const current = tools.find((t) => t.name === selectedTool);
-
-  const shown = tools.slice(0, DETAIL_LIMIT);
-  drawHBars(document.getElementById('toolBars'), shown, {
-    ...TOOL_BARS,
-    scaleMax: Math.max(...shown.map((t) => t.calls)),
-    onSelect: (name) => {
-      selectedTool = name;
-      renderTools(tools);
-    },
-    selectedName: selectedTool,
-  });
-
-  document.getElementById('toolDetailTitle').textContent = `Inside ${toolRowLabel(current.name)}`;
-  const details = current.details;
-  drawHBars(document.getElementById('toolDetailBars'), details, {
-    ...TOOL_BARS,
-    scaleMax: details.length ? Math.max(...details.map((d) => d.calls)) : 0,
-  });
-  document.getElementById('toolDetailNote').textContent = details.length
-    ? ''
-    : 'No breakdown for this tool.';
-  renderToolErrors(current);
-}
-
-// rtk figures are deliberately not folded into any summary card. They count output
-// bytes rtk filtered before the text reached the model, estimated by rtk's own
-// tokeniser; the cards above count tokens Anthropic billed. Adding one to the other
-// would produce a number that means nothing.
-// Held across renders for the same reason selectedTool is: a range switch or a live
-// poll should not throw the reader back to the first command.
-let selectedRtkCommand = null;
-
-// How the rtk lists draw a row: scaled by tokens saved rather than by call count,
-// because "which commands is rtk helping with" is a question about tokens. A
-// command with 15,000 cheap calls and one with 127 expensive ones both show up
-// honestly this way.
-const RTK_BARS = {
-  size: (row) => row.saved,
-  value: (row) => formatTokens(row.saved),
-  tooltip: (row) => `<b>${escapeHtml(row.name)}</b><br>${formatTokens(row.saved)} filtered out`
-    + `<br>${row.calls.toLocaleString('en-US')} ${row.calls === 1 ? 'call' : 'calls'}`,
-  valueClass: 'usage-pct usage-count',
-  empty: 'No rtk commands in this range.',
-};
-
-function renderRtkCommands(commands) {
-  if (!commands.some((c) => c.name === selectedRtkCommand)) {
-    selectedRtkCommand = commands[0].name;
-  }
-  const current = commands.find((c) => c.name === selectedRtkCommand);
-
-  const shown = commands.slice(0, DETAIL_LIMIT);
-  drawHBars(document.getElementById('rtkCommandBars'), shown, {
-    ...RTK_BARS,
-    scaleMax: Math.max(...shown.map((c) => c.saved)),
-    onSelect: (name) => {
-      selectedRtkCommand = name;
-      renderRtkCommands(commands);
-    },
-    selectedName: selectedRtkCommand,
-  });
-
-  document.getElementById('rtkDetailTitle').textContent = `Inside rtk ${current.name}`;
-  const details = current.details.slice(0, DETAIL_LIMIT);
-  drawHBars(document.getElementById('rtkDetailBars'), details, {
-    ...RTK_BARS,
-    scaleMax: details.length ? Math.max(...details.map((d) => d.saved)) : 0,
-  });
-}
-
-function renderRtk(rtk) {
-  const live = Boolean(rtk && rtk.meta.dbExists);
-
-  const dailyPanel = document.getElementById('rtkDailyPanel');
-  const hasDaily = live && rtk.daily.some((d) => d.saved > 0);
-  dailyPanel.hidden = !hasDaily;
-  if (hasDaily && shown('rtkDaily')) {
-    drawBarChart(document.getElementById('rtkDailyChart'), rtk.daily, {
-      // Single series, so no legend and no new hue: this borrows the token palette's
-      // blue the way the daily-tokens chart borrows cache-read purple.
-      color: '#3987e5',
-      valueKey: 'saved',
-      tooltipFn: (d) =>
-        `<b>${fullDate(d.date)}</b><br>${formatTokens(d.saved)} of ${formatTokens(d.input)} filtered out` +
-        `<br>${d.input > 0 ? ((d.saved / d.input) * 100).toFixed(1) : '0.0'}% across ${d.commands.toLocaleString('en-US')} commands`,
-    });
-  }
-
-  const cmdPanel = document.getElementById('rtkCommandPanel');
-  const hasCommands = live && rtk.commands.some((c) => c.saved > 0);
-  cmdPanel.hidden = !hasCommands;
-  if (hasCommands && shown('rtkCommands')) renderRtkCommands(rtk.commands.filter((c) => c.saved > 0));
-}
-
-// A table rather than a list, because $/MTok is the number that explains why a
-// model's token share and its cost share are different. escapeHtml is used on
-// the model name: it comes from a log file, not from this codebase.
-function drawModelList(container, models) {
-  container.innerHTML = '';
-  if (!models.length) {
-    container.appendChild(el('div', { class: 'bar-empty', text: 'No model usage in this range.' }));
-    return;
-  }
-
-  const totalCost = models.reduce((sum, m) => sum + m.cost, 0);
-  const rows = models
-    .map((m) => {
-      // An unpriced model's cost is 0 because no rate is known. Showing $0.00,
-      // 0.0% or $0.00/MTok would read as a measured value.
-      const unpriced = !m.priced;
-      const perMillion = m.tokens > 0 ? m.cost / (m.tokens / 1e6) : 0;
-      const share = totalCost > 0 ? (m.cost / totalCost) * 100 : 0;
-      return `<tr>
-        <td class="model-name"><span class="swatch" style="${segmentTexture(m.family)}"></span>${escapeHtml(m.model)}</td>
-        <td class="num">${formatTokens(m.tokens)}</td>
-        <td class="num cost-cell">${unpriced ? 'unpriced' : formatCost(m.cost)}</td>
-        <td class="num">${unpriced ? '&mdash;' : share.toFixed(1) + '%'}</td>
-        <td class="num">${unpriced ? '&mdash;' : formatCost(perMillion)}</td>
-      </tr>`;
-    })
-    .join('');
-
-  container.innerHTML = `<table class="model-table">
-    <thead><tr>
-      <th>Model</th><th class="num">Tokens</th><th class="num">Cost</th><th class="num">Share</th><th class="num">$/MTok</th>
-    </tr></thead>
-    <tbody>${rows}</tbody>
-  </table>`;
-}
-
-// Prices per million tokens, as the pricing page writes them: "$4 / $20".
-function rateText(row) {
-  let text = `$${row.input} / $${row.output}`;
-  if (row.cacheReadMult != null) text += ` · cache read ${row.cacheReadMult}x`;
-  if (row.fast) text += ` · fast $${row.fast.input} / $${row.fast.output}`;
-  return text;
-}
-
-async function postJson(url, body) {
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: body ? { 'Content-Type': 'application/json' } : {},
-    body: body ? JSON.stringify(body) : undefined,
-  });
-  return res.json();
-}
-
-// The last applied snapshot's effective date, or null on built-in prices.
-// Set from loadPricesSource() and read by renderPricesCheck to floor the
-// Apply date picker: the server already refuses a date before this one, so
-// the picker should not offer it.
-let lastAppliedDate = null;
-
-async function loadPricesSource() {
-  if (!neededRequests(state.hiddenKeys, state.currentDays).has('prices')) return;
-  const note = document.getElementById('pricesSource');
-  // /api/prices answers 200 with an error field when prices.json was ignored.
-  // That field is a warning to show, so this request does not use getJson.
-  const res = await fetch('/api/prices').catch(() => null);
-  const source = res?.ok ? await res.json().catch(() => null) : null;
-  if (!source) {
-    note.textContent = '';
-    return;
-  }
-  lastAppliedDate = source.kind === 'fetched' ? source.date : null;
-  note.textContent = source.kind === 'built-in'
-    ? `Prices: built-in, checked ${source.date}`
-    : `Prices: from Anthropic's pricing page, effective ${source.date}`;
-  if (source.error) note.textContent += ` · prices.json ignored: ${source.error}`;
-}
-
-function renderPricesCheck(result) {
-  const box = document.getElementById('pricesCheck');
-  box.hidden = false;
-  box.innerHTML = '';
-  if (result.error) {
-    box.appendChild(el('p', { class: 'panel-note', text: result.error }));
-    return;
-  }
-  const lines = [
-    ...result.added.map((r) => `New: ${r.name} ${rateText(r)}`),
-    ...result.changed.map((c) => `Changed: ${c.after.name} ${rateText(c.before)} → ${rateText(c.after)}`),
-    ...result.skipped.map((s) => `Skipped: ${s.name} (${s.reason})`),
-  ];
-  for (const text of lines) box.appendChild(el('p', { class: 'panel-note', text }));
-  if (!result.added.length && !result.changed.length) {
-    box.appendChild(el('p', { class: 'panel-note', text: `Prices match Anthropic's pricing page (${result.unchanged} models).` }));
-    return;
-  }
-  const today = localDateStr(new Date());
-  const date = el('input', {
-    type: 'date', id: 'pricesEffective', value: today, max: today,
-    ...(lastAppliedDate ? { min: lastAppliedDate } : {}),
-  });
-  const apply = el('button', { class: 'refresh-btn', type: 'button', text: 'Apply' });
-  apply.addEventListener('click', () => applyPrices(date.value));
-  box.appendChild(el('div', { class: 'prices-apply' }, [el('label', { for: 'pricesEffective', text: 'Effective from' }), date, apply]));
-  box.appendChild(el('p', { class: 'panel-note', text: 'Usage before this date keeps its old prices. New models are priced for all dates.' }));
-}
-
-async function applyPrices(effectiveFrom) {
-  const result = await postJson('/api/prices/apply', { effectiveFrom })
-    .catch((err) => ({ error: `Could not reach the dashboard server: ${err.message}` }));
-  const box = document.getElementById('pricesCheck');
-  if (result.error) {
-    // Keep the diff on screen, so a refused date can be corrected and applied again.
-    // Drop any earlier error line first, so retrying a bad date doesn't pile them up.
-    box.querySelectorAll('.prices-error').forEach((node) => node.remove());
-    box.appendChild(el('p', { class: 'panel-note prices-error', text: result.error }));
-    return;
-  }
-  box.hidden = true;
-  loadPricesSource();
-  reloadAll();
-}
-
-document.getElementById('checkPricesBtn').addEventListener('click', async (event) => {
-  const btn = event.currentTarget;
-  btn.disabled = true;
-  btn.textContent = 'Checking…';
-  const result = await postJson('/api/prices/check')
-    .catch((err) => ({ error: `Could not reach the dashboard server: ${err.message}` }));
-  btn.disabled = false;
-  btn.textContent = 'Check prices';
-  renderPricesCheck(result);
-});
+import { renderTools } from './panels/tools.mjs';
+import { renderRtk } from './panels/rtk.mjs';
+import { loadPricesSource, setupPrices } from './panels/prices.mjs';
+import { renderModels } from './panels/models.mjs';
 
 // #region setup changes
 
@@ -1258,8 +940,6 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
     drawLogLineChart(document.getElementById('tokenTypeChart'), data.daily, TOKEN_SERIES);
   }
 
-  if (shown('costByModel')) drawModelList(document.getElementById('modelList'), data.models);
-
   // Every bar in the panel shares one scale. Groups on separate scales made a
   // 30.8% subagent bar draw longer than a 68.2% thread bar.
   // The two split bars are self-scaling, so only the skill and subagent lists
@@ -1294,19 +974,12 @@ function renderPayload({ data, rtk, limits, sessions, reviews }) {
 
   if (shown('tools')) renderTools(data.tools || []);
 
-  if (shown('modelMix')) drawModelMix(document.getElementById('modelMixChart'), data.models);
+  renderModels(data);
 
-  // An hourly model split is noise, so the over-time view is multi-day only. The mix
-  // donut and the Cost by model panel stay on every range, Today included.
+  // Like the model daily charts, the heatmap shows on multi-day ranges only.
   const multiDay = state.currentDays !== 'today';
-  document.getElementById('modelDailyPanel').hidden = !multiDay;
-  document.getElementById('modelCostDailyPanel').hidden = !multiDay;
   document.getElementById('activityPanel').hidden = !multiDay;
-  if (multiDay) {
-    if (shown('modelDaily')) drawModelDailyChart(document.getElementById('modelDailyChart'), data.daily, data.models);
-    if (shown('modelCostDaily')) drawModelDailyChart(document.getElementById('modelCostDailyChart'), data.daily, data.models, 'cost');
-    if (shown('activity')) drawActivityHeatmap(document.getElementById('activityHeatmap'), data.activity);
-  }
+  if (multiDay && shown('activity')) drawActivityHeatmap(document.getElementById('activityHeatmap'), data.activity);
 
   renderRtk(rtk);
   lastSignature = signature;
@@ -1400,6 +1073,7 @@ setupCollapsibleRows();
 setupHiding();
 setupPanelLight();
 setupUsageGroupToggles();
+setupPrices({ onApplied: reloadAll });
 placeSummaryCards();
 setLive(state.currentDays === 'today');
 refreshRecords();
