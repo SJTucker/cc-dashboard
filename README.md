@@ -467,49 +467,87 @@ only. History then starts at the oldest transcript on disk. Raising
 ## File layout
 
 ```
-server.js              Express app: binds to localhost, serves /api/summary, /api/rtk, /api/changes, /api/limits, /api/records, /api/sessions/live, /api/reviews, the dismiss route (/api/reviews/:sessionId/suggestions/:idx/dismiss) and the price routes (/api/prices, /api/prices/check, /api/prices/apply)
-lib/scan.js            Finds the transcripts under ~/.claude/projects, and scanUsage, which reads all of them once
-lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts and per-session summaries
-lib/aggregate.js       Turns the rows of many transcripts into totals by day, model, tool and session
-lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript only when it changes, and stores settled ones
-lib/store.js           The transcript database, transcripts.db, through node:sqlite
-lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command
-lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window
+server.js              Express app on 127.0.0.1: serves public/ and the /api routes summary, rtk, limits, changes, records, sessions/live, reviews (with dismiss and undo), refresh and prices (check, apply)
+lib/activity.js        Reads the activity files the mod writes (working or waiting), ignores stale ones, deletes those older than a day
+lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill, subagent and session
 lib/changes.js         Setup change markers: plugin installs, new models, Claude Code releases, the mod's setup changes, changes.json
-lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
-lib/pricing.js         Built-in price table, dated price versions, cost calculation
-lib/price-store.js     Applied price history in prices.json
-lib/price-fetch.js     Fetch and parse Anthropic's pricing page
-lib/net-guard.js       Host-header check + security headers
-lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
-lib/activity.js        Live state of each session, read from the activity files the mod writes, and old files pruned
+lib/config-dir.js      loadConfig: the one place the server reads the environment (CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB, PORT)
+lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
 lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeouts, and the server's one shared handle
-lib/sqlite.js          Loads node:sqlite without its experimental-feature warning
+lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window, for the Setup changes panels
+lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts and per-session summaries
+lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
+lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
+lib/net-guard.js       Host-header check and security headers
+lib/price-fetch.js     Fetches and parses Anthropic's pricing page, and compares it with the current prices
+lib/price-store.js     Applied price history in prices.json
+lib/pricing.js         Built-in price table, dated price versions, cost calculation
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
-bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
+lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript only when it changes, and stores settled ones
+lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command
+lib/scan-memo.js       Keeps the latest aggregate per range and bucket until a transcript changes or the date rolls over
+lib/session-id.js      Session id and snapshot file name patterns, and the age after which snapshot and activity files are deleted
+lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
+lib/sqlite.js          Loads node:sqlite without its experimental-feature warning
+lib/stdin.js           readStdin: a whole stream as UTF-8 text, for bin/judge-updates and bin/review-session
+lib/store.js           The transcript database, transcripts.db, through node:sqlite
+lib/transcript-files.js  Finds the transcripts: getProjectsDir (<config dir>/projects) and findJsonlFiles
+lib/updates.js         Verdicts on Claude Code releases: parses the changelog, lists versions in transcripts, writes updates.json
+bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
 bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
 bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
-bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
+bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/review-session     Lists ended sessions to review and records Haiku's suggestions in transcripts.db
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
-public/index.html      Page shell
-public/style.css       All styling
-public/main.mjs        Starts the page: fetches /api/summary, /api/rtk, /api/limits, /api/sessions/live and /api/reviews, draws every panel, runs the live poll and the range picker
-public/state.mjs       The selected range and the hidden panels, shared by the modules
-public/format.mjs      Text formatting for costs, token counts, dates and model names
-public/constants.mjs   Numbers the page shares with the server; test/front-end-constants.test.js keeps them equal
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
-public/guards.mjs      Request sequence numbers and per-panel redraw guards
-public/dom.mjs         Element builders and the tooltip
-public/charts/         Hand-drawn SVG and HTML charts, one module per chart type, no dependencies
-public/panels/         One module per panel; changes.mjs fetches /api/changes, records.mjs /api/records, and prices.mjs /api/prices with the Check prices / Apply controls
-public/ui/             Row drag and order, collapsible rows, hidden panels, the panel border light
-public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
+public/apple-touch-icon.png  Home-screen icon, linked from index.html
 public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, donut slices and the Session timeline's hour ticks, lane layout, range domain and stack glyphs
-public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
+public/constants.mjs   Numbers the page shares with the server; test/front-end-constants.test.js keeps them equal
+public/dom.mjs         Element builders (el, svgEl) and the tooltip
+public/favicon.ico     Tab icon, linked from index.html
+public/favicon.svg     Tab icon and the header logo
+public/format.mjs      Text formatting for costs, token counts, durations, dates and model names
+public/guards.mjs      Request sequence numbers and per-panel redraw guards
+public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
+public/index.html      Page shell: the panels' markup, the plain scripts, then main.mjs as a module
+public/layout.js       orderRowKeys: the saved panel row order merged with the default order in index.html
+public/main.mjs        Starts the page: fetches the API routes, draws every panel, runs the 5 s live poll and the range picker
 public/poll.js         Runs the 5 s live poll so one poll finishes before the next one starts
-public/fonts/          Oxanium, Saira Condensed and JetBrains Mono (SIL OFL), with their licence files
+public/reviews.js      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath
+public/session-groups.js  Groups ended sessions into rows of the Today table, and the running-session and activity labels
+public/state.mjs       The selected range and the hidden panels, shared by the modules
+public/stats.js        median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
+public/style.css       All styling, including the @font-face rules for public/fonts/
+public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
+public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts
+public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
+public/charts/donut.mjs  drawModelMix: each model's share of tokens as a donut with its legend
+public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and rtk commands
+public/charts/heatmap.mjs  drawActivityHeatmap: cost by weekday and hour
+public/charts/line.mjs The four token types on a log-axis line chart, and the token legend
+public/charts/palette.mjs  Series colours and textures, and the SVG pattern definitions
+public/charts/setup-changes.mjs  The Setup changes charts: context at session start with change markers, and the daily metric chart
+public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar
+public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
+public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists
+public/panels/cards.mjs  The summary cards: burn rate, projection and Claude Code's own session counters
+public/panels/changes.mjs  The Setup changes panels; fetches /api/changes
+public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
+public/panels/models.mjs  Cost by model table, the model mix donut and the model daily charts
+public/panels/prices.mjs  The prices note in Cost by model, and the Check prices and Apply buttons; uses the /api/prices routes
+public/panels/records.mjs  The Record day card and the 7d total lines; fetches /api/records
+public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Not useful, Undo and Copy prompt; fetches /api/reviews
+public/panels/rtk.mjs  The rtk panels: tokens rtk filtered per day and per command
+public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
+public/panels/timeline.mjs  The Session timeline: one lane per session with activity today
+public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown and its errors
+public/panels/usage.mjs  Daily cost, daily tokens, cumulative cost, token types and the weekday and hour heatmap
+public/ui/collapse.mjs Collapsible rows of panels, and the collapsible Skills and Subagents lists
+public/ui/hidden.mjs   Hides a panel or card with its x button, and shows it again from the header menu
+public/ui/panel-light.mjs  Lights the border of the panel under the pointer
+public/ui/row-order.mjs  Drag to reorder rows of panels; the order is saved in localStorage
+public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by style.css, with their SIL OFL licence files
 ```
 
 ## Extending it
