@@ -6,7 +6,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const helpers = require('./helpers');
-const { localDateStr } = require('../lib/scan');
+const { localDateStr } = require('../lib/dates');
 
 // Boot the real Express app on an ephemeral port against a fixture log directory.
 // CLAUDE_CONFIG_DIR has to be set before server.js is required, because

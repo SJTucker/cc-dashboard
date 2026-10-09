@@ -4,10 +4,11 @@
 const express = require('express');
 const os = require('os');
 const path = require('path');
-const { getProjectsDir, localDateStr } = require('./lib/scan');
+const { getProjectsDir } = require('./lib/scan');
+const { localDateStr } = require('./lib/dates');
 const { aggregate } = require('./lib/aggregate');
 const { getRowStore } = require('./lib/rowstore');
-const { windowStart } = require('./lib/window');
+const { windowStart } = require('./lib/dates');
 const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');

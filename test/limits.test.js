@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const ROOT = path.join(__dirname, '..');
 const { getClaudeJsonPath, getRateLimitsPath, recordRateLimits, readLimits, readDailyShare } = require('../lib/limits');
 
 const NOW = Date.parse('2026-09-28T17:55:00Z');
@@ -483,4 +484,13 @@ test('a weekly reset since a same-day previous reading, with no baseline, starts
   const file = weekFile(at(2026, 9, 30, 4), 95, undefined, oldReset);
   recordRateLimits(weekInput(at(2026, 9, 30, 6), 1, at(2026, 10, 7, 5)), file);
   assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 0, from: 'reset' });
+});
+
+test('loading lib/limits.js loads neither the transcript reader nor the price table', () => {
+  // require('module')._cache is the object require.cache refers to. The load runs in
+  // a fresh process, so modules other tests loaded do not count.
+  const script = "require('./lib/limits'); process.stdout.write(JSON.stringify(Object.keys(require('module')._cache).filter((k) => /lib\\/(extract|aggregate|pricing)\\.js$/.test(k))));";
+  const out = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, encoding: 'utf8' });
+  assert.strictEqual(out.status, 0, out.stderr);
+  assert.deepStrictEqual(JSON.parse(out.stdout), []);
 });
