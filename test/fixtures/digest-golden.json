@@ -1,0 +1,31 @@
+{
+  "a.jsonl": {
+    "prompts": 4,
+    "text": "USER: <pasted_content id=\"1\"> a long pasted prompt that runs past the eighty character preview limit, so its title is cut </pasted_content>\nCLAUDE: Looking at the repo.\nTOOL Bash git\nTOOL Read /repo/a.js\nERROR Bash: Exit code 1 fatal: not a git repository (or any of the parent directories): .git\nTOOL Edit /repo/a.js\nTOOL Write /repo/new.txt\nTOOL Write /repo/empty.txt\nTOOL Write /repo/two.txt\nTOOL Bash sed\nTOOL Edit\nTOOL Write /repo/odd.txt\nTOOL Edit /repo/b.js\nTOOL WebFetch example.com\nTOOL WebFetch\nTOOL Agent Explore\nTOOL Skill tdd\nTOOL unknown\nTOOL Bash ls\nERROR Edit: String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy\nERROR WebFetch: Permission for this action was denied by the auto mode classifier.\nERROR WebFetch: The user doesn't want to proceed with this tool use.\nLARGE OUTPUT Agent: 12000 chars\nERROR Skill: InputValidationError: skill not found\nERROR unknown: Command blocked: isolated in the worktree\nERROR Bash: ls: /tmp/x 12: No such file\nERROR tool: orphan\nCOMPACTED\nUSER: second prompt, queued\nUSER: typed with a bad timestamp\nUSER: typed with no timestamp\nTOOL Bash ls"
+  },
+  "b.jsonl": {
+    "prompts": 2,
+    "text": "USER: <pasted_content id=\"1\"> a long pasted prompt that runs past the eighty character preview limit, so its title is cut </pasted_content>\nCLAUDE: Looking at the repo.\nTOOL Bash git\nTOOL Read /repo/a.js\nERROR Bash: Exit code 1 fatal: not a git repository (or any of the parent directories): .git\nTOOL Edit /repo/a.js\nTOOL Write /repo/new.txt\nTOOL Write /repo/empty.txt\nTOOL Write /repo/two.txt\nTOOL Bash sed\nTOOL Edit\nTOOL Write /repo/odd.txt\nERROR Bash: Exit code 2 fatal: a later copy of the error\nUSER: pick up where we left off\nCLAUDE: Resuming."
+  },
+  "c.jsonl": {
+    "prompts": 1,
+    "text": "USER: an old prompt\nTOOL Edit /old/c.js\nERROR Edit: File has not been read yet"
+  },
+  "d.jsonl": {
+    "prompts": 0,
+    "text": ""
+  },
+  "e.jsonl": {
+    "prompts": 0,
+    "text": "TOOL Bash npm\nTOOL Edit /e.js\nTOOL Bash npm\nTOOL Read /e.md\nERROR Bash: Exit code 3 npm ERR! 7 failing\nERROR Bash: Exit code 3 lint failed\nERROR Read: File does not exist."
+  },
+  "f.jsonl": {
+    "prompts": 0,
+    "text": ""
+  },
+  "missing.jsonl": null,
+  "g.jsonl": {
+    "prompts": 1,
+    "text": "USER: review me\nTOOL Read /g.js\nTOOL Bash ls\nTOOL unknown\nERROR tool: failed"
+  }
+}

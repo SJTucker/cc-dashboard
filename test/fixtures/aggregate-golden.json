@@ -1,0 +1,8020 @@
+{
+  "all": {
+    "meta": {
+      "projectsDir": "<corpus>",
+      "dirExists": true,
+      "scannedFiles": 7,
+      "unreadableFiles": 1
+    },
+    "tools": [
+      {
+        "name": "Bash",
+        "calls": 6,
+        "errors": 4,
+        "details": [
+          {
+            "name": "ls",
+            "calls": 2,
+            "errors": 1
+          },
+          {
+            "name": "npm",
+            "calls": 2,
+            "errors": 2
+          },
+          {
+            "name": "git",
+            "calls": 1,
+            "errors": 1
+          },
+          {
+            "name": "sed",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "command failed",
+            "count": 3
+          },
+          {
+            "cause": "other",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "command failed",
+            "message": "exit 3 · npm",
+            "count": 2,
+            "example": "Exit code 3\nlint failed",
+            "t": 1791001860000
+          },
+          {
+            "cause": "command failed",
+            "message": "exit 2 · git",
+            "count": 1,
+            "example": "Exit code 2\nfatal: a later copy of the error",
+            "t": 1791464880000
+          },
+          {
+            "cause": "other",
+            "message": "ls: <path> N: No such file",
+            "count": 1,
+            "example": "ls: /tmp/x 12: No such file",
+            "t": 1791468120000
+          }
+        ]
+      },
+      {
+        "name": "Edit",
+        "calls": 5,
+        "errors": 2,
+        "details": [
+          {
+            "name": "/repo/a.js",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/b.js",
+            "calls": 1,
+            "errors": 1
+          },
+          {
+            "name": "/old/c.js",
+            "calls": 1,
+            "errors": 1
+          },
+          {
+            "name": "/e.js",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 2
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "String to replace not found in file <path> yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+            "count": 1,
+            "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+            "t": 1791468060000
+          },
+          {
+            "cause": "tool misused",
+            "message": "File has not been read yet",
+            "count": 1,
+            "example": "File has not been read yet",
+            "t": 1788012120000
+          }
+        ]
+      },
+      {
+        "name": "Write",
+        "calls": 4,
+        "errors": 0,
+        "details": [
+          {
+            "name": "/repo/new.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/empty.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/two.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/odd.txt",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [],
+        "errorGroups": []
+      },
+      {
+        "name": "Read",
+        "calls": 2,
+        "errors": 1,
+        "details": [
+          {
+            "name": "/repo/a.js",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/e.md",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "File does not exist.",
+            "count": 1,
+            "example": "File does not exist.",
+            "t": 0
+          }
+        ]
+      },
+      {
+        "name": "WebFetch",
+        "calls": 2,
+        "errors": 2,
+        "details": [
+          {
+            "name": "example.com",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "blocked by auto mode",
+            "count": 1
+          },
+          {
+            "cause": "rejected by you",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "blocked by auto mode",
+            "message": "Permission for this action was denied by the auto mode classifier.",
+            "count": 1,
+            "example": "Permission for this action was denied by the auto mode classifier.",
+            "t": 1791468060000
+          },
+          {
+            "cause": "rejected by you",
+            "message": "The user doesn't want to proceed with this tool use.",
+            "count": 1,
+            "example": "The user doesn't want to proceed with this tool use.",
+            "t": 1791468060000
+          }
+        ]
+      },
+      {
+        "name": "Agent",
+        "calls": 1,
+        "errors": 0,
+        "details": [
+          {
+            "name": "Explore",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [],
+        "errorGroups": []
+      },
+      {
+        "name": "Skill",
+        "calls": 1,
+        "errors": 1,
+        "details": [
+          {
+            "name": "tdd",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "InputValidationError: skill not found",
+            "count": 1,
+            "example": "InputValidationError: skill not found",
+            "t": 1791468120000
+          }
+        ]
+      },
+      {
+        "name": "unknown",
+        "calls": 1,
+        "errors": 1,
+        "details": [],
+        "errorCauses": [
+          {
+            "cause": "blocked by the worktree check",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "blocked by the worktree check",
+            "message": "Command blocked: isolated in the worktree",
+            "count": 1,
+            "example": "Command blocked: isolated in the worktree",
+            "t": 1791468120000
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "totalCost": 0.18534,
+      "totalTokens": 273192,
+      "totalInput": 7450,
+      "totalOutput": 1742,
+      "totalCacheCreate": 4000,
+      "totalCacheRead": 260000,
+      "cacheEfficiency": 0.957819119543194,
+      "unpricedTokens": 462,
+      "sessions": 6,
+      "apiCalls": 18,
+      "toolCalls": 22,
+      "toolErrors": 11,
+      "reportedCost": 4.35,
+      "reportedSessions": 4,
+      "reportedSessionsOf": 7
+    },
+    "daily": [
+      {
+        "date": "2026-08-29",
+        "input": 900,
+        "output": 90,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.00405,
+        "byModel": {
+          "sonnet": 990
+        },
+        "costByModel": {
+          "sonnet": 0.00405
+        }
+      },
+      {
+        "date": "2026-08-30",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-08-31",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-01",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-02",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-03",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-04",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-05",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-06",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-07",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-08",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-09",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-10",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-11",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-12",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-13",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-14",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-15",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-16",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-17",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-18",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-19",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-20",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-21",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-22",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-23",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-24",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-25",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-26",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-27",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-28",
+        "input": 340,
+        "output": 34,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.0015300000000000001,
+        "byModel": {
+          "sonnet": 374
+        },
+        "costByModel": {
+          "sonnet": 0.0015300000000000001
+        }
+      },
+      {
+        "date": "2026-09-29",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-30",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-01",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-02",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-03",
+        "input": 130,
+        "output": 13,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.000585,
+        "byModel": {
+          "sonnet": 143
+        },
+        "costByModel": {
+          "sonnet": 0.000585
+        }
+      },
+      {
+        "date": "2026-10-04",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-05",
+        "input": 900,
+        "output": 90,
+        "cacheCreate": 2000,
+        "cacheRead": 50000,
+        "cost": 0.027075000000000002,
+        "byModel": {
+          "sonnet": 52770,
+          "haiku": 220
+        },
+        "costByModel": {
+          "sonnet": 0.026775,
+          "haiku": 0.0003
+        }
+      },
+      {
+        "date": "2026-10-06",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-07",
+        "input": 100,
+        "output": 10,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.00045,
+        "byModel": {
+          "sonnet": 110
+        },
+        "costByModel": {
+          "sonnet": 0.00045
+        }
+      },
+      {
+        "date": "2026-10-08",
+        "input": 5080,
+        "output": 1505,
+        "cacheCreate": 2000,
+        "cacheRead": 210000,
+        "cost": 0.15165,
+        "byModel": {
+          "sonnet": 54893,
+          "other": 440,
+          "opus": 162900,
+          "haiku": 330
+        },
+        "costByModel": {
+          "sonnet": 0.038700000000000005,
+          "other": 0,
+          "opus": 0.1125,
+          "haiku": 0.00045
+        }
+      }
+    ],
+    "activity": [
+      {
+        "weekday": 0,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 3,
+        "calls": 1,
+        "tokens": 121,
+        "cost": 0.000495
+      },
+      {
+        "weekday": 1,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 9,
+        "calls": 1,
+        "tokens": 52770,
+        "cost": 0.026775
+      },
+      {
+        "weekday": 1,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 12,
+        "calls": 2,
+        "tokens": 121,
+        "cost": 0.000495
+      },
+      {
+        "weekday": 1,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 14,
+        "calls": 1,
+        "tokens": 220,
+        "cost": 0.0003
+      },
+      {
+        "weekday": 1,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 23,
+        "calls": 1,
+        "tokens": 132,
+        "cost": 0.00054
+      },
+      {
+        "weekday": 2,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 23,
+        "calls": 1,
+        "tokens": 110,
+        "cost": 0.00045
+      },
+      {
+        "weekday": 4,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 9,
+        "calls": 2,
+        "tokens": 54287,
+        "cost": 0.03633
+      },
+      {
+        "weekday": 4,
+        "hour": 10,
+        "calls": 1,
+        "tokens": 540,
+        "cost": 0.0021
+      },
+      {
+        "weekday": 4,
+        "hour": 11,
+        "calls": 6,
+        "tokens": 163758,
+        "cost": 0.11322000000000002
+      },
+      {
+        "weekday": 4,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 0,
+        "calls": 1,
+        "tokens": 143,
+        "cost": 0.000585
+      },
+      {
+        "weekday": 6,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 10,
+        "calls": 1,
+        "tokens": 990,
+        "cost": 0.00405
+      },
+      {
+        "weekday": 6,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      }
+    ],
+    "models": [
+      {
+        "model": "claude-opus-4-6-20260315",
+        "family": "opus",
+        "cost": 0.1125,
+        "tokens": 162900,
+        "priced": true
+      },
+      {
+        "model": "claude-sonnet-4-6-20260115",
+        "family": "sonnet",
+        "cost": 0.07209000000000002,
+        "tokens": 109280,
+        "priced": true
+      },
+      {
+        "model": "claude-haiku-4-5-20251001",
+        "family": "haiku",
+        "cost": 0.00075,
+        "tokens": 550,
+        "priced": true
+      },
+      {
+        "model": "gpt-4o",
+        "family": "other",
+        "cost": 0,
+        "tokens": 440,
+        "priced": false
+      }
+    ],
+    "skills": [
+      {
+        "name": "tdd",
+        "cost": 0.03213
+      },
+      {
+        "name": "review",
+        "cost": 0.026775
+      }
+    ],
+    "subagents": [
+      {
+        "name": "Explore",
+        "cost": 0.00045
+      }
+    ],
+    "threads": {
+      "main": 0.18489,
+      "subagent": 0.00045
+    },
+    "context": {
+      "over": 0.1125,
+      "under": 0.07284000000000002
+    },
+    "contextThreshold": 150000,
+    "efficiency": {
+      "calls": [
+        {
+          "t": 1791464460000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 53000,
+          "cacheRead": 50000,
+          "output": 367,
+          "cost": 0.03213,
+          "tools": [
+            "Bash",
+            "Read"
+          ]
+        },
+        {
+          "t": 1791464640000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 800,
+          "cacheRead": 0,
+          "output": 120,
+          "cost": 0.0042,
+          "tools": [
+            "Edit",
+            "Write",
+            "Write",
+            "Write",
+            "Bash",
+            "Edit",
+            "Write"
+          ]
+        },
+        {
+          "t": 1791468000000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 500,
+          "cacheRead": 0,
+          "output": 40,
+          "cost": 0.0021,
+          "tools": [
+            "Edit",
+            "WebFetch",
+            "WebFetch",
+            "Agent",
+            "Skill",
+            "unknown",
+            "Bash"
+          ]
+        },
+        {
+          "t": 1791471660000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 30,
+          "cacheRead": 0,
+          "output": 3,
+          "cost": 0.000135,
+          "tools": [
+            "Bash"
+          ]
+        },
+        {
+          "t": 1791471660000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 30,
+          "cacheRead": 0,
+          "output": 3,
+          "cost": 0.000135,
+          "tools": []
+        },
+        {
+          "t": 1791471720000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "gpt-4o",
+          "version": null,
+          "context": 400,
+          "cacheRead": 0,
+          "output": 40,
+          "cost": 0,
+          "tools": []
+        },
+        {
+          "t": 1791471780000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": null,
+          "version": null,
+          "context": 20,
+          "cacheRead": 0,
+          "output": 2,
+          "cost": 0,
+          "tools": []
+        },
+        {
+          "t": 1791471840000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-opus-4-6-20260315",
+          "version": null,
+          "context": 162000,
+          "cacheRead": 160000,
+          "output": 900,
+          "cost": 0.1125,
+          "tools": []
+        },
+        {
+          "t": 1791471960000,
+          "sessionId": "sess-a",
+          "main": false,
+          "model": "claude-haiku-4-5-20251001",
+          "version": null,
+          "context": 300,
+          "cacheRead": 0,
+          "output": 30,
+          "cost": 0.00045,
+          "tools": []
+        },
+        {
+          "t": 1791205260000,
+          "sessionId": "sess-b",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 52700,
+          "cacheRead": 50000,
+          "output": 70,
+          "cost": 0.026775,
+          "tools": []
+        },
+        {
+          "t": 1791223200000,
+          "sessionId": "sess-b",
+          "main": true,
+          "model": "claude-haiku-4-5-20251001",
+          "version": null,
+          "context": 200,
+          "cacheRead": 0,
+          "output": 20,
+          "cost": 0.0003,
+          "tools": []
+        },
+        {
+          "t": 1791430200000,
+          "sessionId": "sess-b",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 100,
+          "cacheRead": 0,
+          "output": 10,
+          "cost": 0.00045,
+          "tools": []
+        },
+        {
+          "t": 1788012060000,
+          "sessionId": "sess-c",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 900,
+          "cacheRead": 0,
+          "output": 90,
+          "cost": 0.00405,
+          "tools": [
+            "Edit"
+          ]
+        },
+        {
+          "t": 1790611200000,
+          "sessionId": "<corpus>/d.jsonl",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 50,
+          "cacheRead": 0,
+          "output": 5,
+          "cost": 0.000225,
+          "tools": []
+        },
+        {
+          "t": 1790611320000,
+          "sessionId": "constructor",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 60,
+          "cacheRead": 0,
+          "output": 6,
+          "cost": 0.00027,
+          "tools": []
+        },
+        {
+          "t": 1790578800000,
+          "sessionId": "sess-e",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 110,
+          "cacheRead": 0,
+          "output": 11,
+          "cost": 0.000495,
+          "tools": [
+            "Bash"
+          ]
+        },
+        {
+          "t": 1790650800000,
+          "sessionId": "sess-e",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 120,
+          "cacheRead": 0,
+          "output": 12,
+          "cost": 0.00054,
+          "tools": [
+            "Edit"
+          ]
+        },
+        {
+          "t": 1791001800000,
+          "sessionId": "sess-e",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 130,
+          "cacheRead": 0,
+          "output": 13,
+          "cost": 0.000585,
+          "tools": [
+            "Bash",
+            "Read"
+          ]
+        }
+      ],
+      "prompts": [
+        {
+          "t": 1791464400000,
+          "sessionId": "sess-a"
+        },
+        {
+          "t": 1791468240000,
+          "sessionId": "sess-a"
+        },
+        {
+          "t": 1791205200000,
+          "sessionId": "sess-b"
+        },
+        {
+          "t": 1788012000000,
+          "sessionId": "sess-c"
+        }
+      ],
+      "linesBySession": {
+        "sess-a": {
+          "added": 6,
+          "removed": 1
+        },
+        "sess-c": {
+          "added": 1,
+          "removed": 0
+        },
+        "sess-e": {
+          "added": 1,
+          "removed": 1
+        }
+      },
+      "titleBySession": {
+        "sess-a": "Title from b",
+        "sess-b": "Resumed work",
+        "sess-c": "Old session",
+        "<corpus>/d.jsonl": "No session id",
+        "sess-f": "Titles only"
+      },
+      "branchesBySession": {
+        "sess-a": [
+          "main",
+          "feature/x",
+          "feature/x2",
+          "early",
+          "no-time",
+          "feature/z"
+        ],
+        "sess-b": [
+          "feature/y",
+          "main"
+        ],
+        "sess-c": [
+          "old-branch"
+        ],
+        "constructor": [
+          "proto"
+        ]
+      },
+      "branchBySession": {
+        "sess-a": "feature/z",
+        "sess-b": "main",
+        "sess-c": "old-branch",
+        "constructor": "proto"
+      },
+      "firstPromptBySession": {
+        "sess-a": "a long pasted prompt that runs past the eighty character preview limit, so its…",
+        "sess-b": "pick up where we left off",
+        "sess-c": "an old prompt"
+      }
+    }
+  },
+  "30d": {
+    "meta": {
+      "dirExists": false,
+      "scannedFiles": 7,
+      "unreadableFiles": 1
+    },
+    "tools": [
+      {
+        "name": "Bash",
+        "calls": 6,
+        "errors": 4,
+        "details": [
+          {
+            "name": "ls",
+            "calls": 2,
+            "errors": 1
+          },
+          {
+            "name": "npm",
+            "calls": 2,
+            "errors": 2
+          },
+          {
+            "name": "git",
+            "calls": 1,
+            "errors": 1
+          },
+          {
+            "name": "sed",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "command failed",
+            "count": 3
+          },
+          {
+            "cause": "other",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "command failed",
+            "message": "exit 3 · npm",
+            "count": 2,
+            "example": "Exit code 3\nlint failed",
+            "t": 1791001860000
+          },
+          {
+            "cause": "command failed",
+            "message": "exit 2 · git",
+            "count": 1,
+            "example": "Exit code 2\nfatal: a later copy of the error",
+            "t": 1791464880000
+          },
+          {
+            "cause": "other",
+            "message": "ls: <path> N: No such file",
+            "count": 1,
+            "example": "ls: /tmp/x 12: No such file",
+            "t": 1791468120000
+          }
+        ]
+      },
+      {
+        "name": "Edit",
+        "calls": 4,
+        "errors": 1,
+        "details": [
+          {
+            "name": "/repo/a.js",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/b.js",
+            "calls": 1,
+            "errors": 1
+          },
+          {
+            "name": "/e.js",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "String to replace not found in file <path> yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+            "count": 1,
+            "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+            "t": 1791468060000
+          }
+        ]
+      },
+      {
+        "name": "Write",
+        "calls": 4,
+        "errors": 0,
+        "details": [
+          {
+            "name": "/repo/new.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/empty.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/two.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/odd.txt",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [],
+        "errorGroups": []
+      },
+      {
+        "name": "Read",
+        "calls": 2,
+        "errors": 1,
+        "details": [
+          {
+            "name": "/repo/a.js",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/e.md",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "File does not exist.",
+            "count": 1,
+            "example": "File does not exist.",
+            "t": 0
+          }
+        ]
+      },
+      {
+        "name": "WebFetch",
+        "calls": 2,
+        "errors": 2,
+        "details": [
+          {
+            "name": "example.com",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "blocked by auto mode",
+            "count": 1
+          },
+          {
+            "cause": "rejected by you",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "blocked by auto mode",
+            "message": "Permission for this action was denied by the auto mode classifier.",
+            "count": 1,
+            "example": "Permission for this action was denied by the auto mode classifier.",
+            "t": 1791468060000
+          },
+          {
+            "cause": "rejected by you",
+            "message": "The user doesn't want to proceed with this tool use.",
+            "count": 1,
+            "example": "The user doesn't want to proceed with this tool use.",
+            "t": 1791468060000
+          }
+        ]
+      },
+      {
+        "name": "Agent",
+        "calls": 1,
+        "errors": 0,
+        "details": [
+          {
+            "name": "Explore",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [],
+        "errorGroups": []
+      },
+      {
+        "name": "Skill",
+        "calls": 1,
+        "errors": 1,
+        "details": [
+          {
+            "name": "tdd",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "InputValidationError: skill not found",
+            "count": 1,
+            "example": "InputValidationError: skill not found",
+            "t": 1791468120000
+          }
+        ]
+      },
+      {
+        "name": "unknown",
+        "calls": 1,
+        "errors": 1,
+        "details": [],
+        "errorCauses": [
+          {
+            "cause": "blocked by the worktree check",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "blocked by the worktree check",
+            "message": "Command blocked: isolated in the worktree",
+            "count": 1,
+            "example": "Command blocked: isolated in the worktree",
+            "t": 1791468120000
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "totalCost": 0.18129,
+      "totalTokens": 272202,
+      "totalInput": 6550,
+      "totalOutput": 1652,
+      "totalCacheCreate": 4000,
+      "totalCacheRead": 260000,
+      "cacheEfficiency": 0.9610053594529662,
+      "unpricedTokens": 462,
+      "sessions": 5,
+      "apiCalls": 17,
+      "toolCalls": 21,
+      "toolErrors": 10,
+      "reportedCost": null,
+      "reportedSessions": 0,
+      "reportedSessionsOf": null
+    },
+    "daily": [
+      {
+        "date": "2026-09-28",
+        "input": 340,
+        "output": 34,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.0015300000000000001,
+        "byModel": {
+          "sonnet": 374
+        },
+        "costByModel": {
+          "sonnet": 0.0015300000000000001
+        }
+      },
+      {
+        "date": "2026-09-29",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-09-30",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-01",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-02",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-03",
+        "input": 130,
+        "output": 13,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.000585,
+        "byModel": {
+          "sonnet": 143
+        },
+        "costByModel": {
+          "sonnet": 0.000585
+        }
+      },
+      {
+        "date": "2026-10-04",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-05",
+        "input": 900,
+        "output": 90,
+        "cacheCreate": 2000,
+        "cacheRead": 50000,
+        "cost": 0.027075000000000002,
+        "byModel": {
+          "sonnet": 52770,
+          "haiku": 220
+        },
+        "costByModel": {
+          "sonnet": 0.026775,
+          "haiku": 0.0003
+        }
+      },
+      {
+        "date": "2026-10-06",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-07",
+        "input": 100,
+        "output": 10,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.00045,
+        "byModel": {
+          "sonnet": 110
+        },
+        "costByModel": {
+          "sonnet": 0.00045
+        }
+      },
+      {
+        "date": "2026-10-08",
+        "input": 5080,
+        "output": 1505,
+        "cacheCreate": 2000,
+        "cacheRead": 210000,
+        "cost": 0.15165,
+        "byModel": {
+          "sonnet": 54893,
+          "other": 440,
+          "opus": 162900,
+          "haiku": 330
+        },
+        "costByModel": {
+          "sonnet": 0.038700000000000005,
+          "other": 0,
+          "opus": 0.1125,
+          "haiku": 0.00045
+        }
+      }
+    ],
+    "activity": [
+      {
+        "weekday": 0,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 3,
+        "calls": 1,
+        "tokens": 121,
+        "cost": 0.000495
+      },
+      {
+        "weekday": 1,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 9,
+        "calls": 1,
+        "tokens": 52770,
+        "cost": 0.026775
+      },
+      {
+        "weekday": 1,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 12,
+        "calls": 2,
+        "tokens": 121,
+        "cost": 0.000495
+      },
+      {
+        "weekday": 1,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 14,
+        "calls": 1,
+        "tokens": 220,
+        "cost": 0.0003
+      },
+      {
+        "weekday": 1,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 23,
+        "calls": 1,
+        "tokens": 132,
+        "cost": 0.00054
+      },
+      {
+        "weekday": 2,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 23,
+        "calls": 1,
+        "tokens": 110,
+        "cost": 0.00045
+      },
+      {
+        "weekday": 4,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 9,
+        "calls": 2,
+        "tokens": 54287,
+        "cost": 0.03633
+      },
+      {
+        "weekday": 4,
+        "hour": 10,
+        "calls": 1,
+        "tokens": 540,
+        "cost": 0.0021
+      },
+      {
+        "weekday": 4,
+        "hour": 11,
+        "calls": 6,
+        "tokens": 163758,
+        "cost": 0.11322000000000002
+      },
+      {
+        "weekday": 4,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 0,
+        "calls": 1,
+        "tokens": 143,
+        "cost": 0.000585
+      },
+      {
+        "weekday": 6,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      }
+    ],
+    "models": [
+      {
+        "model": "claude-opus-4-6-20260315",
+        "family": "opus",
+        "cost": 0.1125,
+        "tokens": 162900,
+        "priced": true
+      },
+      {
+        "model": "claude-sonnet-4-6-20260115",
+        "family": "sonnet",
+        "cost": 0.06804000000000002,
+        "tokens": 108290,
+        "priced": true
+      },
+      {
+        "model": "claude-haiku-4-5-20251001",
+        "family": "haiku",
+        "cost": 0.00075,
+        "tokens": 550,
+        "priced": true
+      },
+      {
+        "model": "gpt-4o",
+        "family": "other",
+        "cost": 0,
+        "tokens": 440,
+        "priced": false
+      }
+    ],
+    "skills": [
+      {
+        "name": "tdd",
+        "cost": 0.03213
+      },
+      {
+        "name": "review",
+        "cost": 0.026775
+      }
+    ],
+    "subagents": [
+      {
+        "name": "Explore",
+        "cost": 0.00045
+      }
+    ],
+    "threads": {
+      "main": 0.18084,
+      "subagent": 0.00045
+    },
+    "context": {
+      "over": 0.1125,
+      "under": 0.06879000000000002
+    },
+    "contextThreshold": 150000,
+    "efficiency": {
+      "calls": [
+        {
+          "t": 1791464460000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 53000,
+          "cacheRead": 50000,
+          "output": 367,
+          "cost": 0.03213,
+          "tools": [
+            "Bash",
+            "Read"
+          ]
+        },
+        {
+          "t": 1791464640000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 800,
+          "cacheRead": 0,
+          "output": 120,
+          "cost": 0.0042,
+          "tools": [
+            "Edit",
+            "Write",
+            "Write",
+            "Write",
+            "Bash",
+            "Edit",
+            "Write"
+          ]
+        },
+        {
+          "t": 1791468000000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 500,
+          "cacheRead": 0,
+          "output": 40,
+          "cost": 0.0021,
+          "tools": [
+            "Edit",
+            "WebFetch",
+            "WebFetch",
+            "Agent",
+            "Skill",
+            "unknown",
+            "Bash"
+          ]
+        },
+        {
+          "t": 1791471660000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 30,
+          "cacheRead": 0,
+          "output": 3,
+          "cost": 0.000135,
+          "tools": [
+            "Bash"
+          ]
+        },
+        {
+          "t": 1791471660000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 30,
+          "cacheRead": 0,
+          "output": 3,
+          "cost": 0.000135,
+          "tools": []
+        },
+        {
+          "t": 1791471720000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "gpt-4o",
+          "version": null,
+          "context": 400,
+          "cacheRead": 0,
+          "output": 40,
+          "cost": 0,
+          "tools": []
+        },
+        {
+          "t": 1791471780000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": null,
+          "version": null,
+          "context": 20,
+          "cacheRead": 0,
+          "output": 2,
+          "cost": 0,
+          "tools": []
+        },
+        {
+          "t": 1791471840000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-opus-4-6-20260315",
+          "version": null,
+          "context": 162000,
+          "cacheRead": 160000,
+          "output": 900,
+          "cost": 0.1125,
+          "tools": []
+        },
+        {
+          "t": 1791471960000,
+          "sessionId": "sess-a",
+          "main": false,
+          "model": "claude-haiku-4-5-20251001",
+          "version": null,
+          "context": 300,
+          "cacheRead": 0,
+          "output": 30,
+          "cost": 0.00045,
+          "tools": []
+        },
+        {
+          "t": 1791205260000,
+          "sessionId": "sess-b",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 52700,
+          "cacheRead": 50000,
+          "output": 70,
+          "cost": 0.026775,
+          "tools": []
+        },
+        {
+          "t": 1791223200000,
+          "sessionId": "sess-b",
+          "main": true,
+          "model": "claude-haiku-4-5-20251001",
+          "version": null,
+          "context": 200,
+          "cacheRead": 0,
+          "output": 20,
+          "cost": 0.0003,
+          "tools": []
+        },
+        {
+          "t": 1791430200000,
+          "sessionId": "sess-b",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 100,
+          "cacheRead": 0,
+          "output": 10,
+          "cost": 0.00045,
+          "tools": []
+        },
+        {
+          "t": 1790611200000,
+          "sessionId": "<corpus>/d.jsonl",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 50,
+          "cacheRead": 0,
+          "output": 5,
+          "cost": 0.000225,
+          "tools": []
+        },
+        {
+          "t": 1790611320000,
+          "sessionId": "constructor",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 60,
+          "cacheRead": 0,
+          "output": 6,
+          "cost": 0.00027,
+          "tools": []
+        },
+        {
+          "t": 1790578800000,
+          "sessionId": "sess-e",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 110,
+          "cacheRead": 0,
+          "output": 11,
+          "cost": 0.000495,
+          "tools": [
+            "Bash"
+          ]
+        },
+        {
+          "t": 1790650800000,
+          "sessionId": "sess-e",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 120,
+          "cacheRead": 0,
+          "output": 12,
+          "cost": 0.00054,
+          "tools": [
+            "Edit"
+          ]
+        },
+        {
+          "t": 1791001800000,
+          "sessionId": "sess-e",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 130,
+          "cacheRead": 0,
+          "output": 13,
+          "cost": 0.000585,
+          "tools": [
+            "Bash",
+            "Read"
+          ]
+        }
+      ],
+      "prompts": [
+        {
+          "t": 1791464400000,
+          "sessionId": "sess-a"
+        },
+        {
+          "t": 1791468240000,
+          "sessionId": "sess-a"
+        },
+        {
+          "t": 1791205200000,
+          "sessionId": "sess-b"
+        }
+      ],
+      "linesBySession": {
+        "sess-a": {
+          "added": 6,
+          "removed": 1
+        },
+        "sess-e": {
+          "added": 1,
+          "removed": 1
+        }
+      },
+      "titleBySession": {
+        "sess-a": "Title from b",
+        "sess-b": "Resumed work",
+        "sess-c": "Old session",
+        "<corpus>/d.jsonl": "No session id",
+        "sess-f": "Titles only"
+      },
+      "branchesBySession": {
+        "sess-a": [
+          "main",
+          "feature/x",
+          "feature/x2",
+          "early",
+          "no-time",
+          "feature/z"
+        ],
+        "sess-b": [
+          "feature/y",
+          "main"
+        ],
+        "sess-c": [
+          "old-branch"
+        ],
+        "constructor": [
+          "proto"
+        ]
+      },
+      "branchBySession": {
+        "sess-a": "feature/z",
+        "sess-b": "main",
+        "sess-c": "old-branch",
+        "constructor": "proto"
+      },
+      "firstPromptBySession": {
+        "sess-a": "a long pasted prompt that runs past the eighty character preview limit, so its…",
+        "sess-b": "pick up where we left off",
+        "sess-c": "an old prompt"
+      }
+    }
+  },
+  "7d": {
+    "meta": {
+      "dirExists": false,
+      "scannedFiles": 7,
+      "unreadableFiles": 1
+    },
+    "tools": [
+      {
+        "name": "Bash",
+        "calls": 5,
+        "errors": 3,
+        "details": [
+          {
+            "name": "ls",
+            "calls": 2,
+            "errors": 1
+          },
+          {
+            "name": "git",
+            "calls": 1,
+            "errors": 1
+          },
+          {
+            "name": "sed",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "npm",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "command failed",
+            "count": 2
+          },
+          {
+            "cause": "other",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "command failed",
+            "message": "exit 2 · git",
+            "count": 1,
+            "example": "Exit code 2\nfatal: a later copy of the error",
+            "t": 1791464880000
+          },
+          {
+            "cause": "other",
+            "message": "ls: <path> N: No such file",
+            "count": 1,
+            "example": "ls: /tmp/x 12: No such file",
+            "t": 1791468120000
+          },
+          {
+            "cause": "command failed",
+            "message": "exit 3 · npm",
+            "count": 1,
+            "example": "Exit code 3\nlint failed",
+            "t": 1791001860000
+          }
+        ]
+      },
+      {
+        "name": "Write",
+        "calls": 4,
+        "errors": 0,
+        "details": [
+          {
+            "name": "/repo/new.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/empty.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/two.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/odd.txt",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [],
+        "errorGroups": []
+      },
+      {
+        "name": "Edit",
+        "calls": 3,
+        "errors": 1,
+        "details": [
+          {
+            "name": "/repo/a.js",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/b.js",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "String to replace not found in file <path> yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+            "count": 1,
+            "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+            "t": 1791468060000
+          }
+        ]
+      },
+      {
+        "name": "Read",
+        "calls": 2,
+        "errors": 1,
+        "details": [
+          {
+            "name": "/repo/a.js",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/e.md",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "File does not exist.",
+            "count": 1,
+            "example": "File does not exist.",
+            "t": 0
+          }
+        ]
+      },
+      {
+        "name": "WebFetch",
+        "calls": 2,
+        "errors": 2,
+        "details": [
+          {
+            "name": "example.com",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "blocked by auto mode",
+            "count": 1
+          },
+          {
+            "cause": "rejected by you",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "blocked by auto mode",
+            "message": "Permission for this action was denied by the auto mode classifier.",
+            "count": 1,
+            "example": "Permission for this action was denied by the auto mode classifier.",
+            "t": 1791468060000
+          },
+          {
+            "cause": "rejected by you",
+            "message": "The user doesn't want to proceed with this tool use.",
+            "count": 1,
+            "example": "The user doesn't want to proceed with this tool use.",
+            "t": 1791468060000
+          }
+        ]
+      },
+      {
+        "name": "Agent",
+        "calls": 1,
+        "errors": 0,
+        "details": [
+          {
+            "name": "Explore",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [],
+        "errorGroups": []
+      },
+      {
+        "name": "Skill",
+        "calls": 1,
+        "errors": 1,
+        "details": [
+          {
+            "name": "tdd",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "InputValidationError: skill not found",
+            "count": 1,
+            "example": "InputValidationError: skill not found",
+            "t": 1791468120000
+          }
+        ]
+      },
+      {
+        "name": "unknown",
+        "calls": 1,
+        "errors": 1,
+        "details": [],
+        "errorCauses": [
+          {
+            "cause": "blocked by the worktree check",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "blocked by the worktree check",
+            "message": "Command blocked: isolated in the worktree",
+            "count": 1,
+            "example": "Command blocked: isolated in the worktree",
+            "t": 1791468120000
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "totalCost": 0.17976,
+      "totalTokens": 271828,
+      "totalInput": 6210,
+      "totalOutput": 1618,
+      "totalCacheCreate": 4000,
+      "totalCacheRead": 260000,
+      "cacheEfficiency": 0.9622145738499686,
+      "unpricedTokens": 462,
+      "sessions": 3,
+      "apiCalls": 13,
+      "toolCalls": 19,
+      "toolErrors": 10,
+      "reportedCost": null,
+      "reportedSessions": 0,
+      "reportedSessionsOf": null
+    },
+    "daily": [
+      {
+        "date": "2026-10-03",
+        "input": 130,
+        "output": 13,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.000585,
+        "byModel": {
+          "sonnet": 143
+        },
+        "costByModel": {
+          "sonnet": 0.000585
+        }
+      },
+      {
+        "date": "2026-10-04",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-05",
+        "input": 900,
+        "output": 90,
+        "cacheCreate": 2000,
+        "cacheRead": 50000,
+        "cost": 0.027075000000000002,
+        "byModel": {
+          "sonnet": 52770,
+          "haiku": 220
+        },
+        "costByModel": {
+          "sonnet": 0.026775,
+          "haiku": 0.0003
+        }
+      },
+      {
+        "date": "2026-10-06",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-07",
+        "input": 100,
+        "output": 10,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.00045,
+        "byModel": {
+          "sonnet": 110
+        },
+        "costByModel": {
+          "sonnet": 0.00045
+        }
+      },
+      {
+        "date": "2026-10-08",
+        "input": 5080,
+        "output": 1505,
+        "cacheCreate": 2000,
+        "cacheRead": 210000,
+        "cost": 0.15165,
+        "byModel": {
+          "sonnet": 54893,
+          "other": 440,
+          "opus": 162900,
+          "haiku": 330
+        },
+        "costByModel": {
+          "sonnet": 0.038700000000000005,
+          "other": 0,
+          "opus": 0.1125,
+          "haiku": 0.00045
+        }
+      }
+    ],
+    "activity": [
+      {
+        "weekday": 0,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 9,
+        "calls": 1,
+        "tokens": 52770,
+        "cost": 0.026775
+      },
+      {
+        "weekday": 1,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 14,
+        "calls": 1,
+        "tokens": 220,
+        "cost": 0.0003
+      },
+      {
+        "weekday": 1,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 23,
+        "calls": 1,
+        "tokens": 110,
+        "cost": 0.00045
+      },
+      {
+        "weekday": 4,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 9,
+        "calls": 2,
+        "tokens": 54287,
+        "cost": 0.03633
+      },
+      {
+        "weekday": 4,
+        "hour": 10,
+        "calls": 1,
+        "tokens": 540,
+        "cost": 0.0021
+      },
+      {
+        "weekday": 4,
+        "hour": 11,
+        "calls": 6,
+        "tokens": 163758,
+        "cost": 0.11322000000000002
+      },
+      {
+        "weekday": 4,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 0,
+        "calls": 1,
+        "tokens": 143,
+        "cost": 0.000585
+      },
+      {
+        "weekday": 6,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      }
+    ],
+    "models": [
+      {
+        "model": "claude-opus-4-6-20260315",
+        "family": "opus",
+        "cost": 0.1125,
+        "tokens": 162900,
+        "priced": true
+      },
+      {
+        "model": "claude-sonnet-4-6-20260115",
+        "family": "sonnet",
+        "cost": 0.06651000000000001,
+        "tokens": 107916,
+        "priced": true
+      },
+      {
+        "model": "claude-haiku-4-5-20251001",
+        "family": "haiku",
+        "cost": 0.00075,
+        "tokens": 550,
+        "priced": true
+      },
+      {
+        "model": "gpt-4o",
+        "family": "other",
+        "cost": 0,
+        "tokens": 440,
+        "priced": false
+      }
+    ],
+    "skills": [
+      {
+        "name": "tdd",
+        "cost": 0.03213
+      },
+      {
+        "name": "review",
+        "cost": 0.026775
+      }
+    ],
+    "subagents": [
+      {
+        "name": "Explore",
+        "cost": 0.00045
+      }
+    ],
+    "threads": {
+      "main": 0.17931,
+      "subagent": 0.00045
+    },
+    "context": {
+      "over": 0.1125,
+      "under": 0.06726000000000001
+    },
+    "contextThreshold": 150000,
+    "efficiency": {
+      "calls": [
+        {
+          "t": 1791464460000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 53000,
+          "cacheRead": 50000,
+          "output": 367,
+          "cost": 0.03213,
+          "tools": [
+            "Bash",
+            "Read"
+          ]
+        },
+        {
+          "t": 1791464640000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 800,
+          "cacheRead": 0,
+          "output": 120,
+          "cost": 0.0042,
+          "tools": [
+            "Edit",
+            "Write",
+            "Write",
+            "Write",
+            "Bash",
+            "Edit",
+            "Write"
+          ]
+        },
+        {
+          "t": 1791468000000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 500,
+          "cacheRead": 0,
+          "output": 40,
+          "cost": 0.0021,
+          "tools": [
+            "Edit",
+            "WebFetch",
+            "WebFetch",
+            "Agent",
+            "Skill",
+            "unknown",
+            "Bash"
+          ]
+        },
+        {
+          "t": 1791471660000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 30,
+          "cacheRead": 0,
+          "output": 3,
+          "cost": 0.000135,
+          "tools": [
+            "Bash"
+          ]
+        },
+        {
+          "t": 1791471660000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 30,
+          "cacheRead": 0,
+          "output": 3,
+          "cost": 0.000135,
+          "tools": []
+        },
+        {
+          "t": 1791471720000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "gpt-4o",
+          "version": null,
+          "context": 400,
+          "cacheRead": 0,
+          "output": 40,
+          "cost": 0,
+          "tools": []
+        },
+        {
+          "t": 1791471780000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": null,
+          "version": null,
+          "context": 20,
+          "cacheRead": 0,
+          "output": 2,
+          "cost": 0,
+          "tools": []
+        },
+        {
+          "t": 1791471840000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-opus-4-6-20260315",
+          "version": null,
+          "context": 162000,
+          "cacheRead": 160000,
+          "output": 900,
+          "cost": 0.1125,
+          "tools": []
+        },
+        {
+          "t": 1791471960000,
+          "sessionId": "sess-a",
+          "main": false,
+          "model": "claude-haiku-4-5-20251001",
+          "version": null,
+          "context": 300,
+          "cacheRead": 0,
+          "output": 30,
+          "cost": 0.00045,
+          "tools": []
+        },
+        {
+          "t": 1791205260000,
+          "sessionId": "sess-b",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 52700,
+          "cacheRead": 50000,
+          "output": 70,
+          "cost": 0.026775,
+          "tools": []
+        },
+        {
+          "t": 1791223200000,
+          "sessionId": "sess-b",
+          "main": true,
+          "model": "claude-haiku-4-5-20251001",
+          "version": null,
+          "context": 200,
+          "cacheRead": 0,
+          "output": 20,
+          "cost": 0.0003,
+          "tools": []
+        },
+        {
+          "t": 1791430200000,
+          "sessionId": "sess-b",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 100,
+          "cacheRead": 0,
+          "output": 10,
+          "cost": 0.00045,
+          "tools": []
+        },
+        {
+          "t": 1791001800000,
+          "sessionId": "sess-e",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 130,
+          "cacheRead": 0,
+          "output": 13,
+          "cost": 0.000585,
+          "tools": [
+            "Bash",
+            "Read"
+          ]
+        }
+      ],
+      "prompts": [
+        {
+          "t": 1791464400000,
+          "sessionId": "sess-a"
+        },
+        {
+          "t": 1791468240000,
+          "sessionId": "sess-a"
+        },
+        {
+          "t": 1791205200000,
+          "sessionId": "sess-b"
+        }
+      ],
+      "linesBySession": {
+        "sess-a": {
+          "added": 6,
+          "removed": 1
+        },
+        "sess-e": {
+          "added": 1,
+          "removed": 1
+        }
+      },
+      "titleBySession": {
+        "sess-a": "Title from b",
+        "sess-b": "Resumed work",
+        "sess-c": "Old session",
+        "<corpus>/d.jsonl": "No session id",
+        "sess-f": "Titles only"
+      },
+      "branchesBySession": {
+        "sess-a": [
+          "main",
+          "feature/x",
+          "feature/x2",
+          "early",
+          "no-time",
+          "feature/z"
+        ],
+        "sess-b": [
+          "feature/y",
+          "main"
+        ],
+        "sess-c": [
+          "old-branch"
+        ],
+        "constructor": [
+          "proto"
+        ]
+      },
+      "branchBySession": {
+        "sess-a": "feature/z",
+        "sess-b": "main",
+        "sess-c": "old-branch",
+        "constructor": "proto"
+      },
+      "firstPromptBySession": {
+        "sess-a": "a long pasted prompt that runs past the eighty character preview limit, so its…",
+        "sess-b": "pick up where we left off",
+        "sess-c": "an old prompt"
+      }
+    }
+  },
+  "today-hour": {
+    "meta": {
+      "dirExists": false,
+      "scannedFiles": 7,
+      "unreadableFiles": 1
+    },
+    "tools": [
+      {
+        "name": "Bash",
+        "calls": 4,
+        "errors": 2,
+        "details": [
+          {
+            "name": "ls",
+            "calls": 2,
+            "errors": 1
+          },
+          {
+            "name": "git",
+            "calls": 1,
+            "errors": 1
+          },
+          {
+            "name": "sed",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "command failed",
+            "count": 1
+          },
+          {
+            "cause": "other",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "command failed",
+            "message": "exit 2 · git",
+            "count": 1,
+            "example": "Exit code 2\nfatal: a later copy of the error",
+            "t": 1791464880000
+          },
+          {
+            "cause": "other",
+            "message": "ls: <path> N: No such file",
+            "count": 1,
+            "example": "ls: /tmp/x 12: No such file",
+            "t": 1791468120000
+          }
+        ]
+      },
+      {
+        "name": "Write",
+        "calls": 4,
+        "errors": 0,
+        "details": [
+          {
+            "name": "/repo/new.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/empty.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/two.txt",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/odd.txt",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [],
+        "errorGroups": []
+      },
+      {
+        "name": "Edit",
+        "calls": 3,
+        "errors": 1,
+        "details": [
+          {
+            "name": "/repo/a.js",
+            "calls": 1,
+            "errors": 0
+          },
+          {
+            "name": "/repo/b.js",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "String to replace not found in file <path> yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+            "count": 1,
+            "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+            "t": 1791468060000
+          }
+        ]
+      },
+      {
+        "name": "WebFetch",
+        "calls": 2,
+        "errors": 2,
+        "details": [
+          {
+            "name": "example.com",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "blocked by auto mode",
+            "count": 1
+          },
+          {
+            "cause": "rejected by you",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "blocked by auto mode",
+            "message": "Permission for this action was denied by the auto mode classifier.",
+            "count": 1,
+            "example": "Permission for this action was denied by the auto mode classifier.",
+            "t": 1791468060000
+          },
+          {
+            "cause": "rejected by you",
+            "message": "The user doesn't want to proceed with this tool use.",
+            "count": 1,
+            "example": "The user doesn't want to proceed with this tool use.",
+            "t": 1791468060000
+          }
+        ]
+      },
+      {
+        "name": "Read",
+        "calls": 1,
+        "errors": 0,
+        "details": [
+          {
+            "name": "/repo/a.js",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [],
+        "errorGroups": []
+      },
+      {
+        "name": "Agent",
+        "calls": 1,
+        "errors": 0,
+        "details": [
+          {
+            "name": "Explore",
+            "calls": 1,
+            "errors": 0
+          }
+        ],
+        "errorCauses": [],
+        "errorGroups": []
+      },
+      {
+        "name": "Skill",
+        "calls": 1,
+        "errors": 1,
+        "details": [
+          {
+            "name": "tdd",
+            "calls": 1,
+            "errors": 1
+          }
+        ],
+        "errorCauses": [
+          {
+            "cause": "tool misused",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "tool misused",
+            "message": "InputValidationError: skill not found",
+            "count": 1,
+            "example": "InputValidationError: skill not found",
+            "t": 1791468120000
+          }
+        ]
+      },
+      {
+        "name": "unknown",
+        "calls": 1,
+        "errors": 1,
+        "details": [],
+        "errorCauses": [
+          {
+            "cause": "blocked by the worktree check",
+            "count": 1
+          }
+        ],
+        "errorGroups": [
+          {
+            "cause": "blocked by the worktree check",
+            "message": "Command blocked: isolated in the worktree",
+            "count": 1,
+            "example": "Command blocked: isolated in the worktree",
+            "t": 1791468120000
+          }
+        ]
+      }
+    ],
+    "summary": {
+      "totalCost": 0.15165,
+      "totalTokens": 218585,
+      "totalInput": 5080,
+      "totalOutput": 1505,
+      "totalCacheCreate": 2000,
+      "totalCacheRead": 210000,
+      "cacheEfficiency": 0.9673852957435047,
+      "unpricedTokens": 462,
+      "sessions": 1,
+      "apiCalls": 9,
+      "toolCalls": 17,
+      "toolErrors": 7,
+      "reportedCost": null,
+      "reportedSessions": 0,
+      "reportedSessionsOf": null
+    },
+    "daily": [
+      {
+        "date": "2026-10-08T00",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T01",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T02",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T03",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T04",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T05",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T06",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T07",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T08",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T09",
+        "input": 1800,
+        "output": 487,
+        "cacheCreate": 2000,
+        "cacheRead": 50000,
+        "cost": 0.03633,
+        "byModel": {
+          "sonnet": 54287
+        },
+        "costByModel": {
+          "sonnet": 0.03633
+        }
+      },
+      {
+        "date": "2026-10-08T10",
+        "input": 500,
+        "output": 40,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0.0021,
+        "byModel": {
+          "sonnet": 540
+        },
+        "costByModel": {
+          "sonnet": 0.0021
+        }
+      },
+      {
+        "date": "2026-10-08T11",
+        "input": 2780,
+        "output": 978,
+        "cacheCreate": 0,
+        "cacheRead": 160000,
+        "cost": 0.11322000000000002,
+        "byModel": {
+          "sonnet": 66,
+          "other": 440,
+          "opus": 162900,
+          "haiku": 330
+        },
+        "costByModel": {
+          "sonnet": 0.00027,
+          "other": 0,
+          "opus": 0.1125,
+          "haiku": 0.00045
+        }
+      },
+      {
+        "date": "2026-10-08T12",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T13",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T14",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T15",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T16",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T17",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T18",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T19",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T20",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T21",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T22",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      },
+      {
+        "date": "2026-10-08T23",
+        "input": 0,
+        "output": 0,
+        "cacheCreate": 0,
+        "cacheRead": 0,
+        "cost": 0,
+        "byModel": {},
+        "costByModel": {}
+      }
+    ],
+    "activity": [
+      {
+        "weekday": 0,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 0,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 1,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 2,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 3,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 9,
+        "calls": 2,
+        "tokens": 54287,
+        "cost": 0.03633
+      },
+      {
+        "weekday": 4,
+        "hour": 10,
+        "calls": 1,
+        "tokens": 540,
+        "cost": 0.0021
+      },
+      {
+        "weekday": 4,
+        "hour": 11,
+        "calls": 6,
+        "tokens": 163758,
+        "cost": 0.11322000000000002
+      },
+      {
+        "weekday": 4,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 4,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 5,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 0,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 1,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 2,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 3,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 4,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 5,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 6,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 7,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 8,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 9,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 10,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 11,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 12,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 13,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 14,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 15,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 16,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 17,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 18,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 19,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 20,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 21,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 22,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      },
+      {
+        "weekday": 6,
+        "hour": 23,
+        "calls": 0,
+        "tokens": 0,
+        "cost": 0
+      }
+    ],
+    "models": [
+      {
+        "model": "claude-opus-4-6-20260315",
+        "family": "opus",
+        "cost": 0.1125,
+        "tokens": 162900,
+        "priced": true
+      },
+      {
+        "model": "claude-sonnet-4-6-20260115",
+        "family": "sonnet",
+        "cost": 0.038700000000000005,
+        "tokens": 54893,
+        "priced": true
+      },
+      {
+        "model": "claude-haiku-4-5-20251001",
+        "family": "haiku",
+        "cost": 0.00045,
+        "tokens": 330,
+        "priced": true
+      },
+      {
+        "model": "gpt-4o",
+        "family": "other",
+        "cost": 0,
+        "tokens": 440,
+        "priced": false
+      }
+    ],
+    "skills": [
+      {
+        "name": "tdd",
+        "cost": 0.03213
+      }
+    ],
+    "subagents": [
+      {
+        "name": "Explore",
+        "cost": 0.00045
+      }
+    ],
+    "threads": {
+      "main": 0.1512,
+      "subagent": 0.00045
+    },
+    "context": {
+      "over": 0.1125,
+      "under": 0.039150000000000004
+    },
+    "contextThreshold": 150000,
+    "efficiency": {
+      "calls": [
+        {
+          "t": 1791464460000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 53000,
+          "cacheRead": 50000,
+          "output": 367,
+          "cost": 0.03213,
+          "tools": [
+            "Bash",
+            "Read"
+          ]
+        },
+        {
+          "t": 1791464640000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 800,
+          "cacheRead": 0,
+          "output": 120,
+          "cost": 0.0042,
+          "tools": [
+            "Edit",
+            "Write",
+            "Write",
+            "Write",
+            "Bash",
+            "Edit",
+            "Write"
+          ]
+        },
+        {
+          "t": 1791468000000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": "2.1.280",
+          "context": 500,
+          "cacheRead": 0,
+          "output": 40,
+          "cost": 0.0021,
+          "tools": [
+            "Edit",
+            "WebFetch",
+            "WebFetch",
+            "Agent",
+            "Skill",
+            "unknown",
+            "Bash"
+          ]
+        },
+        {
+          "t": 1791471660000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 30,
+          "cacheRead": 0,
+          "output": 3,
+          "cost": 0.000135,
+          "tools": [
+            "Bash"
+          ]
+        },
+        {
+          "t": 1791471660000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-sonnet-4-6-20260115",
+          "version": null,
+          "context": 30,
+          "cacheRead": 0,
+          "output": 3,
+          "cost": 0.000135,
+          "tools": []
+        },
+        {
+          "t": 1791471720000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "gpt-4o",
+          "version": null,
+          "context": 400,
+          "cacheRead": 0,
+          "output": 40,
+          "cost": 0,
+          "tools": []
+        },
+        {
+          "t": 1791471780000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": null,
+          "version": null,
+          "context": 20,
+          "cacheRead": 0,
+          "output": 2,
+          "cost": 0,
+          "tools": []
+        },
+        {
+          "t": 1791471840000,
+          "sessionId": "sess-a",
+          "main": true,
+          "model": "claude-opus-4-6-20260315",
+          "version": null,
+          "context": 162000,
+          "cacheRead": 160000,
+          "output": 900,
+          "cost": 0.1125,
+          "tools": []
+        },
+        {
+          "t": 1791471960000,
+          "sessionId": "sess-a",
+          "main": false,
+          "model": "claude-haiku-4-5-20251001",
+          "version": null,
+          "context": 300,
+          "cacheRead": 0,
+          "output": 30,
+          "cost": 0.00045,
+          "tools": []
+        }
+      ],
+      "prompts": [
+        {
+          "t": 1791464400000,
+          "sessionId": "sess-a"
+        },
+        {
+          "t": 1791468240000,
+          "sessionId": "sess-a"
+        }
+      ],
+      "linesBySession": {
+        "sess-a": {
+          "added": 6,
+          "removed": 1
+        }
+      },
+      "titleBySession": {
+        "sess-a": "Title from b",
+        "sess-b": "Resumed work",
+        "sess-c": "Old session",
+        "<corpus>/d.jsonl": "No session id",
+        "sess-f": "Titles only"
+      },
+      "branchesBySession": {
+        "sess-a": [
+          "main",
+          "feature/x",
+          "feature/x2",
+          "early",
+          "no-time",
+          "feature/z"
+        ],
+        "sess-b": [
+          "feature/y",
+          "main"
+        ],
+        "sess-c": [
+          "old-branch"
+        ],
+        "constructor": [
+          "proto"
+        ]
+      },
+      "branchBySession": {
+        "sess-a": "feature/z",
+        "sess-b": "main",
+        "sess-c": "old-branch",
+        "constructor": "proto"
+      },
+      "firstPromptBySession": {
+        "sess-a": "a long pasted prompt that runs past the eighty character preview limit, so its…",
+        "sess-b": "pick up where we left off",
+        "sess-c": "an old prompt"
+      }
+    }
+  }
+}
