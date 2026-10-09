@@ -1,6 +1,6 @@
 'use strict';
 
-// Pure helpers for the Session reviews panel. Loaded by index.html before app.js,
+// Pure helpers for the Session reviews panel. Loaded by index.html before main.mjs,
 // and required by test/reviews.test.js.
 
 const isOpen = (s) => s.dismissedAt == null;

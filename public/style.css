@@ -230,9 +230,9 @@ html, body {
   width: 100%;
 }
 
-/* Holds #summaryCards on Today (see placeSummaryCards in app.js). Its flex basis
-   makes the cards wrap onto their own line when the controls row runs out of
-   width. placeSummaryCards hides it on other ranges. */
+/* Holds #summaryCards on Today (see placeSummaryCards in public/main.mjs). Its
+   flex basis makes the cards wrap onto their own line when the controls row runs
+   out of width. placeSummaryCards hides it on other ranges. */
 .header-cards { flex: 1 1 700px; }
 
 .range-picker {
@@ -393,8 +393,8 @@ html, body {
 .panel-row.stretch { align-items: stretch; }
 
 /* The pointer light: a 160px cyan gradient at --x/--y, masked to the 1px border.
-   setupPanelLight in app.js sets --x/--y and adds .lit to the panel under the
-   pointer. */
+   setupPanelLight in public/ui/panel-light.mjs sets --x/--y and adds .lit to the
+   panel under the pointer. */
 .panel::before {
   content: '';
   position: absolute;
@@ -512,8 +512,8 @@ html, body {
 .session-hex { color: var(--accent-cyan); margin-right: 6px; }
 
 /* The title is the row's main text. Under it, in small muted type, the project and
-   git branch (contextLine in app.js), so two sessions of one project can be told
-   apart. A title taken from the first prompt is dimmer and italic, so it reads
+   git branch (contextLine in public/panels/sessions.mjs), so two sessions of one
+   project can be told apart. A title taken from the first prompt is dimmer and italic, so it reads
    apart from a title Claude Code wrote without relying on hue. */
 .session-title {
   display: inline-block;
@@ -846,7 +846,7 @@ html, body {
   margin-bottom: 8px;
 }
 
-/* Live sessions panel (renderSessions in app.js). */
+/* Live sessions panel (renderSessions in public/panels/sessions.mjs). */
 .sessions-table {
   width: 100%;
   border-collapse: collapse;
@@ -917,7 +917,7 @@ html, body {
 }
 .sessions-table .cost-value { position: relative; }
 
-/* Session timeline (renderTimeline in app.js). */
+/* Session timeline (renderTimeline in public/panels/timeline.mjs). */
 .timeline-label {
   font-family: var(--font-data);
   font-size: 11px;
@@ -1274,7 +1274,7 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
 .row-collapsed .panel-head { margin-bottom: 0; }
 
 /* A collapsed Skills or Subagents list in Where usage goes keeps only its title
-   (see setupUsageGroupToggles in app.js). */
+   (see setupUsageGroupToggles in public/ui/collapse.mjs). */
 .usage-group.group-collapsed > :not(.usage-group-title) { display: none; }
 .usage-group.group-collapsed .usage-group-title { margin-bottom: 0; }
 
@@ -1320,9 +1320,9 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
 
 /* ---------- Hidden panels ---------- */
 
-/* A panel or card the user hid (see the hidden panels region in app.js). This is
-   a separate attribute from `hidden`, which renderers set from the data, so a
-   renderer showing its panel cannot undo the user's choice. */
+/* A panel or card the user hid (see public/ui/hidden.mjs). This is a separate
+   attribute from `hidden`, which renderers set from the data, so a renderer
+   showing its panel cannot undo the user's choice. */
 [data-user-hidden] { display: none !important; }
 
 /* The panel left in a pair takes the whole row. */
@@ -1358,7 +1358,8 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStar
 .menu-btn { margin-left: auto; padding: 4px 10px; font-size: 14px; }
 
 /* A popover renders in the top layer, outside the header's overflow clip.
-   app.js sets top and right from the button's position each time it opens. */
+   public/ui/hidden.mjs sets top and right from the button's position each time
+   it opens. */
 .hidden-menu {
   position: fixed;
   inset: auto;

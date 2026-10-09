@@ -1,6 +1,6 @@
 'use strict';
 
-// Loaded two ways: index.html loads it as a script before app.js, which makes these
+// Loaded two ways: index.html loads it as a script before main.mjs, which makes these
 // functions globals, and the tests load it with require().
 
 // Draw every how-many-th x-axis label. Labels stay at least minGap pixels apart,
@@ -16,7 +16,7 @@ function labelStep(count, plotWidth, minGap = 44) {
 // n. The gap between bars is 3px, or a quarter of the step when the step is under
 // 12px, so a narrow bar keeps three quarters of its slot. There is no minimum bar
 // width: 2000 buckets on 554px give bars 0.21px wide. The chart textures are SVG
-// patterns in user space (appendPatternDefs in app.js), so the pattern lines up
+// patterns in user space (appendPatternDefs in public/charts/palette.mjs), so the pattern lines up
 // from one thin bar to the next and still reads across a run of bars. x(i) is the
 // left edge of bar i, measured from the plot's left edge.
 function barSlots(n, plotWidth) {
