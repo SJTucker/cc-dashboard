@@ -86,7 +86,7 @@ test('recordSession skips an older snapshot of the same session', () => {
   assert.strictEqual(written.costUsd, 2);
 });
 
-test('recordSession replaces a longer snapshot when the transcript is newer, as after a resume', () => {
+test('recordSession replaces a longer snapshot when the transcript is newer', () => {
   const dir = tmpDir();
   const T = NOW - 120_000;
   const cost = statuslineInput().cost;
