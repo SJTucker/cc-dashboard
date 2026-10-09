@@ -132,7 +132,8 @@ Set a variable for the server when you start it, for example
 The mod and the `bin/` scripts run inside Claude Code, so they read
 `CLAUDE_CONFIG_DIR` from Claude Code's environment. If you set it, give the server the
 same value. Otherwise the server reads transcripts and snapshots from a folder Claude
-Code does not write to.
+Code does not write to. The mod also reads `HOME`, to find `~/.claude` when
+`CLAUDE_CONFIG_DIR` is unset and to find rtk's config.
 
 `CHANGES_FILE` also exists. It points the server at another `changes.json` so the
 tests can avoid the one in the clone.
@@ -145,8 +146,8 @@ tests can avoid the one in the clone.
 | `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/plugins/installed_plugins.json` | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` |
-| `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, `bin/record-session-end` |
-| `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod |
+| `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, `bin/record-session-end`. `bin/record-statusline` deletes snapshots older than a day. |
+| `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod. The server deletes files older than a day. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
@@ -183,7 +184,21 @@ The mod also reads these files to record setup changes. It writes none of them.
   `/backfill-updates`.
 - **The mod calls Haiku** through your Claude Code login to judge releases, review
   ended sessions and label setup changes. No API key is read. These calls write no
-  transcript line, so the dashboard's totals leave out their cost.
+  transcript line, so the dashboard's totals leave out their cost. Reviews and labels
+  run in interactive sessions only. Each call sends this:
+  - **Judging releases:** the changelog entries of up to 20 versions. Nothing from
+    your setup or transcripts is sent.
+  - **Reviewing a session:** a digest of its transcript. The digest holds the first
+    400 characters of each typed prompt and the first 200 characters of each Claude
+    reply. It names each tool call with its file path, URL host, skill, subagent type
+    or Bash program name. Bash arguments are not sent. It holds the first 200
+    characters of each tool error. A digest over 60,000 characters keeps its first
+    20,000 and last 40,000.
+  - **Labelling a setup change:** the file's short name and its added and removed
+    lines, up to 4,096 characters. This covers `CLAUDE.md`, the files it includes with
+    `@path`, rules, skills, agents, and a project's `CLAUDE.md` and
+    `CLAUDE.local.md`. Changes to settings files, hook scripts, the statusline script
+    and rtk's config are labelled on your machine and not sent.
 
 ## Check it works
 

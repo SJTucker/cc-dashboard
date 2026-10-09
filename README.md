@@ -409,31 +409,11 @@ only. History then starts at the oldest transcript on disk. Raising
 
 ## What it does and doesn't do
 
-- **Read-only, except for four write paths.** The dashboard server only ever reads
-  your `~/.claude/projects` folder, the plugin list and `.claude.json` beside it,
-  `changes.json`, the setup change markers in `cc-dashboard/changes/`,
-  `rate-limits.json` and the activity files in `cc-dashboard/activity/`, and opens rtk's `history.db` with
-  sqlite's `readOnly` flag. One write path is `bin/record-statusline`,
-  `bin/record-session-end` and `bin/judge-updates`, separate scripts the
-  dashboard's Claude Code mod runs (see "Plan usage" above); they write only
-  `rate-limits.json`, the per-session snapshots in `cc-dashboard/sessions/`, and,
-  through `bin/judge-updates`, `cc-dashboard/updates.json`. The mod itself writes the
-  activity files (see "Live state"), and `lib/activity.js`
-  deletes those older than a day. The mod also writes the setup change markers in
-  `cc-dashboard/changes/` and the stored setup copies in `cc-dashboard/setup/` (see
-  "Setup changes recorded automatically"). The other write path is the Apply
-  button in the Cost by model panel: clicking it is the only thing that writes
-  `prices.json`. The third write path is the transcript database,
-  `~/.claude/cc-dashboard/transcripts.db` (or
-  `$CLAUDE_CONFIG_DIR/cc-dashboard/transcripts.db`). `server.js` writes the usage
-  rows of each transcript last modified before today. `bin/review-session` writes
-  the session reviews and their suggestions. Nothing deletes rows from it, because
-  it holds the only copy of a transcript Claude Code has deleted. The fourth write
-  path is the Done, Not useful and Undo buttons in Session reviews. They call `POST`
-  and `DELETE /api/reviews/:sessionId/suggestions/:idx/dismiss`, which set or clear
-  `dismissed_at` and `reason` on one row of `suggestions`. The routes refuse
-  cross-site requests, like the price routes. Nothing else under `server.js` or
-  `public/` writes anything.
+- **Writes only its own files.** The server, the mod and the `bin/` scripts change
+  no transcript and no Claude Code setting, and write files only to
+  `rate-limits.json` and the `cc-dashboard/` folder in your Claude config folder.
+  [Files outside the repo](SETUP.md#files-outside-the-repo) in SETUP.md lists each
+  file, what writes it, and what deletes old files.
 - **One network request from the server, on demand.** The Cost by model panel has
   a Check prices button. Clicking it makes the server fetch
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's
@@ -448,6 +428,9 @@ only. History then starts at the oldest transcript on disk. Raising
   the running Claude Code version has no verdict or when you run
   `/backfill-updates`. That request comes from Claude Code, not from the
   dashboard server.
+  The mod also calls Haiku to review ended sessions and to label setup changes.
+  [Network and model use](SETUP.md#network-and-model-use) in SETUP.md lists what each
+  call sends.
 - **Localhost only.** The server binds to `127.0.0.1` and rejects any request whose
   `Host` header isn't `localhost`/`127.0.0.1`, which blocks the DNS-rebinding trick
   where a malicious website re-points its own hostname at your machine (see
