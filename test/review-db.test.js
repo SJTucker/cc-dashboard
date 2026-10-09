@@ -158,3 +158,14 @@ test('openReviewDb, the opener bin/review-session uses, keeps the 5000 ms busy t
   t.after(() => db.close());
   assert.strictEqual(db.prepare('PRAGMA busy_timeout').get().timeout, 5000);
 });
+
+test('the import skips a stranded tmp file beside the review files', () => {
+  const f = fixture();
+  f.write('abc.json.4242', { sessionId: 'abc', status: 'done' });
+  const db = openReviewDb(f.dbPath, f.legacy);
+  try {
+    assert.deepStrictEqual(rows(db, 'SELECT session_id FROM reviews'), []);
+  } finally {
+    db.close();
+  }
+});
