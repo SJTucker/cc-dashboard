@@ -7,7 +7,10 @@
 // anything or exit non-zero, whatever stdin contains. It marks the session's
 // snapshot as ended (lib/sessions.js).
 
-const { recordSessionEnd } = require('../lib/sessions');
+const { loadConfig } = require('../lib/config-dir');
+const { recordSessionEnd, getSessionsDir } = require('../lib/sessions');
+
+const { configDir } = loadConfig();
 
 let input = '';
 process.stdin.on('data', (chunk) => {
@@ -21,6 +24,6 @@ process.stdin.on('end', () => {
   } catch {
     process.exit(0); // bad JSON: say nothing, exit clean
   }
-  recordSessionEnd(parsed); // never throws
+  recordSessionEnd(parsed, getSessionsDir(configDir)); // never throws
   process.exit(0);
 });

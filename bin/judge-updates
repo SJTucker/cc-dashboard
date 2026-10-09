@@ -19,8 +19,14 @@ const {
   buildPrompt,
   parseReply,
   recordVerdicts,
+  getUpdatesPath,
 } = require('../lib/updates');
+const { loadConfig } = require('../lib/config-dir');
+const { getProjectsDir } = require('../lib/transcript-files');
 const { readStdin } = require('../lib/stdin');
+
+const { configDir } = loadConfig();
+const updatesFile = getUpdatesPath(configDir);
 
 async function prompt(args) {
   const at = args.indexOf('--current');
@@ -30,9 +36,9 @@ async function prompt(args) {
   if (current) {
     seen = new Set([current]);
   } else {
-    seen = await transcriptVersions();
+    seen = await transcriptVersions(getProjectsDir());
   }
-  const pending = pendingVersions(seen, readVerdicts(), changelog);
+  const pending = pendingVersions(seen, readVerdicts(updatesFile), changelog);
   const batches = [];
   for (let i = 0; i < pending.length; i += BATCH_SIZE) {
     const versions = pending.slice(i, i + BATCH_SIZE);
@@ -45,7 +51,7 @@ async function record() {
   const { versions, reply } = JSON.parse(await readStdin());
   if (!Array.isArray(versions) || typeof reply !== 'string') throw new Error('expected {"versions": [...], "reply": "..."}');
   const verdicts = parseReply(reply, versions);
-  const added = recordVerdicts(verdicts);
+  const added = recordVerdicts(verdicts, updatesFile);
   return {
     recorded: added.length,
     relevant: added.filter((v) => verdicts[v].relevant).length,

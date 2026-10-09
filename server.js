@@ -15,17 +15,19 @@ const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
-const { readLimits, readDailyShare } = require('./lib/limits');
-const { readSessions, buildLiveSessions } = require('./lib/sessions');
+const { readLimits, readDailyShare, getRateLimitsPath } = require('./lib/limits');
+const { readSessions, buildLiveSessions, getSessionsDir } = require('./lib/sessions');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
-const { readActivity } = require('./lib/activity');
+const { readActivity, getActivityDir } = require('./lib/activity');
 const { readReviews, setDismissal, DISMISS_REASONS } = require('./lib/review');
 const { createReviewDbGetter, legacyReviewsDir } = require('./lib/review-db');
 const { createServerDb, getStorePath, isBusy } = require('./lib/db');
 const { busiestDay, dayTotals } = require('./public/stats');
 const { currentRows } = require('./lib/pricing');
-const { loadPriceFile, pricesSource, appendSnapshot } = require('./lib/price-store');
+const { loadPriceFile, pricesSource, appendSnapshot, getPricesPath } = require('./lib/price-store');
 const { PRICING_URL, PriceParseError, fetchPricingPage, parsePricingPage, diffPrices } = require('./lib/price-fetch');
+
+const config = loadConfig();
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -39,7 +41,7 @@ function getArg(name) {
 // friendly message never prints. `--port` with no value takes the next argv
 // token, which is how `--port --open` used to become NaN.
 function getPort() {
-  const raw = getArg('port') || loadConfig().port;
+  const raw = getArg('port') || config.port;
   if (raw == null) return 3600;
   const port = Number(raw);
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -79,7 +81,8 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api', sameOriginOnly);
 
 // Before the first scan, so every cost uses the applied price history.
-loadPriceFile();
+const pricesPath = getPricesPath(config.configDir);
+loadPriceFile(pricesPath);
 
 // One transcripts.db handle for the row store and the reviews (lib/db.js). It closes
 // when the server closes.
@@ -157,8 +160,8 @@ app.get('/api/rtk', (req, res) => {
 // readLimits() and readDailyShare() return null rather than throwing, so there is
 // no error branch.
 app.get('/api/limits', (req, res) => {
-  const limits = readLimits();
-  res.json(limits && { ...limits, today: readDailyShare() });
+  const limits = readLimits({ claudeJson: config.claudeJsonPath, rateLimits: getRateLimitsPath(config.configDir) });
+  res.json(limits && { ...limits, today: readDailyShare({ rateLimits: getRateLimitsPath(config.configDir) }) });
 });
 
 // All history, whatever range the page shows: a before/after needs data on both
@@ -211,7 +214,7 @@ app.get('/api/sessions/live', async (req, res) => {
   try {
     const data = await scan('today', 'hour');
     const { efficiency } = data;
-    res.json(buildLiveSessions(readSessions(), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(), {
+    res.json(buildLiveSessions(readSessions(getSessionsDir(config.configDir)), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(getActivityDir(config.configDir)), {
       branchesBySession: efficiency.branchesBySession,
       branchBySession: efficiency.branchBySession,
       firstPromptBySession: efficiency.firstPromptBySession,
@@ -344,7 +347,7 @@ app.post('/api/prices/apply', express.json({ limit: '1kb' }), (req, res) => {
     return;
   }
   const effectiveFrom = req.body ? req.body.effectiveFrom : undefined;
-  const result = appendSnapshot({ effectiveFrom, rows: pendingCheck, source: PRICING_URL });
+  const result = appendSnapshot({ effectiveFrom, rows: pendingCheck, source: PRICING_URL, file: pricesPath });
   if (result.error) {
     res.status(400).json({ error: result.error });
     return;

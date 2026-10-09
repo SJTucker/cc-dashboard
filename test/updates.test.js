@@ -5,20 +5,18 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const updates = require('../lib/updates');
 
-// CLAUDE_CONFIG_DIR is read at call time, so each test points it at a throwaway
-// folder and requires fresh copies.
+// Each test gets a throwaway config folder and passes its paths in.
 function setup({ verdicts } = {}) {
   const base = helpers.tmpDir(null, 'updates');
   fs.mkdirSync(path.join(base, 'projects', 'demo'), { recursive: true });
-  process.env.CLAUDE_CONFIG_DIR = base;
   const file = path.join(base, 'cc-dashboard', 'updates.json');
   if (verdicts !== undefined) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, typeof verdicts === 'string' ? verdicts : JSON.stringify(verdicts));
   }
-  delete require.cache[require.resolve('../lib/updates')];
-  return { updates: require('../lib/updates'), base, file };
+  return { updates, base, file };
 }
 
 const CHANGELOG = [
@@ -58,7 +56,7 @@ test('transcriptVersions reads only the top-level version field of each line', a
     JSON.stringify({ type: 'summary' }),
     'not json',
   ].join('\n') + '\n');
-  assert.deepStrictEqual([...(await updates.transcriptVersions())].sort(), ['2.1.285', '2.1.286']);
+  assert.deepStrictEqual([...(await updates.transcriptVersions(path.join(base, 'projects')))].sort(), ['2.1.285', '2.1.286']);
 });
 
 test('pendingVersions keeps seen versions with no verdict and a changelog entry, oldest first', () => {
@@ -105,14 +103,15 @@ test('parseReply reads plain and fenced JSON, keeps only asked versions, and kee
 });
 
 test('readVerdicts returns {} for a missing, malformed or non-object file', () => {
-  assert.deepStrictEqual(setup().updates.readVerdicts(), {});
-  assert.deepStrictEqual(setup({ verdicts: '{nope' }).updates.readVerdicts(), {});
-  assert.deepStrictEqual(setup({ verdicts: '[]' }).updates.readVerdicts(), {});
+  for (const verdicts of [undefined, '{nope', '[]']) {
+    const { file } = setup({ verdicts });
+    assert.deepStrictEqual(updates.readVerdicts(file), {});
+  }
 });
 
 test('recordVerdicts creates the folder, stamps judgedAt and returns the versions added', () => {
   const { updates, file } = setup();
-  const added = updates.recordVerdicts({ '2.1.286': { relevant: true, summary: 'Cache shared' } }, Date.UTC(2026, 9, 5, 9, 12));
+  const added = updates.recordVerdicts({ '2.1.286': { relevant: true, summary: 'Cache shared' } }, file, Date.UTC(2026, 9, 5, 9, 12));
   assert.deepStrictEqual(added, ['2.1.286']);
   assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')), {
     '2.1.286': { relevant: true, summary: 'Cache shared', judgedAt: '2026-10-05T09:12:00.000Z' },
@@ -123,7 +122,7 @@ test('recordVerdicts creates the folder, stamps judgedAt and returns the version
 test('recordVerdicts never replaces an existing entry', () => {
   const hand = { '2.1.286': { relevant: false, judgedAt: '2026-10-01T00:00:00.000Z', note: 'hand edit' } };
   const { updates, file } = setup({ verdicts: hand });
-  const added = updates.recordVerdicts({ '2.1.286': { relevant: true, summary: 'x' }, '2.1.287': { relevant: false } }, 0);
+  const added = updates.recordVerdicts({ '2.1.286': { relevant: true, summary: 'x' }, '2.1.287': { relevant: false } }, file, 0);
   assert.deepStrictEqual(added, ['2.1.287']);
   const after = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.deepStrictEqual(after['2.1.286'], hand['2.1.286']);
@@ -132,11 +131,10 @@ test('recordVerdicts never replaces an existing entry', () => {
 
 test('recordVerdicts refuses to replace a malformed file', () => {
   const { updates, file } = setup({ verdicts: '{"2.1.286": {"relevant": tru' });
-  assert.throws(() => updates.recordVerdicts({ '2.1.287': { relevant: false } }), /not a JSON object/);
+  assert.throws(() => updates.recordVerdicts({ '2.1.287': { relevant: false } }, file), /not a JSON object/);
   assert.strictEqual(fs.readFileSync(file, 'utf8'), '{"2.1.286": {"relevant": tru');
 });
 
-test('getUpdatesPath is updates.json under CLAUDE_CONFIG_DIR', () => {
-  const { updates, file } = setup();
-  assert.strictEqual(updates.getUpdatesPath(), file);
+test('getUpdatesPath is under the config dir', () => {
+  assert.strictEqual(updates.getUpdatesPath('/cfg'), path.join('/cfg', 'cc-dashboard', 'updates.json'));
 });

@@ -175,17 +175,8 @@ test('recordSession never throws, even when the directory cannot be created', ()
   assert.deepStrictEqual(fs.readdirSync(empty), [], 'a missing statusline input writes no snapshot');
 });
 
-test('getSessionsDir follows CLAUDE_CONFIG_DIR, then ~/.claude', () => {
-  const saved = process.env.CLAUDE_CONFIG_DIR;
-  try {
-    process.env.CLAUDE_CONFIG_DIR = '/tmp/cfg';
-    assert.strictEqual(getSessionsDir(), path.join('/tmp/cfg', 'cc-dashboard', 'sessions'));
-    delete process.env.CLAUDE_CONFIG_DIR;
-    assert.strictEqual(getSessionsDir(), path.join(os.homedir(), '.claude', 'cc-dashboard', 'sessions'));
-  } finally {
-    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = saved;
-  }
+test('getSessionsDir is under the config dir', () => {
+  assert.strictEqual(getSessionsDir('/cfg'), path.join('/cfg', 'cc-dashboard', 'sessions'));
 });
 
 // A throwaway config dir for a bin script, with its sessions folder already made.
@@ -203,6 +194,18 @@ function runBin(name, input, config) {
     env: { ...process.env, CLAUDE_CONFIG_DIR: config },
   });
 }
+
+test('bin/record-statusline records with a PORT that the server would refuse', () => {
+  const { config, sessions } = configDir();
+  const res = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'record-statusline')], {
+    input: JSON.stringify(statuslineInput()),
+    encoding: 'utf8',
+    env: { ...process.env, CLAUDE_CONFIG_DIR: config, PORT: 'abc' },
+  });
+  assert.strictEqual(res.status, 0, res.stderr);
+  assert.strictEqual(res.stdout, '');
+  assert.strictEqual(readSnapshot(sessions).sessionId, 'abc-123');
+});
 
 for (const name of ['record-statusline', 'record-limits']) {
   test(`bin/${name} writes the session snapshot and the rate limits`, () => {

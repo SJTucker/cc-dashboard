@@ -35,7 +35,7 @@ function setup({ plugins, changes, updates, auto } = {}) {
   process.env.CHANGES_FILE = changesPath;
   delete require.cache[require.resolve('../lib/updates')];
   delete require.cache[require.resolve('../lib/changes')];
-  return { changes: require('../lib/changes'), changesPath };
+  return { changes: require('../lib/changes'), changesPath, base };
 }
 
 test('pluginMarkers reads installedAt from installed_plugins.json', () => {
@@ -118,7 +118,7 @@ test('fileMarkers: local times, unknown kind, bad date skipped and reported', ()
 });
 
 test('updateMarkers marks relevant versions at their first call, after a week of history', () => {
-  const { changes } = setup({
+  const { changes, base } = setup({
     updates: {
       '2.1.280': { relevant: true, summary: 'Running when history starts' },
       '2.1.286': { relevant: true, summary: 'Subagents share the parent cache' },
@@ -134,13 +134,13 @@ test('updateMarkers marks relevant versions at their first call, after a week of
     { t: t0 + 10 * DAY, version: '2.1.287' },
     { t: t0 + 11 * DAY, version: null },
   ];
-  assert.deepStrictEqual(changes.updateMarkers(calls), [
+  assert.deepStrictEqual(changes.updateMarkers(calls, path.join(base, 'cc-dashboard', 'updates.json')), [
     { t: t0 + 8 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.286: Subagents share the parent cache', version: '2.1.286', summary: 'Subagents share the parent cache', source: 'update' },
   ]);
 });
 
 test('updateMarkers labels a relevant verdict without a summary with the version alone', () => {
-  const { changes } = setup({
+  const { changes, base } = setup({
     updates: { '2.1.286': { relevant: true }, '2.1.287': { relevant: true, summary: '' } },
   });
   const t0 = new Date(2026, 8, 1).getTime();
@@ -149,14 +149,14 @@ test('updateMarkers labels a relevant verdict without a summary with the version
     { t: t0 + 8 * DAY, version: '2.1.286' },
     { t: t0 + 9 * DAY, version: '2.1.287' },
   ];
-  assert.deepStrictEqual(changes.updateMarkers(calls), [
+  assert.deepStrictEqual(changes.updateMarkers(calls, path.join(base, 'cc-dashboard', 'updates.json')), [
     { t: t0 + 8 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.286', version: '2.1.286', source: 'update' },
     { t: t0 + 9 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.287', version: '2.1.287', source: 'update' },
   ]);
 });
 
 test('updateMarkers skips a version first used after a newer one', () => {
-  const { changes } = setup({
+  const { changes, base } = setup({
     updates: { '2.1.290': { relevant: true, summary: 'Newer' }, '2.1.280': { relevant: true, summary: 'Older' } },
   });
   const t0 = new Date(2026, 8, 1).getTime();
@@ -165,11 +165,11 @@ test('updateMarkers skips a version first used after a newer one', () => {
     { t: t0 + 8 * DAY, version: '2.1.290' },
     { t: t0 + 10 * DAY, version: '2.1.280' },
   ];
-  assert.deepStrictEqual(changes.updateMarkers(calls).map((m) => m.label), ['Claude Code 2.1.290: Newer']);
+  assert.deepStrictEqual(changes.updateMarkers(calls, path.join(base, 'cc-dashboard', 'updates.json')).map((m) => m.label), ['Claude Code 2.1.290: Newer']);
 });
 
 test('updateMarkers marks consecutive releases first used in version order', () => {
-  const { changes } = setup({
+  const { changes, base } = setup({
     updates: { '2.1.286': { relevant: true, summary: 'A' }, '2.1.287': { relevant: true, summary: 'B' } },
   });
   const t0 = new Date(2026, 8, 1).getTime();
@@ -178,11 +178,11 @@ test('updateMarkers marks consecutive releases first used in version order', () 
     { t: t0 + 8 * DAY, version: '2.1.286' },
     { t: t0 + 9 * DAY, version: '2.1.287' },
   ];
-  assert.deepStrictEqual(changes.updateMarkers(calls).map((m) => m.label), ['Claude Code 2.1.286: A', 'Claude Code 2.1.287: B']);
+  assert.deepStrictEqual(changes.updateMarkers(calls, path.join(base, 'cc-dashboard', 'updates.json')).map((m) => m.label), ['Claude Code 2.1.286: A', 'Claude Code 2.1.287: B']);
 });
 
 test('updateMarkers lets a not-relevant newer release block an older relevant one', () => {
-  const { changes } = setup({
+  const { changes, base } = setup({
     updates: { '2.1.291': { relevant: false }, '2.1.288': { relevant: true, summary: 'Older' } },
   });
   const t0 = new Date(2026, 8, 1).getTime();
@@ -192,12 +192,12 @@ test('updateMarkers lets a not-relevant newer release block an older relevant on
     { t: t0 + 9 * DAY, version: '2.1.288' },
     { t: t0 + 10 * DAY, version: '2.1.292-dev.1' },
   ];
-  assert.deepStrictEqual(changes.updateMarkers(calls), []);
+  assert.deepStrictEqual(changes.updateMarkers(calls, path.join(base, 'cc-dashboard', 'updates.json')), []);
 });
 
 test('updateMarkers returns [] without updates.json', () => {
-  const { changes } = setup();
-  assert.deepStrictEqual(changes.updateMarkers([{ t: 0, version: '2.1.280' }, { t: 30 * DAY, version: '2.1.286' }]), []);
+  const { changes, base } = setup();
+  assert.deepStrictEqual(changes.updateMarkers([{ t: 0, version: '2.1.280' }, { t: 30 * DAY, version: '2.1.286' }], path.join(base, 'cc-dashboard', 'updates.json')), []);
 });
 
 const at = (day, hour, minute = 0) => new Date(2026, 9, day, hour, minute).getTime();

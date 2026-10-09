@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const { getClaudeJsonPath, getRateLimitsPath, recordRateLimits, readLimits, readDailyShare } = require('../lib/limits');
+const { getRateLimitsPath, recordRateLimits, readLimits, readDailyShare } = require('../lib/limits');
 
 const NOW = Date.parse('2026-09-28T17:55:00Z');
 const FETCHED = NOW - 3 * 60 * 1000;
@@ -104,30 +104,8 @@ test('readLimits returns null for a missing file, missing key or bad JSON', () =
   );
 });
 
-test('getClaudeJsonPath: inside CLAUDE_CONFIG_DIR, else the home directory', () => {
-  const saved = process.env.CLAUDE_CONFIG_DIR;
-  try {
-    delete process.env.CLAUDE_CONFIG_DIR;
-    assert.strictEqual(getClaudeJsonPath(), path.join(os.homedir(), '.claude.json'));
-    process.env.CLAUDE_CONFIG_DIR = '~/alt-claude';
-    assert.strictEqual(getClaudeJsonPath(), path.join(os.homedir(), 'alt-claude', '.claude.json'));
-  } finally {
-    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = saved;
-  }
-});
-
-test('getRateLimitsPath: inside CLAUDE_CONFIG_DIR, else ~/.claude', () => {
-  const saved = process.env.CLAUDE_CONFIG_DIR;
-  try {
-    delete process.env.CLAUDE_CONFIG_DIR;
-    assert.strictEqual(getRateLimitsPath(), path.join(os.homedir(), '.claude', 'rate-limits.json'));
-    process.env.CLAUDE_CONFIG_DIR = '~/alt-claude';
-    assert.strictEqual(getRateLimitsPath(), path.join(os.homedir(), 'alt-claude', 'rate-limits.json'));
-  } finally {
-    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = saved;
-  }
+test('getRateLimitsPath is in the config dir', () => {
+  assert.strictEqual(getRateLimitsPath('/cfg'), path.join('/cfg', 'rate-limits.json'));
 });
 
 function statuslineInput(overrides = {}) {

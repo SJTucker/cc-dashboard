@@ -11,6 +11,8 @@
 // and exits 1, and the mod logs it.
 
 const { pendingReviews, recordReview } = require('../lib/review');
+const { loadConfig } = require('../lib/config-dir');
+const { getSessionsDir } = require('../lib/sessions');
 const { openReviewDb } = require('../lib/review-db');
 const { getStorePath } = require('../lib/db');
 const { readStdin } = require('../lib/stdin');
@@ -19,6 +21,8 @@ function fail(message) {
   process.stderr.write(`review-session: ${message}\n`);
   process.exitCode = 1;
 }
+
+const { configDir } = loadConfig();
 
 const [command] = process.argv.slice(2);
 if (command !== 'prompt' && command !== 'record') {
@@ -32,7 +36,7 @@ if (command !== 'prompt' && command !== 'record') {
   }
   if (db) {
     const work =
-      command === 'prompt' ? pendingReviews({ db }).then((reviews) => ({ reviews }))
+      command === 'prompt' ? pendingReviews({ db, sessionsDir: getSessionsDir(configDir) }).then((reviews) => ({ reviews }))
       : readStdin().then((input) => recordReview(db, JSON.parse(input)));
     work.then(
       (out) => process.stdout.write(JSON.stringify(out) + '\n'),

@@ -8,8 +8,11 @@
 // the session's cost block (lib/sessions.js). Each runs on its own, so a failure
 // in one does not stop the other.
 
-const { recordRateLimits } = require('../lib/limits');
-const { recordSession } = require('../lib/sessions');
+const { loadConfig } = require('../lib/config-dir');
+const { recordRateLimits, getRateLimitsPath } = require('../lib/limits');
+const { recordSession, getSessionsDir } = require('../lib/sessions');
+
+const { configDir } = loadConfig();
 
 let input = '';
 process.stdin.on('data', (chunk) => {
@@ -24,10 +27,10 @@ process.stdin.on('end', () => {
     process.exit(0); // bad JSON: say nothing, exit clean
   }
   try {
-    recordRateLimits(parsed);
+    recordRateLimits(parsed, getRateLimitsPath(configDir));
   } catch {
     // An unwritable file or a missing transcript: say nothing.
   }
-  recordSession(parsed); // never throws
+  recordSession(parsed, getSessionsDir(configDir)); // never throws
   process.exit(0);
 });
