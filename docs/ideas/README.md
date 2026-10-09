@@ -26,4 +26,3 @@ then on.
 | [Same-week model comparison](same-week-model-comparison.md) | Open: compare two models used in one week; minimum calls, mixed-model prompts and where it shows open |
 | [Tool error rate by model](tool-errors-by-model.md) | Open: split the error rate by model and cause; add the model to tool use rows or join through calls open |
 | [Cost per unit of work](cost-per-unit-of-work.md) | Open: spend per commit or per Edit and Write call; repository counting and noise open |
-| [A `null` transcript line stops every scan](extract-null-line.md) | Open: `extractFile` throws on a line that is `null`, and the row store does not catch it; skip the line or keep the old rows open |
