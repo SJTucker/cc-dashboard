@@ -44,8 +44,8 @@ test('extractFile over the golden corpus matches test/fixtures/extract-golden.js
   checkGolden('extract-golden.json', normalise(await extractAll(dir, shared), dir));
 });
 
-// The row store can read several files at once, so no state may be shared between
-// two extractFile calls.
+// extractFile is async, so two row stores in one process can run it on different
+// files at the same moment. No state may be shared between two calls.
 test('extractFile over every corpus file at once gives the same rows as one at a time', async (t) => {
   const dir = helpers.tmpDir(t, 'golden');
   const { shared } = writeCorpus(dir);
