@@ -1,0 +1,102 @@
+#!/bin/sh
+# Takes a fresh clone to installed dependencies and a linked, validated mod. It runs
+# the steps in SETUP.md, so a change to those steps changes this script too.
+# Preflight changes nothing on disk, so a failed check leaves nothing half done.
+# It does not start the server or edit settings.json.
+
+set -u
+unset CDPATH
+
+clone=$(cd "$(dirname "$0")/.." && pwd -P)
+mod="$clone/mod"
+
+# <cfg> as lib/config-dir.js resolves it: a leading ~ is expanded, empty is unset.
+case "${CLAUDE_CONFIG_DIR:-}" in
+  '') cfg="$HOME/.claude" ;;
+  '~'*) cfg="$HOME${CLAUDE_CONFIG_DIR#\~}" ;;
+  *) cfg="$CLAUDE_CONFIG_DIR" ;;
+esac
+link="$cfg/skills/cc-dashboard"
+
+ok() { printf 'ok    %s\n' "$1"; }
+warn() { printf 'warn  %s\n' "$1"; }
+fail() { printf 'FAIL  %s\n' "$1"; }
+stop() { fail "$1"; exit 1; }
+
+# Preflight
+
+system=$(uname -s)
+if [ "$system" = Darwin ]; then
+  ok "macOS"
+else
+  warn "$system: only macOS is tested"
+fi
+
+command -v node >/dev/null 2>&1 || stop "node is not on PATH. Install Node 22.13 or later."
+version=$(node -p process.versions.node) || stop "node -p process.versions.node failed"
+major=${version%%.*}
+rest=${version#*.}
+minor=${rest%%.*}
+case "$major.$minor" in
+  *[!0-9.]* | .* | *.) stop "could not read the node version from '$version'" ;;
+esac
+if [ "$major" -gt 22 ] || { [ "$major" -eq 22 ] && [ "$minor" -ge 13 ]; }; then
+  ok "node $version"
+else
+  stop "node $version is older than 22.13. Install Node 22.13 or later."
+fi
+
+command -v npm >/dev/null 2>&1 || stop "npm is not on PATH"
+ok "npm"
+command -v claude >/dev/null 2>&1 || stop "claude is not on PATH. The mod needs Claude Code."
+ok "claude"
+
+if [ -L "$link" ]; then
+  target=$(readlink "$link")
+  # cd from the link's folder so a relative target resolves the way the link does.
+  resolved=$(cd "$(dirname "$link")" 2>/dev/null && cd "$target" 2>/dev/null && pwd -P)
+  if [ "$resolved" = "$mod" ]; then
+    link_exists=yes
+  else
+    stop "$link points at $target, not $mod. Remove the link and run bin/setup again."
+  fi
+elif [ -d "$link" ]; then
+  stop "$link is a folder. Move it aside and run bin/setup again."
+elif [ -e "$link" ]; then
+  stop "$link is a file. Move it aside and run bin/setup again."
+else
+  link_exists=no
+fi
+ok "link path $link"
+
+# Steps
+
+(cd "$clone" && npm install) || stop "npm install failed"
+ok "npm install"
+
+if [ "$link_exists" = yes ]; then
+  ok "$link already points at $mod"
+else
+  mkdir -p "$cfg/skills" || stop "could not create $cfg/skills"
+  ln -s "$mod" "$link" || stop "could not create $link"
+  ok "linked $link -> $mod"
+fi
+
+status=0
+if claude plugin validate "$mod"; then
+  ok "claude plugin validate"
+else
+  fail "claude plugin validate"
+  status=1
+fi
+
+cat <<EOF
+
+Next: run 'npm start' in $clone, then open http://localhost:3600.
+SETUP.md's "Check it works" section lists the checks that need the server or a
+Claude Code session.
+The mod runs the bin/ scripts through node, so node must be on the PATH Claude
+Code sees. This script checked its own PATH only: $(command -v node)
+EOF
+
+exit $status
