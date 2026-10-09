@@ -153,14 +153,14 @@ test('a range cutoff excludes older rows at either fractional-second width', (ct
   assert.strictEqual(all.summary.totalCommands, 4, 'days:null reads the whole table');
 });
 
-test('hour bucketing produces the same key shape lib/scan.js uses', (ctx) => {
+test('hour bucketing produces the same key shape lib/dates.js uses', (ctx) => {
   const at14 = new Date();
   at14.setHours(14, 5, 0, 0);
   useDb(ctx, makeDb([{ timestamp: utcStamp(at14), saved_tokens: 42 }]));
 
   const out = readRtkUsage({ days: 'today', bucket: 'hour' });
   // Length is the full-day axis, asserted by its own test; this one is about the
-  // key shape, which has to match lib/scan.js so shortDate()/fullDate() parse it.
+  // key shape, which has to match lib/dates.js so shortDate()/fullDate() parse it.
   const at14Bucket = out.daily.find((d) => d.saved === 42);
   assert.match(at14Bucket.date, /^\d{4}-\d{2}-\d{2}T14$/);
 });
@@ -220,7 +220,7 @@ test('the Today range gets a full-day hour axis, not just the hours with rows', 
   const out = readRtkUsage({ days: 'today', bucket: 'hour' });
 
   // 23 on the spring-forward day, where 2am does not exist locally - the same
-  // shape lib/scan.js produces, so the two Today charts share an axis.
+  // shape lib/dates.js produces, so the two Today charts share an axis.
   const dayStart = new Date();
   dayStart.setHours(0, 0, 0, 0);
   const nextDay = new Date(dayStart);

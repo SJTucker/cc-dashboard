@@ -5,8 +5,10 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const { scanUsage } = require('./scan-usage');
+const { localDateStr } = require('../lib/dates');
 
-// scanUsage resolves its directory from CLAUDE_CONFIG_DIR at call time, so each
+// scanUsage takes its directory as projectsDir, so each
 // test points it at a throwaway fixture tree: <tmp>/projects/<project>/<file>.jsonl
 function makeFixture() {
   const base = helpers.tmpDir(null, 'test');
@@ -14,7 +16,7 @@ function makeFixture() {
   return base;
 }
 
-// One usage line in the shape lib/scan.js expects.
+// One usage line in the shape extractFile expects (lib/extract.js).
 function usageLine(isoTimestamp, { id, input = 100, output = 50 }) {
   return JSON.stringify({
     timestamp: isoTimestamp,
@@ -43,10 +45,10 @@ function atHourToday(hour, minute = 0) {
   return d;
 }
 
+// Each test reads its own fixture folder, passed in as projectsDir.
 function loadScan(base) {
-  process.env.CLAUDE_CONFIG_DIR = base;
-  delete require.cache[require.resolve('../lib/scan')];
-  return require('../lib/scan');
+  const projectsDir = path.join(base, 'projects');
+  return { scanUsage: (opts = {}) => scanUsage({ ...opts, projectsDir }), localDateStr };
 }
 
 test("days: 'today' includes entries after local midnight and excludes yesterday", async () => {

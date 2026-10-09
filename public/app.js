@@ -40,7 +40,7 @@ function formatAgo(ms, now = Date.now()) {
   return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-// Mirrors localDateStr in lib/scan.js so the front end can tell which bucket is
+// Mirrors localDateStr in lib/dates.js so the front end can tell which bucket is
 // today without parsing a locale-formatted string.
 function localDateStr(d) {
   const m = String(d.getMonth() + 1).padStart(2, '0');
@@ -50,7 +50,7 @@ function localDateStr(d) {
 
 // Average cost per COMPLETE day. Today is excluded because it is partial and
 // would drag the average down. The divisor is the calendar span between the
-// first and last complete bucket, not the bucket count. scanUsage fills idle
+// first and last complete bucket, not the bucket count. aggregate (lib/aggregate.js) fills idle
 // days with zero buckets, so the two are equal for its output. The span still
 // gives the right rate for a daily list with days missing.
 function costPerDay(daily) {

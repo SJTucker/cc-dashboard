@@ -10,7 +10,7 @@ const { localDateStr } = require('../lib/dates');
 
 // Boot the real Express app on an ephemeral port against a fixture log directory.
 // CLAUDE_CONFIG_DIR has to be set before server.js is required, because
-// getProjectsDir() reads it when lib/scan.js is loaded into the module cache.
+// getProjectsDir() reads it when lib/transcript-files.js is loaded into the module cache.
 function startServer(t) {
   const base = helpers.tmpDir(t, 'api');
   const dir = path.join(base, 'projects', 'demo');
@@ -43,7 +43,7 @@ function startServer(t) {
   });
   // The row store keeps its rows and database handle at module level, so each
   // server starts from fresh copies.
-  for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
+  for (const mod of ['../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
   delete require.cache[require.resolve('../lib/sessions')];
   delete require.cache[require.resolve('../lib/updates')];
   delete require.cache[require.resolve('../lib/review')];
@@ -250,7 +250,7 @@ test('two concurrent cold requests for the same range aggregate once', async (t)
     CHANGES_FILE: path.join(base, 'changes.json'),
     PORT: '0',
   });
-  for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
+  for (const mod of ['../lib/aggregate', '../lib/rowstore']) delete require.cache[require.resolve(mod)];
   const aggregateModule = require('../lib/aggregate');
   let calls = 0;
   const realAggregate = aggregateModule.aggregate;
@@ -306,7 +306,7 @@ function startChangesServer(t, { changes, plugins } = {}) {
     CLAUDE_CONFIG_DIR: base,
     PORT: '0',
   });
-  for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/changes', '../lib/efficiency', '../server']) delete require.cache[require.resolve(mod)];
+  for (const mod of ['../lib/aggregate', '../lib/rowstore', '../lib/changes', '../lib/efficiency', '../server']) delete require.cache[require.resolve(mod)];
   return { server: require('../server'), changesPath };
 }
 
@@ -521,7 +521,7 @@ test('a transcript that is deleted while the server is stopped still counts afte
   dbModule.closeServerDb();
 
   fs.unlinkSync(file);
-  for (const mod of ['../lib/scan', '../lib/aggregate', '../lib/rowstore', '../lib/store', '../server']) delete require.cache[require.resolve(mod)];
+  for (const mod of ['../lib/aggregate', '../lib/rowstore', '../lib/store', '../server']) delete require.cache[require.resolve(mod)];
   const second = require('../server');
   t.after(() => second.close());
   await new Promise((resolve) => second.once('listening', resolve));

@@ -4,7 +4,7 @@
 const express = require('express');
 const os = require('os');
 const path = require('path');
-const { getProjectsDir } = require('./lib/scan');
+const { getProjectsDir } = require('./lib/transcript-files');
 const { localDateStr } = require('./lib/dates');
 const { aggregate } = require('./lib/aggregate');
 const { getRowStore } = require('./lib/rowstore');
@@ -147,7 +147,7 @@ app.get('/api/summary', async (req, res) => {
 });
 
 // No cache. A full read of the reference database - 21,867 rows, both GROUP BYs,
-// open and close - measured 13ms, against ~1.9s for a 30-day scanUsage(). Putting
+// open and close - measured 13ms, against ~1.9s for a 30-day read of every transcript. Putting
 // this behind the aggregate memo above would either serve stale savings or force every
 // rtk request to clear a memo that exists to avoid re-aggregating the transcripts.
 //

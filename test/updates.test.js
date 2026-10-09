@@ -17,7 +17,6 @@ function setup({ verdicts } = {}) {
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, typeof verdicts === 'string' ? verdicts : JSON.stringify(verdicts));
   }
-  delete require.cache[require.resolve('../lib/scan')];
   delete require.cache[require.resolve('../lib/updates')];
   return { updates: require('../lib/updates'), base, file };
 }

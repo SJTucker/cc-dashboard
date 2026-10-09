@@ -33,7 +33,6 @@ function setup({ plugins, changes, updates, auto } = {}) {
   }
   process.env.CLAUDE_CONFIG_DIR = base;
   process.env.CHANGES_FILE = changesPath;
-  delete require.cache[require.resolve('../lib/scan')];
   delete require.cache[require.resolve('../lib/updates')];
   delete require.cache[require.resolve('../lib/changes')];
   return { changes: require('../lib/changes'), changesPath };

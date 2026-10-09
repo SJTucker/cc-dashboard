@@ -5,15 +5,16 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const { toolDetail } = require('../lib/extract');
 
-// lib/scan.js reads CLAUDE_CONFIG_DIR when it loads, so each fixture gets fresh
-// copies of every module that depends on it.
+// lib/review.js and lib/review-db.js read CLAUDE_CONFIG_DIR, so each fixture gets fresh
+// copies.
 function load(base) {
   process.env.CLAUDE_CONFIG_DIR = base;
-  for (const m of ['../lib/scan', '../lib/sessions', '../lib/updates', '../lib/review', '../lib/db', '../lib/review-db']) {
+  for (const m of ['../lib/sessions', '../lib/updates', '../lib/review', '../lib/db', '../lib/review-db']) {
     delete require.cache[require.resolve(m)];
   }
-  return { review: require('../lib/review'), scan: require('../lib/scan'), reviewDb: require('../lib/review-db') };
+  return { review: require('../lib/review'), reviewDb: require('../lib/review-db') };
 }
 
 const tmpDir = () => helpers.tmpDir(null, 'review');
@@ -34,7 +35,7 @@ function writeTranscript(dir, lines, name = 's.jsonl') {
 
 test('digestTranscript lists prompts, replies, tools, errors, large output and compactions in order', async () => {
   const base = tmpDir();
-  const { review, scan } = load(base);
+  const { review } = load(base);
   const file = writeTranscript(base, [
     typed('fix the build'),
     say('Looking at the build.'),
@@ -46,7 +47,7 @@ test('digestTranscript lists prompts, replies, tools, errors, large output and c
     { ...typed('summary of the earlier conversation'), isCompactSummary: true },
     typed('now commit'),
   ]);
-  const bash = scan.toolDetail('Bash', { command: 'ls -la' });
+  const bash = toolDetail('Bash', { command: 'ls -la' });
   assert.deepStrictEqual(await review.digestTranscript(file), {
     prompts: 2,
     text: [
