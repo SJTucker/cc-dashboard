@@ -21,14 +21,7 @@ function fixture() {
 const rows = (db, sql, ...args) => db.prepare(sql).all(...args).map((r) => ({ ...r }));
 
 test('legacyReviewsDir is under the config dir', () => {
-  const saved = process.env.CLAUDE_CONFIG_DIR;
-  process.env.CLAUDE_CONFIG_DIR = '/cfg';
-  try {
-    assert.strictEqual(legacyReviewsDir(), path.join('/cfg', 'cc-dashboard', 'reviews'));
-  } finally {
-    if (saved === undefined) delete process.env.CLAUDE_CONFIG_DIR;
-    else process.env.CLAUDE_CONFIG_DIR = saved;
-  }
+  assert.strictEqual(legacyReviewsDir('/cfg'), path.join('/cfg', 'cc-dashboard', 'reviews'));
 });
 
 test('openReviewDb imports every review file once, with all fields and suggestion order', () => {

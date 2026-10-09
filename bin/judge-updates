@@ -36,7 +36,7 @@ async function prompt(args) {
   if (current) {
     seen = new Set([current]);
   } else {
-    seen = await transcriptVersions(getProjectsDir());
+    seen = await transcriptVersions(getProjectsDir(configDir));
   }
   const pending = pendingVersions(seen, readVerdicts(updatesFile), changelog);
   const batches = [];

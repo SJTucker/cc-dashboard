@@ -86,17 +86,19 @@ loadPriceFile(pricesPath);
 
 // One transcripts.db handle for the row store and the reviews (lib/db.js). It closes
 // when the server closes.
-const serverDb = createServerDb(getStorePath());
-const getReviewDb = createReviewDbGetter(serverDb.get, legacyReviewsDir());
+const projectsDir = getProjectsDir(config.configDir);
+const storePath = getStorePath(config.configDir);
+const serverDb = createServerDb(storePath);
+const getReviewDb = createReviewDbGetter(serverDb.get, legacyReviewsDir(config.configDir));
 
 // Opened on the first scan, not at start, the same as before the factory.
 let rowStore = null;
 function getRowStore() {
-  if (!rowStore) rowStore = createRowStore({ store: openStore(getStorePath(), serverDb.get) });
+  if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, store: openStore(storePath, serverDb.get) });
   return rowStore;
 }
 
-const { scan, clear: clearScans } = createScanMemo({ getRowStore, aggregate, getProjectsDir });
+const { scan, clear: clearScans } = createScanMemo({ getRowStore, aggregate, getProjectsDir: () => projectsDir });
 
 // The per-call records feed /api/changes only. Sent here they would add a few
 // megabytes to every summary request, and to every 5s poll on the Today range.
@@ -148,7 +150,7 @@ app.get('/api/rtk', (req, res) => {
     return;
   }
   try {
-    res.json(days === 'today' ? readRtkUsage({ days, bucket: 'hour' }) : readRtkUsage({ days }));
+    res.json(days === 'today' ? readRtkUsage({ days, bucket: 'hour', dbPath: config.rtkDb }) : readRtkUsage({ days, dbPath: config.rtkDb }));
   } catch (err) {
     console.error('[API] /api/rtk failed:', err);
     res.status(500).json({ error: 'Failed to read rtk history', detail: err.message });
@@ -173,11 +175,11 @@ app.get('/api/limits', (req, res) => {
 app.get('/api/changes', async (req, res) => {
   try {
     const data = await scan(null);
-    const { markers, changesFile } = collectMarkers(data.efficiency.calls);
-    const rtkWindows = readRtkWindows(windowRanges(markers));
+    const { markers, changesFile } = collectMarkers(data.efficiency.calls, config);
+    const rtkWindows = readRtkWindows(windowRanges(markers), config.rtkDb);
     const report = buildReport(data.efficiency, markers, rtkWindows, changesFile);
     // The two rtk rows' daily series come from rtk's own history, not the scan.
-    const rtkDaily = readRtkDaily();
+    const rtkDaily = readRtkDaily(config.rtkDb);
     if (rtkDaily) Object.assign(report.daily, rtkDaily);
     res.json(report);
   } catch (err) {
@@ -248,7 +250,7 @@ function sendBusy(res, err) {
 // bin/review-session the answer is a 503 with DB_BUSY. The panel shows either as text.
 app.get('/api/reviews', (req, res) => {
   try {
-    res.json({ home: os.homedir(), reviews: readReviews(getReviewDb()) });
+    res.json({ home: os.homedir(), reviews: readReviews(getReviewDb(), projectsDir) });
   } catch (err) {
     if (sendBusy(res, err)) return;
     console.error('[API] /api/reviews failed:', err);
@@ -359,7 +361,7 @@ app.post('/api/prices/apply', express.json({ limit: '1kb' }), (req, res) => {
 
 const server = app.listen(PORT, HOST, () => {
   console.log(`\nClaude Code Dashboard running at http://localhost:${PORT}`);
-  console.log(`Reading logs from: ${getProjectsDir()}`);
+  console.log(`Reading logs from: ${projectsDir}`);
   console.log('Bound to localhost only. The one outbound request is Check prices, to platform.claude.com.\n');
   if (process.argv.includes('--open')) {
     import('open').then((mod) => mod.default(`http://localhost:${PORT}`)).catch(() => {});

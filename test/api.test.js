@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const helpers = require('./helpers');
 const { localDateStr } = require('../lib/dates');
+const { openDatabase, getStorePath } = require('../lib/db');
 
 // Boots the server on a config whose projects/demo holds one Sonnet call at 10:00
 // today. Resolves to { server, config, port, url }.
@@ -769,14 +770,14 @@ test(
   }
 );
 
-function openTestReviewDb() {
-  const { openReviewDb } = require('../lib/review-db');
-  return openReviewDb();
+function openTestReviewDb(config) {
+  const { openReviewDb, legacyReviewsDir } = require('../lib/review-db');
+  return openReviewDb(getStorePath(config.configDir), legacyReviewsDir(config.configDir));
 }
 
 test('GET /api/reviews lists finished reviews with suggestion state and the home directory', async (t) => {
-  const { url } = await startServer(t);
-  const db = openTestReviewDb();
+  const { url, config } = await startServer(t);
+  const db = openTestReviewDb(config);
   const now = Date.now();
   const add = (id, status, extra = {}) => db.prepare(
     'INSERT INTO reviews (session_id, project, ended_at, status, claimed_at, reviewed_at, skip_reason) VALUES (?, ?, ?, ?, ?, ?, ?)',
@@ -834,15 +835,15 @@ test('GET /api/reviews answers 500 with the reason when transcripts.db cannot be
 
 // Seeds one finished review with two suggestions and returns the base URL.
 async function reviewServer(t) {
-  const { url } = await startServer(t);
-  const db = require('../lib/review-db').openReviewDb();
+  const { url, config } = await startServer(t);
+  const db = openTestReviewDb(config);
   const now = Date.now();
   for (const id of ['sess-a', 'sess-b']) {
     db.prepare("INSERT INTO reviews (session_id, project, ended_at, status, claimed_at, reviewed_at) VALUES (?, 'demo', ?, 'done', ?, ?)").run(id, now - 1000, now - 2000, now);
     db.prepare("INSERT INTO suggestions (session_id, idx, kind, text) VALUES (?, 0, 'workflow', 'one'), (?, 1, 'token-waste', 'two')").run(id, id);
   }
   db.close();
-  return url;
+  return { base: url, config };
 }
 
 const dismissUrl = (base, id, idx) => `${base}/api/reviews/${id}/suggestions/${idx}/dismiss`;
@@ -850,7 +851,7 @@ const postJson = (url, body, headers = {}) => fetch(url, { method: 'POST', heade
 const suggestionState = async (base, id) => (await (await fetch(`${base}/api/reviews`)).json()).reviews.find((r) => r.sessionId === id).suggestions.map((s) => s.reason);
 
 test('POST dismiss stores the reason and GET /api/reviews shows it, DELETE undoes it', async (t) => {
-  const base = await reviewServer(t);
+  const { base } = await reviewServer(t);
   const res = await postJson(dismissUrl(base, 'sess-a', 1), { reason: 'not_useful' });
   assert.strictEqual(res.status, 200);
   const body = await res.json();
@@ -865,7 +866,7 @@ test('POST dismiss stores the reason and GET /api/reviews shows it, DELETE undoe
 });
 
 test('POST dismiss answers 400 for a bad reason, a missing body, bad json, a bad session id and a bad idx', async (t) => {
-  const base = await reviewServer(t);
+  const { base } = await reviewServer(t);
   for (const body of [{ reason: 'bored' }, {}, { reason: null }, { reason: ['done'] }]) {
     assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', 0), body)).status, 400, JSON.stringify(body));
   }
@@ -882,7 +883,7 @@ test('POST dismiss answers 400 for a bad reason, a missing body, bad json, a bad
 });
 
 test('POST and DELETE dismiss answer 404 for a session or an idx that does not exist', async (t) => {
-  const base = await reviewServer(t);
+  const { base } = await reviewServer(t);
   for (const [id, idx] of [['sess-a', 2], ['sess-zzz', 0], ['sess-a', 1000]]) {
     assert.strictEqual((await postJson(dismissUrl(base, id, idx), { reason: 'done' })).status, 404, `${id} ${idx}`);
     assert.strictEqual((await fetch(dismissUrl(base, id, idx), { method: 'DELETE' })).status, 404, `DELETE ${id} ${idx}`);
@@ -890,7 +891,7 @@ test('POST and DELETE dismiss answer 404 for a session or an idx that does not e
 });
 
 test('the dismiss routes refuse a cross-site request, like the price POST routes', async (t) => {
-  const base = await reviewServer(t);
+  const { base } = await reviewServer(t);
   for (const site of ['cross-site', 'same-site', 'none']) {
     const post = await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }, { 'Sec-Fetch-Site': site });
     assert.strictEqual(post.status, 403, `POST ${site}`);
@@ -917,9 +918,9 @@ test('the dismiss routes answer 500 with the reason when transcripts.db cannot b
 // process can hold its write lock (holdWriteLock in test/helpers.js).
 async function lockableServer(t) {
   const { url: base, config } = await startServer(t);
-  const { openDatabase, getStorePath } = require('../lib/db');
-  openDatabase().close();
-  return { base, config, file: getStorePath() };
+  const file = getStorePath(config.configDir);
+  openDatabase(file).close();
+  return { base, config, file };
 }
 
 test('a request whose row-store write meets the review lock answers 200 within 1000 ms', async (t) => {
@@ -956,9 +957,9 @@ test('GET /api/reviews answers 503 within 1000 ms when its first import meets th
 });
 
 test('the dismiss routes answer 503 within 1000 ms under the review lock, reads still answer, and a dismiss works after', async (t) => {
-  const base = await reviewServer(t);
+  const { base, config } = await reviewServer(t);
   assert.strictEqual((await fetch(`${base}/api/reviews`)).status, 200); // runs the import before the lock
-  const release = await helpers.holdWriteLock(t, require('../lib/db').getStorePath());
+  const release = await helpers.holdWriteLock(t, getStorePath(config.configDir));
   const sends = {
     POST: () => postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }),
     DELETE: () => fetch(dismissUrl(base, 'sess-a', 0), { method: 'DELETE' }),

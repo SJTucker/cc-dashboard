@@ -221,7 +221,7 @@ test('a row-store write that meets the review lock gives up within 1000 ms, and 
 test('a row store and a reviews getter built on one createServerDb share its handle', (t) => {
   const { serverDb, base, file } = freshServerDb(t);
   const spy = t.mock.method(serverDb, 'get');
-  createRowStore({ store: openStore(file, () => serverDb.get()) });
+  createRowStore({ projectsDir: () => path.join(base, 'projects'), store: openStore(file, () => serverDb.get()) });
   const getReviewDb = createReviewDbGetter(() => serverDb.get(), path.join(base, 'cc-dashboard', 'reviews'));
   const reviewDb = getReviewDb();
   assert.strictEqual(spy.mock.callCount(), 2);

@@ -12,8 +12,9 @@
 
 const { pendingReviews, recordReview } = require('../lib/review');
 const { loadConfig } = require('../lib/config-dir');
+const { getProjectsDir } = require('../lib/transcript-files');
 const { getSessionsDir } = require('../lib/sessions');
-const { openReviewDb } = require('../lib/review-db');
+const { openReviewDb, legacyReviewsDir } = require('../lib/review-db');
 const { getStorePath } = require('../lib/db');
 const { readStdin } = require('../lib/stdin');
 
@@ -23,6 +24,7 @@ function fail(message) {
 }
 
 const { configDir } = loadConfig();
+const storePath = getStorePath(configDir);
 
 const [command] = process.argv.slice(2);
 if (command !== 'prompt' && command !== 'record') {
@@ -30,13 +32,13 @@ if (command !== 'prompt' && command !== 'record') {
 } else {
   let db = null;
   try {
-    db = openReviewDb();
+    db = openReviewDb(storePath, legacyReviewsDir(configDir));
   } catch (err) {
-    fail(`cannot open ${getStorePath()}: ${String(err.message).split('\n')[0]}`);
+    fail(`cannot open ${storePath}: ${String(err.message).split('\n')[0]}`);
   }
   if (db) {
     const work =
-      command === 'prompt' ? pendingReviews({ db, sessionsDir: getSessionsDir(configDir) }).then((reviews) => ({ reviews }))
+      command === 'prompt' ? pendingReviews({ db, sessionsDir: getSessionsDir(configDir), projects: getProjectsDir(configDir) }).then((reviews) => ({ reviews }))
       : readStdin().then((input) => recordReview(db, JSON.parse(input)));
     work.then(
       (out) => process.stdout.write(JSON.stringify(out) + '\n'),
