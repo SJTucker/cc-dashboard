@@ -44,6 +44,19 @@ test('a fresh run installs, links the mod and validates it', (t) => {
   assert.match(calls, new RegExp(`^claude plugin validate ${MOD}$`, 'm'));
   assert.match(out, /npm start/);
   assert.match(out, /http:\/\/localhost:3600/);
+  const summary = out.slice(out.indexOf('Summary:'));
+  assert.ok(summary.startsWith('Summary:'), out);
+  let at = 0;
+  for (const line of ['ok    node', 'ok    npm install', 'ok    linked', 'ok    claude plugin validate']) {
+    const i = summary.indexOf(line, at);
+    assert.ok(i >= 0, `${line} missing or out of order in:\n${summary}`);
+    at = i + line.length;
+  }
+  assert.ok(summary.indexOf('Summary:') < summary.indexOf('Next:'), out);
+});
+
+test('bin/setup is executable', () => {
+  assert.doesNotThrow(() => fs.accessSync(SCRIPT, fs.constants.X_OK));
 });
 
 test('a second run leaves the link alone', (t) => {
@@ -121,6 +134,9 @@ test('a missing claude stops the script before npm install', (t) => {
   assert.strictEqual(code, 1);
   assert.match(out, /claude is not on PATH/);
   assert.doesNotMatch(calls, /npm install/);
+  const summary = out.slice(out.indexOf('Summary:'));
+  assert.ok(summary.startsWith('Summary:'), out);
+  assert.match(summary.trimEnd().split('\n').pop(), /^FAIL {2}claude is not on PATH/);
 });
 
 test('CLAUDE_CONFIG_DIR with a leading ~ puts the link under HOME', (t) => {

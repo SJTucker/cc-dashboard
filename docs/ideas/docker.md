@@ -1,7 +1,8 @@
 # Docker for the dashboard
 
 Check whether a Docker image makes the dashboard easier to ship and run. Asked for on
-2026-10-08, as one of two steps toward getting the project ready to ship. The other, a setup script, shipped as `bin/setup`.
+2026-10-08, as one of two steps toward getting the project ready to ship. The other,
+a setup script, shipped as `bin/setup`.
 
 ## What exists
 

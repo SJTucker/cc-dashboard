@@ -18,10 +18,18 @@ case "${CLAUDE_CONFIG_DIR:-}" in
 esac
 link="$cfg/skills/cc-dashboard"
 
-ok() { printf 'ok    %s\n' "$1"; }
-warn() { printf 'warn  %s\n' "$1"; }
-fail() { printf 'FAIL  %s\n' "$1"; }
-stop() { fail "$1"; exit 1; }
+# Each step line prints as it happens and is also kept for the summary at the end.
+results=
+record() {
+  printf '%s\n' "$1"
+  results="$results$1
+"
+}
+ok() { record "$(printf 'ok    %s' "$1")"; }
+warn() { record "$(printf 'warn  %s' "$1")"; }
+fail() { record "$(printf 'FAIL  %s' "$1")"; }
+summary() { printf '\nSummary:\n%s' "$results"; }
+stop() { fail "$1"; summary; exit 1; }
 
 # Preflight
 
@@ -48,7 +56,7 @@ fi
 
 command -v npm >/dev/null 2>&1 || stop "npm is not on PATH"
 ok "npm"
-command -v claude >/dev/null 2>&1 || stop "claude is not on PATH. The mod needs Claude Code."
+command -v claude >/dev/null 2>&1 || stop "claude is not on PATH. The mod needs Claude Code. bin/setup cannot use a shell alias, so the folder holding claude must be on PATH."
 ok "claude"
 
 if [ -L "$link" ]; then
@@ -90,13 +98,20 @@ else
   status=1
 fi
 
+summary
+
+if [ "$status" -ne 0 ]; then
+  printf '\nFix what claude plugin validate printed above, then run bin/setup again.\n'
+fi
+
 cat <<EOF
 
 Next: run 'npm start' in $clone, then open http://localhost:3600.
 SETUP.md's "Check it works" section lists the checks that need the server or a
 Claude Code session.
 The mod runs the bin/ scripts through node, so node must be on the PATH Claude
-Code sees. This script checked its own PATH only: $(command -v node)
+Code sees. This script checked its own PATH only: $(node -p process.execPath)
+To check the PATH Claude Code sees, run '!node -v' in a Claude Code session.
 EOF
 
 exit $status
