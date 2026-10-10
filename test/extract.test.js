@@ -7,7 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { extractFile, EXTRACT_VERSION } = require('../lib/extract');
+const { extractFile, markRebuilds, REBUILD_MIN_TOKENS, EXTRACT_VERSION } = require('../lib/extract');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -18,6 +18,125 @@ function writeTranscript(lines) {
   fs.writeFileSync(file, lines.map((l) => (typeof l === 'string' ? l : JSON.stringify(l))).join('\n') + '\n');
   return file;
 }
+
+// One assistant line with cache usage. `write` goes to the 5m or the 1h split.
+const BASE = Date.parse('2026-10-01T10:00:00.000Z');
+const atMin = (min) => new Date(BASE + min * 60_000).toISOString();
+function cached({ min = 0, msg, write = 0, read = 0, ttl = '5m', model = 'claude-opus-5-5', reason, sidechain = false }) {
+  const split = ttl === '1h'
+    ? { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: write }
+    : { ephemeral_5m_input_tokens: write, ephemeral_1h_input_tokens: 0 };
+  const message = {
+    id: msg,
+    model,
+    content: [],
+    usage: { input_tokens: 5, output_tokens: 10, cache_creation_input_tokens: write, cache_read_input_tokens: read, cache_creation: split },
+  };
+  if (reason) message.diagnostics = { cache_miss_reason: { type: reason, cache_missed_input_tokens: write } };
+  return { type: 'assistant', timestamp: atMin(min), sessionId: 's1', requestId: `r-${msg}`, ...(sidechain ? { isSidechain: true } : {}), message };
+}
+
+async function callsOf(lines) {
+  return (await extractFile(writeTranscript(lines))).calls;
+}
+
+test('a call row carries Claude Code\'s cache miss reason, or null', async () => {
+  const calls = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 1, msg: 'b', write: 100_000, reason: 'tools_changed' })]);
+  assert.deepStrictEqual(calls.map((c) => c.missReason), [null, 'tools_changed']);
+});
+
+test('each cache_miss_reason type maps to a cause, and an unknown type to other', async () => {
+  const table = [
+    ['previous_message_not_found', 'expired'],
+    ['messages_changed', 'messages'],
+    ['tools_changed', 'tools'],
+    ['system_changed', 'system'],
+    ['model_changed', 'model'],
+    ['unavailable', 'unavailable'],
+    ['brand_new_reason', 'other'],
+  ];
+  for (const [reason, cause] of table) {
+    const calls = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 1, msg: 'b', write: 100_000, reason })]);
+    assert.deepStrictEqual(calls[1].rebuild, { cause, reason, tokens: 100_000, gapMs: 60_000 }, reason);
+  }
+});
+
+test('a conversation\'s first call is never a rebuild', async () => {
+  const [call] = await callsOf([cached({ msg: 'a', write: 100_000, reason: 'previous_message_not_found' })]);
+  assert.strictEqual('rebuild' in call, false);
+});
+
+test('a cache write under REBUILD_MIN_TOKENS is not a rebuild, even with a reason', async () => {
+  const calls = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 1, msg: 'b', write: REBUILD_MIN_TOKENS - 1, reason: 'unavailable' })]);
+  assert.strictEqual('rebuild' in calls[1], false);
+});
+
+test('without a reason, a call is a rebuild only when its cache write is over 80% of its context', async () => {
+  const small = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 10, msg: 'b', write: 50_000, read: 100_000 })]);
+  assert.strictEqual('rebuild' in small[1], false);
+  const big = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 10, msg: 'b', write: 100_000 })]);
+  assert.strictEqual(big[1].rebuild.cause, 'expired');
+});
+
+test('without a reason, a gap past the 5-minute TTL is expired and a shorter one unknown', async () => {
+  const late = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 6, msg: 'b', write: 100_000 })]);
+  assert.deepStrictEqual(late[1].rebuild, { cause: 'expired', reason: null, tokens: 100_000, gapMs: 6 * 60_000 });
+  const soon = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 4, msg: 'b', write: 100_000 })]);
+  assert.strictEqual(soon[1].rebuild.cause, 'unknown');
+});
+
+test('a 1-hour cache write sets a 1-hour TTL, and a read-only call keeps the TTL', async () => {
+  const within = await callsOf([cached({ msg: 'a', write: 100_000, ttl: '1h' }), cached({ min: 30, msg: 'b', write: 100_000 })]);
+  assert.strictEqual(within[1].rebuild.cause, 'unknown');
+  const past = await callsOf([
+    cached({ msg: 'a', write: 100_000, ttl: '1h' }),
+    cached({ min: 1, msg: 'b', read: 100_000 }),
+    cached({ min: 62, msg: 'c', write: 100_000 }),
+  ]);
+  assert.strictEqual(past[2].rebuild.cause, 'expired');
+});
+
+test('without a reason, a model change is the cause', async () => {
+  const calls = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 1, msg: 'b', write: 100_000, model: 'claude-sonnet-5' })]);
+  assert.strictEqual(calls[1].rebuild.cause, 'model');
+});
+
+// extractFile applies no day cutoff, so the first call of a session's day still has
+// the call before it, however long ago.
+test('a call after a 12-hour gap is compared with the call before the gap', async () => {
+  const calls = await callsOf([cached({ min: -120, msg: 'a', write: 100_000 }), cached({ min: 600, msg: 'b', write: 100_000 })]);
+  assert.strictEqual(calls[1].rebuild.cause, 'expired');
+  assert.strictEqual(calls[1].rebuild.gapMs, 720 * 60_000);
+});
+
+test('sidechain calls and main-thread calls are separate cache conversations', async () => {
+  const calls = await callsOf([
+    cached({ min: 0, msg: 'm1', write: 100_000 }),
+    cached({ min: 1, msg: 's1', write: 100_000, sidechain: true }),
+    cached({ min: 2, msg: 'm2', read: 100_000 }),
+    cached({ min: 3, msg: 's2', read: 100_000, sidechain: true }),
+    cached({ min: 4, msg: 'm3', write: 100_000, reason: 'messages_changed' }),
+  ]);
+  const flagged = calls.filter((c) => 'rebuild' in c);
+  assert.deepStrictEqual(flagged.map((c) => [c.key, c.rebuild.gapMs]), [['m3:r-m3', 2 * 60_000]]);
+});
+
+test('the first call of a subagent file is not a rebuild', async () => {
+  const calls = await callsOf([
+    cached({ min: 0, msg: 's1', write: 100_000, sidechain: true }),
+    cached({ min: 8, msg: 's2', write: 100_000, sidechain: true }),
+  ]);
+  assert.strictEqual('rebuild' in calls[0], false);
+  assert.strictEqual(calls[1].rebuild.cause, 'expired');
+});
+
+test('markRebuilds leaves the order of the calls array alone', () => {
+  const row = (key, min) => ({ key, t: BASE + min * 60_000, sidechain: false, model: 'm', missReason: null, usage: { input_tokens: 0, cache_creation_input_tokens: 100_000 } });
+  const calls = [row('b', 10), row('a', 0)];
+  markRebuilds(calls);
+  assert.deepStrictEqual(calls.map((c) => c.key), ['b', 'a']);
+  assert.strictEqual(calls[0].rebuild.cause, 'expired');
+});
 
 const T0 = '2026-10-01T10:00:00.000Z';
 const T1 = '2026-10-01T10:00:05.000Z';
@@ -295,7 +414,7 @@ test('the warning adds nothing to the extracted rows', async (t) => {
   const file = writeTranscript([untagged('hello')]);
   const rows = await extractFile(file);
   assert.deepStrictEqual(rows.prompts, []);
-  assert.strictEqual(EXTRACT_VERSION, 3);
+  assert.strictEqual(EXTRACT_VERSION, 4);
 });
 
 test('a slash command line is a command row with its name, keyed like a prompt row', async () => {
