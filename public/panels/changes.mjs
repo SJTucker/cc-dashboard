@@ -1,12 +1,12 @@
-// The Setup changes panels: context at session start, and the before/after
+// The Setup changes panel: change lanes, the daily chart and the before/after
 // comparison for a picked change.
 import { getJson } from '../api.mjs';
-import { el, spinnerNode } from '../dom.mjs';
-import { formatCost, formatPercent, formatTokens, shortDate, localDateStr, axisTokens, axisCost } from '../format.mjs';
+import { el, spinnerNode, hideTooltip, focusedRowName } from '../dom.mjs';
+import { formatCost, formatPercent, formatTokens, localDateStr, axisTokens, axisCost } from '../format.mjs';
 import { state, shown } from '../state.mjs';
 import { createSequence } from '../guards.mjs';
 import {
-  WEEK_MS, markerDate, markerIcon, timeDomain, drawSessionStartChart, drawMetricChart, drawMetricLegend,
+  WEEK_MS, markerDate, markerIcon, timeDomain, drawMetricChart, drawMetricLegend,
 } from '../charts/setup-changes.mjs';
 
 // Days of history the setup charts show for each range picker value. Today and 7d
@@ -107,7 +107,6 @@ function renderBeforeAfter(report, marker) {
   note.replaceChildren(...lines.flatMap((text, i) => (i ? [el('br'), text] : [text])));
 }
 
-const markerKey = (m) => `${m.t}|${m.label}`;
 let changesReport = null;
 let selectedMarkerKey = null;
 
@@ -122,6 +121,15 @@ function chartRow(report) {
   return [...BA_ROWS, ...RTK_ROWS].find((row) => row.key === selectedRowKey && report.daily[row.key]) || BA_ROWS[0];
 }
 
+const chartLabel = (row) => `${row.title}, with setup changes by kind above the chart`;
+
+// Puts keyboard focus back on the lane cell that had it before drawMetricChart
+// rebuilt the SVG.
+function refocusLaneCell(chart, name) {
+  if (name === null) return;
+  [...chart.querySelectorAll('.lane-cell')].find((cell) => cell.dataset.name === name)?.focus({ preventScroll: true });
+}
+
 // Moves the selection marks to the picked row and redraws its chart. The table is
 // not rebuilt, so keyboard focus stays on the button that was pressed.
 function selectRow(report, marker, key) {
@@ -132,23 +140,46 @@ function selectRow(report, marker, key) {
     tr.classList.toggle('selected', on);
     tr.querySelector('.ba-row-btn').setAttribute('aria-pressed', String(on));
   }
+  const domain = chartDomain(report);
   document.getElementById('baChartTitle').textContent = row.title;
   const chart = document.getElementById('baDailyChart');
-  chart.setAttribute('aria-label', row.title);
-  drawMetricChart(chart, report, marker, row, chartDomain(report), (m) => selectMarker(report, m));
-  drawMetricLegend(document.getElementById('baLegend'), row, report, chartDomain(report));
+  chart.setAttribute('aria-label', chartLabel(row));
+  const refocus = focusedRowName(chart);
+  drawMetricChart(chart, report, marker, row, domain, (m) => selectMarker(report, m));
+  refocusLaneCell(chart, refocus);
+  drawMetricLegend(document.getElementById('baLegend'), row, report, domain);
 }
 
+const timeOfDay = (t) => new Date(t).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+const dayHeading = (t) => new Date(t).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+
+function dayListRow(report, m, picked) {
+  const btn = el('button', { type: 'button', class: 'day-change', 'data-name': markerKey(m), 'aria-pressed': String(picked) });
+  btn.append(el('span', { class: 'day-change-time', text: timeOfDay(m.t) }), markerIcon(m.kind), el('span', { text: m.label }));
+  btn.addEventListener('click', () => selectMarker(report, m));
+  return btn;
+}
+
+// The picked change's day: a heading with the count, then one button per change.
+// The list is rebuilt on every pick, so the row that had keyboard focus gets it
+// back (focusedRowName).
+function renderDayList(report, marker) {
+  const list = document.getElementById('dayList');
+  const refocus = focusedRowName(list);
+  const day = localDateStr(new Date(marker.t));
+  const items = report.markers.filter((m) => localDateStr(new Date(m.t)) === day).sort((a, b) => a.t - b.t);
+  const heading = el('div', { class: 'usage-group-title day-list-head', text: `${dayHeading(marker.t)} · ${items.length} change${items.length === 1 ? '' : 's'}` });
+  const rows = items.map((m) => dayListRow(report, m, markerKey(m) === markerKey(marker)));
+  list.replaceChildren(heading, ...rows);
+  if (refocus === null) return;
+  rows.find((row) => row.dataset.name === refocus)?.focus({ preventScroll: true });
+}
+
+// The one entry for a pick, from a lane cell, a day list row or a range fallback.
+// The picked change is remembered by key, so it survives redraws and range switches.
 function selectMarker(report, marker) {
-  selectedMarkerKey = marker ? markerKey(marker) : null;
-  for (const btn of document.querySelectorAll('#markerList .marker-btn')) {
-    btn.setAttribute('aria-pressed', String(btn.dataset.key === selectedMarkerKey));
-  }
-  // A closed day still shows that it holds the selected change.
-  const day = marker ? localDateStr(new Date(marker.t)) : null;
-  for (const group of document.querySelectorAll('#markerList .marker-day')) {
-    group.querySelector('.marker-day-btn').classList.toggle('has-selected', group.dataset.day === day);
-  }
+  selectedMarkerKey = markerKey(marker);
+  renderDayList(report, marker);
   renderBeforeAfter(report, marker);
   selectRow(report, marker, selectedRowKey);
 }
@@ -162,71 +193,18 @@ function renderChangesFileNote(file) {
   else note.hidden = true;
 }
 
-// Changes grouped by local day, in report order. One day often holds many
-// changes (17 on 9/28), and a flat list of every change pushed the comparison
-// off screen. A day only opens and closes; the changes inside pick the comparison,
-// because each change's before/after window is measured from its own time.
-function groupMarkersByDay(markers) {
-  const days = new Map();
-  for (const m of markers) {
-    const day = localDateStr(new Date(m.t));
-    if (!days.has(day)) days.set(day, []);
-    days.get(day).push(m);
-  }
-  return [...days].map(([day, items]) => ({ day, items }));
-}
-
-function markerDayGroup(report, { day, items }, open) {
-  const listId = `markerDay-${day}`;
-  const kinds = [...new Set(items.map((m) => m.kind))];
-  const toggle = el('button', { type: 'button', class: 'marker-day-btn', 'aria-controls': listId });
-  toggle.append(...kinds.map((k) => markerIcon(k)), `${shortDate(day)} · ${items.length} change${items.length > 1 ? 's' : ''}`);
-  const list = el('div', { class: 'marker-day-items', id: listId });
-  for (const m of items) {
-    const btn = el('button', { type: 'button', class: 'marker-btn', 'data-key': markerKey(m), 'aria-pressed': 'false' });
-    btn.append(markerIcon(m.kind), m.label);
-    btn.addEventListener('click', () => selectMarker(report, m));
-    list.appendChild(btn);
-  }
-  const group = el('div', { class: 'marker-day', 'data-day': day }, [toggle, list]);
-  const setOpen = (isOpen) => {
-    list.hidden = !isOpen;
-    toggle.setAttribute('aria-expanded', String(isOpen));
-    group.classList.toggle('open', isOpen);
-  };
-  toggle.addEventListener('click', () => setOpen(list.hidden));
-  setOpen(open);
-  return group;
-}
-
 function renderChanges(report) {
   changesReport = report;
-  document.getElementById('sessionStartPanel').hidden = false;
   document.getElementById('beforeAfterPanel').hidden = false;
   renderChangesFileNote(report.changesFile);
-  if (shown('sessionStart')) drawSessionStartChart(document.getElementById('sessionStartChart'), document.getElementById('sessionStartLegend'), report, chartDomain(report));
-  // The marker list, the Bash chart and the table all belong to the before/after panel.
   // Showing the panel again re-runs renderChanges: resumeRequests in main.mjs
   // calls loadChanges or redrawCharts, which calls redrawChanges.
   if (!shown('beforeAfter')) return;
-
-  const list = document.getElementById('markerList');
-  list.replaceChildren();
-  if (!report.markers.length) {
-    list.appendChild(el('p', { class: 'panel-note', text: 'No changes to compare yet.' }));
-    selectMarker(report, null);
-    return;
-  }
-  const selected = report.markers.find((m) => markerKey(m) === selectedMarkerKey)
-    || report.markers[report.markers.length - 1];
-  const selectedDay = localDateStr(new Date(selected.t));
-  for (const group of groupMarkersByDay(report.markers)) {
-    list.appendChild(markerDayGroup(report, group, group.day === selectedDay));
-  }
-  selectMarker(report, selected);
+  const marker = resolvePicked(report.markers, selectedMarkerKey, chartDomain(report));
+  if (marker) selectMarker(report, marker);
 }
 
-const CHANGES_CHARTS = ['sessionStartChart', 'baDailyChart'];
+const CHANGES_CHARTS = ['baDailyChart'];
 
 // /api/changes reads the all-history scan, about 2.4s when that cache entry is
 // cold. Both panels show straight away with a placeholder, so the page does not
@@ -237,8 +215,8 @@ function showChangesLoading() {
   // block would leave the previous report in place, and a later redraw (e.g. a
   // row expand) would show stale data instead of the error state it just set.
   changesReport = null;
-  document.getElementById('sessionStartPanel').hidden = false;
   document.getElementById('beforeAfterPanel').hidden = false;
+  document.getElementById('baBody').hidden = false;
   for (const id of CHANGES_CHARTS) {
     document.getElementById(id).replaceChildren(
       el('div', { class: 'chart-loading' }, [spinnerNode(), document.createTextNode('Loading setup changes…')])
@@ -266,8 +244,8 @@ export async function loadChanges() {
     // A spinner that never stops reads as still loading, so it goes, and the
     // before/after panel has nothing to show without a report.
     for (const id of CHANGES_CHARTS) document.getElementById(id).replaceChildren();
-    document.getElementById('beforeAfterPanel').hidden = true;
-    document.getElementById('sessionStartPanel').hidden = false;
+    document.getElementById('baBody').hidden = true;
+    document.getElementById('beforeAfterPanel').hidden = false;
     const note = document.getElementById('changesFileNote');
     note.hidden = false;
     note.classList.add('changes-error');

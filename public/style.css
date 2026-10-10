@@ -1102,6 +1102,34 @@ html, body {
 
 .ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 860px) { .ba-grid { grid-template-columns: 1fr; } }
+
+/* The legend and title start at the plot's left edge. 110px equals PLOT_LEFT in public/charts/setup-changes.mjs. */
+.ba-under { margin-left: 110px; }
+.ba-under .usage-group-title { margin: -2px 0 6px; }
+.ba-grid { margin-top: 10px; }
+
+.day-list { max-height: 320px; overflow-y: auto; border-left: 2px solid var(--accent-cost); padding: 2px 0 2px 12px; }
+.day-list-head { margin-bottom: 4px; }
+.day-change {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.day-change:hover { background: var(--surface-hover); }
+.day-change[aria-pressed="true"], .day-change[aria-pressed="true"]:hover { background: var(--accent-cost); color: var(--bg); font-weight: 700; }
+.day-change:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.day-change-time { color: var(--text-tertiary); flex: none; }
+.day-change[aria-pressed="true"] .day-change-time { color: inherit; opacity: 0.75; }
 .ba-table { width: 100%; }
 .ba-table .n { color: var(--text-tertiary); font-size: 10px; margin-left: 6px; }
 .ba-table .dim { color: var(--text-tertiary); }

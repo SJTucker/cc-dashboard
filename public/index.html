@@ -322,33 +322,30 @@
         </section>
       </div>
 
-      <section class="panel" id="sessionStartPanel" data-hide-key="sessionStart" hidden>
-        <div class="panel-head">
-          <h2>Setup changes &middot; context at session start</h2>
-          <span class="panel-note">tokens in each session's first call</span>
-        </div>
-        <p id="changesFileNote" class="panel-note changes-file-note" hidden></p>
-        <div id="sessionStartChart" class="chart" aria-label="Context at the first call of each session, with setup changes marked below the axis"></div>
-        <div id="sessionStartLegend" class="legend changes-legend"></div>
-      </section>
-
       <section class="panel" id="beforeAfterPanel" data-hide-key="beforeAfter" hidden>
         <div class="panel-head">
           <h2>Setup changes &middot; before and after</h2>
           <span class="panel-note">7 days before and after the picked change</span>
         </div>
-        <div id="markerList" class="marker-list" role="group" aria-label="Choose a change"></div>
-        <div class="ba-grid">
-          <div>
-            <table class="model-table ba-table" id="beforeAfterTable" aria-live="polite"></table>
-            <p id="overlapNote" class="panel-note"></p>
-          </div>
-          <div>
-            <div class="usage-group-title" id="baChartTitle">Median context at session start, tokens per day</div>
-            <div id="baDailyChart" class="chart" aria-label="Median context at session start, tokens per day"></div>
+        <p id="changesFileNote" class="panel-note changes-file-note" hidden></p>
+        <p id="baEmpty" class="bar-empty" hidden>No setup changes in this range.</p>
+        <div id="baBody">
+          <div id="baDailyChart" class="chart" role="group" aria-label="Context at session start: bars are the daily median, dots are sessions, with setup changes by kind above the chart"></div>
+          <div class="ba-under">
+            <div class="usage-group-title" id="baChartTitle">Context at session start: bars are the daily median, dots are sessions</div>
             <div id="baLegend"></div>
           </div>
+          <div class="ba-grid">
+            <div>
+              <table class="model-table ba-table" id="beforeAfterTable" aria-live="polite"></table>
+            </div>
+            <div>
+              <div id="dayList" class="day-list" aria-live="polite"></div>
+              <p id="overlapNote" class="panel-note"></p>
+            </div>
+          </div>
         </div>
+      </section>
       </section>
     </main>
 
