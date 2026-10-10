@@ -6,7 +6,7 @@ import { formatCost, formatPercent, formatTokens, shortDate, localDateStr, axisT
 import { state, shown } from '../state.mjs';
 import { createSequence } from '../guards.mjs';
 import {
-  WEEK_MS, markerDate, markerIcon, timeDomain, drawSessionStartChart, drawMetricChart,
+  WEEK_MS, markerDate, markerIcon, timeDomain, drawSessionStartChart, drawMetricChart, drawMetricLegend,
 } from '../charts/setup-changes.mjs';
 
 // Days of history the setup charts show for each range picker value. Today and 7d
@@ -136,6 +136,7 @@ function selectRow(report, marker, key) {
   const chart = document.getElementById('baDailyChart');
   chart.setAttribute('aria-label', row.title);
   drawMetricChart(chart, report, marker, row, chartDomain(report));
+  drawMetricLegend(document.getElementById('baLegend'));
 }
 
 function selectMarker(report, marker) {

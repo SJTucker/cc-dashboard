@@ -1037,9 +1037,17 @@ html, body {
 .marker-overflow { font-family: var(--font-data); font-size: 10px; fill: var(--text-secondary); cursor: default; }
 .step-label { font-family: var(--font-data); font-size: 10px; fill: var(--accent-cost); }
 
-.day-bar { fill: var(--border); }
-.day-bar.before { fill: var(--text-secondary); }
+.day-bar.outside { fill: var(--border); }
+.day-bar.before { stroke: var(--text-secondary); stroke-width: 1; }
 .day-bar.after { fill: var(--accent-cost); }
+.empty-dash { stroke: var(--text-tertiary); stroke-width: 1.5; }
+.weekend-shade { fill: var(--text-primary); opacity: 0.03; pointer-events: none; }
+.median-label { font-family: var(--font-data); font-size: 10px; }
+.median-label.before { fill: var(--text-primary); }
+.median-label.after { fill: var(--accent-cost); }
+.axis-label.picked { fill: var(--accent-cost); font-weight: 700; }
+.median-before-swatch { height: 0; border-top: 2px dashed var(--text-primary); }
+.median-after-swatch { height: 0; border-top: 2px solid var(--accent-cost); }
 .window-before { fill: var(--text-primary); opacity: 0.04; }
 .window-after { fill: var(--accent-cost); opacity: 0.08; }
 .window-median { stroke-width: 2; }

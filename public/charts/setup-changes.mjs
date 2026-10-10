@@ -2,7 +2,8 @@
 // and the daily chart beside the before/after table. Both share one time axis.
 import { el, svgEl, hideTooltip, chartWidth, withTooltip, withFocusTooltip } from '../dom.mjs';
 import { formatTokens, shortDate, localDateStr, axisTokens, escapeHtml } from '../format.mjs';
-import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawYAxis } from './axes.mjs';
+import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawYAxis, drawPlotAxis } from './axes.mjs';
+import { appendPatternDefs, fillFor, textureCss } from './palette.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const WEEK_MS = 7 * DAY_MS;
@@ -259,44 +260,150 @@ function markerWindow(marker, row, domain) {
   return { t: marker.t, before: before && before[row.key], after: after && after[row.key] };
 }
 
-// The class of a day's bar: marked before or after when it falls in the
-// marker's two 7-day windows.
-function dayBarClass(t, win) {
-  if (!win || t < win.t - WEEK_MS || t >= win.t + WEEK_MS) return 'day-bar';
-  return t >= win.t ? 'day-bar after' : 'day-bar before';
+// The before-window bars and the legend swatch use this ink. It equals --text-secondary
+// in style.css. A pattern's paint cannot be a CSS variable, so the hex is repeated here.
+const BEFORE_INK = '#7f93b8';
+const PATTERN_SCOPE = 'ba';
+
+// Where the plot starts. Task 3 widens it to the lane gutter.
+const PLOT_LEFT = CHART_PAD_LEFT;
+const RIGHT_PAD = 10;
+const PLOT_HEIGHT = 170;
+const LANES_TOP = 6;
+const LANE_HEIGHT = 20;
+// From the bottom of the lanes to the top of the plot: the 6px window bar and room for median labels.
+const BAR_BLOCK = 34;
+const DATE_AXIS_HEIGHT = 22;
+
+// Every y and x the chart parts share. Lanes sit on top (laneCount rows), then the
+// window bar, then the plot, then the date labels. With no lanes the plot starts at the top.
+function plotLayout(domain, width, laneCount) {
+  const left = PLOT_LEFT;
+  const right = width - RIGHT_PAD;
+  const lanesBottom = LANES_TOP + laneCount * LANE_HEIGHT;
+  const top = laneCount ? lanesBottom + BAR_BLOCK : LANES_TOP;
+  const bottom = top + PLOT_HEIGHT;
+  const span = domain[1] - domain[0];
+  return {
+    domain, width, left, right, lanesTop: LANES_TOP, lanesBottom, top, bottom, plotHeight: PLOT_HEIGHT,
+    height: bottom + DATE_AXIS_HEIGHT,
+    markerTop: laneCount ? lanesBottom + 6 : top,
+    dayWidth: ((right - left) * DAY_MS) / span,
+    xOf: (t) => left + ((t - domain[0]) / span) * (right - left),
+    clampX: (x) => Math.min(right, Math.max(left, x)),
+  };
+}
+
+// before or after when the day falls in the marker's two 7-day windows, else outside.
+function dayBarKind(t, win) {
+  if (!win || t < win.t - WEEK_MS || t >= win.t + WEEK_MS) return 'outside';
+  return t >= win.t ? 'after' : 'before';
+}
+
+// Faint shade over each Saturday and Sunday, from the top of the lanes to the baseline.
+function drawWeekends(svg, g) {
+  for (const t of domainDays(g.domain)) {
+    const day = new Date(t).getDay();
+    if (day !== 0 && day !== 6) continue;
+    const x0 = g.clampX(g.xOf(t - DAY_MS / 2));
+    const x1 = g.clampX(g.xOf(t + DAY_MS / 2));
+    svg.appendChild(svgEl('rect', { class: 'weekend-shade', x: x0, y: g.lanesTop, width: x1 - x0, height: g.bottom - g.lanesTop }));
+  }
 }
 
 function drawWindowShade(svg, win, g) {
   const b0 = g.clampX(g.xOf(win.t - WEEK_MS));
   const mid = g.clampX(g.xOf(win.t));
   const a1 = g.clampX(g.xOf(win.t + WEEK_MS));
-  svg.appendChild(svgEl('rect', { class: 'window-before', x: b0, y: 0, width: mid - b0, height: g.plotHeight }));
-  svg.appendChild(svgEl('rect', { class: 'window-after', x: mid, y: 0, width: a1 - mid, height: g.plotHeight }));
+  svg.appendChild(svgEl('rect', { class: 'window-before', x: b0, y: g.top, width: mid - b0, height: g.plotHeight }));
+  svg.appendChild(svgEl('rect', { class: 'window-after', x: mid, y: g.top, width: a1 - mid, height: g.plotHeight }));
 }
 
+// Before-window bars are hatched, after-window bars solid amber, the rest --border.
+// A hatched bar's fill is an attribute, so style.css has no fill rule for .day-bar.before.
 function drawDayBars(svg, days, row, win, g) {
-  const barWidth = Math.max(((g.width - CHART_PAD_LEFT) * DAY_MS) / (g.domain[1] - g.domain[0]) * 0.7, 2);
+  const barWidth = Math.max(g.dayWidth * 0.64, 2);
   for (const d of days) {
     const t = dayNoon(d.date);
-    const h = (d.value / g.max) * g.plotHeight;
-    const rect = svgEl('rect', { class: dayBarClass(t, win), x: g.xOf(t) - barWidth / 2, y: g.plotHeight - h, width: barWidth, height: Math.max(h, 1), rx: 1 });
+    const kind = dayBarKind(t, win);
+    const h = Math.max((Math.min(d.value, g.max) / g.max) * g.plotHeight, 1);
+    const rect = svgEl('rect', { class: `day-bar ${kind}`, x: g.xOf(t) - barWidth / 2, y: g.bottom - h, width: barWidth, height: h, rx: 1 });
+    if (kind === 'before') rect.setAttribute('fill', fillFor(PATTERN_SCOPE, 'diag', BEFORE_INK));
     svg.appendChild(withTooltip(rect, `<strong>${shortDate(d.date)}</strong><br>${escapeHtml(row.fmt(d.value))}<br>${d.n} ${d.n === 1 ? row.unitOne : row.unit}`));
   }
 }
 
-// The before and after medians as lines across their windows, and the marker line.
-function drawWindowLines(svg, win, g) {
-  const line = (from, to, value, cls) => {
-    if (value == null) return;
-    svg.appendChild(svgEl('line', { class: `window-median ${cls}`, x1: g.clampX(g.xOf(from)), x2: g.clampX(g.xOf(to)), y1: g.yOf(value), y2: g.yOf(value) }));
-  };
-  line(win.t - WEEK_MS, win.t, win.before, 'before');
-  line(win.t, win.t + WEEK_MS, win.after, 'after');
-  svg.appendChild(svgEl('line', { class: 'marker-line', x1: g.xOf(win.t), x2: g.xOf(win.t), y1: 0, y2: g.plotHeight }));
+// A day with no value gets a short dash on the baseline, so a gap reads as "nothing to
+// count" and not as a missing bar.
+function drawEmptyDays(svg, days, g) {
+  const have = new Set(days.map((d) => d.date));
+  for (const t of domainDays(g.domain)) {
+    if (have.has(localDateStr(new Date(t)))) continue;
+    const x = g.xOf(t);
+    svg.appendChild(svgEl('line', { class: 'empty-dash', x1: x - 4, x2: x + 4, y1: g.bottom - 3, y2: g.bottom - 3 }));
+  }
 }
 
-// The daily chart beside the before/after table, for the row the reader picked,
-// over the shared time axis domain.
+// One median as a line across its window with its value at the line's near end:
+// "before 40.0k" at the left end, "after 50.0k" at the right end. A null median
+// draws nothing.
+function drawMedian(svg, g, row, { from, to, value, name }) {
+  if (value == null) return;
+  const x1 = g.clampX(g.xOf(from));
+  const x2 = g.clampX(g.xOf(to));
+  const y = g.yOf(value);
+  svg.appendChild(svgEl('line', { class: `window-median ${name}`, x1, x2, y1: y, y2: y }));
+  const atStart = name === 'before';
+  const label = svgEl('text', { class: `median-label ${name}`, x: atStart ? x1 + 4 : x2 - 4, y: y - 5, 'text-anchor': atStart ? 'start' : 'end' });
+  label.textContent = `${name} ${row.fmt(value)}`;
+  svg.appendChild(label);
+}
+
+// The two medians and the amber line at the change's time.
+function drawWindowLines(svg, win, row, g) {
+  drawMedian(svg, g, row, { from: win.t - WEEK_MS, to: win.t, value: win.before, name: 'before' });
+  drawMedian(svg, g, row, { from: win.t, to: win.t + WEEK_MS, value: win.after, name: 'after' });
+  svg.appendChild(svgEl('line', { class: 'marker-line', x1: g.xOf(win.t), x2: g.xOf(win.t), y1: g.markerTop, y2: g.bottom }));
+}
+
+// The y axis, bars, medians and baseline for one row. The 7-day lines can sit above
+// every bar, so the axis has to reach them too.
+function drawPlot(svg, days, row, win, layout) {
+  const lines = win ? [win.before, win.after].filter((v) => v != null) : [];
+  const rawMax = Math.max(...days.map((d) => d.value), ...lines);
+  const max = drawPlotAxis(svg, rawMax, { ...layout, format: row.axis });
+  const g = { ...layout, max, yOf: (v) => layout.bottom - (Math.min(v, max) / max) * layout.plotHeight };
+  if (win) drawWindowShade(svg, win, g);
+  drawDayBars(svg, days, row, win, g);
+  drawEmptyDays(svg, days, g);
+  if (win) drawWindowLines(svg, win, row, g);
+  svg.appendChild(svgEl('line', { x1: g.left, x2: g.right, y1: g.bottom, y2: g.bottom, stroke: 'var(--border)' }));
+}
+
+// "Oct 1" for the first label and for the 1st of a month, else the day number.
+function dateLabel(t, first) {
+  const d = new Date(t);
+  if (!first && d.getDate() !== 1) return String(d.getDate());
+  return `${d.toLocaleString('en-US', { month: 'short' })} ${d.getDate()}`;
+}
+
+// Every day while a day is 28px wide (dateLabelStep), Mondays below that. The picked
+// change's day is bold amber (.axis-label.picked).
+function drawDateAxis(svg, g, marker) {
+  const step = dateLabelStep(g.dayWidth);
+  const pickedDay = marker ? localDateStr(new Date(marker.t)) : null;
+  let first = true;
+  for (const t of domainDays(g.domain)) {
+    if (step === 'monday' && new Date(t).getDay() !== 1) continue;
+    const picked = localDateStr(new Date(t)) === pickedDay;
+    const label = svgEl('text', { class: picked ? 'axis-label picked' : 'axis-label', x: g.xOf(t), y: g.bottom + 14, 'text-anchor': 'middle' });
+    label.textContent = dateLabel(t, first);
+    first = false;
+    svg.appendChild(label);
+  }
+}
+
+// The daily chart for the row the reader picked, over the shared time axis domain.
 export function drawMetricChart(container, report, marker, row, domain) {
   hideTooltip();
   container.innerHTML = '';
@@ -305,23 +412,29 @@ export function drawMetricChart(container, report, marker, row, domain) {
     container.appendChild(el('div', { class: 'bar-empty', text: `No data for ${row.name} yet.` }));
     return;
   }
-  const width = chartWidth(container);
-  const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
-  const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT, class: 'changes-chart' });
-  const win = markerWindow(marker, row, domain);
-  // The 7-day lines can sit above every bar, so the y-axis has to reach them too.
-  const lines = win ? [win.before, win.after].filter((v) => v != null) : [];
-  const max = drawYAxis(svg, Math.max(...days.map((d) => d.value), ...lines), width, row.axis);
-  const g = {
-    width, plotHeight, max, domain,
-    xOf: timeScale(domain, width),
-    yOf: (v) => plotHeight - (v / max) * plotHeight,
-    clampX: (x) => Math.min(width, Math.max(CHART_PAD_LEFT, x)),
-  };
-  if (win) drawWindowShade(svg, win, g);
-  drawDayBars(svg, days, row, win, g);
-  if (win) drawWindowLines(svg, win, g);
-  svg.appendChild(svgEl('line', { x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight, stroke: 'var(--border)' }));
-  drawTimeAxis(svg, domain, g.xOf);
+  const layout = plotLayout(domain, chartWidth(container), 0);
+  const svg = svgEl('svg', { viewBox: `0 0 ${layout.width} ${layout.height}`, height: layout.height, class: 'changes-chart' });
+  appendPatternDefs(svg, PATTERN_SCOPE, [{ texture: 'diag', color: BEFORE_INK }]);
+  drawWeekends(svg, layout);
+  drawPlot(svg, days, row, markerWindow(marker, row, domain), layout);
+  drawDateAxis(svg, layout, marker);
   container.appendChild(svg);
+}
+
+function legendItem(swatch, text) {
+  return el('span', { class: 'legend-item' }, [swatch, document.createTextNode(text)]);
+}
+
+// One legend row under the chart. Hatch, fill, dash and solid line separate the five
+// marks without colour.
+export function drawMetricLegend(legend) {
+  const box = (background) => el('span', { class: 'legend-swatch', style: `background:${background}` });
+  const rule = (cls) => el('span', { class: `legend-line ${cls}` });
+  legend.replaceChildren(el('div', { class: 'legend changes-legend' }, [
+    legendItem(box(textureCss('diag', BEFORE_INK)), '7 days before'),
+    legendItem(box('var(--accent-cost)'), '7 days after'),
+    legendItem(box('var(--border)'), 'outside the windows'),
+    legendItem(rule('median-before-swatch'), 'before median'),
+    legendItem(rule('median-after-swatch'), 'after median'),
+  ]));
 }
