@@ -170,7 +170,10 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
     if ((await $.session.turns()) > 0) fail($, 'transcript not found')
     return null
   }
-  launchId ??= `${(await $.clock.now()).toString(36)}-${Math.random().toString(36).slice(2, 10)}`
+  // Read the clock before the check so no await sits between the check and the
+  // assignment; two overlapping first measures then cannot each assign an id.
+  const now = await $.clock.now()
+  launchId ??= `${now.toString(36)}-${Math.random().toString(36).slice(2, 10)}`
   const input: Record<string, unknown> = {
     session_id: id,
     launch_id: launchId,
