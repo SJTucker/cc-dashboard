@@ -238,3 +238,25 @@ test('a skill with cost and no call in the range shows 0, and a called skill wit
 
   assert.deepStrictEqual(data.skills.map((r) => [r.name, r.invocations]), [['review', 0]]);
 });
+
+// A command row as extractFile writes it.
+const command = (id, name, t = at(0)) => ({ id, t, name });
+
+test('a slash command adds to its skill invocations and counts once across row sets, and a built-in joins no row', () => {
+  const first = rowSet({
+    calls: [call({ attributionSkill: 'handoff' })],
+    toolUses: [toolUse('toolu_1', 'Skill', 'handoff')],
+    commands: [command('u1', 'handoff'), command('u2', 'clear'), command('u3', 'handoff', at(40))],
+  });
+  const copy = rowSet({ commands: [command('u1', 'handoff')] });
+  const data = run([first, copy], { days: 30 });
+
+  assert.deepStrictEqual(data.skills.map((r) => [r.name, r.invocations]), [['handoff', 2]]);
+});
+
+test('a row set with no commands field, as stored before EXTRACT_VERSION 2, counts no slash commands', () => {
+  // rowSet has no commands key, like the stored rows of a transcript Claude Code deleted.
+  const entry = rowSet({ calls: [call({ attributionSkill: 'tdd' })], toolUses: [toolUse('toolu_1', 'Skill', 'tdd')] });
+
+  assert.strictEqual(run([entry]).skills[0].invocations, 1);
+});

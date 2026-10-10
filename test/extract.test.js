@@ -295,5 +295,23 @@ test('the warning adds nothing to the extracted rows', async (t) => {
   const file = writeTranscript([untagged('hello')]);
   const rows = await extractFile(file);
   assert.deepStrictEqual(rows.prompts, []);
-  assert.strictEqual(EXTRACT_VERSION, 1);
+  assert.strictEqual(EXTRACT_VERSION, 2);
+});
+
+test('a slash command line is a command row with its name, keyed like a prompt row', async () => {
+  const file = writeTranscript([
+    typed('<command-message>handoff</command-message>\n<command-name>/handoff</command-name>', { uuid: 'u1', timestamp: T0 }),
+    typed('<command-name>/clear</command-name>\n<command-message>clear</command-message>', { timestamp: T1 }),
+    typed('<command-name>/compact</command-name>'), // no timestamp
+    typed('<command-message>x</command-message>', { uuid: 'u3', timestamp: T2 }), // no command-name
+    typed('<command-name>/handoff</command-name>', { uuid: 'u4', timestamp: T2, isMeta: true }),
+    typed('a prompt that quotes <command-name>/handoff</command-name> later on', { uuid: 'u2', timestamp: T2 }),
+  ]);
+  const rows = await extractFile(file);
+
+  assert.deepStrictEqual(rows.commands, [
+    { id: 'u1', t: Date.parse(T0), name: 'handoff' },
+    { id: `s1:${T1}`, t: Date.parse(T1), name: 'clear' },
+  ]);
+  assert.deepStrictEqual(rows.prompts.map((p) => p.id), ['u2'], 'a prompt that only quotes a command is still a prompt');
 });
