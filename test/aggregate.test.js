@@ -260,3 +260,50 @@ test('a row set with no commands field, as stored before EXTRACT_VERSION 2, coun
 
   assert.strictEqual(run([entry]).skills[0].invocations, 1);
 });
+
+const { ERROR_CAUSES } = require('../lib/aggregate');
+
+function causeOf(text) {
+  const entry = rowSet({
+    toolUses: [{ key: 'toolu_1', t: at(0), name: 'Bash', detail: 'cat', model: 'claude-opus-5-5' }],
+    errors: [{ toolUseId: 'toolu_1', t: at(0), text }],
+  });
+  return run([entry]).tools[0].errorCauses[0].cause;
+}
+
+test('a PreToolUse hook error is blocked by a hook, not other', () => {
+  assert.strictEqual(causeOf('PreToolUse:Bash hook error: Use the Read tool to read files under frontend/'), 'blocked by a hook');
+});
+
+test('a hook message that quotes an exit code is still blocked by a hook', () => {
+  assert.strictEqual(causeOf('PreToolUse:Bash hook error: Exit code 2 from guard'), 'blocked by a hook');
+});
+
+test('"doesn\'t want to take this action" is rejected by you', () => {
+  assert.strictEqual(causeOf("The user doesn't want to take this action right now. STOP what you are doing"), 'rejected by you');
+});
+
+test('the newly recognised misuse messages are tool misused', () => {
+  for (const text of [
+    'Error: No such tool available: bash. Tool names are case-sensitive: call Bash instead.',
+    'File has been modified since read, either by the user or by a linter.',
+    'File content (30000 tokens) exceeds maximum allowed tokens (25000).',
+    'No changes to make: old_string and new_string are exactly the same.',
+    'Missing required parameter: task_id',
+  ]) assert.strictEqual(causeOf(text), 'tool misused', text);
+});
+
+test('an environment failure stays other', () => {
+  assert.strictEqual(causeOf('connect ECONNREFUSED 127.0.0.1:443'), 'other');
+});
+
+test('ERROR_CAUSES names the six causes in match order', () => {
+  assert.deepStrictEqual(ERROR_CAUSES.map(([cause]) => cause), [
+    'blocked by the worktree check',
+    'blocked by auto mode',
+    'blocked by a hook',
+    'rejected by you',
+    'command failed',
+    'tool misused',
+  ]);
+});
