@@ -1,7 +1,8 @@
 // The Session reviews panel: suggestions from reviews of ended sessions, with
-// dismiss, undo and Copy prompt.
+// Done, Not useful, Undo and Copy prompt. The three row actions are icon buttons
+// with tooltips.
 import { getJson } from '../api.mjs';
-import { el } from '../dom.mjs';
+import { el, svgEl, withTooltip, withFocusTooltip } from '../dom.mjs';
 import { formatAgo, localDateStr } from '../format.mjs';
 import { createDrawGuard } from '../guards.mjs';
 import { REVIEW_DAYS } from '../constants.mjs';
@@ -66,6 +67,39 @@ const reviewButton = (label, focusKey, ariaLabel, onClick, cls = 'refresh-btn') 
   button.addEventListener('click', onClick);
   return button;
 };
+
+// Lucide icon paths, drawn in a 24 x 24 box.
+const ICONS = {
+  check: [{ d: 'M20 6 9 17l-5-5' }],
+  x: [{ d: 'M18 6 6 18' }, { d: 'm6 6 12 12' }],
+  undo: [{ d: 'M9 14 4 9l5-5' }, { d: 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11' }],
+};
+
+// The tooltip text is fixed, so it needs no escaping. A <br> breaks a long line,
+// because .tooltip does not wrap.
+const reviewTip = (title, ...lines) => `<b>${title}</b><br>${lines.join('<br>')}`;
+
+// A square icon button. The aria-label names the suggestion, which the icon alone
+// cannot, so the tooltip is for sighted users and adds nothing for a screen reader.
+function iconButton(icon, focusKey, ariaLabel, tip, onClick) {
+  const svg = svgEl('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
+  for (const attrs of ICONS[icon]) svg.appendChild(svgEl('path', attrs));
+  const button = el('button', { type: 'button', class: 'review-icon', 'data-review-focus': focusKey, 'aria-label': ariaLabel }, [svg]);
+  button.addEventListener('click', onClick);
+  return withFocusTooltip(withTooltip(button, tip), tip);
+}
+
+const TIP_DONE = reviewTip('Done', 'I acted on this. Moves it to the dismissed list.');
+const TIP_NOT_USEFUL = reviewTip('Not useful', 'Hide it and record that Haiku got it wrong.');
+const TIP_UNDO = reviewTip('Undo', 'Put this suggestion back in the open list.');
+
+// What Copy prompt copies, worded to match reviewPrompt in public/reviews.js.
+function copyTip(r) {
+  const copies = 'Copies a prompt for a new Claude Code session.';
+  if (r.status === 'failed') return reviewTip('Copy prompt', copies, 'It gives Claude this transcript and asks what it would suggest,', 'since the Haiku review failed.');
+  if (!r.suggestions.length) return reviewTip('Copy prompt', copies, 'It gives Claude this transcript and asks what it would suggest,', 'since Haiku made none.');
+  return reviewTip('Copy prompt', copies, 'It gives Claude this transcript and the open suggestions,', 'and asks which are right and what Haiku missed.');
+}
 
 const suggestionName = (s) => `${REVIEW_KINDS[s.kind] || s.kind}: ${s.text.length > 80 ? `${s.text.slice(0, 79)}…` : s.text}`;
 
@@ -140,23 +174,27 @@ function toggleSet(set, id) {
   renderReviews(lastReviews);
 }
 
+// Each row has three columns: the kind, the text and the actions.
 function dismissedList(review) {
   return el('ul', { class: 'review-dismissed' }, dismissedSuggestions(review).map((s) => el('li', {}, [
     el('span', { class: 'review-kind', text: REVIEW_KINDS[s.kind] || s.kind }),
-    document.createTextNode(` ${s.text} `),
-    el('span', { class: 'review-dismissal', text: `(${dismissalText(s)})` }),
-    document.createTextNode(' '),
-    reviewButton('Undo', `undo:${review.sessionId}:${s.idx}`, `Undo dismissal: ${suggestionName(s)}`, () => changeSuggestion(review, s, null)),
+    el('span', {}, [
+      document.createTextNode(`${s.text} `),
+      el('span', { class: 'review-dismissal', text: `(${dismissalText(s)})` }),
+    ]),
+    el('span', { class: 'review-actions' }, [
+      iconButton('undo', `undo:${review.sessionId}:${s.idx}`, `Undo dismissal: ${suggestionName(s)}`, TIP_UNDO, () => changeSuggestion(review, s, null)),
+    ]),
   ])));
 }
 
 function openList(review) {
   return el('ul', { class: 'review-suggestions' }, openSuggestions(review).map((s) => el('li', {}, [
     el('span', { class: 'review-kind', text: REVIEW_KINDS[s.kind] || s.kind }),
-    document.createTextNode(` ${s.text} `),
+    el('span', { text: s.text }),
     el('span', { class: 'review-actions' }, [
-      reviewButton('Done', `done:${review.sessionId}:${s.idx}`, `Mark done: ${suggestionName(s)}`, () => changeSuggestion(review, s, 'done')),
-      reviewButton('Not useful', `notuseful:${review.sessionId}:${s.idx}`, `Dismiss as not useful: ${suggestionName(s)}`, () => changeSuggestion(review, s, 'not_useful')),
+      iconButton('check', `done:${review.sessionId}:${s.idx}`, `Mark done: ${suggestionName(s)}`, TIP_DONE, () => changeSuggestion(review, s, 'done')),
+      iconButton('x', `notuseful:${review.sessionId}:${s.idx}`, `Dismiss as not useful: ${suggestionName(s)}`, TIP_NOT_USEFUL, () => changeSuggestion(review, s, 'not_useful')),
     ]),
   ])));
 }
@@ -237,15 +275,12 @@ function drawReviews(data) {
       contextLine(r, ended),
     ]);
     const prompt = reviewPrompt(r);
-    let source = null;
-    if (r.transcript) {
-      const children = [el('span', { class: 'review-path', title: r.transcript, text: shortPath(r.transcript, data.home) })];
-      if (prompt) {
-        children.push(reviewButton(reviewCopyResults.get(r.sessionId) || 'Copy prompt', `copy:${r.sessionId}`, null, () => copyReviewPrompt(r.sessionId, prompt)));
-      }
-      source = el('div', { class: 'review-source' }, children);
+    const top = [head];
+    if (prompt) {
+      const button = reviewButton(reviewCopyResults.get(r.sessionId) || 'Copy prompt', `copy:${r.sessionId}`, null, () => copyReviewPrompt(r.sessionId, prompt));
+      top.push(withFocusTooltip(withTooltip(button, copyTip(r)), copyTip(r)));
     }
-    return el('li', { class: 'review' }, [head, ...(source ? [source] : []), ...reviewBody(r)]);
+    return el('li', { class: 'review' }, [el('div', { class: 'review-top' }, top), ...reviewBody(r)]);
   });
   list.replaceChildren(...items);
   if (focusKey) [...list.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus({ preventScroll: true });

@@ -187,11 +187,13 @@
 
       <section class="panel" id="reviewsPanel" data-hide-key="reviews" hidden>
         <div class="panel-head">
-          <h2>Session reviews</h2>
+          <h2 id="reviewsHeading">Session reviews</h2>
           <span class="panel-note" id="reviewsNote"></span>
         </div>
         <p class="review-empty" id="reviewsStatus" role="status" hidden></p>
-        <ul class="reviews-list" id="reviewsList"></ul>
+        <div class="review-scroll" tabindex="0" role="region" aria-labelledby="reviewsHeading">
+          <ul class="reviews-list" id="reviewsList"></ul>
+        </div>
       </section>
 
       <div class="panel-row even">

@@ -27,12 +27,4 @@ function reviewPrompt(review) {
   return `${intro} A Haiku review of it suggested:\n${lines}\nWhich of these are right, which are wrong, and what did it miss?`;
 }
 
-// Replaces a leading home directory with ~. The folder name must end at the home
-// path, so /Users/ab is not shortened by a home of /Users/a.
-function shortPath(path, home) {
-  if (!home) return path;
-  if (path === home) return '~';
-  return path.startsWith(`${home}/`) ? `~${path.slice(home.length)}` : path;
-}
-
-if (typeof module === 'object') module.exports = { reviewPrompt, shortPath, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText };
+if (typeof module === 'object') module.exports = { reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText };

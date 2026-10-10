@@ -3,7 +3,6 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
-const os = require('os');
 const path = require('path');
 const helpers = require('./helpers');
 const { localDateStr } = require('../lib/dates');
@@ -800,7 +799,7 @@ function openTestReviewDb(config) {
   return openReviewDb(getStorePath(config.configDir), legacyReviewsDir(config.configDir));
 }
 
-test('GET /api/reviews lists finished reviews with suggestion state and the home directory', async (t) => {
+test('GET /api/reviews lists finished reviews with suggestion state', async (t) => {
   const { url, config } = await startServer(t);
   const db = openTestReviewDb(config);
   const now = Date.now();
@@ -815,7 +814,6 @@ test('GET /api/reviews lists finished reviews with suggestion state and the home
   const res = await fetch(`${url}/api/reviews`);
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), {
-    home: os.homedir(),
     reviews: [{
       sessionId: 'sess-a', title: null, branch: null, transcript: null, project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done',
       suggestions: [{ idx: 0, kind: 'token-waste', text: 'Read the file once.', dismissedAt: null, reason: null }],
@@ -827,7 +825,7 @@ test('GET /api/reviews answers an empty list before any review exists', async (t
   const { url } = await startServer(t);
   const res = await fetch(`${url}/api/reviews`);
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(await res.json(), { home: os.homedir(), reviews: [] });
+  assert.deepStrictEqual(await res.json(), { reviews: [] });
 });
 
 test('GET /api/reviews imports review files from an earlier version', async (t) => {
@@ -978,7 +976,7 @@ test('GET /api/reviews answers 503 within 1000 ms when its first import meets th
   await release();
   const after = await fetch(`${base}/api/reviews`);
   assert.strictEqual(after.status, 200);
-  assert.deepStrictEqual(await after.json(), { home: os.homedir(), reviews: [] });
+  assert.deepStrictEqual(await after.json(), { reviews: [] });
 });
 
 test('the dismiss routes answer 503 within 1000 ms under the review lock, reads still answer, and a dismiss works after', async (t) => {

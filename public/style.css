@@ -957,40 +957,70 @@ html, body {
 }
 .timeline-label.prompt-title { font-style: italic; }
 .timeline-bar:hover { stroke: var(--text-primary); stroke-width: 1; }
+/* The list scrolls inside the panel past 48rem, as the Live sessions tables do at
+   20rem. The wrapper is in index.html, so the 5 s redraw keeps its scroll position. */
+.review-scroll { overflow: auto; max-height: 48rem; }
+.review-scroll:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 .reviews-list { list-style: none; margin: 0; padding: 0; }
 .review { padding: 8px 0; border-top: 1px solid var(--border); }
 .review:first-child { border-top: none; }
+.review-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.review-top .review-head { min-width: 0; }
+.review-top .refresh-btn { padding: 4px 10px; font-size: 11px; flex: none; }
 .review-head { color: var(--text-secondary); font-size: 0.85em; }
-.review-source { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
-.review-path {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-family: var(--font-data);
-  font-size: 11px;
-  color: var(--text-tertiary);
+.review-suggestions,
+.review-dismissed { list-style: none; margin: 4px 0 0; padding: 0; }
+/* A row has three columns: the kind, the text and the actions. */
+.review-suggestions li,
+.review-dismissed li {
+  display: grid;
+  grid-template-columns: 13ch minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: start;
+  padding: 3px 6px;
+  margin: 0 -6px;
+  border-radius: 2px;
 }
-.review-source .refresh-btn { padding: 4px 10px; font-size: 11px; flex: none; }
-.review-suggestions { margin: 4px 0 0; padding-left: 18px; }
-.review-suggestions li { margin: 2px 0; }
+.review-suggestions li:hover,
+.review-dismissed li:hover { background: var(--surface-raised); }
+.review-dismissed { color: var(--text-secondary); }
+.review-dismissed .review-kind { color: var(--text-secondary); }
 .review-kind { font-weight: 600; color: var(--text-primary); }
 .review-empty { margin: 4px 0 0; color: var(--text-tertiary); }
-.review-actions { display: inline-flex; gap: 6px; margin-left: 6px; vertical-align: baseline; }
-.review-actions .refresh-btn,
-.review-dismissed .refresh-btn { padding: 2px 8px; font-size: 11px; flex: none; }
+.review-actions { display: inline-flex; gap: 2px; }
+.review-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 2px;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.review-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.review-icon:hover { color: var(--text-primary); border-color: var(--text-tertiary); background: var(--surface-hover); }
 .review-toggle {
   background: none; border: none; padding: 2px 0; font: inherit; color: var(--text-secondary);
   text-decoration: underline; cursor: pointer; text-align: left;
 }
 .review-toggle:hover { color: var(--text-primary); }
 .review-collapsed .review-toggle { display: block; width: 100%; text-decoration: none; }
-.review-dismissed { margin: 4px 0 0; padding-left: 18px; color: var(--text-secondary); }
-.review-dismissed li { margin: 2px 0; }
 .review-dismissal { font-style: italic; }
 .review-dismissed-line { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.85em; }
 .review button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+@media (max-width: 640px) {
+  .review-suggestions li,
+  .review-dismissed li { grid-template-columns: minmax(0, 1fr) auto; }
+  .review-suggestions .review-kind,
+  .review-dismissed .review-kind,
+  .review-suggestions li > :nth-child(2),
+  .review-dismissed li > :nth-child(2) { grid-column: 1; }
+  .review-suggestions .review-actions,
+  .review-dismissed .review-actions { grid-column: 2; grid-row: 1 / span 2; }
+}
 .sessions-total td { font-weight: 600; }
 
 .usage-row {
