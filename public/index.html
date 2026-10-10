@@ -278,16 +278,16 @@
 
       <section class="panel" id="rtkDailyPanel" data-hide-key="rtkDaily" hidden>
         <div class="panel-head">
-          <h2>Output rtk filtered out</h2>
-          <span class="panel-note">estimated tokens rtk cut from command output, not in cost</span>
+          <h2>Output rtk kept out of context</h2>
+          <span class="panel-note">estimated tokens rtk kept out of the model's context, not in cost</span>
         </div>
-        <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk filtered out per day"></div>
+        <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk kept out of context per day"></div>
       </section>
 
       <section class="panel" id="rtkCommandPanel" data-hide-key="rtkCommands" hidden>
         <div class="panel-head">
-          <h2>What rtk filtered</h2>
-          <span class="panel-note">pick a command to see its calls</span>
+          <h2>What rtk kept out of context</h2>
+          <span class="panel-note">tests and builds count at most 750 tokens without rtk; files and diffs count in full. Pick a command to see its calls</span>
         </div>
         <div class="usage-grid">
           <div class="usage-group">

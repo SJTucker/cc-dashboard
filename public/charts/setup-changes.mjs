@@ -280,13 +280,21 @@ function drawWindowLines(svg, win, row, g) {
   drawMedian(svg, g, row, { from: win.t, to: win.t + WEEK_MS, value: win.after, name: 'after' });
 }
 
+// The y of a value in the daily plot. Values above max draw at the top. A negative
+// value draws on the baseline: rtk's share kept out of context goes below zero on a
+// day when rtk's output put more into context than it kept out. The table and the
+// tooltip still show the real value.
+export function plotY(value, { bottom, plotHeight, max }) {
+  return bottom - (Math.min(Math.max(value, 0), max) / max) * plotHeight;
+}
+
 // The y axis, bars, session dots, medians and baseline for one row. Dots draw over
 // dimmed bars and under the median lines.
 function drawPlot(svg, days, row, win, layout, report) {
   const inView = sessionsInView(report, layout.domain);
   const dots = row.key === 'sessionStart' && inView.length > 0;
   const max = drawPlotAxis(svg, plotRawMax(row, days, win, inView), { ...layout, format: row.axis });
-  const g = { ...layout, max, yOf: (v) => layout.bottom - (Math.min(v, max) / max) * layout.plotHeight };
+  const g = { ...layout, max, yOf: (v) => plotY(v, { bottom: layout.bottom, plotHeight: layout.plotHeight, max }) };
   if (win) drawWindowShade(svg, win, g);
   drawDayBars(svg, days, row, win, g, dots);
   drawEmptyDays(svg, days, g);

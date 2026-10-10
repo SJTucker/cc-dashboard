@@ -36,11 +36,11 @@ const BA_ROWS = [
   { name: 'Cache hit rate', key: 'cacheHit', n: 'callN', unit: 'API calls', unitOne: 'API call', fmt: formatPercent, axis: axisPercent, points: true, title: 'Cache hit rate, per day' },
 ];
 const RTK_ROWS = [
-  { name: 'Tokens kept per command', key: 'keptPerCommand', n: 'commands', unit: 'commands', unitOne: 'command', fmt: tokensCell, axis: axisTokens, rtk: true, title: 'Tokens rtk kept per command, per day' },
-  { name: 'Share of output filtered', key: 'filteredShare', n: 'commands', unit: 'commands', unitOne: 'command', fmt: formatPercent, axis: axisPercent, points: true, rtk: true, title: 'Share of output rtk filtered, per day' },
+  { name: 'Tokens reaching context per command', key: 'reachedPerCommand', n: 'commands', unit: 'commands', unitOne: 'command', fmt: tokensCell, axis: axisTokens, rtk: true, title: 'Tokens per rtk command that reached context, per day' },
+  { name: 'Share kept out of context', key: 'keptOutShare', n: 'commands', unit: 'commands', unitOne: 'command', fmt: formatPercent, axis: axisPercent, points: true, rtk: true, title: 'Share of output rtk kept out of context, per day' },
 ];
 
-// A share (cache hit, filtered) changes in percentage points; everything else as a
+// A share (cache hit, kept out) changes in percentage points; everything else as a
 // relative change. Either way, a change under 5% relative to the "before" value is
 // shown dimmed with no arrow, per spec: the spike measured day-to-day swings well
 // above that on every row. A zero "before" value has no relative change to compute,
