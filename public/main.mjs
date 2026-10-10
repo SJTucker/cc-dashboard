@@ -12,7 +12,7 @@ import { renderAttribution } from './panels/attribution.mjs';
 import { renderCards } from './panels/cards.mjs';
 import { loadChanges, redrawChanges } from './panels/changes.mjs';
 import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits.mjs';
-import { renderModels } from './panels/models.mjs';
+import { renderModels, setupModelMixToggle } from './panels/models.mjs';
 import { loadPricesSource, setupPrices } from './panels/prices.mjs';
 import { refreshRecords } from './panels/records.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
@@ -332,6 +332,7 @@ setupCollapsibleRows({
 setupHiding({ onWidthChange: () => redrawCharts({ changes: false }), onResume: resumeRequests });
 setupPanelLight();
 setupUsageGroupToggles();
+setupModelMixToggle();
 setupPrices({ onApplied: reloadAll });
 placeSummaryCards();
 setLive(state.currentDays === 'today');

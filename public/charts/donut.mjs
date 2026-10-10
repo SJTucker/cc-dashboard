@@ -77,3 +77,34 @@ export function drawModelMix(container, models, measure = 'tokens') {
   for (const m of unpriced) legend.appendChild(legendItem(m, `${shortModel(m.model)} unpriced`));
   container.appendChild(legend);
 }
+
+// Half of a flip in ms; the whole flip takes twice this.
+const FLIP_HALF_MS = 150;
+
+// Turns the donut's SVG edge-on, calls redraw, then turns the new SVG back to face
+// the viewer. Only the SVG turns; the legend changes at the edge-on point. With
+// prefers-reduced-motion set, or no SVG drawn (the empty message), redraw runs at
+// once. fill: 'forwards' holds the old SVG edge-on until redraw replaces it, so it
+// does not show face-on for a frame. A cancelled animation still leads to redraw.
+export async function flipDonut(container, redraw) {
+  const before = container.querySelector('svg');
+  if (!before || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    redraw();
+    return;
+  }
+  await before
+    .animate(
+      [{ transform: 'perspective(600px) rotateY(0deg)' }, { transform: 'perspective(600px) rotateY(90deg)' }],
+      { duration: FLIP_HALF_MS, easing: 'ease-in', fill: 'forwards' }
+    )
+    .finished.catch(() => {});
+  redraw();
+  const after = container.querySelector('svg');
+  if (!after) return;
+  await after
+    .animate(
+      [{ transform: 'perspective(600px) rotateY(-90deg)' }, { transform: 'perspective(600px) rotateY(0deg)' }],
+      { duration: FLIP_HALF_MS, easing: 'ease-out' }
+    )
+    .finished.catch(() => {});
+}
