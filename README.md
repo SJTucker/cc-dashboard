@@ -354,6 +354,16 @@ session has striped bars. Hover a bar for the session's title, project and branc
 the bar's time range, cost today and prompt count. The panel hides when no session
 has a call today.
 
+The Where usage goes panel shows where total cost went: main thread against
+subagents, calls over against under 150k of context, and the Skills and Subagents
+lists, which are collapsed until you open them. Each list row shows how many times
+the skill or subagent type was invoked in the range, then its share of total cost,
+as in `21× · 4.3%`. A skill counts its Skill tool calls and the times you typed it as
+a slash command. A subagent type counts the Agent tool calls that started it. A skill
+started before the range whose calls continue into it shows `0×`. Usage stored from
+transcripts Claude Code has since deleted counts no slash commands, because the
+dashboard did not record them before this version.
+
 ### Hiding panels
 
 Each panel and summary card has an "x" button, shown when the pointer is over it or
@@ -492,7 +502,7 @@ lib/config-dir.js      loadConfig: the one place the server reads the environmen
 lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
 lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeouts, and the server's one shared handle
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window, for the Setup changes panel
-lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts and per-session summaries
+lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts, slash commands and per-session summaries
 lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
 lib/net-guard.js       Host-header check and security headers
@@ -547,7 +557,7 @@ public/charts/palette.mjs  Series colours and textures, and the SVG pattern defi
 public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, window bar, daily metric chart with session dots, and its legend
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
-public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists
+public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists with invocation counts
 public/panels/cards.mjs  The summary cards: total cost, tokens, cache, files, tool calls, burn rate, projection and Claude Code's reported cost
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits

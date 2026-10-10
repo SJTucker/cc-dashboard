@@ -13,7 +13,6 @@ then on.
 | [Subagent permission prompts](subagent-permission-prompts.md) | Open: a subagent waiting on a permission prompt shows as working; needs a way to read the permission mode first |
 | [Row store growth](row-store-growth.md) | Open: loaded rows take 47 MB and the All range 75 ms after 40 days; the heap size, aggregate time or stat pass time that starts the work, and daily totals versus loading only the requested range, open |
 | [Feed "not useful" dismissals to Haiku](feed-dismissals-to-haiku.md) | Open: which dismissals to send, how to word them, token cost, and how to measure whether it helped |
-| [Counts for skills and subagents](skill-and-subagent-counts.md) | Open: what to count (invocations, calls or sessions) and where the count shows |
 | [Sticky plan limit banner](sticky-limits-banner.md) | Open: sticky below the header or moved into it, and its height on a narrow screen |
 | [All-time session drill-down](all-time-session-drill-down.md) | Open: per-session totals across all time on a new route; columns, paging and where it shows open |
 | [Per-project breakdown](per-project-breakdown.md) | Open: usage and cost per project; decoding folder names or using `cwd`, worktrees, and whether estimates are worth showing open |
