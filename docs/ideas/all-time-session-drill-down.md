@@ -19,3 +19,6 @@ time, so a past session can be looked up. Moved from README "Extending it" on
 - Which columns a row shows: cost, tokens, prompts, duration, project, branch.
 - Whether the list pages or searches, given about 1,400 transcripts in 40 days.
 - Where it lives on the page: a new panel, or a link from the Session reviews panel.
+- Whether clicking a day's bar in Daily cost opens that day's sessions. The Today
+  table and the Session timeline already show one day's sessions, so a past day
+  could reuse them. Added on 2026-10-10.

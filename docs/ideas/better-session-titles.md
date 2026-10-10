@@ -46,6 +46,11 @@ branch next to it. Asked for on 2026-10-07.
     `ai-title`);
   - the mod's own model call at session end, like the session review in
     `bin/review-session`;
-  - a title the user sets with `/rename`.
+  - a title the user sets with `/rename`;
+  - Claude Code's `away_summary` lines, a `system` line Claude Code writes when the
+    user comes back to an idle session. Each holds a one-paragraph recap of the
+    session so far. The transcripts on this machine held 276 on 2026-10-10. Nothing
+    in `lib/` reads them. The recap is written by Claude Code, so it costs the mod
+    nothing, but it is a paragraph and not a title.
   Calls made by the mod write no transcript line, so their cost is missing from the
   dashboard's totals (see the README's session review notes).
