@@ -1029,59 +1029,77 @@ html, body {
 .changes-legend { flex-wrap: wrap; margin-top: 8px; }
 .marker-icon { color: inherit; flex: none; }
 .marker-glyph { fill: none; stroke: currentColor; stroke-width: 1.5; }
-.marker-guide { stroke: var(--text-tertiary); stroke-width: 1; stroke-dasharray: 1 4; opacity: 0.7; }
 .session-dot { fill: var(--text-secondary); stroke: var(--text-secondary); stroke-width: 1.2; }
 .session-dot.hollow { fill: var(--surface); }
-.step-line { fill: none; stroke: var(--accent-cost); stroke-width: 2.5; }
-.step-swatch { width: 16px; height: 0; border-top: 2.5px solid var(--accent-cost); }
-.marker-overflow { font-family: var(--font-data); font-size: 10px; fill: var(--text-secondary); cursor: default; }
-.step-label { font-family: var(--font-data); font-size: 10px; fill: var(--accent-cost); }
 
-.day-bar { fill: var(--border); }
-.day-bar.before { fill: var(--text-secondary); }
+.day-bar.outside { fill: var(--border); }
+.day-bar.before { stroke: var(--text-secondary); stroke-width: 1; }
 .day-bar.after { fill: var(--accent-cost); }
+.day-bar.dimmed { opacity: 0.5; }
+.session-halo { fill: var(--bg); stroke: var(--bg); stroke-width: 4; }
+.empty-dash { stroke: var(--text-tertiary); stroke-width: 1.5; }
+.weekend-shade { fill: var(--text-primary); opacity: 0.03; pointer-events: none; }
+.median-label { font-family: var(--font-data); font-size: 10px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.median-label.before { fill: var(--text-primary); }
+.median-label.after { fill: var(--accent-cost); }
+.axis-label.picked { fill: var(--accent-cost); font-weight: 700; }
+.median-before-swatch { height: 0; border-top: 2px dashed var(--text-primary); }
+.median-after-swatch { height: 0; border-top: 2px solid var(--accent-cost); }
 .window-before { fill: var(--text-primary); opacity: 0.04; }
 .window-after { fill: var(--accent-cost); opacity: 0.08; }
 .window-median { stroke-width: 2; }
 .window-median.before { stroke: var(--text-primary); stroke-dasharray: 5 3; }
 .window-median.after { stroke: var(--accent-cost); }
 .marker-line { stroke: var(--accent-cost); stroke-width: 1.5; }
-
-.marker-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-.marker-btn, .marker-day-btn {
-  font: inherit;
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.marker-btn:hover, .marker-day-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
-.marker-btn[aria-pressed="true"] { color: var(--bg); background: var(--accent-cost); border-color: var(--accent-cost); }
-.marker-btn:focus-visible, .marker-day-btn:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 2px; }
-
-/* An open day takes a full line, so its changes sit directly under it. The
-   arrow and the bold text mark state without relying on colour. */
-.marker-day.open { flex-basis: 100%; }
-.marker-day-btn::after { content: '▸'; }
-.marker-day-btn[aria-expanded="true"]::after { content: '▾'; }
-.marker-day-btn.has-selected { color: var(--text-primary); border-color: var(--accent-cost); font-weight: 600; }
-.marker-day-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-  padding-left: 10px;
-  border-left: 1px solid var(--border);
-}
+.lane-name { font-family: var(--font-data); font-size: 10.5px; fill: var(--text-secondary); }
+.lane-rule { stroke: var(--border); opacity: 0.35; }
+.lane-count { font-family: var(--font-data); font-size: 9.5px; fill: var(--text-primary); pointer-events: none; }
+.lane-picked { fill: var(--accent-cost); fill-opacity: 0.08; stroke: var(--accent-cost); stroke-opacity: 0.6; pointer-events: none; }
+.lane-hit { fill: transparent; stroke: none; }
+.lane-cell { cursor: pointer; outline: none; }
+.lane-cell:focus-visible .lane-hit { stroke: var(--text-primary); stroke-width: 1.5; }
+.lane-cell.picked .marker-glyph { fill: var(--accent-cost); stroke: var(--accent-cost); }
+.window-bar.after { fill: var(--accent-cost); }
+.plot-empty { font-family: var(--font-data); font-size: 11px; fill: var(--text-tertiary); }
 
 .ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 860px) { .ba-grid { grid-template-columns: 1fr; } }
+
+/* The legend and title start at the plot's left edge. 110px equals PLOT_LEFT in public/charts/setup-changes.mjs. */
+.ba-under { margin-left: 110px; }
+.ba-under .usage-group-title { margin: -2px 0 6px; }
+.ba-grid { margin-top: 10px; }
+/* The before/after table needs about 390px. Below that its column scrolls sideways instead of widening the page. */
+.ba-main { overflow-x: auto; }
+
+.day-list { max-height: 320px; overflow-y: auto; border-left: 2px solid var(--accent-cost); padding: 2px 0 2px 12px; }
+.day-list-head { margin-bottom: 4px; }
+/* Side by side, .ba-side takes the height the table sets for the row (height: 0 plus min-height: 100%), so a busy window scrolls inside the column instead of stretching the panel. The 14em floor holds the 5em list and the 7.5em (five-line) note when the table is shorter. */
+@media (min-width: 861px) {
+  .ba-side { display: flex; flex-direction: column; height: 0; min-height: max(100%, 14em); }
+  .ba-side .day-list { flex: 0 1 auto; min-height: 5em; }
+  .ba-side #overlapNote { flex: 1 1 auto; min-height: 7.5em; overflow-y: auto; }
+}
+.day-change {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 4px 6px;
+  border: 0;
+  border-radius: 3px;
+  background: none;
+  font: inherit;
+  font-size: 12px;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.day-change:hover { background: var(--surface-hover); }
+.day-change[aria-pressed="true"], .day-change[aria-pressed="true"]:hover { background: var(--accent-cost); color: var(--bg); font-weight: 700; }
+.day-change:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.day-change-time { color: var(--text-tertiary); flex: none; }
+.day-change[aria-pressed="true"] .day-change-time { color: inherit; opacity: 0.75; }
 .ba-table { width: 100%; }
 .ba-table .n { color: var(--text-tertiary); font-size: 10px; margin-left: 6px; }
 .ba-table .dim { color: var(--text-tertiary); }
@@ -1189,10 +1207,9 @@ html, body {
   color: var(--text-secondary);
 }
 
-/* The setup changes panels load on their own schedule (Task 2), and the two
-   banners carry errors and the limits warning, so none dims with the
-   range-dependent content. */
-main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStartPanel):not(#beforeAfterPanel) { opacity: 0.5; }
+/* The setup changes panel loads on its own schedule, and the two banners carry
+   errors and the limits warning, so none dims with the range-dependent content. */
+main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfterPanel) { opacity: 0.5; }
 
 /* ---------- Plan usage ---------- */
 

@@ -36,3 +36,29 @@ export function drawYAxis(svg, rawMax, width, format, ticks = 4) {
   }
   return max;
 }
+
+// The y axis of the Setup changes chart. Two differences from yTicks: it has a
+// tick for 0 at the baseline, and its top is above the data, because the median
+// labels sit above their lines and a bar as tall as the data max would touch the
+// top gridline. top is the y of the plot's top edge in the SVG.
+export const PLOT_HEADROOM = 1.12;
+
+export function plotTicks(rawMax, { top, plotHeight, ticks = 4 }) {
+  const { step, max } = axisScale(rawMax * PLOT_HEADROOM, ticks);
+  const yOf = (value) => top + plotHeight - (value / max) * plotHeight;
+  const out = [{ value: 0, y: yOf(0) }];
+  for (let i = 1; i * step <= max * 1.0001; i++) out.push({ value: i * step, y: yOf(i * step) });
+  return { max, ticks: out };
+}
+
+// Draws the gridlines and labels from plotTicks and returns the rounded max.
+export function drawPlotAxis(svg, rawMax, { left, right, top, plotHeight, format }) {
+  const { max, ticks } = plotTicks(rawMax, { top, plotHeight });
+  for (const { value, y } of ticks) {
+    if (value) svg.appendChild(svgEl('line', { class: 'gridline', x1: left, x2: right, y1: y, y2: y }));
+    const label = svgEl('text', { class: 'axis-label', x: left - 6, y: y + 3, 'text-anchor': 'end' });
+    label.textContent = value ? format(value) : '0';
+    svg.appendChild(label);
+  }
+  return max;
+}

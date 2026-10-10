@@ -341,7 +341,7 @@ browser. Reset layout restores the panel order only and leaves hidden panels hid
 A hidden panel is not drawn. A request is skipped when every panel and card it feeds
 is hidden:
 
-- `/api/changes`: both Setup changes panels
+- `/api/changes`: the Setup changes panel
 - `/api/rtk`: both rtk panels
 - `/api/sessions/live`: Live sessions and Session timeline
 - `/api/reviews`: Session reviews
@@ -355,21 +355,31 @@ computed from the stored rows on each request, so no separate cache file exists.
 
 ## Setup changes
 
-Two panels at the bottom show whether a change to your setup moved the numbers. Both
-follow the range picker. Today and 7d show the last 14 days, 30d and 90d their own
-span, and All shows everything. A stack of more than 5 change glyphs shows 5 and a
-`+n` for the rest. Hover or focus the `+n` to list them. The before/after table
-always uses the full 7-day windows, so its numbers do not change with the range.
+One panel at the bottom shows whether a change to your setup moved the numbers. It
+follows the range picker. Today and 7d show the last 14 days, 30d and 90d their own
+span, and All shows everything. The before/after table always uses the full 7-day
+windows, so its numbers do not change with the range.
 
-- **Context at session start**: the tokens in each session's first call (system
-  prompt, tool definitions, CLAUDE.md, skill list, hook output), with your changes
-  marked under the time axis. The task barely affects this number, so a step up or
-  down points to a setup change or a Claude Code release.
-- **Before and after**: pick a change to compare the 7 days before it with the 7
-  days after. Click a row of the table, or tab to it and press Enter, to chart that
-  row's value per day beside the table. The panel opens on Session start context. Each
+- **Lanes.** One row for each kind of change in the range, on the same time axis as
+  the chart: Claude Code releases, CLAUDE.md, skills, plugins, hooks, config, rtk,
+  models, effort and other. A glyph marks each day with changes of that kind, with a
+  count when there are several. Below 16px per day a glyph covers one week. Hover or
+  focus a glyph to list its changes, and click it (or press Enter or Space) to pick
+  the newest one. A bar under the lanes shows the picked change's windows: hatched
+  for the 7 days before, solid for the 7 days after, stopping at now.
+- **Before and after.** The panel opens on the newest change in the range. Click a
+  row of the table, or tab to it and press Enter, to chart that row's value per day.
+  The chart's bars are hatched in the 7 days before the change and solid in the 7
+  days after, and the two medians are labelled at their line ends. A change less
+  than 7 days old shows "AFTER · N OF 7 DAYS" over the After column. Beside the
+  table, the picked day's changes are listed, and a click picks another one. Each
   day's value is computed the same way as the 7-day value in the table. The rtk rows
   show only the days the transcripts cover.
+- **Context at session start.** This row of the table is the panel's default chart:
+  the tokens in each session's first call (system prompt, tool definitions,
+  CLAUDE.md, skill list, hook output). Bars are the daily median and dots are
+  sessions, shaped by model. The task barely affects this number, so a step up or
+  down points to a setup change or a Claude Code release.
 
 Plugin installs, the first use of a new model, Claude Code releases that could
 change usage, and edits to your setup files are marked automatically. The releases
@@ -457,7 +467,7 @@ lib/changes.js         Setup change markers: plugin installs, new models, Claude
 lib/config-dir.js      loadConfig: the one place the server reads the environment (CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB, PORT)
 lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
 lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeouts, and the server's one shared handle
-lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window, for the Setup changes panels
+lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window, for the Setup changes panel
 lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts and per-session summaries
 lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
@@ -485,7 +495,7 @@ bin/review-session     Lists ended sessions to review and records Haiku's sugges
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
 public/apple-touch-icon.png  Home-screen icon, linked from index.html
-public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, donut slices and the Session timeline's hour ticks, lane layout, range domain and stack glyphs
+public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, donut slices and the Session timeline's hour ticks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
 public/constants.mjs   Numbers the page shares with the server; test/front-end-constants.test.js keeps them equal
 public/dom.mjs         Element builders (el, svgEl) and the tooltip
 public/favicon.ico     Tab icon, linked from index.html
@@ -503,19 +513,19 @@ public/state.mjs       The selected range and the hidden panels, shared by the m
 public/stats.js        median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/style.css       All styling, including the @font-face rules for public/fonts/
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
-public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts
+public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, and the Setup changes y axis with a 0 label and headroom
 public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
 public/charts/donut.mjs  drawModelMix: each model's share of tokens as a donut with its legend
 public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and rtk commands
 public/charts/heatmap.mjs  drawActivityHeatmap: cost by weekday and hour
 public/charts/line.mjs The four token types on a log-axis line chart, and the token legend
 public/charts/palette.mjs  Series colours and textures, and the SVG pattern definitions
-public/charts/setup-changes.mjs  The Setup changes charts: context at session start with change markers, and the daily metric chart
+public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, window bar, daily metric chart with session dots, and its legend
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
 public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists
 public/panels/cards.mjs  The summary cards: total cost, tokens, cache, files, tool calls, burn rate, projection and Claude Code's reported cost
-public/panels/changes.mjs  The Setup changes panels; fetches /api/changes
+public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
 public/panels/models.mjs  Cost by model table, the model mix donut and the model daily charts
 public/panels/prices.mjs  The prices note in Cost by model, and the Check prices and Apply buttons; uses the /api/prices routes

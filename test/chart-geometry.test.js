@@ -2,7 +2,10 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs } = require('../public/chart-geometry');
+const {
+  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain,
+  markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
+} = require('../public/chart-geometry');
 
 test('labelStep keeps at most 12 labels on a wide chart', () => {
   assert.strictEqual(labelStep(24, 800), 2);
@@ -151,49 +154,6 @@ test('rangeDomain returns the full domain for null', () => {
   assert.strictEqual(rangeDomain(full, null), full);
 });
 
-test('stackGlyphs puts glyphs that are far apart on row 0', () => {
-  const r = stackGlyphs([0, 20, 40]);
-  assert.deepStrictEqual(r.glyphs, [{ row: 0, hidden: false }, { row: 0, hidden: false }, { row: 0, hidden: false }]);
-  assert.deepStrictEqual(r.overflows, []);
-  assert.strictEqual(r.rows, 1);
-});
-
-test('stackGlyphs stacks a chain of 3 one row lower each', () => {
-  const r = stackGlyphs([0, 5, 10]);
-  assert.deepStrictEqual(r.glyphs.map((g) => g.row), [0, 1, 2]);
-  assert.strictEqual(r.rows, 3);
-});
-
-test('stackGlyphs hides the 6th and later glyphs of a chain and reports one overflow', () => {
-  const r = stackGlyphs(Array.from({ length: 16 }, (_, i) => i));
-  assert.strictEqual(r.glyphs.filter((g) => !g.hidden).length, 5);
-  assert.strictEqual(r.glyphs.filter((g) => g.hidden).length, 11);
-  assert.deepStrictEqual(r.glyphs.slice(0, 5).map((g) => g.row), [0, 1, 2, 3, 4]);
-  assert.strictEqual(r.overflows.length, 1);
-  assert.deepStrictEqual(r.overflows[0], { x: 5, row: 5, indices: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] });
-  assert.strictEqual(r.rows, 6);
-});
-
-test('stackGlyphs shows a chain of exactly 5 with no overflow', () => {
-  const r = stackGlyphs([0, 1, 2, 3, 4]);
-  assert.deepStrictEqual(r.overflows, []);
-  assert.ok(r.glyphs.every((g) => !g.hidden));
-  assert.strictEqual(r.rows, 5);
-});
-
-test('stackGlyphs starts a new chain after a gap', () => {
-  const r = stackGlyphs([0, 5, 100, 105, 110]);
-  assert.deepStrictEqual(r.glyphs.map((g) => g.row), [0, 1, 0, 1, 2]);
-  assert.strictEqual(r.rows, 3);
-});
-
-test('stackGlyphs reports an overflow for each long chain', () => {
-  const xs = [...Array.from({ length: 7 }, (_, i) => i), ...Array.from({ length: 6 }, (_, i) => 100 + i)];
-  const r = stackGlyphs(xs);
-  assert.deepStrictEqual(r.overflows.map((o) => o.indices), [[5, 6], [12]]);
-  assert.deepStrictEqual(r.overflows.map((o) => o.x), [5, 105]);
-});
-
 test('barSlots keeps every bar inside the plot, with no minimum width', () => {
   for (const n of [1, 7, 30, 190, 400, 2000]) {
     const { x, barWidth } = barSlots(n, 554);
@@ -234,4 +194,152 @@ test('axisScale treats a max that is not a positive number as 1, so the top is n
   for (const raw of [0, -3, NaN, Infinity, undefined]) {
     assert.deepStrictEqual(axisScale(raw), { step: 0.5, max: 1 }, `rawMax ${raw}`);
   }
+});
+
+// Setup changes timeline. Dates are built in local time because the functions group by local day.
+const atLocal = (month, day, hour = 12) => new Date(2026, month, day, hour).getTime();
+const marker = (t, kind, label = `${kind}@${t}`) => ({ t, kind, label });
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+test('markerKey joins the time and the label', () => {
+  assert.strictEqual(markerKey({ t: 5, label: 'x' }), '5|x');
+});
+
+test('markersInDomain keeps a marker on either edge, drops the rest, and keeps order', () => {
+  const domain = [atLocal(9, 1, 0), atLocal(9, 8, 0)];
+  const a = marker(domain[0], 'skill');
+  const b = marker(atLocal(9, 3), 'hook');
+  const c = marker(domain[1], 'rtk');
+  const early = marker(domain[0] - 1, 'skill');
+  const late = marker(domain[1] + 1, 'skill');
+  assert.deepStrictEqual(markersInDomain([early, a, b, c, late], domain), [a, b, c]);
+});
+
+test('markersInDomain returns nothing for the domain of an empty report', () => {
+  assert.deepStrictEqual(markersInDomain([marker(5, 'skill')], [Infinity, -Infinity]), []);
+});
+
+test('laneKinds lists the kinds present in the fixed lane order', () => {
+  const ms = [marker(1, 'hook'), marker(2, 'claude-code'), marker(3, 'hook'), marker(4, 'skill'), marker(5, 'effort')];
+  assert.deepStrictEqual(laneKinds(ms), ['claude-code', 'skill', 'hook', 'effort']);
+  assert.deepStrictEqual(laneKinds([]), []);
+});
+
+test('laneKinds puts an unknown kind in the other lane', () => {
+  assert.deepStrictEqual(laneKinds([marker(1, 'mystery'), marker(2, 'other')]), ['other']);
+});
+
+test('laneCells groups one kind on one day into one cell, oldest marker first', () => {
+  const domain = [atLocal(9, 1, 0), atLocal(9, 8, 0)];
+  const late = marker(atLocal(9, 2, 18), 'skill', 'late');
+  const early = marker(atLocal(9, 2, 8), 'skill', 'early');
+  assert.deepStrictEqual(laneCells([late, early], domain, 60), [
+    { kind: 'skill', start: atLocal(9, 2, 0), end: atLocal(9, 3, 0), markers: [early, late] },
+  ]);
+});
+
+test('laneCells makes one cell per kind on a day with several kinds, in lane order', () => {
+  const domain = [atLocal(9, 1, 0), atLocal(9, 8, 0)];
+  const ms = [marker(atLocal(9, 2, 9), 'hook'), marker(atLocal(9, 2, 10), 'claude-code'), marker(atLocal(9, 2, 11), 'skill')];
+  assert.deepStrictEqual(laneCells(ms, domain, 60).map((c) => c.kind), ['claude-code', 'skill', 'hook']);
+});
+
+test('laneCells counts a marker exactly on the first domain edge', () => {
+  const domain = [atLocal(9, 1, 0), atLocal(9, 8, 0)];
+  const edge = marker(domain[0], 'rtk');
+  assert.deepStrictEqual(laneCells([edge], domain, 60).map((c) => c.markers), [[edge]]);
+});
+
+test('laneCells leaves out a marker outside the domain', () => {
+  const domain = [atLocal(9, 1, 0), atLocal(9, 8, 0)];
+  assert.deepStrictEqual(laneCells([marker(atLocal(8, 20), 'skill')], domain, 60), []);
+});
+
+test('laneCells puts 17 changes of one kind on one day in one cell', () => {
+  const domain = [atLocal(8, 28, 0), atLocal(9, 5, 0)];
+  const ms = Array.from({ length: 17 }, (_, i) => marker(atLocal(8, 28, 0) + i * 60000, 'claude-code', `v${i}`));
+  const cells = laneCells(ms, domain, 60);
+  assert.strictEqual(cells.length, 1);
+  assert.strictEqual(cells[0].markers.length, 17);
+});
+
+test('laneCells groups by Monday week below 16px per day, across a month boundary', () => {
+  // Mon 28 Sep, Wed 30 Sep and Fri 2 Oct are one week. Mon 5 Oct starts the next.
+  const domain = [atLocal(8, 21, 0), atLocal(9, 12, 0)];
+  const wed = marker(atLocal(8, 30), 'skill', 'wed');
+  const fri = marker(atLocal(9, 2), 'skill', 'fri');
+  const mon = marker(atLocal(9, 5), 'skill', 'mon');
+  assert.deepStrictEqual(laneCells([mon, fri, wed], domain, 10), [
+    { kind: 'skill', start: atLocal(8, 28, 0), end: atLocal(9, 5, 0), markers: [wed, fri] },
+    { kind: 'skill', start: atLocal(9, 5, 0), end: atLocal(9, 12, 0), markers: [mon] },
+  ]);
+});
+
+test('laneCells groups by day at exactly 16px per day', () => {
+  const domain = [atLocal(8, 21, 0), atLocal(9, 12, 0)];
+  const ms = [marker(atLocal(8, 30), 'skill'), marker(atLocal(9, 2), 'skill')];
+  assert.strictEqual(laneCells(ms, domain, 16).length, 2);
+});
+
+test('laneCells puts an unknown kind in the other cell', () => {
+  const domain = [atLocal(9, 1, 0), atLocal(9, 8, 0)];
+  assert.deepStrictEqual(laneCells([marker(atLocal(9, 2), 'mystery')], domain, 60).map((c) => c.kind), ['other']);
+});
+
+test('pickInCell returns the newest marker', () => {
+  const a = marker(10, 'skill');
+  const b = marker(30, 'skill');
+  const c = marker(20, 'skill');
+  assert.strictEqual(pickInCell({ markers: [a, b, c] }), b);
+});
+
+test('resolvePicked returns the picked marker when it is inside the domain', () => {
+  const a = marker(10, 'skill', 'a');
+  const b = marker(20, 'skill', 'b');
+  assert.strictEqual(resolvePicked([a, b], markerKey(a), [0, 100]), a);
+});
+
+test('resolvePicked falls back to the newest marker in the domain when the picked one is outside', () => {
+  const old = marker(10, 'skill', 'old');
+  const mid = marker(60, 'skill', 'mid');
+  const new1 = marker(90, 'hook', 'new');
+  assert.strictEqual(resolvePicked([old, mid, new1], markerKey(old), [50, 100]), new1);
+});
+
+test('resolvePicked picks the newest marker when nothing is picked', () => {
+  const a = marker(10, 'skill', 'a');
+  const b = marker(20, 'skill', 'b');
+  assert.strictEqual(resolvePicked([b, a], null, [0, 100]), b);
+});
+
+test('resolvePicked counts a marker on the domain edge and returns null when none is inside', () => {
+  const edge = marker(100, 'skill', 'edge');
+  assert.strictEqual(resolvePicked([edge], markerKey(edge), [0, 100]), edge);
+  assert.strictEqual(resolvePicked([edge], markerKey(edge), [200, 300]), null);
+  assert.strictEqual(resolvePicked([], null, [0, 100]), null);
+  assert.strictEqual(resolvePicked([edge], null, [Infinity, -Infinity]), null);
+});
+
+test('afterDaysSoFar counts whole and part days since the change, up to 7', () => {
+  assert.strictEqual(afterDaysSoFar(0, 0), 0);
+  assert.strictEqual(afterDaysSoFar(0, 1), 1);
+  assert.strictEqual(afterDaysSoFar(0, 3.2 * DAY_MS), 4);
+  assert.strictEqual(afterDaysSoFar(0, 6 * DAY_MS), 6);
+  assert.strictEqual(afterDaysSoFar(0, 7.5 * DAY_MS), 7);
+  assert.strictEqual(afterDaysSoFar(0, 30 * DAY_MS), 7);
+  assert.strictEqual(afterDaysSoFar(10, 0), 0);
+});
+
+test('dateLabelStep labels every day from 28px and Mondays below', () => {
+  assert.strictEqual(dateLabelStep(63), 'day');
+  assert.strictEqual(dateLabelStep(28), 'day');
+  assert.strictEqual(dateLabelStep(27.9), 'monday');
+  assert.strictEqual(dateLabelStep(3), 'monday');
+});
+
+test('domainDays lists the local noon of each day inside the domain', () => {
+  assert.deepStrictEqual(domainDays([atLocal(9, 1, 0), atLocal(9, 4, 0)]), [atLocal(9, 1), atLocal(9, 2), atLocal(9, 3)]);
+  assert.deepStrictEqual(domainDays([atLocal(9, 1, 12), atLocal(9, 2, 12)]), [atLocal(9, 1), atLocal(9, 2)]);
+  assert.deepStrictEqual(domainDays([atLocal(9, 1, 13), atLocal(9, 2, 13)]), [atLocal(9, 2)]);
+  assert.deepStrictEqual(domainDays([Infinity, -Infinity]), []);
 });

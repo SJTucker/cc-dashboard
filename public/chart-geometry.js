@@ -135,32 +135,105 @@ function rangeDomain(fullDomain, days) {
   return [Math.max(fullDomain[0], fullDomain[1] - days * 24 * 60 * 60 * 1000), fullDomain[1]];
 }
 
-// Rows for glyphs drawn in order at the given x positions. A glyph closer than gap
-// px to the one before it continues a chain and sits one row lower. A chain shows
-// at most cap glyphs; the rest are hidden and collected in one overflow per chain.
-// Returns { glyphs: [{ row, hidden }] per input x, overflows: [{ x, row, indices }],
-// rows }. An overflow's x is the x of the chain's first hidden glyph, and its row is
-// cap, the row after the last shown glyph. rows is the row count the rail needs.
-function stackGlyphs(xs, gap = 12, cap = 5) {
-  const glyphs = [];
-  const overflows = [];
-  let rows = xs.length ? 1 : 0;
-  let lastX = -Infinity;
-  let row = 0;
-  xs.forEach((x, i) => {
-    row = x - lastX < gap ? row + 1 : 0;
-    lastX = x;
-    const hidden = row >= cap;
-    glyphs.push({ row: hidden ? cap : row, hidden });
-    if (!hidden) {
-      rows = Math.max(rows, row + 1);
-      return;
-    }
-    if (row === cap) overflows.push({ x, row: cap, indices: [] });
-    overflows[overflows.length - 1].indices.push(i);
-    rows = Math.max(rows, cap + 1);
-  });
-  return { glyphs, overflows, rows };
+// The Setup changes timeline. Lane kinds, top to bottom. A kind that is not listed
+// draws in the 'other' lane, as MARKER_SHAPES in public/charts/setup-changes.mjs does.
+const LANE_KINDS = ['claude-code', 'claude-md', 'skill', 'plugin', 'hook', 'config', 'rtk', 'model', 'effort', 'other'];
+
+function laneKindOf(marker) {
+  return LANE_KINDS.includes(marker.kind) ? marker.kind : 'other';
 }
 
-if (typeof module === 'object') module.exports = { labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs };
+// Two markers are the same change when time and label match. The picked change is
+// remembered by this key, because a report reload builds new marker objects.
+function markerKey(marker) {
+  return `${marker.t}|${marker.label}`;
+}
+
+// The markers inside the time axis, edges included. A domain of [Infinity, -Infinity]
+// (a report with no sessions and no daily days) holds none.
+function markersInDomain(markers, domain) {
+  return markers.filter((m) => m.t >= domain[0] && m.t <= domain[1]);
+}
+
+function laneKinds(markers) {
+  const present = new Set(markers.map(laneKindOf));
+  return LANE_KINDS.filter((kind) => present.has(kind));
+}
+
+function localMidnight(t) {
+  const d = new Date(t);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+// Calendar arithmetic, not +24h, so a day with a clock change still ends at midnight.
+function addLocalDays(t, days) {
+  const d = new Date(t);
+  d.setDate(d.getDate() + days);
+  return d.getTime();
+}
+
+function mondayOf(t) {
+  const d = new Date(localMidnight(t));
+  d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+  return d.getTime();
+}
+
+// One cell per kind per day, or per Monday-start week when a day is under 16px wide.
+// Each cell is { kind, start, end, markers }: start and end are local midnights
+// (end exclusive) and markers run oldest first. Cells sort by lane order, then start.
+// Markers outside the domain are left out.
+function laneCells(markers, domain, dayWidth) {
+  const weekly = dayWidth < 16;
+  const cells = new Map();
+  for (const m of markersInDomain(markers, domain)) {
+    const kind = laneKindOf(m);
+    const start = weekly ? mondayOf(m.t) : localMidnight(m.t);
+    const id = `${kind}|${start}`;
+    if (!cells.has(id)) cells.set(id, { kind, start, end: addLocalDays(start, weekly ? 7 : 1), markers: [] });
+    cells.get(id).markers.push(m);
+  }
+  const lane = (cell) => LANE_KINDS.indexOf(cell.kind);
+  return [...cells.values()]
+    .map((cell) => ({ ...cell, markers: cell.markers.sort((a, b) => a.t - b.t) }))
+    .sort((a, b) => lane(a) - lane(b) || a.start - b.start);
+}
+
+function pickInCell(cell) {
+  return cell.markers.reduce((newest, m) => (m.t >= newest.t ? m : newest));
+}
+
+// The picked marker if it is inside the domain, else the newest marker inside it,
+// else null.
+function resolvePicked(markers, pickedKey, domain) {
+  const inside = markersInDomain(markers, domain);
+  if (!inside.length) return null;
+  return inside.find((m) => markerKey(m) === pickedKey) || inside.reduce((newest, m) => (m.t >= newest.t ? m : newest));
+}
+
+// Whole and part days from a change to now, for "AFTER · N OF 7 DAYS". Never above 7.
+function afterDaysSoFar(t, now) {
+  return Math.min(7, Math.max(0, Math.ceil((now - t) / (24 * 60 * 60 * 1000))));
+}
+
+// A day label fits in 28px. Narrower days label Mondays only.
+function dateLabelStep(dayWidth) {
+  return dayWidth >= 28 ? 'day' : 'monday';
+}
+
+// Local noon of every day whose noon lies in the domain. The charts centre a day's
+// bar and label on its noon.
+function domainDays(domain) {
+  if (!Number.isFinite(domain[0]) || !Number.isFinite(domain[1])) return [];
+  const d = new Date(domain[0]);
+  d.setHours(12, 0, 0, 0);
+  if (d.getTime() < domain[0]) d.setDate(d.getDate() + 1);
+  const days = [];
+  for (; d.getTime() <= domain[1]; d.setDate(d.getDate() + 1)) days.push(d.getTime());
+  return days;
+}
+
+if (typeof module === 'object') module.exports = {
+  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain,
+  markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
+};

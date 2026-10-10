@@ -316,7 +316,7 @@ window.addEventListener('resize', () => {
 function resumeRequests(resumed) {
   if (resumed('records')) refreshRecords();
   if (resumed('prices')) loadPricesSource();
-  // loadChanges renders both changes panels itself when it finishes.
+  // loadChanges renders the Setup changes panel itself when it finishes.
   if (resumed('changes')) loadChanges();
   redrawCharts({ changes: !resumed('changes'), refetch: FETCH_ALL_OPTIONAL.some(resumed) });
 }
@@ -326,7 +326,7 @@ setupRowOrder();
 // A chart drawn while its row was collapsed has the 200px fallback width. The
 // changes charts are redrawn only when the expanded row holds them.
 setupCollapsibleRows({
-  onExpand: (row) => redrawCharts({ changes: row.id === 'sessionStartPanel' || row.id === 'beforeAfterPanel' }),
+  onExpand: (row) => redrawCharts({ changes: row.id === 'beforeAfterPanel' }),
 });
 // The other panel of a pair widens to the full row.
 setupHiding({ onWidthChange: () => redrawCharts({ changes: false }), onResume: resumeRequests });
