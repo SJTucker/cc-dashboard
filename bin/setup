@@ -102,6 +102,7 @@ summary
 
 if [ "$status" -ne 0 ]; then
   printf '\nFix what claude plugin validate printed above, then run bin/setup again.\n'
+  exit "$status"
 fi
 
 cat <<EOF
@@ -114,4 +115,4 @@ Code sees. This script checked its own PATH only: $(node -p process.execPath)
 To check the PATH Claude Code sees, run '!node -v' in a Claude Code session.
 EOF
 
-exit $status
+exit 0

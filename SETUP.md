@@ -160,7 +160,7 @@ Set a variable for the server when you start it, for example
 The mod and the `bin/` scripts run inside Claude Code, so they read
 `CLAUDE_CONFIG_DIR` from Claude Code's environment. `bin/setup` is the exception. It
 runs in your shell, so it reads `CLAUDE_CONFIG_DIR` from that shell. Set it there to
-the same value Claude Code uses. If you set it, give the server the
+the same value Claude Code uses. If you set `CLAUDE_CONFIG_DIR`, give the server the
 same value. Otherwise the server reads transcripts and snapshots from a folder Claude
 Code does not write to. The mod also reads `HOME`, to find `~/.claude` when
 `CLAUDE_CONFIG_DIR` is unset, to find rtk's config, and to expand a leading `~` in

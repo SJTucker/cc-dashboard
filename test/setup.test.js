@@ -153,11 +153,13 @@ test('an empty CLAUDE_CONFIG_DIR counts as unset', (t) => {
   assert.strictEqual(fs.readlinkSync(linkPath(box.home)), MOD);
 });
 
-test('a failed plugin validate exits 1 and keeps the link', (t) => {
+test('a failed plugin validate exits 1, keeps the link and gives no npm start step', (t) => {
   const box = sandbox(t, { validateExit: 1 });
   const { code, out } = run(box);
   assert.strictEqual(code, 1);
   assert.match(out, /FAIL\s+claude plugin validate/);
+  assert.match(out, /run bin\/setup again/);
+  assert.doesNotMatch(out, /npm start/);
   assert.strictEqual(fs.readlinkSync(linkPath(box.home)), MOD);
 });
 
