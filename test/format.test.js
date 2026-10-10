@@ -92,3 +92,11 @@ test('escapeHtml escapes all five markup characters', async () => {
   assert.equal(escapeHtml(`<a href="x">'&`), '&lt;a href=&quot;x&quot;&gt;&#39;&amp;');
   assert.equal(escapeHtml(42), '42');
 });
+
+test('formatTokens keeps the unit for negative values', async () => {
+  const { formatTokens, axisTokens } = await load();
+  assert.equal(formatTokens(-6188), '-6.2k');
+  assert.equal(formatTokens(-999), '-999');
+  assert.equal(formatTokens(-2_500_000), '-2.50M');
+  assert.equal(axisTokens(-5000), '-5k');
+});

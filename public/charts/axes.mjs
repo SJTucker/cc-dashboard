@@ -37,6 +37,38 @@ export function drawYAxis(svg, rawMax, width, format, ticks = 4) {
   return max;
 }
 
+// The y axis for a bar chart with values below zero (the rtk chart, when rtk's
+// output put more into context than it kept out). One tick step serves both
+// sides, so gridlines below zero are spaced like those above. zeroY is the y of the
+// zero line, and yOf maps a value to its y in the plot. Zero has no tick: the
+// chart draws its own zero line.
+export function signedTicks(rawMin, rawMax, ticks = 4) {
+  const { step } = axisScale(rawMax - rawMin, ticks);
+  const up = Math.max(Math.ceil(rawMax / step), 0);
+  const down = Math.ceil(-rawMin / step);
+  const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
+  const yOf = (value) => ((up * step - value) / ((up + down) * step)) * plotHeight;
+  const out = [];
+  for (let i = -down; i <= up; i++) {
+    if (i !== 0) out.push({ value: i * step, y: yOf(i * step) });
+  }
+  return { zeroY: yOf(0), yOf, ticks: out };
+}
+
+// Draws the gridlines and labels from signedTicks and returns its result.
+export function drawSignedYAxis(svg, rawMin, rawMax, width, format, ticks = 4) {
+  const scale = signedTicks(rawMin, rawMax, ticks);
+  for (const { value, y } of scale.ticks) {
+    svg.appendChild(svgEl('line', { class: 'gridline', x1: CHART_PAD_LEFT, x2: width, y1: y, y2: y }));
+    const label = svgEl('text', {
+      class: 'axis-label', x: CHART_PAD_LEFT - 6, y: y + 3, 'text-anchor': 'end',
+    });
+    label.textContent = format(value);
+    svg.appendChild(label);
+  }
+  return scale;
+}
+
 // The y axis of the Setup changes chart. Two differences from yTicks: it has a
 // tick for 0 at the baseline, and its top is above the data, because the median
 // labels sit above their lines and a bar as tall as the data max would touch the
