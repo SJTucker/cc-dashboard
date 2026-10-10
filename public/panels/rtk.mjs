@@ -37,13 +37,22 @@ const scaleOf = (rows) => ({
   scaleMin: Math.min(...rows.map((r) => r.keptOut), 0),
 });
 
+// The DETAIL_LIMIT commands with the largest |keptOut|, shown largest first. Ranking by
+// magnitude keeps a negative command, which sorts last, from falling off the list.
+export function commandRows(commands) {
+  return [...commands]
+    .sort((a, b) => Math.abs(b.keptOut) - Math.abs(a.keptOut))
+    .slice(0, DETAIL_LIMIT)
+    .sort((a, b) => b.keptOut - a.keptOut);
+}
+
 function renderRtkCommands(commands) {
   if (!commands.some((c) => c.name === selectedRtkCommand)) {
     selectedRtkCommand = commands[0].name;
   }
   const current = commands.find((c) => c.name === selectedRtkCommand);
 
-  const shown = commands.slice(0, DETAIL_LIMIT);
+  const shown = commandRows(commands);
   drawHBars(document.getElementById('rtkCommandBars'), shown, {
     ...RTK_BARS,
     ...scaleOf(shown),

@@ -276,6 +276,21 @@ test('detail rows are capped per command, keeping the largest', () => {
   assert.strictEqual(grep.details[11].name, 'grep pattern-09', 'and the 12 largest are the ones kept');
 });
 
+test('a negative detail row survives the cap, and the rows come back keptOut descending', () => {
+  const now = utcStamp(new Date());
+  const rows = [];
+  for (let i = 0; i < 12; i++) {
+    rows.push({ timestamp: now, rtk_cmd: 'rtk grep x', original_cmd: `grep pos-${i}`, input_tokens: 100, output_tokens: 100 - (10 + i), saved_tokens: 10 + i });
+  }
+  rows.push({ timestamp: now, rtk_cmd: 'rtk grep x', original_cmd: 'grep neg', input_tokens: 50, output_tokens: 100, saved_tokens: 0 });
+  const grep = readRtkUsage({ days: 7, dbPath: makeDb(rows) }).commands.find((c) => c.name === 'grep');
+  assert.strictEqual(grep.details.length, 12);
+  assert.ok(grep.details.some((d) => d.name === 'grep neg'), 'the -50 row is kept');
+  assert.ok(!grep.details.some((d) => d.name === 'grep pos-0'), 'the smallest positive row (10) is dropped');
+  assert.strictEqual(grep.details[11].name, 'grep neg', 'and it sorts last');
+  assert.deepStrictEqual(grep.details.map((d) => d.keptOut), [21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, -50]);
+});
+
 test('the Today range gets a full-day hour axis, not just the hours with rows', () => {
   const at13 = new Date();
   at13.setHours(13, 20, 0, 0);
