@@ -167,14 +167,16 @@ function dayListRow(report, m, picked) {
   return btn;
 }
 
-// The picked change's day: a heading with the count, then one button per change.
+// The picked change's day: a heading with the count, then one button per change
+// that falls inside the chart domain, so every row has a glyph in the lanes.
 // The list is rebuilt on every pick, so the row that had keyboard focus gets it
 // back (focusedRowName).
 function renderDayList(report, marker) {
   const list = document.getElementById('dayList');
   const refocus = focusedRowName(list);
   const day = localDateStr(new Date(marker.t));
-  const items = report.markers.filter((m) => localDateStr(new Date(m.t)) === day).sort((a, b) => a.t - b.t);
+  const inView = markersInDomain(report.markers, chartDomain(report));
+  const items = inView.filter((m) => localDateStr(new Date(m.t)) === day).sort((a, b) => a.t - b.t);
   const heading = el('div', { class: 'usage-group-title day-list-head', text: `${dayHeading(marker.t)} · ${items.length} change${items.length === 1 ? '' : 's'}` });
   const rows = items.map((m) => dayListRow(report, m, markerKey(m) === markerKey(marker)));
   list.replaceChildren(heading, ...rows);
@@ -226,7 +228,7 @@ function renderChanges(report) {
 const CHANGES_CHARTS = ['baDailyChart'];
 
 // /api/changes reads the all-history scan, about 2.4s when that cache entry is
-// cold. Both panels show straight away with a placeholder, so the page does not
+// cold. The panel shows straight away with a placeholder, so the page does not
 // jump when the data arrives. The chart draw functions clear their container, so
 // the placeholder needs no explicit removal on success.
 function showChangesLoading() {
@@ -249,7 +251,7 @@ const changesLoads = createSequence();
 // The fetch does not depend on the range picker, so it loads once and again on
 // Refresh. A range change only redraws from the loaded report. A response that is
 // not from the newest request is dropped, whether it succeeded or failed, because
-// the newest request draws both panels when it settles.
+// the newest request draws the panel when it settles.
 export async function loadChanges() {
   if (!neededRequests(state.hiddenKeys, state.currentDays).has('changes')) return;
   const isLatest = changesLoads.next();
@@ -273,7 +275,7 @@ export async function loadChanges() {
   }
 }
 
-// Draws both panels again from the loaded report, after a range switch or at a
+// Draws the Setup changes panel again from the loaded report, after a range switch or at a
 // new width. Does nothing before the first report arrives.
 export function redrawChanges() {
   if (changesReport) renderChanges(changesReport);
