@@ -316,7 +316,7 @@ window.addEventListener('resize', () => {
 function resumeRequests(resumed) {
   if (resumed('records')) refreshRecords();
   if (resumed('prices')) loadPricesSource();
-  // loadChanges renders both changes panels itself when it finishes.
+  // loadChanges renders the Setup changes panel itself when it finishes.
   if (resumed('changes')) loadChanges();
   redrawCharts({ changes: !resumed('changes'), refetch: FETCH_ALL_OPTIONAL.some(resumed) });
 }

@@ -1039,7 +1039,7 @@ html, body {
 .session-halo { fill: var(--bg); stroke: var(--bg); stroke-width: 4; }
 .empty-dash { stroke: var(--text-tertiary); stroke-width: 1.5; }
 .weekend-shade { fill: var(--text-primary); opacity: 0.03; pointer-events: none; }
-.median-label { font-family: var(--font-data); font-size: 10px; }
+.median-label { font-family: var(--font-data); font-size: 10px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .median-label.before { fill: var(--text-primary); }
 .median-label.after { fill: var(--accent-cost); }
 .axis-label.picked { fill: var(--accent-cost); font-weight: 700; }
