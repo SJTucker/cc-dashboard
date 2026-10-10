@@ -655,14 +655,14 @@ test('two responses back to back are not merged into one', async () => {
   assert.strictEqual(summary.apiCalls, 2);
 });
 
-function callLine(isoTimestamp, { id, calls }) {
+function callLine(isoTimestamp, { id, calls, model = 'claude-opus-5' }) {
   return JSON.stringify({
     timestamp: isoTimestamp,
     requestId: 'req-' + id,
     sessionId: 's-' + id,
     message: {
       id: 'msg-' + id,
-      model: 'claude-opus-5',
+      model,
       content: calls.map(([toolId, name, input]) => ({ type: 'tool_use', id: toolId, name, input })),
       usage: { input_tokens: 1, output_tokens: 1 },
     },
@@ -900,6 +900,26 @@ test('a tool with no errors has empty error lists', async () => {
   const { tools } = await scanUsage({ days: null });
   assert.deepStrictEqual(tools[0].errorCauses, []);
   assert.deepStrictEqual(tools[0].errorGroups, []);
+});
+
+test('tools and toolTotals split calls and causes by model', async () => {
+  const base = makeFixture();
+  const at = (h) => atHourToday(h).toISOString();
+  writeSession(base, 'models', [
+    callLine(at(9), { id: 'o', model: 'claude-opus-5-5', calls: [['m1', 'Bash', { command: 'ls' }], ['m2', 'Bash', { command: 'ls' }]] }),
+    callLine(at(10), { id: 's', model: 'claude-sonnet-5-5', calls: [['m3', 'Bash', { command: 'ls' }], ['m4', 'Read', { file_path: '/a' }]] }),
+    errorResultLine(at(10), 'm3', 'PreToolUse:Bash hook error: Use the Read tool'),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const { tools, toolTotals } = await scanUsage({ days: null });
+
+  assert.deepStrictEqual(tools.find((t) => t.name === 'Bash').byModel.map((m) => [m.label, m.calls, m.errors]), [
+    ['Opus 5.5', 2, 0],
+    ['Sonnet 5.5', 1, 1],
+  ]);
+  assert.deepStrictEqual(toolTotals.byModel.map((m) => [m.label, m.calls]), [['Opus 5.5', 2], ['Sonnet 5.5', 2]]);
+  assert.deepStrictEqual(toolTotals.errorCauses, [{ cause: 'blocked by a hook', count: 1 }]);
 });
 
 test('a price change applies only to usage from its effective date on', async (t) => {

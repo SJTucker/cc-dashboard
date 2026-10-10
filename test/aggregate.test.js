@@ -307,3 +307,65 @@ test('ERROR_CAUSES names the six causes in match order', () => {
     'tool misused',
   ]);
 });
+
+const use = (key, model, name = 'Bash', t = at(0)) => ({ key, t, name, detail: null, model });
+const err = (toolUseId, text) => ({ toolUseId, t: at(0), text });
+
+test('byModel counts calls and causes per model label, for a tool and for toolTotals', () => {
+  const entry = rowSet({
+    toolUses: [use('a', 'claude-opus-5-5'), use('b', 'claude-opus-5-5'), use('c', 'claude-sonnet-5-5'), use('d', 'claude-sonnet-5-5', 'Edit')],
+    errors: [err('a', 'Exit code 1'), err('c', 'Error: No such tool available: bash'), err('d', 'String to replace not found in file.')],
+  });
+  const data = run([entry]);
+
+  assert.deepStrictEqual(data.tools.find((t) => t.name === 'Bash').byModel, [
+    { label: 'Opus 5.5', family: 'opus', calls: 2, errors: 1, errorCauses: [{ cause: 'command failed', count: 1 }] },
+    { label: 'Sonnet 5.5', family: 'sonnet', calls: 1, errors: 1, errorCauses: [{ cause: 'tool misused', count: 1 }] },
+  ]);
+  assert.strictEqual(data.toolTotals.name, 'All tools');
+  assert.strictEqual(data.toolTotals.calls, 4);
+  assert.deepStrictEqual(data.toolTotals.details, []);
+  assert.deepStrictEqual(data.toolTotals.byModel.map((m) => [m.label, m.calls, m.errors]), [['Opus 5.5', 2, 1], ['Sonnet 5.5', 2, 2]]);
+  assert.deepStrictEqual(data.toolTotals.errorCauses, [{ cause: 'tool misused', count: 2 }, { cause: 'command failed', count: 1 }]);
+});
+
+test('two model ids with one label share one byModel row', () => {
+  const entry = rowSet({ toolUses: [use('a', 'claude-opus-5'), use('b', 'claude-opus-5-20260101')] });
+
+  assert.deepStrictEqual(run([entry]).tools[0].byModel.map((m) => [m.label, m.calls]), [['Opus 5', 2]]);
+});
+
+test('a tool use with a null model is under Unknown model', () => {
+  const entry = rowSet({ toolUses: [use('a', null)] });
+
+  assert.deepStrictEqual(run([entry]).tools[0].byModel.map((m) => [m.label, m.family]), [['Unknown model', 'other']]);
+});
+
+test('an old row set takes each tool use model from the latest call at or before it', () => {
+  const old = (key, t) => ({ key, t, name: 'Bash', detail: null });
+  const entry = rowSet({
+    calls: [
+      call({ key: 'm1:r1', t: at(0, 9), model: 'claude-opus-5-5' }),
+      call({ key: 'm2:r2', t: at(0, 10), model: 'claude-sonnet-5-5' }),
+      call({ key: 'm3:r3', t: at(0, 10), model: 'claude-haiku-5-5' }),
+    ],
+    toolUses: [old('a', at(0, 9)), old('b', at(0, 9) + 500), old('c', at(0, 10)), old('d', at(0, 8))],
+  });
+  const labels = Object.fromEntries(run([entry]).tools[0].byModel.map((m) => [m.label, m.calls]));
+
+  // a: same t as the Opus call. b: a later line of the Opus response. c: a tie on t,
+  // so the later call in array order wins. d: before every call.
+  assert.deepStrictEqual(labels, { 'Opus 5.5': 2, 'Haiku 5.5': 1, 'Unknown model': 1 });
+});
+
+test('toolTotals counts only errors whose tool use is in range, as the tools do', () => {
+  const entry = rowSet({
+    toolUses: [use('a', 'claude-opus-5-5', 'Bash', at(10)), use('b', 'claude-opus-5-5', 'Bash', at(0))],
+    errors: [err('a', 'Exit code 1'), err('b', 'Exit code 1')],
+  });
+  const data = run([entry], { days: 7 });
+
+  assert.strictEqual(data.summary.toolErrors, 2, 'summary counts the error of the use before the cutoff');
+  assert.strictEqual(data.toolTotals.errors, data.tools.reduce((n, t) => n + t.errors, 0));
+  assert.strictEqual(data.toolTotals.errors, 1);
+});
