@@ -369,3 +369,36 @@ test('toolTotals counts only errors whose tool use is in range, as the tools do'
   assert.strictEqual(data.toolTotals.errors, data.tools.reduce((n, t) => n + t.errors, 0));
   assert.strictEqual(data.toolTotals.errors, 1);
 });
+
+const round6 = (n) => Math.round(n * 1e6) / 1e6;
+const rebuilt = (overrides = {}) => call({
+  model: 'claude-opus-5-5',
+  usage: { input_tokens: 5, output_tokens: 10, cache_creation_input_tokens: 100_000, cache_read_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 100_000, ephemeral_1h_input_tokens: 0 } },
+  rebuild: { cause: 'expired', reason: null, tokens: 100_000, gapMs: 600_000 },
+  ...overrides,
+});
+
+// Opus 5.5 in lib/pricing.js: input $4/M, 5m write 1.25x, 1h write 2x, read 0.05x.
+test('a rebuild\'s premium is its cost minus the cost of reading the same tokens from cache', () => {
+  const data = run([rowSet({ calls: [rebuilt()] })]);
+  const [rec] = data.efficiency.calls;
+  assert.deepStrictEqual({ ...rec.rebuild, premium: round6(rec.rebuild.premium) }, {
+    cause: 'expired', reason: null, tokens: 100_000, gapMs: 600_000, premium: 0.48,
+  });
+});
+
+test('a 1-hour rebuild\'s premium uses the 1-hour write price', () => {
+  const usage = { input_tokens: 5, output_tokens: 10, cache_creation_input_tokens: 100_000, cache_read_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 100_000 } };
+  const data = run([rowSet({ calls: [rebuilt({ usage })] })]);
+  assert.strictEqual(round6(data.efficiency.calls[0].rebuild.premium), 0.78);
+});
+
+test('an unpriced model\'s rebuild has a null premium', () => {
+  const data = run([rowSet({ calls: [rebuilt({ model: 'claude-unknown-9' })] })]);
+  assert.strictEqual(data.efficiency.calls[0].rebuild.premium, null);
+});
+
+test('a call without rebuild gets no rebuild field', () => {
+  const data = run([rowSet({ calls: [call()] })]);
+  assert.strictEqual('rebuild' in data.efficiency.calls[0], false);
+});
