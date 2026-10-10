@@ -23,4 +23,5 @@ then on.
 | [Tool error rate by model](tool-errors-by-model.md) | Open: split the error rate by model and cause; add the model to tool use rows or join through calls open |
 | [Cost per unit of work](cost-per-unit-of-work.md) | Open: spend per commit or per Edit and Write call; repository counting and noise open |
 | [Setup changes: long-history labels](setup-changes-long-history-labels.md) | Open: Monday date labels collide below about 2.3px per day and weekly lane counts below about 3.5px per day; a month-start step and month cells are the possible fix |
+| [Page jumps to Live sessions](page-jumps-to-live-sessions.md) | Open: the page scrolls to the Live sessions panel when it updates; cause not found, the bare `focus()` in `renderSessions` is the first lead |
 | [Horizontal scroll at 400px](narrow-viewport-horizontal-scroll.md) | Open: the page is 416px wide on 30d and All because of `#modelMixPanel`; which element sets the width open |
