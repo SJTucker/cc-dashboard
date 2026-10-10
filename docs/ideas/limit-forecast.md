@@ -20,6 +20,20 @@ or a table in `transcripts.db`. Fit the rate over the last hour for the 5-hour
 window, and over the current day for the week. Show "at this rate, 100% at 15:40" when
 that time comes before the reset, and nothing otherwise.
 
+## How other tools do it
+
+Found in the second round on 2026-10-10.
+
+- ClaudeCodeAnalytics (`Pierre-Demessence/ClaudeCodeAnalytics`) projects from the
+  official 5-hour and weekly percentages: usage at reset with a likely range, time to
+  reach the cap, and headroom at the user's active pace. It also lists the past 5-hour
+  windows of 7 days and the weekly windows of 12 weeks, and marks the ones that hit the
+  limit. Kept readings would give the dashboard the same history.
+- Claude-Code-Usage-Monitor guesses the limit as the 90th percentile of past window
+  peaks. The dashboard has the official percentages, so it does not need a guess.
+- Users of the transcript-only tools report that the tools' numbers disagree with
+  `/usage`. A forecast should use only the official percentages.
+
 ## Open questions
 
 - Readings come in 1-point steps, so a rate over a short span is coarse. Decide the

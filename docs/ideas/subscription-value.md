@@ -16,6 +16,13 @@ whether a cheaper or more expensive plan fits the usage.
 - The Plan usage panel knows the user has a subscription login, because rate limits
   are only reported for one. It does not know which plan.
 
+## How other tools do it
+
+Found in the second round on 2026-10-10. ClaudeCodeAnalytics compares the charge with
+the API-price cost per billing cycle, and estimates the same week on Pro, Max 5x and
+Max 20x. It reads the billing date from a value Claude Code caches. That source was
+not checked.
+
 ## Open questions
 
 - Where the plan and its price come from. Claude Code may keep the subscription type

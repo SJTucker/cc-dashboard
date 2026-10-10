@@ -21,6 +21,14 @@ and the Setup changes panel can then show whether it worked.
 - `lib/review.js` marks results over 10,000 characters as `LARGE OUTPUT` in the
   digest.
 
+## Rules from token-dashboard
+
+Found in the second round on 2026-10-10. token-dashboard (`nateherkai/token-dashboard`)
+gives waste tips from fixed rules, with no model call: repeated reads of one file,
+oversized tool results, and a low cache hit rate. It also draws tool and file heatmaps
+and lists the most-touched files per project. Fixed rules cost nothing per session,
+so they could run on every session, where Haiku reviews run on at most 3 per pass.
+
 ## Open questions
 
 - Storing the result length per tool use changes `lib/extract.js` and raises

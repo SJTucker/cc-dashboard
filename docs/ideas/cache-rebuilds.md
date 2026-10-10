@@ -21,6 +21,26 @@ cache-write tokens per day but not which calls were rebuilds or what caused them
   call is known.
 - `lib/efficiency.js` computes a context delta between consecutive calls.
 
+## Claude Code's own cache miss reason
+
+Found in the second round on 2026-10-10, from ccusage issue #1804. Some assistant
+lines carry `message.diagnostics.cache_miss_reason`, an object with a `type` and
+`cache_missed_input_tokens`. The transcripts on this machine held 312 on 2026-10-10:
+
+| `type` | Lines |
+|---|---|
+| `previous_message_not_found` | 219 |
+| `messages_changed` | 49 |
+| `unavailable` | 24 |
+| `tools_changed` | 15 |
+| `system_changed` | 5 |
+
+Where the field is present, use it in place of the guessed causes below. The
+guesses stay for lines without it. What `previous_message_not_found` means needs a
+check against gap lengths: it may be the TTL expiry case. ccusage issue #1804 links
+a standalone tool, `CedricConday/cachemiss`, that reports tokens rewritten and the
+write premium per rebuild.
+
 ## Possible approach
 
 A call is a rebuild when its cache write is most of its context and the session's

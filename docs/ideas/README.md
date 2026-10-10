@@ -32,3 +32,11 @@ then on.
 | [What fills the context](context-fillers.md) | Open: largest tool results and repeated reads across the range; result size storage and grouping open |
 | [Plan value](subscription-value.md) | Open: API-price cost against the subscription fee per month; where the plan comes from open |
 | [MCP server breakdown](mcp-server-breakdown.md) | Open: calls and errors per MCP server, and connected servers never called; reading the server list open |
+| [Cost by plugin](plugin-cost-rows.md) | Open: a Plugins list in Where usage goes from the unused `attributionPlugin` field; invocation counts and subagent calls open |
+| [Costliest prompts](costliest-prompts.md) | Open: rank prompts by cost with a drill-down; storing prompt text open |
+| [Search past sessions](transcript-search.md) | Open: full-text search over prompts across all history; storing text, FTS5 and raw transcript copies open |
+| [Year heatmap](year-heatmap.md) | Open: one cell per day for a year, shaded by cost; whether it adds enough over Daily cost open |
+| [Cache expiry countdown](cache-ttl-countdown.md) | Open: time left on a waiting session's prompt cache in Running now; whether reads refresh the TTL open |
+| [Check: rows when a transcript is rewritten](transcript-rewrites.md) | Open: confirm whether Claude Code rewrites transcripts with fewer lines, which the row store would follow |
+| [Receive Claude Code's OpenTelemetry export](otel-receiver.md) | Open: a local OTLP endpoint for active time, edit decisions, commits and permission mode changes; protocol and storage open |
+| [Other coding agents](other-agents.md) | Open: read Codex CLI and other agents' logs; whether it is in scope open |

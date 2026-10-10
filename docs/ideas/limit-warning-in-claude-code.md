@@ -14,6 +14,12 @@ Recorded on 2026-10-10.
   reading.
 - Mods can show a toast and a band above the prompt.
 
+## How other tools do it
+
+Found in the second round on 2026-10-10. CCSeva notifies at 70% and 90%, only when the
+status gets worse, with a cooldown between notifications. Claude-Code-Usage-Monitor
+exits with code 10 near the limit and 11 at the limit, so a script can act on it.
+
 ## Open questions
 
 - Toast or band. A toast is easy to miss. A band stays until the window resets.
