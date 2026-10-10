@@ -3,7 +3,6 @@
 
 const express = require('express');
 const http = require('http');
-const os = require('os');
 const path = require('path');
 const { loadConfig } = require('./lib/config-dir');
 const { getProjectsDir } = require('./lib/transcript-files');
@@ -266,13 +265,13 @@ function createServer(config) {
   // writes the reviews, run by the mod in mod/. The dismiss routes below write the
   // dismissals. Each review includes its session id and transcript path, because the
   // user pastes them into a prompt for another model. Only this machine can reach the
-  // API: the server listens on HOST (127.0.0.1). home lets the page shorten the
-  // transcript path. When transcripts.db cannot be opened the answer is a 500 with the
-  // reason. When the one-time import (getReviewDb) or a write meets the lock of
-  // bin/review-session the answer is a 503 with DB_BUSY. The panel shows either as text.
+  // API: the server listens on HOST (127.0.0.1). When transcripts.db cannot be
+  // opened the answer is a 500 with the reason. When the one-time import
+  // (getReviewDb) or a write meets the lock of bin/review-session the answer is a
+  // 503 with DB_BUSY. The panel shows either as text.
   app.get('/api/reviews', (req, res) => {
     try {
-      res.json({ home: os.homedir(), reviews: readReviews(getReviewDb(), projectsDir) });
+      res.json({ reviews: readReviews(getReviewDb(), projectsDir) });
     } catch (err) {
       if (sendBusy(res, err)) return;
       console.error('[API] /api/reviews failed:', err);
