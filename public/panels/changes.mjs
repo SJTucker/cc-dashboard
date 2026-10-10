@@ -28,7 +28,7 @@ const axisPercent = (x) => `${Math.round(x * 100)}%`;
 // Each row of the before/after table, and the daily chart it shows when picked:
 // title names the chart, axis formats its y-axis, unit (unitOne when n is 1) follows n in a bar's tooltip.
 const BA_ROWS = [
-  { name: 'Session start context', key: 'sessionStart', n: 'sessions', unit: 'sessions', unitOne: 'session', fmt: tokensCell, axis: axisTokens, title: 'Median context at session start, tokens per day' },
+  { name: 'Session start context', key: 'sessionStart', n: 'sessions', unit: 'sessions', unitOne: 'session', fmt: tokensCell, axis: axisTokens, title: 'Context at session start: bars are the daily median, dots are sessions' },
   { name: 'Bash result, median', key: 'bashMedian', n: 'bashN', unit: 'Bash calls', unitOne: 'Bash call', fmt: tokensCell, axis: axisTokens, title: 'Median Bash result on the main thread, tokens per day' },
   { name: 'Bash result, p90', key: 'bashP90', n: 'bashN', unit: 'Bash calls', unitOne: 'Bash call', fmt: tokensCell, axis: axisTokens, title: '90th percentile Bash result on the main thread, tokens per day' },
   { name: 'Cost per prompt, median', key: 'costPerPrompt', n: 'prompts', unit: 'prompts', unitOne: 'prompt', fmt: formatCost, axis: axisCost, title: 'Median cost per prompt, per day' },
@@ -136,7 +136,7 @@ function selectRow(report, marker, key) {
   const chart = document.getElementById('baDailyChart');
   chart.setAttribute('aria-label', row.title);
   drawMetricChart(chart, report, marker, row, chartDomain(report), (m) => selectMarker(report, m));
-  drawMetricLegend(document.getElementById('baLegend'));
+  drawMetricLegend(document.getElementById('baLegend'), row, report, chartDomain(report));
 }
 
 function selectMarker(report, marker) {

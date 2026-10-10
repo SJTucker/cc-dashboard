@@ -1040,6 +1040,8 @@ html, body {
 .day-bar.outside { fill: var(--border); }
 .day-bar.before { stroke: var(--text-secondary); stroke-width: 1; }
 .day-bar.after { fill: var(--accent-cost); }
+.day-bar.dimmed { opacity: 0.5; }
+.session-halo { fill: var(--bg); stroke: var(--bg); stroke-width: 4; }
 .empty-dash { stroke: var(--text-tertiary); stroke-width: 1.5; }
 .weekend-shade { fill: var(--text-primary); opacity: 0.03; pointer-events: none; }
 .median-label { font-family: var(--font-data); font-size: 10px; }

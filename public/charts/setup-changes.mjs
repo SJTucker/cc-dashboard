@@ -67,6 +67,40 @@ function sessionDot(shape, x, y) {
   return node;
 }
 
+// A dot with an outline in the background colour, so it stays readable over a bar.
+// The tooltip hangs on the group, which holds the outline and the dot.
+function sessionDotNode(shape, x, y) {
+  const halo = sessionDot(shape, x, y);
+  halo.setAttribute('class', 'session-halo');
+  const group = svgEl('g');
+  group.append(halo, sessionDot(shape, x, y));
+  return group;
+}
+
+function sessionsInView(report, domain) {
+  return report.sessions.filter((s) => s.t >= domain[0] && s.t <= domain[1]);
+}
+
+// Shapes stay the same on every range: they rank models over every session.
+function drawSessionDots(svg, report, g) {
+  const shapes = modelShapes(report.sessions);
+  for (const s of sessionsInView(report, g.domain)) {
+    const dot = sessionDotNode(shapes.get(s.model), g.xOf(s.t), g.yOf(s.context));
+    svg.appendChild(withTooltip(dot, sessionTooltip(s, g.max)));
+  }
+}
+
+// The top of the y axis before headroom. On the Session start row it is the 95th
+// percentile of the sessions in view: one outlier session (260,620 tokens against a
+// typical 38k-52k) would otherwise squash every ordinary session into the bottom
+// slice. Other rows, and a Session start range with no session, use the tallest bar
+// or median line.
+function plotRawMax(row, days, win, inView) {
+  if (row.key === 'sessionStart' && inView.length) return percentile(inView.map((s) => s.context), 95);
+  const lines = win ? [win.before, win.after].filter((v) => v != null) : [];
+  return Math.max(...days.map((d) => d.value), ...lines);
+}
+
 export function markerDate(t) {
   return new Date(t).toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
 }
@@ -322,13 +356,13 @@ function drawWindowShade(svg, win, g) {
 
 // Before-window bars are hatched, after-window bars solid amber, the rest --border.
 // A hatched bar's fill is an attribute, so style.css has no fill rule for .day-bar.before.
-function drawDayBars(svg, days, row, win, g) {
+function drawDayBars(svg, days, row, win, g, dim) {
   const barWidth = Math.max(g.dayWidth * 0.64, 2);
   for (const d of days) {
     const t = dayNoon(d.date);
     const kind = dayBarKind(t, win);
     const h = Math.max((Math.min(d.value, g.max) / g.max) * g.plotHeight, 1);
-    const rect = svgEl('rect', { class: `day-bar ${kind}`, x: g.xOf(t) - barWidth / 2, y: g.bottom - h, width: barWidth, height: h, rx: 1 });
+    const rect = svgEl('rect', { class: `day-bar ${kind}${dim ? ' dimmed' : ''}`, x: g.xOf(t) - barWidth / 2, y: g.bottom - h, width: barWidth, height: h, rx: 1 });
     if (kind === 'before') rect.setAttribute('fill', fillFor(PATTERN_SCOPE, 'diag', BEFORE_INK));
     svg.appendChild(withTooltip(rect, `<strong>${shortDate(d.date)}</strong><br>${escapeHtml(row.fmt(d.value))}<br>${d.n} ${d.n === 1 ? row.unitOne : row.unit}`));
   }
@@ -367,16 +401,17 @@ function drawWindowLines(svg, win, row, g) {
   svg.appendChild(svgEl('line', { class: 'marker-line', x1: g.xOf(win.t), x2: g.xOf(win.t), y1: g.markerTop, y2: g.bottom }));
 }
 
-// The y axis, bars, medians and baseline for one row. The 7-day lines can sit above
-// every bar, so the axis has to reach them too.
-function drawPlot(svg, days, row, win, layout) {
-  const lines = win ? [win.before, win.after].filter((v) => v != null) : [];
-  const rawMax = Math.max(...days.map((d) => d.value), ...lines);
-  const max = drawPlotAxis(svg, rawMax, { ...layout, format: row.axis });
+// The y axis, bars, session dots, medians and baseline for one row. Dots draw over
+// dimmed bars and under the median lines.
+function drawPlot(svg, days, row, win, layout, report) {
+  const inView = sessionsInView(report, layout.domain);
+  const dots = row.key === 'sessionStart' && inView.length > 0;
+  const max = drawPlotAxis(svg, plotRawMax(row, days, win, inView), { ...layout, format: row.axis });
   const g = { ...layout, max, yOf: (v) => layout.bottom - (Math.min(v, max) / max) * layout.plotHeight };
   if (win) drawWindowShade(svg, win, g);
-  drawDayBars(svg, days, row, win, g);
+  drawDayBars(svg, days, row, win, g, dots);
   drawEmptyDays(svg, days, g);
+  if (dots) drawSessionDots(svg, report, g);
   if (win) drawWindowLines(svg, win, row, g);
   svg.appendChild(svgEl('line', { x1: g.left, x2: g.right, y1: g.bottom, y2: g.bottom, stroke: 'var(--border)' }));
 }
@@ -523,7 +558,7 @@ export function drawMetricChart(container, report, marker, row, domain, onPick) 
   drawWeekends(svg, layout);
   drawChangeLanes(svg, lanes, marker, layout, onPick);
   if (win) drawWindowBar(svg, win, layout, Date.now());
-  if (days.length) drawPlot(svg, days, row, win, layout);
+  if (days.length) drawPlot(svg, days, row, win, layout, report);
   else drawNoData(svg, row, layout);
   drawDateAxis(svg, layout, marker);
   container.appendChild(svg);
@@ -533,16 +568,30 @@ function legendItem(swatch, text) {
   return el('span', { class: 'legend-item' }, [swatch, document.createTextNode(text)]);
 }
 
-// One legend row under the chart. Hatch, fill, dash and solid line separate the five
-// marks without colour.
-export function drawMetricLegend(legend) {
+// Row one: the five marks of the chart. Row two, on the Session start row: one dot
+// shape per model that has a session in view.
+export function drawMetricLegend(legend, row, report, domain) {
   const box = (background) => el('span', { class: 'legend-swatch', style: `background:${background}` });
   const rule = (cls) => el('span', { class: `legend-line ${cls}` });
-  legend.replaceChildren(el('div', { class: 'legend changes-legend' }, [
+  const rows = [el('div', { class: 'legend changes-legend' }, [
     legendItem(box(textureCss('diag', BEFORE_INK)), '7 days before'),
     legendItem(box('var(--accent-cost)'), '7 days after'),
     legendItem(box('var(--border)'), 'outside the windows'),
     legendItem(rule('median-before-swatch'), 'before median'),
     legendItem(rule('median-after-swatch'), 'after median'),
-  ]));
+  ])];
+  const inView = sessionsInView(report, domain);
+  if (row.key === 'sessionStart' && inView.length) rows.push(dotLegendRow(report, inView));
+  legend.replaceChildren(...rows);
+}
+
+function dotLegendRow(report, inView) {
+  const shapes = modelShapes(report.sessions);
+  const row = el('div', { class: 'legend changes-legend' });
+  for (const model of new Set(inView.map((s) => s.model))) {
+    const icon = svgEl('svg', { width: 10, height: 10, viewBox: '0 0 10 10', 'aria-hidden': 'true' });
+    icon.appendChild(sessionDot(shapes.get(model), 5, 5));
+    row.appendChild(legendItem(icon, `session, ${model || 'unknown model'}`));
+  }
+  return row;
 }
