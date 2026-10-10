@@ -41,12 +41,11 @@ export function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
   data.forEach((d, i) => {
     const value = d[valueKey];
     const x = CHART_PAD_LEFT + slots.x(i);
-    const y = yOf(value);
 
     // A negative bar hangs below the zero line in the same colour.
     const rect = svgEl('rect', {
       class: 'bar',
-      x, y: Math.min(y, zeroY), width: slots.barWidth, height: Math.max(Math.abs(zeroY - y), value !== 0 ? 1 : 0),
+      x, ...barRect(value, { yOf, zeroY }), width: slots.barWidth,
       rx: 2,
       fill: color,
     });
@@ -66,6 +65,13 @@ export function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
   });
 
   container.appendChild(svg);
+}
+
+// The top edge and height of one bar. It spans zeroY to the value's y on either side
+// of zero, and a non-zero value is at least 1px tall so it stays visible.
+export function barRect(value, { yOf, zeroY }) {
+  const y = yOf(value);
+  return { y: Math.min(y, zeroY), height: Math.max(Math.abs(zeroY - y), value !== 0 ? 1 : 0) };
 }
 
 // The scale of an all-positive chart: zero at the bottom of the plot. max comes
