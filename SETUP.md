@@ -14,6 +14,31 @@ what each panel shows.
 - **Claude Code.** The mod uses Claude Code's function hooks, which are early access.
   No minimum version is known. The mod was last run on 2.1.294.
 
+## Quick setup
+
+From a fresh clone:
+
+```bash
+git clone <this repository's URL> cc-dashboard
+cd cc-dashboard
+bin/setup
+npm start
+```
+
+Then open **http://localhost:3600**.
+
+`bin/setup` checks for Node 22.13 or later, `npm` and `claude` on your PATH, and
+stops before changing anything if one is missing. Then it runs `npm install`,
+links `mod/` to `~/.claude/skills/cc-dashboard`, and runs `claude plugin validate`.
+`bin/setup` reads `CLAUDE_CONFIG_DIR` from the shell that runs it, so set it there to
+the same value Claude Code uses. It is safe to run again. When a file, folder or link
+already sits at the link path, `bin/setup` stops, names the path and leaves it in
+place.
+
+`bin/setup` does not start the server or edit `settings.json`. The sections below
+give the same steps by hand. They also cover the "Without the mod" route, which
+`bin/setup` does not run.
+
 ## Run the server
 
 ```bash
@@ -47,13 +72,16 @@ ln -s "$PWD/mod" ~/.claude/skills/cc-dashboard
 claude plugin validate "$PWD/mod"
 ```
 
+`bin/setup` runs both lines.
+
 Every Claude Code session started after that loads the mod. It needs no change to
 your statusline script or to `settings.json`.
 
 - **`mod/` must stay beside `bin/`.** The mod follows the link back to the clone and
   runs `<clone>/bin/<script>`. A copy of `mod/` on its own finds no scripts.
 - **Moving the clone breaks the link.** Remove `~/.claude/skills/cc-dashboard` and run
-  the `ln -s` line again from the new location.
+  the `ln -s` line again from the new location. Running `bin/setup` again after
+  removing the link also works.
 - **A failure shows as one transcript line** starting `cc-dashboard:`.
   `claude plugin validate` says what Claude Code refuses to load.
 
@@ -130,7 +158,9 @@ Set a variable for the server when you start it, for example
 `CLAUDE_CONFIG_DIR=/path/to/.claude npm start`.
 
 The mod and the `bin/` scripts run inside Claude Code, so they read
-`CLAUDE_CONFIG_DIR` from Claude Code's environment. If you set it, give the server the
+`CLAUDE_CONFIG_DIR` from Claude Code's environment. `bin/setup` is the exception. It
+runs in your shell, so it reads `CLAUDE_CONFIG_DIR` from that shell. Set it there to
+the same value Claude Code uses. If you set it, give the server the
 same value. Otherwise the server reads transcripts and snapshots from a folder Claude
 Code does not write to. The mod also reads `HOME`, to find `~/.claude` when
 `CLAUDE_CONFIG_DIR` is unset, to find rtk's config, and to expand a leading `~` in
@@ -147,6 +177,7 @@ tests can avoid the one in the clone.
 | `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/plugins/installed_plugins.json` | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` |
+| `<cfg>/skills/cc-dashboard` (a symlink to the clone's `mod/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, `bin/record-session-end`. `bin/record-statusline` deletes snapshots older than a day. |
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod. The server deletes files older than a day when the page shows the Today range. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
@@ -208,6 +239,7 @@ The mod also reads these files to record setup changes. It writes none of them.
 2. **The database.** After the first page load, the server's output has no `[store]`
    warning and `~/.claude/cc-dashboard/transcripts.db` exists.
 3. **The mod.** `claude plugin validate "$PWD/mod"` passes, run from the clone.
+   `bin/setup` runs this check.
 4. **The recorder.** Start a Claude Code session and send one prompt. A file named
    after the session id appears in `~/.claude/cc-dashboard/sessions/`, and the Plan
    usage panel's "as of" time is a moment ago.

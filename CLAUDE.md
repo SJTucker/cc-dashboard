@@ -15,5 +15,9 @@ same change whenever that change does any of these:
   route needs in `settings.json` or the statusline script
 - adds a network request or a model call
 
+`bin/setup` runs the steps in "Quick setup". When a change alters a step it runs
+(the Node floor, `npm install`, the mod link, `claude plugin validate`), change
+`bin/setup` and `test/setup.test.js` in the same change.
+
 Check the environment variable table and the files table in `SETUP.md` against the
 code, not against the README.
