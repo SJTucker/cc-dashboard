@@ -863,7 +863,8 @@ html, body {
    narrower than the viewport by the scrollbar width, about 15px, so it switches
    slightly later. At half width, two columns wrapped each legend's percentage onto
    the line under its label. */
-#attributionPanel { container-type: inline-size; }
+/* #toolPanel is a container too, so its .usage-grid stacks at the same width. */
+#attributionPanel, #toolPanel { container-type: inline-size; }
 
 @container (max-width: 814px) {
   .usage-grid { grid-template-columns: 1fr; }

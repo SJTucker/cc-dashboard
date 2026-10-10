@@ -580,7 +580,7 @@ public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Not use
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
 public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
 public/panels/timeline.mjs  The Session timeline: one lane per session with activity today
-public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown and its errors
+public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown, its errors and an error table per model
 public/panels/usage.mjs  Daily cost, daily tokens, cumulative cost, token types and the weekday and hour heatmap
 public/ui/collapse.mjs Collapsible rows of panels, and the collapsible Skills and Subagents lists
 public/ui/hidden.mjs   Hides a panel or card with its x button, shows it again from the header menu, and keeps a row's handle and toggle on a panel that shows
