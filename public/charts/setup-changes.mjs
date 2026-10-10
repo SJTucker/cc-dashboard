@@ -126,9 +126,9 @@ export function timeDomain(report, keys) {
   return [Math.min(...times) - DAY_MS / 2, Math.max(...times) + DAY_MS / 2];
 }
 
-// True when a marker falls inside the time axis both charts share. A marker just
-// outside it (see timeDomain above) keeps its place in the marker button list but
-// draws no glyph, guide, line or shaded window on either chart.
+// True when a marker falls inside the time axis of the Setup changes chart. A marker
+// just outside it (see timeDomain above) draws no lane glyph, line, picked column or
+// shaded window, and the day list leaves it out.
 function markerInDomain(marker, domain) {
   return Boolean(marker) && marker.t >= domain[0] && marker.t <= domain[1];
 }
@@ -268,11 +268,16 @@ function drawMedian(svg, g, row, { from, to, value, name }) {
   svg.appendChild(label);
 }
 
-// The two medians and the amber line at the change's time.
+// The amber line at the change's time, from the window bar down to the plot's base.
+// A row with no data draws it too, from drawMetricChart.
+function drawChangeLine(svg, win, g) {
+  svg.appendChild(svgEl('line', { class: 'marker-line', x1: g.xOf(win.t), x2: g.xOf(win.t), y1: g.markerTop, y2: g.bottom }));
+}
+
+// The two medians. They need the y scale, so they draw inside drawPlot.
 function drawWindowLines(svg, win, row, g) {
   drawMedian(svg, g, row, { from: win.t - WEEK_MS, to: win.t, value: win.before, name: 'before' });
   drawMedian(svg, g, row, { from: win.t, to: win.t + WEEK_MS, value: win.after, name: 'after' });
-  svg.appendChild(svgEl('line', { class: 'marker-line', x1: g.xOf(win.t), x2: g.xOf(win.t), y1: g.markerTop, y2: g.bottom }));
 }
 
 // The y axis, bars, session dots, medians and baseline for one row. Dots draw over
@@ -286,7 +291,10 @@ function drawPlot(svg, days, row, win, layout, report) {
   drawDayBars(svg, days, row, win, g, dots);
   drawEmptyDays(svg, days, g);
   if (dots) drawSessionDots(svg, report, g);
-  if (win) drawWindowLines(svg, win, row, g);
+  if (win) {
+    drawWindowLines(svg, win, row, g);
+    drawChangeLine(svg, win, g);
+  }
   svg.appendChild(svgEl('line', { x1: g.left, x2: g.right, y1: g.bottom, y2: g.bottom, stroke: 'var(--border)' }));
 }
 
@@ -332,9 +340,11 @@ function drawLaneRows(svg, kinds, g) {
 // Amber outline and tint over the picked change's day, across every lane.
 function drawPickedColumn(svg, marker, g) {
   if (!marker || marker.t < g.domain[0] || marker.t > g.domain[1]) return;
+  const x0 = g.clampX(g.xOf(localMidnight(marker.t)));
+  const x1 = g.clampX(g.xOf(localMidnight(marker.t)) + g.dayWidth);
   svg.appendChild(svgEl('rect', {
-    class: 'lane-picked', x: g.xOf(localMidnight(marker.t)), y: g.lanesTop - 3,
-    width: Math.max(g.dayWidth, 4), height: g.lanesBottom - g.lanesTop + 6, rx: 3,
+    class: 'lane-picked', x: x0, y: g.lanesTop - 3,
+    width: Math.max(x1 - x0, 4), height: g.lanesBottom - g.lanesTop + 6, rx: 3,
   }));
 }
 
@@ -362,7 +372,7 @@ function laneCellNode(cell, laneIndex, g, pickedKey, onPick) {
   const picked = cell.markers.some((m) => markerKey(m) === pickedKey);
   const node = svgEl('g', {
     class: picked ? 'lane-cell picked' : 'lane-cell', tabindex: 0, role: 'button',
-    'aria-label': cellLabel(cell), 'data-name': `${cell.kind}|${cell.start}`,
+    'aria-label': cellLabel(cell), 'aria-pressed': String(picked), 'data-name': `${cell.kind}|${cell.start}`,
   });
   node.appendChild(svgEl('rect', { class: 'lane-hit', x: g.xOf(lo), y: y - LANE_HEIGHT / 2, width: g.xOf(hi) - g.xOf(lo), height: LANE_HEIGHT }));
   node.appendChild(markerGlyph(cell.kind, cx, y));
@@ -433,7 +443,10 @@ export function drawMetricChart(container, report, marker, row, domain, onPick) 
   drawChangeLanes(svg, lanes, marker, layout, onPick);
   if (win) drawWindowBar(svg, win, layout, Date.now());
   if (days.length) drawPlot(svg, days, row, win, layout, report);
-  else drawNoData(svg, row, layout);
+  else {
+    drawNoData(svg, row, layout);
+    if (win) drawChangeLine(svg, win, layout);
+  }
   drawDateAxis(svg, layout, marker);
   container.appendChild(svg);
 }
