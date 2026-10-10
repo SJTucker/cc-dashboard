@@ -1070,12 +1070,16 @@ html, body {
 .ba-under .usage-group-title { margin: -2px 0 6px; }
 .ba-grid { margin-top: 10px; }
 /* The before/after table needs about 390px. Below that its column scrolls sideways instead of widening the page. */
-.ba-grid > div:first-child { overflow-x: auto; }
+.ba-main { overflow-x: auto; }
 
 .day-list { max-height: 320px; overflow-y: auto; border-left: 2px solid var(--accent-cost); padding: 2px 0 2px 12px; }
 .day-list-head { margin-bottom: 4px; }
-/* A busy window lists dozens of changes. 34px is the table column (364px with the rtk rows) minus .day-list (320px) and the note's 10px top margin, so the right column is no taller than the table. */
-#overlapNote { max-height: 34px; overflow-y: auto; }
+/* Side by side, .ba-side takes the height the table sets for the row (height: 0 plus min-height: 100%), so a busy window scrolls inside the column instead of stretching the panel. The 14em floor holds the 5em list and the 7.5em (five-line) note when the table is shorter. */
+@media (min-width: 861px) {
+  .ba-side { display: flex; flex-direction: column; height: 0; min-height: max(100%, 14em); }
+  .ba-side .day-list { flex: 0 1 auto; min-height: 5em; }
+  .ba-side #overlapNote { flex: 1 1 auto; min-height: 7.5em; overflow-y: auto; }
+}
 .day-change {
   display: flex;
   width: 100%;
