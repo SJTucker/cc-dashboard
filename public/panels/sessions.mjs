@@ -138,7 +138,7 @@ function drawSessions(live) {
   ]));
   document.getElementById('sessionsTable').replaceChildren(...rows);
   sessionToggles = toggles;
-  if (focused) toggles.get(focused[0])?.focus();
+  if (focused) toggles.get(focused[0])?.focus({ preventScroll: true });
 
   // Running now: live sessions and sessions waiting on you, in a fixed order. State
   // and Doing now come from the mod's activity files (lib/activity.js) and show "—"

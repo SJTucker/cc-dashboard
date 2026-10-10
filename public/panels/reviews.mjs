@@ -248,7 +248,7 @@ function drawReviews(data) {
     return el('li', { class: 'review' }, [head, ...(source ? [source] : []), ...reviewBody(r)]);
   });
   list.replaceChildren(...items);
-  if (focusKey) [...list.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus();
+  if (focusKey) [...list.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus({ preventScroll: true });
 
   document.getElementById('reviewsNote').textContent =
     `${data.reviews.length} in the last ${REVIEW_DAYS} days · ${countWithOpen(data.reviews)} with open suggestions`;
