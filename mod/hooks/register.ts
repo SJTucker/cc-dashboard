@@ -39,6 +39,14 @@ type Window = { used_percentage: number; resets_at?: number }
 // over, which costs one more fs.stat or one more log line.
 let binDir: string | undefined
 let hasLogged = false
+// One id per claude process, sent with every measure as launch_id. A /clear starts a
+// new session id but the process and this module stay, so every session the process
+// records shares the id, and the Today table groups them. statuslineInput sets it on
+// first use, because module load has no $ to read the clock from. A reload makes a
+// new one, which splits the launch into two groups. Math.random, because whether
+// this runtime has crypto.randomUUID is not known. The value fits SESSION_ID_PATTERN
+// in lib/session-id.js, which recordSession checks.
+let launchId: string | undefined
 
 function fail($: EngineInterface, text: string) {
   if (hasLogged) return
@@ -162,8 +170,10 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
     if ((await $.session.turns()) > 0) fail($, 'transcript not found')
     return null
   }
+  launchId ??= `${(await $.clock.now()).toString(36)}-${Math.random().toString(36).slice(2, 10)}`
   const input: Record<string, unknown> = {
     session_id: id,
+    launch_id: launchId,
     transcript_path: transcript,
     workspace: { project_dir: root },
     model: { display_name: displayName(await $.session.model()) },
