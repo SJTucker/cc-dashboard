@@ -4,7 +4,8 @@ A local dashboard for your Claude Code usage: daily and cumulative cost, daily t
 broken out by input / output / cache-write / cache-read, cost by model with dollars
 per million tokens, and a weekday-by-hour heatmap of when the spend happens.
 
-If you use `rtk`, it also charts the tokens rtk kept out of the model's context. See "rtk savings" below.
+If you use `rtk`, it also charts the tokens rtk kept out of the model's context. See
+"rtk savings" below.
 
 Two dependencies, no telemetry, no CDN. The server makes one outbound request, and
 only when you click Check prices. The optional Claude Code mod in `mod/` also fetches
@@ -48,7 +49,7 @@ would have taken without rtk, by the rtk subcommand:
 - Everything else: the whole output up to 7,500 tokens, which is Claude Code's
   30,000-character inline limit, and 2,500 tokens above that.
 
-rtk's own output goes through the same limit. The difference can be negative, when
+rtk's own output is counted by the same rule. The difference can be negative, when
 rtk's output put more into context than the model would have taken without it.
 Tooltips also show rtk's raw and filtered sizes.
 `docs/research/2026-10-10-large-bash-output.md` has the measurements behind these
@@ -493,7 +494,7 @@ lib/pricing.js         Built-in price table, dated price versions, cost calculat
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
 lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript only when it changes, and stores settled ones
-lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command
+lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command, estimates the tokens kept out of context
 lib/scan-memo.js       Keeps the latest aggregate per range and bucket until a transcript changes or the date rolls over
 lib/session-id.js      Session id and snapshot file name patterns, and the age after which snapshot and activity files are deleted
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
@@ -528,7 +529,7 @@ public/state.mjs       The selected range and the hidden panels, shared by the m
 public/stats.js        median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/style.css       All styling, including the @font-face rules for public/fonts/
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
-public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, and the Setup changes y axis with a 0 label and headroom
+public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, the signed y axis for charts with negative values, and the Setup changes y axis with a 0 label and headroom
 public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
 public/charts/donut.mjs  drawModelMix: each model's share of tokens as a donut with its legend
 public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and rtk commands
