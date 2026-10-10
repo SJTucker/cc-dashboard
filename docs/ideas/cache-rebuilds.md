@@ -54,10 +54,19 @@ previous call was cached. The cause is one of:
 Show rebuild cost per day, the share of all cache-write cost it makes up, and the
 cause split. A tooltip could name the cost of the single largest idle-gap rebuild.
 
+## Decided on 2026-10-10
+
+- The user wants to see when each rebuild happened, not only a daily total. Mark each
+  rebuild on the Session timeline, at the call's time in that session's lane. A
+  tooltip names the cause and the rebuild's cost.
+
 ## Open questions
 
 - The threshold for "most of its context": a fixed share, such as 80%, or the context
   size minus the previous call's cache read.
 - Subagent calls start with a cold cache by design. Leave them out, or count them
   separately.
-- Where it shows: a row in Where usage goes, a Setup changes table row, or a panel.
+- The marker's shape on the timeline. It must be told apart by shape, not colour,
+  because the charts design for red-green colourblindness.
+- The Session timeline shows the Today range only. Decide what shows rebuilds on the
+  other ranges: a daily total in a panel, a Setup changes table row, or nothing.

@@ -14,6 +14,10 @@ Recorded on 2026-10-10.
   reading.
 - Mods can show a toast and a band above the prompt.
 
+## Decided on 2026-10-10
+
+- The warning must be dismissable in Claude Code.
+
 ## How other tools do it
 
 Found in the second round on 2026-10-10. CCSeva notifies at 70% and 90%, only when the
@@ -22,7 +26,9 @@ exits with code 10 near the limit and 11 at the limit, so a script can act on it
 
 ## Open questions
 
-- Toast or band. A toast is easy to miss. A band stays until the window resets.
+- Toast or band. A toast is easy to miss. A band stays until it is dismissed.
+- What a dismissal covers: this threshold in this window, or every warning until
+  the window resets. Whether dismissing it in one session hides it in the others.
 - How often it repeats: once per window per threshold, or at each further 5 points.
 - Whether the day budget warning belongs in Claude Code at all, given it is a
   personal pacing rule and not a hard limit.
