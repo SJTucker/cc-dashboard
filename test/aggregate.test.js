@@ -188,3 +188,53 @@ test('aggregating the same rows twice gives the same result', () => {
 
   assert.deepStrictEqual(run(entries), run(entries));
 });
+
+// A tool use row as extractFile writes it.
+const toolUse = (key, name, detail, t = at(0)) => ({ key, t, name, detail });
+
+test('skill and subagent rows count their Skill and Agent tool calls in the range', () => {
+  const entry = rowSet({
+    calls: [
+      call({ key: 'm1:r1', attributionSkill: 'tdd' }),
+      call({ key: 'm2:r2', sidechain: true, attributionAgent: 'Explore' }),
+    ],
+    toolUses: [
+      toolUse('toolu_1', 'Skill', 'tdd'),
+      toolUse('toolu_2', 'Skill', 'tdd'),
+      toolUse('toolu_3', 'Agent', 'Explore'),
+      toolUse('toolu_4', 'Skill', 'tdd', at(40)), // before the 30-day range
+      toolUse('toolu_5', 'Skill', null), // a Skill call with no skill input names no row
+      toolUse('toolu_6', 'Bash', 'git'),
+    ],
+  });
+  const data = run([entry], { days: 30 });
+
+  assert.deepStrictEqual(data.skills.map((r) => [r.name, r.invocations]), [['tdd', 2]]);
+  assert.deepStrictEqual(data.subagents.map((r) => [r.name, r.invocations]), [['Explore', 1]]);
+});
+
+test('a Skill call copied into a second row set counts once', () => {
+  const first = rowSet({ calls: [call({ attributionSkill: 'tdd' })], toolUses: [toolUse('toolu_1', 'Skill', 'tdd')] });
+  const copy = rowSet({ toolUses: [toolUse('toolu_1', 'Skill', 'tdd')] });
+
+  assert.strictEqual(run([first, copy]).skills[0].invocations, 1);
+});
+
+test('an Agent call with no subagent_type counts toward general-purpose', () => {
+  const entry = rowSet({
+    calls: [call({ sidechain: true, attributionAgent: 'general-purpose' })],
+    toolUses: [toolUse('toolu_1', 'Agent', null), toolUse('toolu_2', 'Agent', 'general-purpose')],
+  });
+
+  assert.deepStrictEqual(run([entry]).subagents.map((r) => [r.name, r.invocations]), [['general-purpose', 2]]);
+});
+
+test('a skill with cost and no call in the range shows 0, and a called skill with no cost has no row', () => {
+  const entry = rowSet({
+    calls: [call({ attributionSkill: 'review' })],
+    toolUses: [toolUse('toolu_1', 'Skill', 'review', at(2)), toolUse('toolu_2', 'Skill', 'unused')],
+  });
+  const data = run([entry], { days: 'today' });
+
+  assert.deepStrictEqual(data.skills.map((r) => [r.name, r.invocations]), [['review', 0]]);
+});
