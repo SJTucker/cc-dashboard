@@ -32,10 +32,12 @@ export function drawModelMix(container, models, measure = 'tokens') {
   const C = 100;
   const R_OUTER = 96;
   const R_INNER = 62;
+  // The cost view names unpriced models in the label, because they have no slice.
+  const unpricedNote = unpriced.length ? `; unpriced: ${unpriced.map((m) => shortModel(m.model)).join(', ')}` : '';
   const svg = svgEl('svg', {
     viewBox: '0 0 200 200',
     role: 'img',
-    'aria-label': `Share of ${fmt.unit} by model: ${shown.map((m) => `${shortModel(m.model)} ${pctOf(m).toFixed(0)}%`).join(', ')}`,
+    'aria-label': `Share of ${fmt.unit} by model: ${shown.map((m) => `${shortModel(m.model)} ${pctOf(m).toFixed(0)}%`).join(', ')}${unpricedNote}`,
   });
   appendPatternDefs(svg, 'mix', shown.map((m) => ({ texture: modelTexture(m.family), color: modelColor(m.family) })));
 

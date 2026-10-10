@@ -95,7 +95,7 @@ async function flipMix() {
     flipping = false;
   }
   if (drawnMeasure !== state.mixMeasure) flipMix();
-  else if (drawnModels !== lastModels) drawMix();
+  else if (shown('modelMix') && drawnModels !== lastModels) drawMix();
 }
 
 function switchMix(measure) {

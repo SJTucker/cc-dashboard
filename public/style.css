@@ -766,11 +766,11 @@ html, body {
 .donut-unit { font-size: 11px; fill: var(--text-tertiary); }
 
 /* Tokens | Cost in the Model mix head: the .range-picker look at a smaller size.
-   margin-left: auto keeps the pair at the right, beside the panel's hide button.
-   The pressed button is inverted (light on dark), so the state does not rest on hue. */
+   The pair sits at the right because .panel-head > h2 takes the free space
+   (margin-right: auto). The pressed button is inverted (light on dark), so the
+   state does not rest on hue. */
 .mix-measure {
   display: flex;
-  margin-left: auto;
   border: 1px solid var(--border);
   border-radius: 2px;
   overflow: hidden;
@@ -792,8 +792,9 @@ html, body {
 .mix-measure button:hover { color: var(--text-primary); }
 .mix-measure button[aria-pressed="true"] { background: var(--text-primary); color: var(--bg); }
 .mix-measure button:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: -2px; }
-/* A click on the donut switches it too (setupModelMixToggle). */
-.mix-donut svg { cursor: pointer; }
+/* A click on the donut switches it too (setupModelMixToggle). user-select: none
+   stops a double click from selecting the centre text. */
+.mix-donut svg { cursor: pointer; user-select: none; }
 
 /* Stacked, the panel is no longer stretched to a neighbour: the chart area
    falls back to its 200px minimum and the legend may wrap below the donut. This
