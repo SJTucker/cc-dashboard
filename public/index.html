@@ -102,38 +102,43 @@
 
       <div id="mainCards"></div>
 
-      <section class="panel" id="limitsPanel" data-hide-key="limits" hidden>
-        <div class="panel-head">
-          <h2>Plan usage</h2>
-          <span class="panel-note" id="limitsNote"></span>
-        </div>
-        <div id="limitsRows"></div>
-      </section>
+      <!-- One row on every range. Off Today, Plan usage is hidden and Where usage goes
+           takes the whole row (.panel-row:has(> [hidden]) in style.css). Plan usage
+           stays first: the row's key is its first heading (assignRowKeys). -->
+      <div class="panel-row even stretch">
+        <section class="panel" id="limitsPanel" data-hide-key="limits" hidden>
+          <div class="panel-head">
+            <h2>Plan usage</h2>
+            <span class="panel-note" id="limitsNote"></span>
+          </div>
+          <div id="limitsRows"></div>
+        </section>
 
-      <section class="panel" id="attributionPanel" data-hide-key="attribution" hidden>
-        <div class="panel-head">
-          <h2>Where usage goes</h2>
-          <span class="panel-note">share of total cost</span>
-        </div>
-        <div class="usage-grid">
-        <div class="usage-group">
-          <div class="usage-group-title">Main thread vs subagents</div>
-          <div id="threadBars"></div>
-        </div>
-        <div class="usage-group">
-          <div class="usage-group-title">Context size</div>
-          <div id="contextBars"></div>
-        </div>
-        <div class="usage-group group-collapsed">
-          <div class="usage-group-title"><button type="button" class="row-toggle group-toggle" data-name="Skills" aria-expanded="false" aria-controls="skillBars" aria-label="Expand Skills">Skills</button> <span class="usage-group-note">with subagents, one call can be in both, so the two do not sum to 100%</span></div>
-          <div id="skillBars"></div>
-        </div>
-        <div class="usage-group group-collapsed">
-          <div class="usage-group-title"><button type="button" class="row-toggle group-toggle" data-name="Subagents" aria-expanded="false" aria-controls="subagentBars" aria-label="Expand Subagents">Subagents</button></div>
-          <div id="subagentBars"></div>
-        </div>
+        <section class="panel" id="attributionPanel" data-hide-key="attribution" hidden>
+          <div class="panel-head">
+            <h2>Where usage goes</h2>
+            <span class="panel-note">share of total cost</span>
+          </div>
+          <div class="usage-grid">
+            <div class="usage-group">
+              <div class="usage-group-title">Main thread vs subagents</div>
+              <div id="threadBars"></div>
+            </div>
+            <div class="usage-group">
+              <div class="usage-group-title">Context size</div>
+              <div id="contextBars"></div>
+            </div>
+            <div class="usage-group group-collapsed">
+              <div class="usage-group-title"><button type="button" class="row-toggle group-toggle" data-name="Skills" aria-expanded="false" aria-controls="skillBars" aria-label="Expand Skills">Skills</button> <span class="usage-group-note">with subagents, one call can be in both, so the two do not sum to 100%</span></div>
+              <div id="skillBars"></div>
+            </div>
+            <div class="usage-group group-collapsed">
+              <div class="usage-group-title"><button type="button" class="row-toggle group-toggle" data-name="Subagents" aria-expanded="false" aria-controls="subagentBars" aria-label="Expand Subagents">Subagents</button></div>
+              <div id="subagentBars"></div>
+            </div>
+          </div>
+        </section>
       </div>
-      </section>
 
       <section class="panel" id="timelinePanel" data-hide-key="timeline" hidden>
         <div class="panel-head">

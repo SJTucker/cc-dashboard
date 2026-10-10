@@ -855,8 +855,19 @@ html, body {
 
 .usage-grid .usage-group + .usage-group { margin-top: 0; }
 
-@media (max-width: 900px) {
+/* Where usage goes is half the row beside Plan usage on Today, and the whole row on
+   other ranges. Its two columns follow the panel's own width, not the viewport's.
+   814px is the full-width panel's content box at a 900px viewport (900 − 48 page
+   padding − 2 border − 36 panel padding), so the full-width panel switches where
+   it always did. At half width, two columns wrapped each legend's percentage onto
+   the line under its label. */
+#attributionPanel { container-type: inline-size; }
+
+@container (max-width: 814px) {
   .usage-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 900px) {
   .chart-with-legend { flex-direction: column; }
   .chart-side { max-width: none; }
   .side-legend { flex-direction: row; flex-wrap: wrap; }
@@ -1085,9 +1096,11 @@ html, body {
 
 @media (max-width: 720px) {
   /* auto, not a fixed 40px: a count such as "869 · 7.4% err" is wider than 40px,
-     and .usage-count's 96px minimum pushed it past the panel edge. */
+     and .usage-count's 96px minimum pushed it past the panel edge. The track is
+     hidden in drawHBars rows only. Plan usage meters (.limit-row) use the same
+     class and keep their bars at every width. */
   .usage-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .usage-track { display: none; }
+  .usage-row .usage-track { display: none; }
 }
 
 /* ---------- Setup changes ---------- */
@@ -1411,8 +1424,10 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
    showing its panel cannot undo the user's choice. */
 [data-user-hidden] { display: none !important; }
 
-/* The panel left in a pair takes the whole row. */
-.panel-row:has(> [data-user-hidden]) { grid-template-columns: 1fr; }
+/* The panel left in a pair takes the whole row, whether the user hid the other one
+   or its renderer did (Plan usage is hidden off Today, Where usage goes when the
+   range has no cost). */
+.panel-row:has(> [data-user-hidden], > [hidden]) { grid-template-columns: 1fr; }
 
 /* The "x" follows the panel note and any heading button, all pushed right. */
 .panel-head > h2 { margin-right: auto; }
