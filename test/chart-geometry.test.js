@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain,
+  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
 } = require('../public/chart-geometry');
 
@@ -78,6 +78,39 @@ test('donutSlices skips zero values without moving the next slice', () => {
 test('donutSlices returns [] for empty input or a zero total', () => {
   assert.deepStrictEqual(donutSlices([], 100, 100, 96, 62), []);
   assert.deepStrictEqual(donutSlices([0, 0], 100, 100, 96, 62), []);
+});
+
+test('mixEntries sorts by the chosen measure, largest first', () => {
+  const models = [
+    { model: 'a', tokens: 10, cost: 5, priced: true },
+    { model: 'b', tokens: 30, cost: 1, priced: true },
+  ];
+  const tokens = mixEntries(models, 'tokens');
+  const cost = mixEntries(models, 'cost');
+  assert.deepStrictEqual(tokens.shown.map((e) => [e.model, e.value]), [['b', 30], ['a', 10]]);
+  assert.deepStrictEqual(cost.shown.map((e) => [e.model, e.value]), [['a', 5], ['b', 1]]);
+  assert.strictEqual(tokens.total, 40);
+  assert.strictEqual(cost.total, 6);
+  assert.deepStrictEqual(models.map((m) => m.model), ['a', 'b'], 'input order unchanged');
+});
+
+test('mixEntries lists an unpriced model apart in the cost view only', () => {
+  const models = [
+    { model: 'a', tokens: 10, cost: 5, priced: true },
+    { model: 'x', tokens: 50, cost: 0, priced: false },
+  ];
+  const cost = mixEntries(models, 'cost');
+  assert.deepStrictEqual(cost.shown.map((e) => e.model), ['a']);
+  assert.deepStrictEqual(cost.unpriced.map((m) => m.model), ['x']);
+  assert.strictEqual(cost.total, 5);
+  const tokens = mixEntries(models, 'tokens');
+  assert.deepStrictEqual(tokens.shown.map((e) => e.model), ['x', 'a']);
+  assert.deepStrictEqual(tokens.unpriced, []);
+});
+
+test('mixEntries gives a zero total when every model is unpriced', () => {
+  const { shown, unpriced, total } = mixEntries([{ model: 'x', tokens: 5, cost: 0, priced: false }], 'cost');
+  assert.deepStrictEqual([shown.length, unpriced.length, total], [0, 1, 0]);
 });
 
 const at = (h, m = 0) => new Date(2026, 9, 6, h, m).getTime();
