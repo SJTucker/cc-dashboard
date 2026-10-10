@@ -657,3 +657,29 @@ test('version 1 rows: a file on disk is read again for its command rows, and a g
   assert.deepStrictEqual(data.skills.map((r) => [r.name, r.invocations]), [['tdd', 1]]);
   store.close();
 });
+
+test('version 2 rows: a file on disk is read again and its tool uses gain the model', async () => {
+  const { dir } = makeProjects();
+  const file = path.join(dir, 'v2.jsonl');
+  const twoDaysAgo = Date.now() - 2 * DAY_MS;
+  const line = {
+    type: 'assistant', sessionId: 's1', requestId: 'r1', timestamp: new Date(twoDaysAgo).toISOString(),
+    message: { id: 'm1', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: 'ls' } }], usage: { input_tokens: 1, output_tokens: 1 } },
+  };
+  fs.writeFileSync(file, JSON.stringify(line) + '\n');
+  fs.utimesSync(file, twoDaysAgo / 1000, twoDaysAgo / 1000);
+  const dbFile = tmpDb();
+  const seed = openStore(dbFile);
+  const st = fs.statSync(file);
+  const v2 = await extractFile(file);
+  seed.put(file, { size: st.size, mtimeMs: st.mtimeMs, version: 2, onDisk: true, rows: { ...v2, toolUses: v2.toolUses.map(({ model, ...rest }) => rest) } });
+  seed.close();
+
+  const store = openStore(dbFile);
+  const { rows, reads, refresh } = harness(dir, { store });
+  await refresh();
+
+  assert.deepStrictEqual(reads, [file]);
+  assert.strictEqual(rows.entries()[0].rows.toolUses[0].model, 'claude-opus-5-5');
+  store.close();
+});

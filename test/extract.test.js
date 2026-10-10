@@ -89,8 +89,8 @@ test('tool uses on later lines of a group are kept, with detail and a fallback k
   const rows = await extractFile(file);
 
   assert.deepStrictEqual(rows.toolUses, [
-    { key: 'toolu_1', t: Date.parse(T1), name: 'Bash', detail: 'git' },
-    { key: 'm1:r1:1', t: Date.parse(T1), name: 'Read', detail: '/a.js' },
+    { key: 'toolu_1', t: Date.parse(T1), name: 'Bash', detail: 'git', model: 'claude-sonnet-4-6' },
+    { key: 'm1:r1:1', t: Date.parse(T1), name: 'Read', detail: '/a.js', model: 'claude-sonnet-4-6' },
   ]);
 });
 
@@ -295,7 +295,7 @@ test('the warning adds nothing to the extracted rows', async (t) => {
   const file = writeTranscript([untagged('hello')]);
   const rows = await extractFile(file);
   assert.deepStrictEqual(rows.prompts, []);
-  assert.strictEqual(EXTRACT_VERSION, 2);
+  assert.strictEqual(EXTRACT_VERSION, 3);
 });
 
 test('a slash command line is a command row with its name, keyed like a prompt row', async () => {
