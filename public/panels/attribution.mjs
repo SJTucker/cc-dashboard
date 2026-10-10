@@ -5,6 +5,31 @@ import { shown } from '../state.mjs';
 import { drawSplitBar } from '../charts/split.mjs';
 import { drawHBars } from '../charts/hbars.mjs';
 
+// A skill or subagent row's share of total cost, such as "4.3%".
+function shareOfTotal(row, totalCost) {
+  return `${(totalCost > 0 ? (row.cost / totalCost) * 100 : 0).toFixed(1)}%`;
+}
+
+// A skill or subagent row's text: the times it was invoked in the range, then its
+// share of total cost, such as "21× · 4.3%". row.invocations comes from aggregate in
+// lib/aggregate.js: Skill tool calls and slash commands for a skill, Agent tool calls
+// for a subagent type.
+export function usageValue(row, totalCost) {
+  return `${row.invocations.toLocaleString('en-US')}× · ${shareOfTotal(row, totalCost)}`;
+}
+
+function invokedLine(n) {
+  if (n === 0) return 'Not invoked in this range';
+  return `Invoked ${n === 1 ? 'once' : `${n.toLocaleString('en-US')} times`} in this range`;
+}
+
+// The name is escaped because the tooltip is assigned as HTML (barNode in
+// charts/hbars.mjs).
+export function usageTooltip(row, totalCost) {
+  return `<b>${escapeHtml(row.name)}</b><br>${formatCost(row.cost)} &middot; ${shareOfTotal(row, totalCost)} of total`
+    + `<br>${invokedLine(row.invocations)}`;
+}
+
 export function renderAttribution(data) {
   const totalCost = data.summary.totalCost;
   document.getElementById('attributionPanel').hidden = totalCost <= 0;
@@ -13,14 +38,15 @@ export function renderAttribution(data) {
   // subagent bar drew longer than a 68.2% thread bar. The two split bars scale
   // themselves.
   const attributionScale = [...data.skills, ...data.subagents].reduce((max, r) => Math.max(max, r.cost), 0);
-  // Skill and subagent rows: the bar against the shared scale, the text the true
-  // share of total cost.
-  const shareOfTotal = (row) => `${(totalCost > 0 ? (row.cost / totalCost) * 100 : 0).toFixed(1)}%`;
+  // Skill and subagent rows: the bar against the shared scale, the text the
+  // invocations and the true share of total cost. usage-count widens the text cell
+  // to fit both, so the bars of one list line up.
   const usageBars = {
     size: (row) => row.cost,
     scaleMax: attributionScale,
-    value: shareOfTotal,
-    tooltip: (row) => `<b>${escapeHtml(row.name)}</b><br>${formatCost(row.cost)} &middot; ${shareOfTotal(row)} of total`,
+    value: (row) => usageValue(row, totalCost),
+    tooltip: (row) => usageTooltip(row, totalCost),
+    valueClass: 'usage-pct usage-count',
     empty: 'Nothing attributed in this range.',
   };
   const threadRows = [

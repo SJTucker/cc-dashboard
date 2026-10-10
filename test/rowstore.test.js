@@ -627,3 +627,33 @@ test('a file that extracts cleanly after throwing warns again when it next throw
 
   assert.strictEqual(warn.mock.calls.filter((c) => String(c.arguments[0]).includes(file)).length, 2);
 });
+
+test('version 1 rows: a file on disk is read again for its command rows, and a gone file aggregates without them', async () => {
+  const { dir } = makeProjects();
+  const onDisk = path.join(dir, 'ondisk.jsonl');
+  const twoDaysAgo = Date.now() - 2 * DAY_MS;
+  const line = { type: 'user', sessionId: 's1', uuid: 'u1', timestamp: new Date(twoDaysAgo).toISOString(), message: { content: '<command-message>tdd</command-message>\n<command-name>/tdd</command-name>' } };
+  fs.writeFileSync(onDisk, JSON.stringify(line) + '\n');
+  fs.utimesSync(onDisk, twoDaysAgo / 1000, twoDaysAgo / 1000);
+  const gone = path.join(dir, 'gone.jsonl');
+  const v1 = { ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], sessions: {}, minT: 1, maxT: 1 };
+  const goneCall = { key: 'k', t: 1, sessionId: 's2', sidechain: false, model: 'claude-sonnet-4-6', version: null, usage: { input_tokens: 100, output_tokens: 50 }, attributionSkill: 'tdd', attributionAgent: null, tools: [] };
+  const dbFile = tmpDb();
+  const seed = openStore(dbFile);
+  const st = fs.statSync(onDisk);
+  seed.put(onDisk, { size: st.size, mtimeMs: st.mtimeMs, version: 1, onDisk: true, rows: v1 });
+  seed.put(gone, { size: 1, mtimeMs: 1, version: 1, onDisk: false, rows: { ...v1, calls: [goneCall] } });
+  seed.close();
+
+  const store = openStore(dbFile);
+  const { rows, reads, refresh } = harness(dir, { store });
+  await refresh();
+
+  assert.deepStrictEqual(reads, [onDisk], 'only the file on disk is read again');
+  const byPath = new Map(rows.entries().map((e) => [e.path, e.rows]));
+  assert.deepStrictEqual(byPath.get(onDisk).commands.map((c) => c.name), ['tdd']);
+  assert.ok(!('commands' in byPath.get(gone)), 'a deleted transcript cannot be read for command rows');
+  const data = aggregate(rows.entries().map((e) => e.rows), { days: null });
+  assert.deepStrictEqual(data.skills.map((r) => [r.name, r.invocations]), [['tdd', 1]]);
+  store.close();
+});

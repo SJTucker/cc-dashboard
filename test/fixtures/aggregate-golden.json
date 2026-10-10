@@ -1950,17 +1950,20 @@
     "skills": [
       {
         "name": "tdd",
-        "cost": 0.03213
+        "cost": 0.03213,
+        "invocations": 1
       },
       {
         "name": "review",
-        "cost": 0.026775
+        "cost": 0.026775,
+        "invocations": 0
       }
     ],
     "subagents": [
       {
         "name": "Explore",
-        "cost": 0.00045
+        "cost": 0.00045,
+        "invocations": 1
       }
     ],
     "threads": {
@@ -3927,17 +3930,20 @@
     "skills": [
       {
         "name": "tdd",
-        "cost": 0.03213
+        "cost": 0.03213,
+        "invocations": 1
       },
       {
         "name": "review",
-        "cost": 0.026775
+        "cost": 0.026775,
+        "invocations": 0
       }
     ],
     "subagents": [
       {
         "name": "Explore",
-        "cost": 0.00045
+        "cost": 0.00045,
+        "invocations": 1
       }
     ],
     "threads": {
@@ -5823,17 +5829,20 @@
     "skills": [
       {
         "name": "tdd",
-        "cost": 0.03213
+        "cost": 0.03213,
+        "invocations": 1
       },
       {
         "name": "review",
-        "cost": 0.026775
+        "cost": 0.026775,
+        "invocations": 0
       }
     ],
     "subagents": [
       {
         "name": "Explore",
-        "cost": 0.00045
+        "cost": 0.00045,
+        "invocations": 1
       }
     ],
     "threads": {
@@ -7811,13 +7820,15 @@
     "skills": [
       {
         "name": "tdd",
-        "cost": 0.03213
+        "cost": 0.03213,
+        "invocations": 1
       }
     ],
     "subagents": [
       {
         "name": "Explore",
-        "cost": 0.00045
+        "cost": 0.00045,
+        "invocations": 1
       }
     ],
     "threads": {

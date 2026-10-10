@@ -349,6 +349,13 @@
         "sessionId": "sess-a"
       }
     ],
+    "commands": [
+      {
+        "id": "sess-a:2026-10-08T14:05:00.000Z",
+        "t": 1791468300000,
+        "name": "clear"
+      }
+    ],
     "sessions": {
       "sess-a": {
         "branches": [
@@ -561,6 +568,7 @@
         "sessionId": "sess-b"
       }
     ],
+    "commands": [],
     "sessions": {
       "sess-a": {
         "branches": [
@@ -644,6 +652,7 @@
         "sessionId": "sess-c"
       }
     ],
+    "commands": [],
     "sessions": {
       "sess-c": {
         "branches": [
@@ -699,6 +708,7 @@
     "errors": [],
     "edits": [],
     "prompts": [],
+    "commands": [],
     "sessions": {
       "<corpus>/d.jsonl": {
         "branches": [],
@@ -832,6 +842,7 @@
       }
     ],
     "prompts": [],
+    "commands": [],
     "sessions": {},
     "minT": 1790578800000,
     "maxT": 1791001860000
@@ -843,6 +854,7 @@
     "errors": [],
     "edits": [],
     "prompts": [],
+    "commands": [],
     "sessions": {
       "sess-f": {
         "branches": [],
@@ -862,6 +874,7 @@
     "errors": [],
     "edits": [],
     "prompts": [],
+    "commands": [],
     "sessions": {},
     "minT": null,
     "maxT": null
