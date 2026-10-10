@@ -10,6 +10,7 @@ type World = {
   model: string
   env: Record<string, string>
   exists: (path: string) => boolean
+  turns: () => number
   dirs: Record<string, string[]>
   files: Record<string, string>
   version: { version: string; base?: string }
@@ -74,6 +75,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     model: 'claude-opus-5-5[1m]',
     env: { HOME: '/home/u' },
     exists: () => true,
+    turns: () => 1,
     dirs: {},
     files: {},
     version: { version: '2.1.290', base: '2.1.290' },
@@ -149,6 +151,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   on('session.id', () => ({ value: state.id }))
   on('session.root', () => ({ value: '/work/my.demo' }))
   on('session.model', () => ({ value: state.model }))
+  on('session.turns', () => ({ value: state.turns() }))
   on('session.usage', () => ({ value: { startedAt: 1_000, context: { window: 200_000 }, rateLimits: [] } }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('session.end', async (_$, e) => {
@@ -266,7 +269,7 @@ test('a transcript outside the built path is found by searching the projects fol
   expect(input.workspace.project_dir).toBe('/work/my.demo')
 })
 
-test('a transcript that exists nowhere records nothing and, with a cost, logs once', async ($, on) => {
+test('a transcript that exists nowhere after a prompt records nothing and logs once', async ($, on) => {
   const { ran, logged } = world(on, { exists: () => false, dirs: { '/home/u/.claude/projects': ['-work-my-demo'] } })
   await $.session.measure(measure([FIVE]))
   await $.session.measure(measure([FIVE]))
@@ -274,11 +277,15 @@ test('a transcript that exists nowhere records nothing and, with a cost, logs on
   expect(logged).toEqual(['transcript not found'])
 })
 
-test('a measure without cost on a missing transcript logs nothing, and a later one with cost still logs', async ($, on) => {
-  const { ran, logged } = world(on, { exists: () => false, dirs: { '/home/u/.claude/projects': ['-work-my-demo'] } })
-  await $.session.measure(measure([FIVE], null))
+test('a fresh session with no transcript yet logs nothing, and one after a prompt still logs', async ($, on) => {
+  // Claude Code's first measure names every unit it has a figure for, so it carries
+  // cost { usd: 0 } before the first prompt writes the transcript.
+  let turns = 0
+  const { ran, logged } = world(on, { exists: () => false, turns: () => turns, dirs: { '/home/u/.claude/projects': ['-work-my-demo'] } })
+  await $.session.measure(measure([FIVE], { usd: 0 }))
   expect(ran).toEqual([])
   expect(logged).toEqual([])
+  turns = 1
   await $.session.measure(measure([FIVE]))
   expect(logged).toEqual(['transcript not found'])
 })
