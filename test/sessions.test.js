@@ -392,6 +392,17 @@ test('recordSession keeps endedAt and endReason when it rewrites a snapshot', ()
   assert.strictEqual(written.endReason, 'clear');
 });
 
+test('recordSession keeps launchId when a later write has none or an invalid one', () => {
+  const dir = tmpDir();
+  recordSession(statuslineInput({ launch_id: 'L1' }), dir, NOW);
+  const longer = { ...statuslineInput().cost, total_duration_ms: statuslineInput().cost.total_duration_ms + 1000 };
+  recordSession(statuslineInput({ cost: longer }), dir, NOW);
+  assert.strictEqual(readSnapshot(dir).launchId, 'L1');
+  const longest = { ...longer, total_duration_ms: longer.total_duration_ms + 1000 };
+  recordSession(statuslineInput({ cost: longest, launch_id: '../bad' }), dir, NOW);
+  assert.strictEqual(readSnapshot(dir).launchId, 'L1');
+});
+
 test('readSessions keeps a valid end and drops malformed end fields', () => {
   const dir = writeSnapshots([
     snapshot({ sessionId: 'good', lastActiveAt: NOW - 5000, endedAt: NOW - 1000, endReason: 'prompt_input_exit' }),

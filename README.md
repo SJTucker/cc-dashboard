@@ -335,9 +335,10 @@ the `SessionEnd` hook from SETUP.md's "Without the mod" runs it. With neither, a
 session shows as live for 10 minutes after its last response. So after a `/clear`, the
 old session and the new one both show as live for up to 10 minutes. A resumed session keeps its
 session id, so its row shows as live again after its next response.
-When a project has two or more cleared or ended sessions, the panel shows them as
-one row with the summed figures and a count of each state. Click the row's arrow to
-list the sessions one by one. Live and idle open sessions always keep their own rows.
+When a project has two or more cleared or ended sessions outside a launch group, the
+panel shows them as one row with the summed figures and a count of each state. Click
+the row's arrow to list the sessions one by one. Live and idle open sessions keep
+their own rows unless they belong to a launch group.
 
 The Session timeline panel, above Live sessions, shows the same sessions by time on
 the Today range. Each session has one lane, ordered by when it started working today.

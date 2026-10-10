@@ -905,7 +905,9 @@ html, body {
 .sessions-table .session-child td:first-child { padding-left: 24px; }
 .sessions-table .session-group .row-toggle { padding-right: 4px; }
 /* In a launch group row the toggle sits before the hex glyph, so the project and
-   branch line starts further in to stay under the title. */
+   branch line starts further in to stay under the title. The 2ch + 12px matches the
+   width of the `.row-toggle` glyph plus its padding in `.session-group` rows, so a
+   change to that padding needs this value changed too. */
 .sessions-table .launch-group .session-hex ~ .session-title ~ .session-context {
   padding-left: calc(2ch + 12px);
 }
