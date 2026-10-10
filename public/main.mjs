@@ -219,7 +219,7 @@ function renderPayload(payload) {
   renderUsageCharts(data);
   renderModels(data);
   renderAttribution(data);
-  if (shown('tools')) renderTools(data.tools || []);
+  if (shown('tools')) renderTools(data.tools || [], data.toolTotals);
   renderRtk(rtk);
   lastSignature = signature;
 }

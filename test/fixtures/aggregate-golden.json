@@ -65,6 +65,24 @@
             "example": "ls: /tmp/x 12: No such file",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 6,
+            "errors": 4,
+            "errorCauses": [
+              {
+                "cause": "command failed",
+                "count": 3
+              },
+              {
+                "cause": "other",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -114,6 +132,20 @@
             "example": "File has not been read yet",
             "t": 1788012120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 5,
+            "errors": 2,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 2
+              }
+            ]
+          }
         ]
       },
       {
@@ -143,7 +175,16 @@
           }
         ],
         "errorCauses": [],
-        "errorGroups": []
+        "errorGroups": [],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 4,
+            "errors": 0,
+            "errorCauses": []
+          }
+        ]
       },
       {
         "name": "Read",
@@ -174,6 +215,20 @@
             "count": 1,
             "example": "File does not exist.",
             "t": 0
+          }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 2,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
           }
         ]
       },
@@ -213,6 +268,24 @@
             "example": "The user doesn't want to proceed with this tool use.",
             "t": 1791468060000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 2,
+            "errors": 2,
+            "errorCauses": [
+              {
+                "cause": "blocked by auto mode",
+                "count": 1
+              },
+              {
+                "cause": "rejected by you",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -227,7 +300,16 @@
           }
         ],
         "errorCauses": [],
-        "errorGroups": []
+        "errorGroups": [],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 0,
+            "errorCauses": []
+          }
+        ]
       },
       {
         "name": "Skill",
@@ -254,6 +336,20 @@
             "example": "InputValidationError: skill not found",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -275,9 +371,147 @@
             "example": "Command blocked: isolated in the worktree",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "blocked by the worktree check",
+                "count": 1
+              }
+            ]
+          }
         ]
       }
     ],
+    "toolTotals": {
+      "name": "All tools",
+      "calls": 22,
+      "errors": 11,
+      "details": [],
+      "errorCauses": [
+        {
+          "cause": "tool misused",
+          "count": 4
+        },
+        {
+          "cause": "command failed",
+          "count": 3
+        },
+        {
+          "cause": "blocked by auto mode",
+          "count": 1
+        },
+        {
+          "cause": "rejected by you",
+          "count": 1
+        },
+        {
+          "cause": "blocked by the worktree check",
+          "count": 1
+        },
+        {
+          "cause": "other",
+          "count": 1
+        }
+      ],
+      "errorGroups": [
+        {
+          "cause": "command failed",
+          "message": "exit 3 · npm",
+          "count": 2,
+          "example": "Exit code 3\nlint failed",
+          "t": 1791001860000
+        },
+        {
+          "cause": "command failed",
+          "message": "exit 2 · git",
+          "count": 1,
+          "example": "Exit code 2\nfatal: a later copy of the error",
+          "t": 1791464880000
+        },
+        {
+          "cause": "tool misused",
+          "message": "String to replace not found in file <path> yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "count": 1,
+          "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "t": 1791468060000
+        },
+        {
+          "cause": "blocked by auto mode",
+          "message": "Permission for this action was denied by the auto mode classifier.",
+          "count": 1,
+          "example": "Permission for this action was denied by the auto mode classifier.",
+          "t": 1791468060000
+        },
+        {
+          "cause": "rejected by you",
+          "message": "The user doesn't want to proceed with this tool use.",
+          "count": 1,
+          "example": "The user doesn't want to proceed with this tool use.",
+          "t": 1791468060000
+        },
+        {
+          "cause": "tool misused",
+          "message": "InputValidationError: skill not found",
+          "count": 1,
+          "example": "InputValidationError: skill not found",
+          "t": 1791468120000
+        },
+        {
+          "cause": "blocked by the worktree check",
+          "message": "Command blocked: isolated in the worktree",
+          "count": 1,
+          "example": "Command blocked: isolated in the worktree",
+          "t": 1791468120000
+        },
+        {
+          "cause": "other",
+          "message": "ls: <path> N: No such file",
+          "count": 1,
+          "example": "ls: /tmp/x 12: No such file",
+          "t": 1791468120000
+        }
+      ],
+      "byModel": [
+        {
+          "label": "Sonnet 4.6",
+          "family": "sonnet",
+          "calls": 22,
+          "errors": 11,
+          "errorCauses": [
+            {
+              "cause": "tool misused",
+              "count": 4
+            },
+            {
+              "cause": "command failed",
+              "count": 3
+            },
+            {
+              "cause": "blocked by auto mode",
+              "count": 1
+            },
+            {
+              "cause": "rejected by you",
+              "count": 1
+            },
+            {
+              "cause": "blocked by the worktree check",
+              "count": 1
+            },
+            {
+              "cause": "other",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
     "summary": {
       "totalCost": 0.18534,
       "totalTokens": 273192,
@@ -2361,6 +2595,24 @@
             "example": "ls: /tmp/x 12: No such file",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 6,
+            "errors": 4,
+            "errorCauses": [
+              {
+                "cause": "command failed",
+                "count": 3
+              },
+              {
+                "cause": "other",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -2398,6 +2650,20 @@
             "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
             "t": 1791468060000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 4,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -2427,7 +2693,16 @@
           }
         ],
         "errorCauses": [],
-        "errorGroups": []
+        "errorGroups": [],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 4,
+            "errors": 0,
+            "errorCauses": []
+          }
+        ]
       },
       {
         "name": "Read",
@@ -2458,6 +2733,20 @@
             "count": 1,
             "example": "File does not exist.",
             "t": 0
+          }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 2,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
           }
         ]
       },
@@ -2497,6 +2786,24 @@
             "example": "The user doesn't want to proceed with this tool use.",
             "t": 1791468060000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 2,
+            "errors": 2,
+            "errorCauses": [
+              {
+                "cause": "blocked by auto mode",
+                "count": 1
+              },
+              {
+                "cause": "rejected by you",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -2511,7 +2818,16 @@
           }
         ],
         "errorCauses": [],
-        "errorGroups": []
+        "errorGroups": [],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 0,
+            "errorCauses": []
+          }
+        ]
       },
       {
         "name": "Skill",
@@ -2538,6 +2854,20 @@
             "example": "InputValidationError: skill not found",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -2559,9 +2889,147 @@
             "example": "Command blocked: isolated in the worktree",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "blocked by the worktree check",
+                "count": 1
+              }
+            ]
+          }
         ]
       }
     ],
+    "toolTotals": {
+      "name": "All tools",
+      "calls": 21,
+      "errors": 10,
+      "details": [],
+      "errorCauses": [
+        {
+          "cause": "command failed",
+          "count": 3
+        },
+        {
+          "cause": "tool misused",
+          "count": 3
+        },
+        {
+          "cause": "blocked by auto mode",
+          "count": 1
+        },
+        {
+          "cause": "rejected by you",
+          "count": 1
+        },
+        {
+          "cause": "blocked by the worktree check",
+          "count": 1
+        },
+        {
+          "cause": "other",
+          "count": 1
+        }
+      ],
+      "errorGroups": [
+        {
+          "cause": "command failed",
+          "message": "exit 3 · npm",
+          "count": 2,
+          "example": "Exit code 3\nlint failed",
+          "t": 1791001860000
+        },
+        {
+          "cause": "command failed",
+          "message": "exit 2 · git",
+          "count": 1,
+          "example": "Exit code 2\nfatal: a later copy of the error",
+          "t": 1791464880000
+        },
+        {
+          "cause": "tool misused",
+          "message": "String to replace not found in file <path> yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "count": 1,
+          "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "t": 1791468060000
+        },
+        {
+          "cause": "blocked by auto mode",
+          "message": "Permission for this action was denied by the auto mode classifier.",
+          "count": 1,
+          "example": "Permission for this action was denied by the auto mode classifier.",
+          "t": 1791468060000
+        },
+        {
+          "cause": "rejected by you",
+          "message": "The user doesn't want to proceed with this tool use.",
+          "count": 1,
+          "example": "The user doesn't want to proceed with this tool use.",
+          "t": 1791468060000
+        },
+        {
+          "cause": "tool misused",
+          "message": "InputValidationError: skill not found",
+          "count": 1,
+          "example": "InputValidationError: skill not found",
+          "t": 1791468120000
+        },
+        {
+          "cause": "blocked by the worktree check",
+          "message": "Command blocked: isolated in the worktree",
+          "count": 1,
+          "example": "Command blocked: isolated in the worktree",
+          "t": 1791468120000
+        },
+        {
+          "cause": "other",
+          "message": "ls: <path> N: No such file",
+          "count": 1,
+          "example": "ls: /tmp/x 12: No such file",
+          "t": 1791468120000
+        }
+      ],
+      "byModel": [
+        {
+          "label": "Sonnet 4.6",
+          "family": "sonnet",
+          "calls": 21,
+          "errors": 10,
+          "errorCauses": [
+            {
+              "cause": "command failed",
+              "count": 3
+            },
+            {
+              "cause": "tool misused",
+              "count": 3
+            },
+            {
+              "cause": "blocked by auto mode",
+              "count": 1
+            },
+            {
+              "cause": "rejected by you",
+              "count": 1
+            },
+            {
+              "cause": "blocked by the worktree check",
+              "count": 1
+            },
+            {
+              "cause": "other",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
     "summary": {
       "totalCost": 0.18129,
       "totalTokens": 272202,
@@ -4319,6 +4787,24 @@
             "example": "Exit code 3\nlint failed",
             "t": 1791001860000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 5,
+            "errors": 3,
+            "errorCauses": [
+              {
+                "cause": "command failed",
+                "count": 2
+              },
+              {
+                "cause": "other",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -4348,7 +4834,16 @@
           }
         ],
         "errorCauses": [],
-        "errorGroups": []
+        "errorGroups": [],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 4,
+            "errors": 0,
+            "errorCauses": []
+          }
+        ]
       },
       {
         "name": "Edit",
@@ -4379,6 +4874,20 @@
             "count": 1,
             "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
             "t": 1791468060000
+          }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 3,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
           }
         ]
       },
@@ -4411,6 +4920,20 @@
             "count": 1,
             "example": "File does not exist.",
             "t": 0
+          }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 2,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
           }
         ]
       },
@@ -4450,6 +4973,24 @@
             "example": "The user doesn't want to proceed with this tool use.",
             "t": 1791468060000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 2,
+            "errors": 2,
+            "errorCauses": [
+              {
+                "cause": "blocked by auto mode",
+                "count": 1
+              },
+              {
+                "cause": "rejected by you",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -4464,7 +5005,16 @@
           }
         ],
         "errorCauses": [],
-        "errorGroups": []
+        "errorGroups": [],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 0,
+            "errorCauses": []
+          }
+        ]
       },
       {
         "name": "Skill",
@@ -4491,6 +5041,20 @@
             "example": "InputValidationError: skill not found",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -4512,9 +5076,147 @@
             "example": "Command blocked: isolated in the worktree",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "blocked by the worktree check",
+                "count": 1
+              }
+            ]
+          }
         ]
       }
     ],
+    "toolTotals": {
+      "name": "All tools",
+      "calls": 19,
+      "errors": 9,
+      "details": [],
+      "errorCauses": [
+        {
+          "cause": "tool misused",
+          "count": 3
+        },
+        {
+          "cause": "command failed",
+          "count": 2
+        },
+        {
+          "cause": "blocked by auto mode",
+          "count": 1
+        },
+        {
+          "cause": "rejected by you",
+          "count": 1
+        },
+        {
+          "cause": "blocked by the worktree check",
+          "count": 1
+        },
+        {
+          "cause": "other",
+          "count": 1
+        }
+      ],
+      "errorGroups": [
+        {
+          "cause": "command failed",
+          "message": "exit 2 · git",
+          "count": 1,
+          "example": "Exit code 2\nfatal: a later copy of the error",
+          "t": 1791464880000
+        },
+        {
+          "cause": "tool misused",
+          "message": "String to replace not found in file <path> yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "count": 1,
+          "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "t": 1791468060000
+        },
+        {
+          "cause": "blocked by auto mode",
+          "message": "Permission for this action was denied by the auto mode classifier.",
+          "count": 1,
+          "example": "Permission for this action was denied by the auto mode classifier.",
+          "t": 1791468060000
+        },
+        {
+          "cause": "rejected by you",
+          "message": "The user doesn't want to proceed with this tool use.",
+          "count": 1,
+          "example": "The user doesn't want to proceed with this tool use.",
+          "t": 1791468060000
+        },
+        {
+          "cause": "tool misused",
+          "message": "InputValidationError: skill not found",
+          "count": 1,
+          "example": "InputValidationError: skill not found",
+          "t": 1791468120000
+        },
+        {
+          "cause": "blocked by the worktree check",
+          "message": "Command blocked: isolated in the worktree",
+          "count": 1,
+          "example": "Command blocked: isolated in the worktree",
+          "t": 1791468120000
+        },
+        {
+          "cause": "other",
+          "message": "ls: <path> N: No such file",
+          "count": 1,
+          "example": "ls: /tmp/x 12: No such file",
+          "t": 1791468120000
+        },
+        {
+          "cause": "command failed",
+          "message": "exit 3 · npm",
+          "count": 1,
+          "example": "Exit code 3\nlint failed",
+          "t": 1791001860000
+        }
+      ],
+      "byModel": [
+        {
+          "label": "Sonnet 4.6",
+          "family": "sonnet",
+          "calls": 19,
+          "errors": 9,
+          "errorCauses": [
+            {
+              "cause": "tool misused",
+              "count": 3
+            },
+            {
+              "cause": "command failed",
+              "count": 2
+            },
+            {
+              "cause": "blocked by auto mode",
+              "count": 1
+            },
+            {
+              "cause": "rejected by you",
+              "count": 1
+            },
+            {
+              "cause": "blocked by the worktree check",
+              "count": 1
+            },
+            {
+              "cause": "other",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
     "summary": {
       "totalCost": 0.17976,
       "totalTokens": 271828,
@@ -6154,6 +6856,24 @@
             "example": "ls: /tmp/x 12: No such file",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 4,
+            "errors": 2,
+            "errorCauses": [
+              {
+                "cause": "command failed",
+                "count": 1
+              },
+              {
+                "cause": "other",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -6183,7 +6903,16 @@
           }
         ],
         "errorCauses": [],
-        "errorGroups": []
+        "errorGroups": [],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 4,
+            "errors": 0,
+            "errorCauses": []
+          }
+        ]
       },
       {
         "name": "Edit",
@@ -6214,6 +6943,20 @@
             "count": 1,
             "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
             "t": 1791468060000
+          }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 3,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
           }
         ]
       },
@@ -6253,6 +6996,24 @@
             "example": "The user doesn't want to proceed with this tool use.",
             "t": 1791468060000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 2,
+            "errors": 2,
+            "errorCauses": [
+              {
+                "cause": "blocked by auto mode",
+                "count": 1
+              },
+              {
+                "cause": "rejected by you",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -6267,7 +7028,16 @@
           }
         ],
         "errorCauses": [],
-        "errorGroups": []
+        "errorGroups": [],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 0,
+            "errorCauses": []
+          }
+        ]
       },
       {
         "name": "Agent",
@@ -6281,7 +7051,16 @@
           }
         ],
         "errorCauses": [],
-        "errorGroups": []
+        "errorGroups": [],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 0,
+            "errorCauses": []
+          }
+        ]
       },
       {
         "name": "Skill",
@@ -6308,6 +7087,20 @@
             "example": "InputValidationError: skill not found",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "tool misused",
+                "count": 1
+              }
+            ]
+          }
         ]
       },
       {
@@ -6329,9 +7122,140 @@
             "example": "Command blocked: isolated in the worktree",
             "t": 1791468120000
           }
+        ],
+        "byModel": [
+          {
+            "label": "Sonnet 4.6",
+            "family": "sonnet",
+            "calls": 1,
+            "errors": 1,
+            "errorCauses": [
+              {
+                "cause": "blocked by the worktree check",
+                "count": 1
+              }
+            ]
+          }
         ]
       }
     ],
+    "toolTotals": {
+      "name": "All tools",
+      "calls": 17,
+      "errors": 7,
+      "details": [],
+      "errorCauses": [
+        {
+          "cause": "tool misused",
+          "count": 2
+        },
+        {
+          "cause": "command failed",
+          "count": 1
+        },
+        {
+          "cause": "blocked by auto mode",
+          "count": 1
+        },
+        {
+          "cause": "rejected by you",
+          "count": 1
+        },
+        {
+          "cause": "blocked by the worktree check",
+          "count": 1
+        },
+        {
+          "cause": "other",
+          "count": 1
+        }
+      ],
+      "errorGroups": [
+        {
+          "cause": "command failed",
+          "message": "exit 2 · git",
+          "count": 1,
+          "example": "Exit code 2\nfatal: a later copy of the error",
+          "t": 1791464880000
+        },
+        {
+          "cause": "tool misused",
+          "message": "String to replace not found in file <path> yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "count": 1,
+          "example": "String to replace not found in file /repo/b.js. yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy",
+          "t": 1791468060000
+        },
+        {
+          "cause": "blocked by auto mode",
+          "message": "Permission for this action was denied by the auto mode classifier.",
+          "count": 1,
+          "example": "Permission for this action was denied by the auto mode classifier.",
+          "t": 1791468060000
+        },
+        {
+          "cause": "rejected by you",
+          "message": "The user doesn't want to proceed with this tool use.",
+          "count": 1,
+          "example": "The user doesn't want to proceed with this tool use.",
+          "t": 1791468060000
+        },
+        {
+          "cause": "tool misused",
+          "message": "InputValidationError: skill not found",
+          "count": 1,
+          "example": "InputValidationError: skill not found",
+          "t": 1791468120000
+        },
+        {
+          "cause": "blocked by the worktree check",
+          "message": "Command blocked: isolated in the worktree",
+          "count": 1,
+          "example": "Command blocked: isolated in the worktree",
+          "t": 1791468120000
+        },
+        {
+          "cause": "other",
+          "message": "ls: <path> N: No such file",
+          "count": 1,
+          "example": "ls: /tmp/x 12: No such file",
+          "t": 1791468120000
+        }
+      ],
+      "byModel": [
+        {
+          "label": "Sonnet 4.6",
+          "family": "sonnet",
+          "calls": 17,
+          "errors": 7,
+          "errorCauses": [
+            {
+              "cause": "tool misused",
+              "count": 2
+            },
+            {
+              "cause": "command failed",
+              "count": 1
+            },
+            {
+              "cause": "blocked by auto mode",
+              "count": 1
+            },
+            {
+              "cause": "rejected by you",
+              "count": 1
+            },
+            {
+              "cause": "blocked by the worktree check",
+              "count": 1
+            },
+            {
+              "cause": "other",
+              "count": 1
+            }
+          ]
+        }
+      ]
+    },
     "summary": {
       "totalCost": 0.15165,
       "totalTokens": 218585,

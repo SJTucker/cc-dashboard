@@ -863,7 +863,8 @@ html, body {
    narrower than the viewport by the scrollbar width, about 15px, so it switches
    slightly later. At half width, two columns wrapped each legend's percentage onto
    the line under its label. */
-#attributionPanel { container-type: inline-size; }
+/* #toolPanel is a container too, so its .usage-grid stacks at the same width. */
+#attributionPanel, #toolPanel { container-type: inline-size; }
 
 @container (max-width: 814px) {
   .usage-grid { grid-template-columns: 1fr; }
@@ -1263,6 +1264,29 @@ html, body {
   overflow-wrap: anywhere;
   max-height: 12em;
   overflow: auto;
+}
+/* The All tools row sits above the per-tool bars, set apart by a rule under it. */
+.tool-all {
+  padding-bottom: 6px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+}
+
+/* A grid item will not shrink below its content width unless min-width is 0. The
+   model table is wider than a 400px viewport, so its column must be allowed to
+   shrink for .tool-model-scroll to scroll instead of widening the page. */
+#toolPanel .usage-group { min-width: 0; }
+
+/* The model table scrolls inside this box, so at a 400px viewport it does not
+   widen the page. */
+.tool-model-scroll {
+  overflow-x: auto;
+  margin: 8px 0 12px;
+}
+
+.tool-model-scroll .model-table td,
+.tool-model-scroll .model-table th {
+  white-space: nowrap;
 }
 .changes-error { color: var(--accent-cost); }
 

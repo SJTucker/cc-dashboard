@@ -364,6 +364,18 @@ or subagent started before the range whose calls continue into it shows `0×`. U
 transcripts Claude Code has since deleted counts no slash commands, because the
 dashboard did not record them before this version.
 
+The Tool calls panel lists calls per tool, with the error rate beside each tool that
+had errors. Pick a tool, or "All tools" above the list, to see its breakdown, its
+error causes, a table per model and its most common errors. The causes are blocked
+by the worktree check, blocked by auto mode, blocked by a hook, rejected by you,
+command failed, tool misused, and other. The model table has one row per model, with
+its calls and two rates. Mistakes counts "tool misused" errors. "+ failed commands"
+adds "command failed", because a failing test or a grep with no match also exits
+non-zero. Not counted is every other error, which comes from the environment the
+model ran in. Hover it for the count per cause. A model with fewer than 20 calls
+shows "–" for both rates. Tool calls stored from transcripts Claude Code has since
+deleted take the model of the response before them.
+
 ### Hiding panels
 
 Each panel and summary card has an "x" button, shown when the pointer is over it or
@@ -568,7 +580,7 @@ public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Not use
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
 public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
 public/panels/timeline.mjs  The Session timeline: one lane per session with activity today
-public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown and its errors
+public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown, its errors and an error table per model
 public/panels/usage.mjs  Daily cost, daily tokens, cumulative cost, token types and the weekday and hour heatmap
 public/ui/collapse.mjs Collapsible rows of panels, and the collapsible Skills and Subagents lists
 public/ui/hidden.mjs   Hides a panel or card with its x button, shows it again from the header menu, and keeps a row's handle and toggle on a panel that shows

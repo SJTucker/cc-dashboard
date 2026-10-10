@@ -171,103 +171,120 @@
         "key": "toolu_a1",
         "t": 1791464460000,
         "name": "Bash",
-        "detail": "git"
+        "detail": "git",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "m-a1:r-a1:0",
         "t": 1791464520000,
         "name": "Read",
-        "detail": "/repo/a.js"
+        "detail": "/repo/a.js",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a2",
         "t": 1791464640000,
         "name": "Edit",
-        "detail": "/repo/a.js"
+        "detail": "/repo/a.js",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a3",
         "t": 1791464640000,
         "name": "Write",
-        "detail": "/repo/new.txt"
+        "detail": "/repo/new.txt",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a4",
         "t": 1791464640000,
         "name": "Write",
-        "detail": "/repo/empty.txt"
+        "detail": "/repo/empty.txt",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a5",
         "t": 1791464640000,
         "name": "Write",
-        "detail": "/repo/two.txt"
+        "detail": "/repo/two.txt",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a6",
         "t": 1791464640000,
         "name": "Bash",
-        "detail": "sed"
+        "detail": "sed",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a7",
         "t": 1791464640000,
         "name": "Edit",
-        "detail": null
+        "detail": null,
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a8",
         "t": 1791464640000,
         "name": "Write",
-        "detail": "/repo/odd.txt"
+        "detail": "/repo/odd.txt",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a9",
         "t": 1791468000000,
         "name": "Edit",
-        "detail": "/repo/b.js"
+        "detail": "/repo/b.js",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a10",
         "t": 1791468000000,
         "name": "WebFetch",
-        "detail": "example.com"
+        "detail": "example.com",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a11",
         "t": 1791468000000,
         "name": "WebFetch",
-        "detail": null
+        "detail": null,
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a12",
         "t": 1791468000000,
         "name": "Agent",
-        "detail": "Explore"
+        "detail": "Explore",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a13",
         "t": 1791468000000,
         "name": "Skill",
-        "detail": "tdd"
+        "detail": "tdd",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a14",
         "t": 1791468000000,
         "name": "unknown",
-        "detail": null
+        "detail": null,
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a15",
         "t": 1791468000000,
         "name": "Bash",
-        "detail": "ls"
+        "detail": "ls",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "undefined:undefined:0",
         "t": 1791471660000,
         "name": "Bash",
-        "detail": "ls"
+        "detail": "ls",
+        "model": "claude-sonnet-4-6-20260115"
       }
     ],
     "errors": [
@@ -484,55 +501,64 @@
         "key": "toolu_a1",
         "t": 1791464460000,
         "name": "Bash",
-        "detail": "git"
+        "detail": "git",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "m-a1:r-a1:0",
         "t": 1791464520000,
         "name": "Read",
-        "detail": "/repo/a.js"
+        "detail": "/repo/a.js",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a2",
         "t": 1791464640000,
         "name": "Edit",
-        "detail": "/repo/a.js"
+        "detail": "/repo/a.js",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a3",
         "t": 1791464640000,
         "name": "Write",
-        "detail": "/repo/new.txt"
+        "detail": "/repo/new.txt",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a4",
         "t": 1791464640000,
         "name": "Write",
-        "detail": "/repo/empty.txt"
+        "detail": "/repo/empty.txt",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a5",
         "t": 1791464640000,
         "name": "Write",
-        "detail": "/repo/two.txt"
+        "detail": "/repo/two.txt",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a6",
         "t": 1791464640000,
         "name": "Bash",
-        "detail": "sed"
+        "detail": "sed",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a7",
         "t": 1791464640000,
         "name": "Edit",
-        "detail": null
+        "detail": null,
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_a8",
         "t": 1791464640000,
         "name": "Write",
-        "detail": "/repo/odd.txt"
+        "detail": "/repo/odd.txt",
+        "model": "claude-sonnet-4-6-20260115"
       }
     ],
     "errors": [
@@ -626,7 +652,8 @@
         "key": "toolu_c1",
         "t": 1788012060000,
         "name": "Edit",
-        "detail": "/old/c.js"
+        "detail": "/old/c.js",
+        "model": "claude-sonnet-4-6-20260115"
       }
     ],
     "errors": [
@@ -794,25 +821,29 @@
         "key": "toolu_e1",
         "t": 1790578800000,
         "name": "Bash",
-        "detail": "npm"
+        "detail": "npm",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_e2",
         "t": 1790650800000,
         "name": "Edit",
-        "detail": "/e.js"
+        "detail": "/e.js",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_e3",
         "t": 1791001800000,
         "name": "Bash",
-        "detail": "npm"
+        "detail": "npm",
+        "model": "claude-sonnet-4-6-20260115"
       },
       {
         "key": "toolu_e4",
         "t": 1791001800000,
         "name": "Read",
-        "detail": "/e.md"
+        "detail": "/e.md",
+        "model": "claude-sonnet-4-6-20260115"
       }
     ],
     "errors": [
