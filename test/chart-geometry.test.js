@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rangeDomain,
+  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
 } = require('../public/chart-geometry');
 
@@ -167,6 +167,35 @@ test('laneLayout does not stretch a live session whose last call is older than t
 test('laneLayout never opens the bar of a session that is not live', () => {
   const [{ bars }] = laneLayout([lane([[at(11, 55), at(11, 58)]], false)], xOf, NOW_T);
   assert.strictEqual(bars[0].open, false);
+});
+
+const rb = (t, main = true) => ({ t, main, cause: 'expired', reason: null, tokens: 50_000, gapMs: 1, premium: 0.1 });
+
+test('rebuildMarks gives each rebuild its own mark when they are far apart', () => {
+  const marks = rebuildMarks([rb(at(10)), rb(at(11))], xOf);
+  assert.deepStrictEqual(marks.map((m) => [m.x, m.items.length, m.main]), [[60, 1, true], [120, 1, true]]);
+});
+
+test('rebuildMarks joins rebuilds closer than minGapPx into one mark, in time order', () => {
+  const late = rb(at(10, 5), false);
+  const early = rb(at(10), false);
+  const apart = rb(at(10, 20), false);
+  const marks = rebuildMarks([late, early, apart], xOf, 8);
+  assert.deepStrictEqual(marks.map((m) => [m.x, m.items, m.main]), [[60, [early, late], false], [80, [apart], false]]);
+});
+
+test('rebuildMarks measures the gap from the mark\'s first item, so a chain does not grow without end', () => {
+  const marks = rebuildMarks([rb(at(10)), rb(at(10, 5)), rb(at(10, 10))], xOf, 8);
+  assert.deepStrictEqual(marks.map((m) => m.items.length), [2, 1]);
+});
+
+test('a mark with any main-thread rebuild is main', () => {
+  const [mark] = rebuildMarks([rb(at(10), false), rb(at(10, 1), true)], xOf, 8);
+  assert.strictEqual(mark.main, true);
+});
+
+test('rebuildMarks of no rebuilds is empty', () => {
+  assert.deepStrictEqual(rebuildMarks([], xOf), []);
 });
 
 test('rangeDomain keeps the end and moves the start back by the given days', () => {
