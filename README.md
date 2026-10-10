@@ -74,7 +74,8 @@ what Anthropic billed. Do not add one to the other.
 On the Today range, a panel shows the two limits from Claude Code's `/usage` screen:
 the current session (the 5-hour window) and the current week across all models.
 The panel sits beside Where usage goes. On the other ranges, or when one of the two
-is hidden, the other panel takes the whole row.
+is hidden, the other panel takes the whole row. Below 880px the two panels stack,
+Plan usage above Where usage goes.
 The dashboard reads two possible sources and shows whichever was updated more
 recently. It makes no network request of its own.
 
