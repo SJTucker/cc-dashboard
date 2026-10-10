@@ -158,10 +158,18 @@ test('the 3.x naming scheme prices against its own rows, not the fallbacks', () 
 });
 
 test('a release date is not read as a minor version', () => {
-  assert.strictEqual(shortModelLabel('claude-opus-4-20250514'), 'Opus');
-  assert.strictEqual(shortModelLabel('claude-sonnet-4-20250514'), 'Sonnet');
+  assert.strictEqual(shortModelLabel('claude-opus-4-20250514'), 'Opus 4');
+  assert.strictEqual(shortModelLabel('claude-sonnet-4-20250514'), 'Sonnet 4');
   assert.strictEqual(shortModelLabel('claude-opus-4-1-20250805'), 'Opus 4.1');
   assert.strictEqual(shortModelLabel('claude-opus-4-6-20260315'), 'Opus 4.6');
+  assert.strictEqual(shortModelLabel('claude-haiku-4-5-20251001'), 'Haiku 4.5');
+});
+
+test('a model id with no minor version shows its major version', () => {
+  assert.strictEqual(shortModelLabel('claude-opus-5'), 'Opus 5');
+  assert.strictEqual(shortModelLabel('claude-sonnet-5'), 'Sonnet 5');
+  assert.strictEqual(shortModelLabel('claude-opus-5-5'), 'Opus 5.5');
+  assert.strictEqual(shortModelLabel('claude-opus-5-20260101'), 'Opus 5');
 });
 
 const { cacheWriteTokens } = require('../lib/pricing');
