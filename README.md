@@ -4,8 +4,8 @@ A local dashboard for your Claude Code usage: daily and cumulative cost, daily t
 broken out by input / output / cache-write / cache-read, cost by model with dollars
 per million tokens, and a weekday-by-hour heatmap of when the spend happens.
 
-If you use `rtk`, it also charts the command output rtk filtered out before it reached
-the model. See "rtk savings" below.
+If you use `rtk`, it also charts the tokens rtk kept out of the model's context. See
+"rtk savings" below.
 
 Two dependencies, no telemetry, no CDN. The server makes one outbound request, and
 only when you click Check prices. The optional Claude Code mod in `mod/` also fetches
@@ -36,8 +36,24 @@ section), nothing is stored and the first request reads every transcript.
 ## rtk savings (optional)
 
 If you use `rtk` to filter command output before it reaches Claude, two extra panels
-appear: how much output it stripped per day, and which commands it stripped the most
-from.
+appear: how many tokens rtk kept out of the model's context per day, and which
+commands it kept the most out of.
+
+rtk logs the raw and filtered size of every command. The raw size overstates what
+rtk saved. Claude Code never puts a large Bash output into context in full, and the
+model narrows large status commands itself. So the panels estimate what the model
+would have taken without rtk, by the rtk subcommand:
+
+- Test runners, type checks, linters and builds: at most 750 tokens.
+- File reads and diffs: the whole output.
+- Everything else: the whole output up to 7,500 tokens, which is Claude Code's
+  30,000-character inline limit, and 2,500 tokens above that.
+
+rtk's own output is counted by the same rule. The difference can be negative, when
+rtk's output put more into context than the model would have taken without it.
+Tooltips also show rtk's raw and filtered sizes.
+`docs/research/2026-10-10-large-bash-output.md` has the measurements behind these
+numbers.
 
 These are read straight from rtk's own sqlite history, opened read-only. Nothing
 invokes the `rtk` binary, because every `rtk` call writes a row and would inflate the
@@ -48,10 +64,10 @@ points at another one (see SETUP.md).
 
 No rtk? The panels do not appear.
 
-**These numbers are not billed tokens.** They are rtk's own estimate of output it
-filtered out before the model saw it. The cost and token figures everywhere else on
-the page come from Claude Code's transcripts and count what Anthropic billed. Do not
-add one to the other.
+**These numbers are not billed tokens.** They are estimates, in rtk's tokens of 4
+characters, of command output that never reached the model. The cost and token
+figures everywhere else on the page come from Claude Code's transcripts and count
+what Anthropic billed. Do not add one to the other.
 
 ## Plan usage
 
@@ -478,7 +494,7 @@ lib/pricing.js         Built-in price table, dated price versions, cost calculat
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
 lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript only when it changes, and stores settled ones
-lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command
+lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command, estimates the tokens kept out of context
 lib/scan-memo.js       Keeps the latest aggregate per range and bucket until a transcript changes or the date rolls over
 lib/session-id.js      Session id and snapshot file name patterns, and the age after which snapshot and activity files are deleted
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
@@ -513,7 +529,7 @@ public/state.mjs       The selected range and the hidden panels, shared by the m
 public/stats.js        median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/style.css       All styling, including the @font-face rules for public/fonts/
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
-public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, and the Setup changes y axis with a 0 label and headroom
+public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, the signed y axis for charts with negative values, and the Setup changes y axis with a 0 label and headroom
 public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
 public/charts/donut.mjs  drawModelMix: each model's share of tokens as a donut with its legend
 public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and rtk commands
@@ -531,7 +547,7 @@ public/panels/models.mjs  Cost by model table, the model mix donut and the model
 public/panels/prices.mjs  The prices note in Cost by model, and the Check prices and Apply buttons; uses the /api/prices routes
 public/panels/records.mjs  The Record day card and the 7d total lines; fetches /api/records
 public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Not useful, Undo and Copy prompt; fetches /api/reviews
-public/panels/rtk.mjs  The rtk panels: tokens rtk filtered per day and per command
+public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
 public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
 public/panels/timeline.mjs  The Session timeline: one lane per session with activity today
 public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown and its errors

@@ -1,7 +1,7 @@
 // Single-series bars and the cumulative cost line, against a time axis of buckets.
 import { el, svgEl, showTooltip, hideTooltip, chartWidth } from '../dom.mjs';
 import { formatCost, shortDate, fullDate, axisCost, axisTokens } from '../format.mjs';
-import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawYAxis } from './axes.mjs';
+import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawYAxis, drawSignedYAxis } from './axes.mjs';
 
 export function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
   hideTooltip();
@@ -17,30 +17,35 @@ export function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
 
   const width = chartWidth(container);
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
-  const rawMax = Math.max(...data.map((d) => d[valueKey]), 0.0001);
+  const values = data.map((d) => d[valueKey]);
+  const rawMin = Math.min(...values, 0);
   const slots = barSlots(data.length, width - CHART_PAD_LEFT);
   const labelEvery = labelStep(data.length, width - CHART_PAD_LEFT);
 
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
-  const max = drawYAxis(svg, rawMax, width, valueKey === 'cost' ? axisCost : axisTokens);
+  const format = valueKey === 'cost' ? axisCost : axisTokens;
+  // Only a chart with a value below zero gets the signed axis, so every
+  // all-positive chart draws exactly as before.
+  const { zeroY, yOf } = rawMin < 0
+    ? drawSignedYAxis(svg, rawMin, Math.max(...values, 0), width, format)
+    : positiveScale(drawYAxis(svg, Math.max(...values, 0.0001), width, format), plotHeight);
 
   // Zero line
   svg.appendChild(
     svgEl('line', {
-      x1: CHART_PAD_LEFT, x2: width, y1: plotHeight, y2: plotHeight,
+      x1: CHART_PAD_LEFT, x2: width, y1: zeroY, y2: zeroY,
       stroke: 'var(--border)', 'stroke-width': 1,
     })
   );
 
   data.forEach((d, i) => {
     const value = d[valueKey];
-    const barHeight = max > 0 ? (value / max) * plotHeight : 0;
     const x = CHART_PAD_LEFT + slots.x(i);
-    const y = plotHeight - barHeight;
 
+    // A negative bar hangs below the zero line in the same colour.
     const rect = svgEl('rect', {
       class: 'bar',
-      x, y, width: slots.barWidth, height: Math.max(barHeight, value > 0 ? 1 : 0),
+      x, ...barRect(value, { yOf, zeroY }), width: slots.barWidth,
       rx: 2,
       fill: color,
     });
@@ -60,6 +65,19 @@ export function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
   });
 
   container.appendChild(svg);
+}
+
+// The top edge and height of one bar. It spans zeroY to the value's y on either side
+// of zero, and a non-zero value is at least 1px tall so it stays visible.
+export function barRect(value, { yOf, zeroY }) {
+  const y = yOf(value);
+  return { y: Math.min(y, zeroY), height: Math.max(Math.abs(zeroY - y), value !== 0 ? 1 : 0) };
+}
+
+// The scale of an all-positive chart: zero at the bottom of the plot. max comes
+// from drawYAxis and is never 0.
+function positiveScale(max, plotHeight) {
+  return { zeroY: plotHeight, yOf: (value) => plotHeight - (value / max) * plotHeight };
 }
 
 // A running total across the range's buckets. One path, plus a transparent

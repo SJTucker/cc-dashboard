@@ -58,6 +58,85 @@ function utcStamp(d) {
   return d.toISOString().replace('Z', '000+00:00');
 }
 
+// The estimate in lib/rtk.js. Each case is one command; keptOut = without - with.
+test('content commands count their whole output on both sides', () => {
+  const now = utcStamp(new Date());
+  const file = makeDb([
+    { timestamp: now, rtk_cmd: 'rtk read', original_cmd: 'cat big.js', input_tokens: 20000, output_tokens: 9000, saved_tokens: 11000 },
+    { timestamp: now, rtk_cmd: 'rtk git diff HEAD~1', original_cmd: 'git diff HEAD~1', input_tokens: 12000, output_tokens: 3000, saved_tokens: 9000 },
+    { timestamp: now, rtk_cmd: 'rtk git show abc', original_cmd: 'git show abc', input_tokens: 500, output_tokens: 200, saved_tokens: 300 },
+  ]);
+  const out = readRtkUsage({ days: 7, dbPath: file });
+  assert.strictEqual(out.commands.find((c) => c.name === 'read').keptOut, 11000);
+  assert.strictEqual(out.commands.find((c) => c.name === 'git').keptOut, 9300);
+});
+
+test('status commands count at most 750 tokens without rtk', () => {
+  const now = utcStamp(new Date());
+  const file = makeDb([
+    { timestamp: now, rtk_cmd: 'rtk vitest run', original_cmd: 'vitest run', input_tokens: 1145263, output_tokens: 5, saved_tokens: 1145258 },
+    { timestamp: now, rtk_cmd: 'rtk cargo test', original_cmd: 'cargo test', input_tokens: 300, output_tokens: 20, saved_tokens: 280 },
+    { timestamp: now, rtk_cmd: 'rtk tsc', original_cmd: 'tsc', input_tokens: 900, output_tokens: 6738, saved_tokens: 0 },
+  ]);
+  const out = readRtkUsage({ days: 7, dbPath: file });
+  const kept = Object.fromEntries(out.commands.map((c) => [c.name, c.keptOut]));
+  assert.deepStrictEqual(kept, { vitest: 745, cargo: 280, tsc: -5988 });
+  assert.strictEqual(out.commands.find((c) => c.name === 'vitest').filtered, 1145258, 'rtk\'s own figure is still reported');
+});
+
+test('other commands are capped at the inline limit on both sides', () => {
+  const now = utcStamp(new Date());
+  const file = makeDb([
+    { timestamp: now, rtk_cmd: 'rtk grep a', original_cmd: 'grep a', input_tokens: 7500, output_tokens: 100 },
+    { timestamp: now, rtk_cmd: 'rtk find b', original_cmd: 'find b', input_tokens: 7501, output_tokens: 100 },
+    { timestamp: now, rtk_cmd: 'rtk ls', original_cmd: 'ls -R', input_tokens: 30000, output_tokens: 7501 },
+    { timestamp: now, rtk_cmd: 'rtk git status', original_cmd: 'git status', input_tokens: 27304, output_tokens: 7225 },
+    { timestamp: now, rtk_cmd: 'rtk frobnicate x', original_cmd: 'frobnicate x', input_tokens: 100, output_tokens: 10 },
+  ]);
+  const out = readRtkUsage({ days: 7, dbPath: file });
+  const kept = Object.fromEntries(out.commands.map((c) => [c.name, c.keptOut]));
+  assert.deepStrictEqual(kept, {
+    grep: 7400, // 7,500 fits inline
+    find: 2400, // 7,501 does not: 2,500 - 100
+    ls: 0, // both sides over the limit
+    git: -4725, // git status is not content: 2,500 - 7,225
+    frobnicate: 90, // an unknown subcommand counts as other
+  });
+});
+
+test('a negative command stays negative in the summary, the day and the detail row', () => {
+  const file = makeDb([
+    { timestamp: utcStamp(new Date()), rtk_cmd: 'rtk tsc', original_cmd: 'tsc --noEmit', input_tokens: 900, output_tokens: 6738, saved_tokens: 0 },
+  ]);
+  const out = readRtkUsage({ days: 7, dbPath: file });
+  assert.strictEqual(out.summary.keptOut, -5988);
+  assert.strictEqual(out.daily.at(-1).keptOut, -5988);
+  assert.strictEqual(out.commands[0].keptOut, -5988);
+  assert.strictEqual(out.commands[0].details[0].keptOut, -5988);
+});
+
+test('readRtkUsage reports raw and filtered beside keptOut, and drops the old fields', () => {
+  const file = makeDb([
+    { timestamp: utcStamp(new Date()), rtk_cmd: 'rtk grep x', original_cmd: 'grep x', input_tokens: 800, output_tokens: 300, saved_tokens: 500 },
+  ]);
+  const out = readRtkUsage({ days: 7, dbPath: file });
+  assert.deepStrictEqual(out.summary, { totalCommands: 1, raw: 800, filtered: 500, keptOut: 500 });
+  assert.deepStrictEqual(out.commands[0].details, [{ name: 'grep x', calls: 1, raw: 800, filtered: 500, keptOut: 500 }]);
+  const day = out.daily.at(-1);
+  assert.deepStrictEqual(Object.keys(day).sort(), ['commands', 'date', 'filtered', 'keptOut', 'raw']);
+  assert.ok(!('saved' in out.commands[0]) && !('input' in out.commands[0]));
+});
+
+test('commands are ordered by keptOut, not by rtk\'s figure', () => {
+  const now = utcStamp(new Date());
+  const file = makeDb([
+    { timestamp: now, rtk_cmd: 'rtk vitest run', original_cmd: 'vitest run', input_tokens: 1145263, output_tokens: 5, saved_tokens: 1145258 },
+    { timestamp: now, rtk_cmd: 'rtk read', original_cmd: 'cat a', input_tokens: 1000, output_tokens: 0, saved_tokens: 1000 },
+  ]);
+  const out = readRtkUsage({ days: 7, dbPath: file });
+  assert.deepStrictEqual(out.commands.map((c) => c.name), ['read', 'vitest']);
+});
+
 test('daily buckets use LOCAL dates, not the stored UTC date', () => {
   // 23:30 local today. In any timezone west of UTC this stores as tomorrow's UTC
   // date, so a substr(timestamp,1,10) implementation puts it on the wrong bar.
@@ -70,7 +149,7 @@ test('daily buckets use LOCAL dates, not the stored UTC date', () => {
 
   assert.strictEqual(out.daily.length, 1);
   assert.strictEqual(out.daily[0].date, expectedDay, 'bucketed by local date');
-  assert.strictEqual(out.daily[0].saved, 500);
+  assert.strictEqual(out.daily[0].filtered, 500);
   assert.strictEqual(out.daily[0].commands, 1);
 });
 
@@ -86,23 +165,19 @@ test('commands are grouped by rtk subcommand with an original_cmd level below', 
   const out = readRtkUsage({ days: 7, dbPath: file });
 
   assert.deepStrictEqual(
-    out.commands.map((c) => [c.name, c.calls, c.saved]),
-    [['read', 1, 900], ['grep', 3, 175]],
-    'sorted by tokens saved, descending'
+    out.commands.map((c) => [c.name, c.calls, c.filtered, c.keptOut]),
+    [['read', 1, 900, 960], ['grep', 3, 175, 255]],
+    'sorted by keptOut, descending'
   );
-
   const grep = out.commands.find((c) => c.name === 'grep');
   assert.deepStrictEqual(
-    grep.details.map((d) => [d.name, d.calls, d.saved]),
-    [['grep alpha', 2, 125], ['grep beta', 1, 50]],
-    'detail rows are distinct original_cmd values, saved-descending'
+    grep.details.map((d) => [d.name, d.calls, d.keptOut]),
+    [['grep alpha', 2, 195], ['grep beta', 1, 60]],
+    'detail rows are distinct original_cmd values, keptOut-descending'
   );
-
   assert.strictEqual(out.summary.totalCommands, 4);
-  assert.strictEqual(out.summary.totalSaved, 1075);
-  assert.strictEqual(out.summary.totalInput, 1375);
-  // 1075/1375 = 78.18%
-  assert.ok(Math.abs(out.summary.savingsPct - 78.18) < 0.01);
+  assert.strictEqual(out.summary.filtered, 1075);
+  assert.strictEqual(out.summary.raw, 1375);
 });
 
 test('a subcommand with no arguments still groups correctly', () => {
@@ -137,7 +212,7 @@ test('a range cutoff excludes older rows at either fractional-second width', () 
 
   const windowed = readRtkUsage({ days: 7, dbPath: file });
   assert.strictEqual(windowed.summary.totalCommands, 2, 'both recent rows, neither old one');
-  assert.strictEqual(windowed.summary.totalSaved, 10);
+  assert.strictEqual(windowed.summary.filtered, 10);
 
   const all = readRtkUsage({ days: null, dbPath: file });
   assert.strictEqual(all.summary.totalCommands, 4, 'days:null reads the whole table');
@@ -151,7 +226,7 @@ test('hour bucketing produces the same key shape lib/dates.js uses', () => {
   const out = readRtkUsage({ days: 'today', bucket: 'hour', dbPath: file });
   // Length is the full-day axis, asserted by its own test; this one is about the
   // key shape, which has to match lib/dates.js so shortDate()/fullDate() parse it.
-  const at14Bucket = out.daily.find((d) => d.saved === 42);
+  const at14Bucket = out.daily.find((d) => d.filtered === 42);
   assert.match(at14Bucket.date, /^\d{4}-\d{2}-\d{2}T14$/);
 });
 
@@ -187,6 +262,7 @@ test('detail rows are capped per command, keeping the largest', () => {
       original_cmd: `grep pattern-${String(i).padStart(2, '0')}`,
       saved_tokens: i,
       input_tokens: 100,
+      output_tokens: 100 - i,
     });
   }
   const file = makeDb(rows);
@@ -194,10 +270,25 @@ test('detail rows are capped per command, keeping the largest', () => {
 
   const grep = out.commands.find((c) => c.name === 'grep');
   assert.strictEqual(grep.calls, 20, 'the parent row still counts every call');
-  assert.strictEqual(grep.saved, 210, 'and still sums every call');
+  assert.strictEqual(grep.keptOut, 210, 'and still sums every call');
   assert.strictEqual(grep.details.length, 12, 'but the detail level is capped');
   assert.strictEqual(grep.details[0].name, 'grep pattern-20', 'largest first');
   assert.strictEqual(grep.details[11].name, 'grep pattern-09', 'and the 12 largest are the ones kept');
+});
+
+test('a negative detail row survives the cap, and the rows come back keptOut descending', () => {
+  const now = utcStamp(new Date());
+  const rows = [];
+  for (let i = 0; i < 12; i++) {
+    rows.push({ timestamp: now, rtk_cmd: 'rtk grep x', original_cmd: `grep pos-${i}`, input_tokens: 100, output_tokens: 100 - (10 + i), saved_tokens: 10 + i });
+  }
+  rows.push({ timestamp: now, rtk_cmd: 'rtk grep x', original_cmd: 'grep neg', input_tokens: 50, output_tokens: 100, saved_tokens: 0 });
+  const grep = readRtkUsage({ days: 7, dbPath: makeDb(rows) }).commands.find((c) => c.name === 'grep');
+  assert.strictEqual(grep.details.length, 12);
+  assert.ok(grep.details.some((d) => d.name === 'grep neg'), 'the -50 row is kept');
+  assert.ok(!grep.details.some((d) => d.name === 'grep pos-0'), 'the smallest positive row (10) is dropped');
+  assert.strictEqual(grep.details[11].name, 'grep neg', 'and it sorts last');
+  assert.deepStrictEqual(grep.details.map((d) => d.keptOut), [21, 20, 19, 18, 17, 16, 15, 14, 13, 12, 11, -50]);
 });
 
 test('the Today range gets a full-day hour axis, not just the hours with rows', () => {
@@ -223,13 +314,13 @@ test('the Today range gets a full-day hour axis, not just the hours with rows', 
   );
 
   const filled = out.daily.find((d) => d.date.endsWith('T13'));
-  assert.strictEqual(filled.saved, 42, 'the 13:00 slot holds the fixture row');
+  assert.strictEqual(filled.filtered, 42, 'the 13:00 slot holds the fixture row');
   assert.strictEqual(filled.commands, 1);
 
   const empty = out.daily.find((d) => d.date.endsWith('T04'));
   assert.deepStrictEqual(
-    { commands: empty.commands, input: empty.input, saved: empty.saved },
-    { commands: 0, input: 0, saved: 0 },
+    { commands: empty.commands, raw: empty.raw, filtered: empty.filtered, keptOut: empty.keptOut },
+    { commands: 0, raw: 0, filtered: 0, keptOut: 0 },
     'an hour with no commands is a real zero, not a missing bar'
   );
 });
@@ -237,14 +328,14 @@ test('the Today range gets a full-day hour axis, not just the hours with rows', 
 test('readRtkWindows returns one entry per range, exact to the second at the boundary', () => {
   const t = new Date('2026-09-04T16:15:00Z').getTime();
   const file = makeDb([
-    { timestamp: utcStamp(new Date(t - 60_000)), input_tokens: 1000, saved_tokens: 600 },
-    { timestamp: utcStamp(new Date(t)), input_tokens: 1000, saved_tokens: 900 }, // exactly at t: after
-    { timestamp: utcStamp(new Date(t + 60_000)), input_tokens: 500, saved_tokens: 400 },
+    { timestamp: utcStamp(new Date(t - 60_000)), input_tokens: 1000, output_tokens: 400 },
+    { timestamp: utcStamp(new Date(t)), input_tokens: 1000, output_tokens: 100 }, // exactly at t: after
+    { timestamp: utcStamp(new Date(t + 60_000)), input_tokens: 500, output_tokens: 100 },
   ]);
   const [before, after, empty] = readRtkWindows([[t - 3_600_000, t], [t, t + 3_600_000], [0, 1000]], file);
-  assert.deepStrictEqual(before, { commands: 1, keptPerCommand: 400, filteredShare: 0.6 });
-  assert.deepStrictEqual(after, { commands: 2, keptPerCommand: 100, filteredShare: 1300 / 1500 });
-  assert.deepStrictEqual(empty, { commands: 0, keptPerCommand: null, filteredShare: null });
+  assert.deepStrictEqual(before, { commands: 1, reachedPerCommand: 400, keptOutShare: 0.6 });
+  assert.deepStrictEqual(after, { commands: 2, reachedPerCommand: 100, keptOutShare: 1300 / 1500 });
+  assert.deepStrictEqual(empty, { commands: 0, reachedPerCommand: null, keptOutShare: null });
 });
 
 test('readRtkWindows returns null when the database is missing or not rtk', () => {
@@ -254,20 +345,20 @@ test('readRtkWindows returns null when the database is missing or not rtk', () =
   assert.strictEqual(readRtkWindows([[0, 1]], junk), null);
 });
 
-test('readRtkDaily gives each local day its tokens kept per command and share filtered', () => {
+test('readRtkDaily gives each local day its tokens reaching context per command and share kept out', () => {
   const day1 = new Date('2026-09-10T12:00:00'); // local noon
   const day2 = new Date('2026-09-11T12:00:00');
   const file = makeDb([
-    { timestamp: utcStamp(day1), input_tokens: 1000, saved_tokens: 600 },
-    { timestamp: utcStamp(new Date(day1.getTime() + 3_600_000)), input_tokens: 1000, saved_tokens: 800 },
-    { timestamp: utcStamp(day2), input_tokens: 0, saved_tokens: 0 }, // no input: no share to compute
+    { timestamp: utcStamp(day1), input_tokens: 1000, output_tokens: 400 },
+    { timestamp: utcStamp(new Date(day1.getTime() + 3_600_000)), input_tokens: 1000, output_tokens: 200 },
+    { timestamp: utcStamp(day2), input_tokens: 0, output_tokens: 0 }, // nothing without rtk: no share to compute
   ]);
   assert.deepStrictEqual(readRtkDaily(file), {
-    keptPerCommand: [
+    reachedPerCommand: [
       { date: '2026-09-10', n: 2, value: 300 },
       { date: '2026-09-11', n: 1, value: 0 },
     ],
-    filteredShare: [{ date: '2026-09-10', n: 2, value: 0.7 }],
+    keptOutShare: [{ date: '2026-09-10', n: 2, value: 0.7 }],
   });
 });
 
@@ -294,7 +385,7 @@ test('day buckets run unbroken from the first day with rows to today', () => {
   });
   assert.deepStrictEqual(out.daily.map((d) => d.date), expected);
   assert.deepStrictEqual(
-    out.daily.slice(1).map((d) => [d.commands, d.input, d.saved]),
-    [[0, 0, 0], [0, 0, 0], [0, 0, 0]]
+    out.daily.slice(1).map((d) => [d.commands, d.raw, d.filtered, d.keptOut]),
+    [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]]
   );
 });

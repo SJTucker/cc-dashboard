@@ -47,3 +47,21 @@ test('plotTicks on an all-zero range has a top above zero and finite ticks', asy
   assert.deepStrictEqual(ticks.map((t) => t.value), [0, 0.5, 1]);
   assert.ok(ticks.every((t) => Number.isFinite(t.y)));
 });
+
+test('signedTicks uses one step on both sides of zero', async () => {
+  const { signedTicks } = await load();
+  // axisScale(150) has a step of 50: two steps up to 100, one down to -50, over a 160px plot.
+  const { zeroY, yOf, ticks } = signedTicks(-50, 100);
+  assert.ok(Math.abs(zeroY - 320 / 3) < 1e-9);
+  assert.deepStrictEqual(ticks.map((t) => t.value), [-50, 50, 100]);
+  assert.equal(yOf(-50), 160);
+  assert.equal(yOf(100), 0);
+});
+
+test('signedTicks with no positive value puts zero at the top and no tick above it', async () => {
+  const { signedTicks } = await load();
+  const { zeroY, ticks } = signedTicks(-300, 0);
+  assert.equal(zeroY, 0);
+  assert.deepStrictEqual(ticks.map((t) => t.value), [-300, -200, -100]);
+  assert.equal(ticks[0].y, 160);
+});

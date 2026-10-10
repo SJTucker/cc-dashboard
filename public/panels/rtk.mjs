@@ -1,41 +1,65 @@
-// The rtk panels: tokens rtk filtered per day, and per command.
+// The rtk panels: tokens rtk kept out of the model's context per day, and per command.
 import { formatTokens, fullDate, escapeHtml } from '../format.mjs';
 import { shown } from '../state.mjs';
 import { drawBarChart } from '../charts/bar.mjs';
 import { drawHBars } from '../charts/hbars.mjs';
 import { DETAIL_LIMIT } from '../constants.mjs';
 
-// rtk figures are deliberately not folded into any summary card. They count output
-// bytes rtk filtered before the text reached the model, estimated by rtk's own
-// tokeniser; the cards above count tokens Anthropic billed. Adding one to the other
-// would produce a number that means nothing.
+// rtk figures are deliberately not folded into any summary card. They estimate
+// command output that never reached the model's context, in rtk's own tokens of 4
+// characters; the cards above count tokens Anthropic billed. Adding one to the
+// other would produce a number that means nothing. lib/rtk.js has the estimate.
 // Held across renders so a range switch or a live poll does not move the reader
 // back to the first command.
 let selectedRtkCommand = null;
 
-// How the rtk lists draw a row: scaled by tokens saved rather than by call count,
-// because "which commands is rtk helping with" is a question about tokens. A
-// command with 15,000 cheap calls and one with 127 expensive ones both show up
-// honestly this way.
+// The estimate first, then rtk's own figures for comparison.
+const figureLines = (row) =>
+  `${formatTokens(row.keptOut)} kept out of context`
+  + `<br>${formatTokens(row.filtered)} filtered from ${formatTokens(row.raw)} raw`;
+
+// How the rtk lists draw a row: scaled by tokens kept out of context rather than by
+// call count, because "which commands is rtk helping with" is a question about
+// tokens. A command whose rtk output put more into context than it kept out has a
+// negative figure and draws left of zero.
 const RTK_BARS = {
-  size: (row) => row.saved,
-  value: (row) => formatTokens(row.saved),
-  tooltip: (row) => `<b>${escapeHtml(row.name)}</b><br>${formatTokens(row.saved)} filtered out`
+  size: (row) => row.keptOut,
+  value: (row) => formatTokens(row.keptOut),
+  tooltip: (row) => `<b>${escapeHtml(row.name)}</b><br>${figureLines(row)}`
     + `<br>${row.calls.toLocaleString('en-US')} ${row.calls === 1 ? 'call' : 'calls'}`,
   valueClass: 'usage-pct usage-count',
   empty: 'No rtk commands in this range.',
 };
 
-function renderRtkCommands(commands) {
-  if (!commands.some((c) => c.name === selectedRtkCommand)) {
-    selectedRtkCommand = commands[0].name;
-  }
-  const current = commands.find((c) => c.name === selectedRtkCommand);
+// Both ends of a list's scale. scaleMin stays 0 unless a row is negative.
+const scaleOf = (rows) => ({
+  scaleMax: Math.max(...rows.map((r) => r.keptOut), 0),
+  scaleMin: Math.min(...rows.map((r) => r.keptOut), 0),
+});
 
-  const shown = commands.slice(0, DETAIL_LIMIT);
+// The DETAIL_LIMIT commands with the largest |keptOut|, shown largest first. Ranking by
+// magnitude keeps a negative command, which sorts last, from falling off the list.
+export function commandRows(commands) {
+  return [...commands]
+    .sort((a, b) => Math.abs(b.keptOut) - Math.abs(a.keptOut))
+    .slice(0, DETAIL_LIMIT)
+    .sort((a, b) => b.keptOut - a.keptOut);
+}
+
+// The selected row of the shown list, or its first row when the selection is not in
+// it: a range change can move the stored command out of the shown DETAIL_LIMIT.
+export function pickCommand(rows, name) {
+  return rows.find((c) => c.name === name) || rows[0];
+}
+
+function renderRtkCommands(commands) {
+  const shown = commandRows(commands);
+  const current = pickCommand(shown, selectedRtkCommand);
+  selectedRtkCommand = current.name;
+
   drawHBars(document.getElementById('rtkCommandBars'), shown, {
     ...RTK_BARS,
-    scaleMax: Math.max(...shown.map((c) => c.saved)),
+    ...scaleOf(shown),
     onSelect: (name) => {
       selectedRtkCommand = name;
       renderRtkCommands(commands);
@@ -45,32 +69,29 @@ function renderRtkCommands(commands) {
 
   document.getElementById('rtkDetailTitle').textContent = `Inside rtk ${current.name}`;
   const details = current.details.slice(0, DETAIL_LIMIT);
-  drawHBars(document.getElementById('rtkDetailBars'), details, {
-    ...RTK_BARS,
-    scaleMax: details.length ? Math.max(...details.map((d) => d.saved)) : 0,
-  });
+  drawHBars(document.getElementById('rtkDetailBars'), details, { ...RTK_BARS, ...scaleOf(details) });
 }
 
 export function renderRtk(rtk) {
   const live = Boolean(rtk && rtk.meta.dbExists);
 
   const dailyPanel = document.getElementById('rtkDailyPanel');
-  const hasDaily = live && rtk.daily.some((d) => d.saved > 0);
+  const hasDaily = live && rtk.daily.some((d) => d.keptOut !== 0);
   dailyPanel.hidden = !hasDaily;
   if (hasDaily && shown('rtkDaily')) {
     drawBarChart(document.getElementById('rtkDailyChart'), rtk.daily, {
       // Single series, so no legend and no new hue: this borrows the token palette's
       // blue the way the daily-tokens chart borrows cache-read purple.
       color: '#3987e5',
-      valueKey: 'saved',
+      valueKey: 'keptOut',
       tooltipFn: (d) =>
-        `<b>${fullDate(d.date)}</b><br>${formatTokens(d.saved)} of ${formatTokens(d.input)} filtered out` +
-        `<br>${d.input > 0 ? ((d.saved / d.input) * 100).toFixed(1) : '0.0'}% across ${d.commands.toLocaleString('en-US')} commands`,
+        `<b>${fullDate(d.date)}</b><br>${figureLines(d)}`
+        + `<br>${d.commands.toLocaleString('en-US')} ${d.commands === 1 ? 'command' : 'commands'}`,
     });
   }
 
   const cmdPanel = document.getElementById('rtkCommandPanel');
-  const hasCommands = live && rtk.commands.some((c) => c.saved > 0);
-  cmdPanel.hidden = !hasCommands;
-  if (hasCommands && shown('rtkCommands')) renderRtkCommands(rtk.commands.filter((c) => c.saved > 0));
+  const withFigure = live ? rtk.commands.filter((c) => c.keptOut !== 0) : [];
+  cmdPanel.hidden = !withFigure.length;
+  if (withFigure.length && shown('rtkCommands')) renderRtkCommands(withFigure);
 }
