@@ -14,33 +14,66 @@ function lastActive(item) {
   return item.type === 'group' ? item.lastActiveAt : item.session.lastActiveAt;
 }
 
+// Sums, the newest lastActiveAt and the end counts of a group's sessions. cleared
+// counts sessions ended by /clear, and ended every other end. An open session of a
+// launch group is in neither.
+function groupFields(sessions) {
+  const fields = {};
+  for (const key of GROUP_SUMS) fields[key] = sessions.reduce((sum, s) => sum + s[key], 0);
+  fields.lastActiveAt = Math.max(...sessions.map((s) => s.lastActiveAt));
+  fields.cleared = sessions.filter((s) => s.ended === 'clear').length;
+  fields.ended = sessions.filter((s) => s.ended && s.ended !== 'clear').length;
+  return fields;
+}
+
 // Turns the sessions of /api/sessions/live (newest lastActiveAt first) into the rows
-// of the Today table. Ended sessions of one project collapse into a group when the
-// project has two or more of them. Live sessions and idle open sessions stay plain
-// rows. Rows are sorted by Cost today, highest first, and a group counts by its
-// summed Cost today. Equal costs fall back to the newest lastActiveAt. Only live
-// sessions' costs change, so rows rarely move between polls.
+// of the Today table.
+// - Sessions with the same launchId came from one claude process (the mod's
+//   statuslineInput). Two or more of them collapse into a launch group, live and open
+//   ones included, so a /clear's new session sits with the one it replaced. head is
+//   the newest, and the row shows its title.
+// - Of the rest, ended sessions of one project collapse into a project group when
+//   the project has two or more. Live and idle open sessions stay plain rows.
+// A session is in one group at most. key tells groups apart across polls, with a
+// prefix so a project named like a launch id cannot collide with it. Rows are
+// sorted by Cost today, highest first, and a group counts by its summed Cost today.
+// Equal costs fall back to the newest lastActiveAt.
 function groupSessions(sessions) {
+  const byLaunch = new Map();
+  for (const s of sessions) {
+    if (s.launchId == null) continue;
+    if (!byLaunch.has(s.launchId)) byLaunch.set(s.launchId, []);
+    byLaunch.get(s.launchId).push(s);
+  }
+  const inLaunch = (s) => s.launchId != null && byLaunch.get(s.launchId).length >= 2;
+
   const endedByProject = new Map();
   for (const s of sessions) {
-    if (!s.ended) continue;
+    if (!s.ended || inLaunch(s)) continue;
     if (!endedByProject.has(s.project)) endedByProject.set(s.project, []);
     endedByProject.get(s.project).push(s);
   }
 
   const items = [];
   for (const s of sessions) {
+    if (inLaunch(s)) {
+      const launch = byLaunch.get(s.launchId);
+      // The group takes the place of its first (newest) session.
+      if (launch[0] !== s) continue;
+      items.push({
+        type: 'group', kind: 'launch', key: `launch:${s.launchId}`, project: s.project,
+        sessions: launch, head: s, live: launch.some((e) => e.live), ...groupFields(launch),
+      });
+      continue;
+    }
     const ended = s.ended ? endedByProject.get(s.project) : null;
     if (!ended || ended.length < 2) {
       items.push({ type: 'session', session: s });
     } else if (ended[0] === s) {
-      // The group takes the place of its first (newest) session.
-      const group = { type: 'group', project: s.project, sessions: ended };
-      for (const key of GROUP_SUMS) group[key] = ended.reduce((sum, e) => sum + e[key], 0);
-      group.lastActiveAt = Math.max(...ended.map((e) => e.lastActiveAt));
-      group.cleared = ended.filter((e) => e.ended === 'clear').length;
-      group.ended = ended.length - group.cleared;
-      items.push(group);
+      items.push({
+        type: 'group', kind: 'project', key: `project:${s.project ?? ''}`, project: s.project,
+        sessions: ended, ...groupFields(ended),
+      });
     }
   }
   return items.sort((a, b) => itemCost(b) - itemCost(a) || lastActive(b) - lastActive(a));

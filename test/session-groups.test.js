@@ -163,3 +163,84 @@ test('runningSessions keeps a session that is waiting on you after it stops bein
   const working = { ...base, project: 'working', activity: { state: 'working' } };
   assert.deepStrictEqual(runningSessions([stale, approval, working, waiting]).map((s) => s.project), ['waiting']);
 });
+
+test('two sessions of one launch group even when one of them is live', () => {
+  const items = groupSessions([
+    session('a', 30, { ended: null, live: true, launchId: 'L1' }),
+    session('a', 20, { launchId: 'L1' }),
+  ]);
+  assert.strictEqual(items.length, 1);
+  assert.strictEqual(items[0].kind, 'launch');
+  assert.strictEqual(items[0].key, 'launch:L1');
+  assert.strictEqual(items[0].sessions.length, 2);
+  assert.strictEqual(items[0].live, true);
+});
+
+test('a launch group takes head, project and lastActiveAt from its newest session', () => {
+  const newest = session('a', 30, { ended: null, launchId: 'L1', costTodayUsd: 1 });
+  const [g] = groupSessions([newest, session('a', 20, { launchId: 'L1' })]);
+  assert.strictEqual(g.head, newest);
+  assert.strictEqual(g.project, 'a');
+  assert.strictEqual(g.lastActiveAt, 30);
+  assert.strictEqual(g.costTodayUsd, 1.5);
+});
+
+test('a launch whose sessions all ended is not live', () => {
+  const [g] = groupSessions([
+    session('a', 30, { ended: 'other', launchId: 'L1' }),
+    session('a', 20, { launchId: 'L1' }),
+    session('a', 10, { launchId: 'L1' }),
+  ]);
+  assert.strictEqual(g.live, false);
+  assert.strictEqual(g.cleared, 2);
+  assert.strictEqual(g.ended, 1);
+});
+
+test("cleared and ended leave out a launch's open session", () => {
+  const [g] = groupSessions([
+    session('a', 30, { ended: null, live: false, launchId: 'L1' }),
+    session('a', 20, { launchId: 'L1' }),
+  ]);
+  assert.strictEqual(g.live, false);
+  assert.strictEqual(g.cleared, 1);
+  assert.strictEqual(g.ended, 0);
+});
+
+test('a single-session launch falls through to project grouping once ended', () => {
+  const items = groupSessions([session('a', 20, { launchId: 'L1' }), session('a', 10, { launchId: 'L2' })]);
+  assert.strictEqual(items.length, 1);
+  assert.strictEqual(items[0].kind, 'project');
+  assert.strictEqual(items[0].key, 'project:a');
+});
+
+test('a session in a launch group never also joins a project group', () => {
+  const items = groupSessions([
+    session('a', 40, { launchId: 'L1' }),
+    session('a', 30, { launchId: 'L1' }),
+    session('a', 20),
+  ]);
+  assert.deepStrictEqual(items.map((i) => i.type === 'group' ? i.kind : 'session'), ['launch', 'session']);
+  assert.strictEqual(items[0].sessions.length, 2);
+});
+
+test('sessions without a launchId group by project as before', () => {
+  const items = groupSessions([session('a', 20, { launchId: null }), session('a', 10)]);
+  assert.strictEqual(items.length, 1);
+  assert.strictEqual(items[0].kind, 'project');
+  assert.strictEqual(items[0].sessions.length, 2);
+});
+
+test('a project and a launch with the same name get different keys', () => {
+  const items = groupSessions([
+    session('L1', 40, { launchId: 'L1' }), session('L1', 30, { launchId: 'L1' }),
+    session('L1', 20), session('L1', 10),
+  ]);
+  const keys = items.map((i) => i.key);
+  assert.strictEqual(new Set(keys).size, 2);
+  assert.deepStrictEqual(keys.sort(), ['launch:L1', 'project:L1']);
+});
+
+test('a null project gets the key project: with nothing after it', () => {
+  const [g] = groupSessions([session(null, 20), session(null, 10)]);
+  assert.strictEqual(g.key, 'project:');
+});
