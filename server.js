@@ -172,10 +172,11 @@ function createServer(config) {
     }
   });
 
-  // No cache. A full read of the reference database - 21,867 rows, both GROUP BYs,
-  // open and close - measured 13ms, against ~1.9s for a 30-day read of every transcript. Putting
-  // this behind the aggregate memo above would either serve stale savings or force every
-  // rtk request to clear a memo that exists to avoid re-aggregating the transcripts.
+  // No cache. A full read of the reference database - 36,552 rows, every query, open
+  // and close - measured 118ms, against ~1.9s for a 30-day read of every transcript.
+  // Putting this behind the aggregate memo above would either serve stale savings or
+  // force every rtk request to clear a memo that exists to avoid re-aggregating the
+  // transcripts.
   app.get('/api/rtk', (req, res) => {
     const { days, error } = parseDays(req.query.days);
     if (error) {
