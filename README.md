@@ -360,7 +360,7 @@ lists, which are collapsed until you open them. Each list row shows how many tim
 the skill or subagent type was invoked in the range, then its share of total cost,
 as in `21× · 4.3%`. A skill counts its Skill tool calls and the times you typed it as
 a slash command. A subagent type counts the Agent tool calls that started it. A skill
-started before the range whose calls continue into it shows `0×`. Usage stored from
+or subagent started before the range whose calls continue into it shows `0×`. Usage stored from
 transcripts Claude Code has since deleted counts no slash commands, because the
 dashboard did not record them before this version.
 
@@ -511,7 +511,7 @@ lib/price-store.js     Applied price history in prices.json
 lib/pricing.js         Built-in price table, dated price versions, cost calculation
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
-lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript only when it changes, and stores settled ones
+lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript when it changes or `EXTRACT_VERSION` changes, and stores settled ones
 lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command, estimates the tokens kept out of context
 lib/scan-memo.js       Keeps the latest aggregate per range and bucket until a transcript changes or the date rolls over
 lib/session-id.js      Session id and snapshot file name patterns, and the age after which snapshot and activity files are deleted
