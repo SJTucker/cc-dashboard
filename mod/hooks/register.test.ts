@@ -59,7 +59,7 @@ const CONTRACT = [
   { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
   { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
   { "script": "record-statusline", "args": [], "stdin": {
-    "session_id": "abc", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
+    "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
     "model": { "display_name": "Opus 5.5 (1M context)" }, "cost": { "total_cost_usd": 0.42, "total_duration_ms": 60000 },
     "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 }, "seven_day": { "used_percentage": 41, "resets_at": 1791192600 } } } },
 ]
@@ -219,7 +219,9 @@ const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = 
 test('a measure pipes statusline JSON to record-statusline', async ($, on) => {
   const { ran } = world(on)
   await $.session.measure(measure([FIVE, WEEK]))
-  expect(ran).toEqual([{
+  const { launch_id, ...stdin } = ran[0].stdin as Record<string, unknown>
+  expect(typeof launch_id === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(launch_id)).toBe(true)
+  expect([{ ...ran[0], stdin }]).toEqual([{
     argv: ['/repo/bin/record-statusline'],
     timeoutMs: 5000,
     stdin: {
@@ -234,6 +236,7 @@ test('a measure pipes statusline JSON to record-statusline', async ($, on) => {
       },
     },
   }])
+  expect(ran.length).toBe(1)
 })
 
 test('a measure with no rate limits leaves rate_limits out', async ($, on) => {
@@ -332,6 +335,17 @@ test('after a /clear the next measure records under the new session id', async (
     '/home/u/.claude/projects/-work-my-demo/s1.jsonl',
     '/home/u/.claude/projects/-work-my-demo/s2.jsonl',
   ])
+})
+
+test('after a /clear the next measure keeps the same launch_id', async ($, on) => {
+  const { ran, state } = world(on)
+  await $.session.measure(measure([FIVE]))
+  state.id = 's2'
+  await $.session.measure(measure([FIVE]))
+  const sent = ran.map((r) => r.stdin as { session_id: string; launch_id: string })
+  expect(sent.map((s) => s.session_id)).toEqual(['s1', 's2'])
+  expect(typeof sent[0].launch_id).toBe('string')
+  expect(sent[1].launch_id).toBe(sent[0].launch_id)
 })
 
 test('model ids become the names the statusline shows', async ($, on) => {

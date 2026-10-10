@@ -63,6 +63,22 @@ test('recordSession writes the panel fields and nothing else', () => {
   });
 });
 
+test('recordSession stores a launch_id as launchId', () => {
+  const dir = tmpDir();
+  recordSession(statuslineInput({ launch_id: 'mfz3k1-a8c2e9f0' }), dir, NOW);
+  assert.strictEqual(readSnapshot(dir).launchId, 'mfz3k1-a8c2e9f0');
+});
+
+test('recordSession leaves out a launch_id that is not a safe id string', () => {
+  for (const launch_id of [42, { id: 'x' }, '../x', '', 'a b', 'x'.repeat(129)]) {
+    const dir = tmpDir();
+    recordSession(statuslineInput({ launch_id }), dir, NOW);
+    const snap = readSnapshot(dir);
+    assert.ok(!('launchId' in snap), `launch_id ${JSON.stringify(launch_id)} was stored`);
+    assert.strictEqual(snap.sessionId, 'abc-123');
+  }
+});
+
 test('recordSession falls back to current_dir, then cwd, for the project', () => {
   const dir = tmpDir();
   recordSession(statuslineInput({ workspace: { current_dir: '/x/fallback' } }), dir, NOW);
@@ -376,6 +392,17 @@ test('recordSession keeps endedAt and endReason when it rewrites a snapshot', ()
   assert.strictEqual(written.endReason, 'clear');
 });
 
+test('recordSession keeps launchId when a later write has none or an invalid one', () => {
+  const dir = tmpDir();
+  recordSession(statuslineInput({ launch_id: 'L1' }), dir, NOW);
+  const longer = { ...statuslineInput().cost, total_duration_ms: statuslineInput().cost.total_duration_ms + 1000 };
+  recordSession(statuslineInput({ cost: longer }), dir, NOW);
+  assert.strictEqual(readSnapshot(dir).launchId, 'L1');
+  const longest = { ...longer, total_duration_ms: longer.total_duration_ms + 1000 };
+  recordSession(statuslineInput({ cost: longest, launch_id: '../bad' }), dir, NOW);
+  assert.strictEqual(readSnapshot(dir).launchId, 'L1');
+});
+
 test('readSessions keeps a valid end and drops malformed end fields', () => {
   const dir = writeSnapshots([
     snapshot({ sessionId: 'good', lastActiveAt: NOW - 5000, endedAt: NOW - 1000, endReason: 'prompt_input_exit' }),
@@ -471,6 +498,14 @@ test('buildLiveSessions gives a null title to a session without one', () => {
   const { sessions } = buildLiveSessions([snapshot()], [], NOW, {}, { other: 'Elsewhere' });
   assert.strictEqual(sessions[0].title, null);
   assert.strictEqual(buildLiveSessions([snapshot()], [], NOW).sessions[0].title, null);
+});
+
+test('buildLiveSessions passes launchId through, and gives null without one', () => {
+  const { sessions } = buildLiveSessions(
+    [snapshot({ sessionId: 's1', launchId: 'L1' }), snapshot({ sessionId: 's2', lastActiveAt: NOW - 120_000 })],
+    [], NOW
+  );
+  assert.deepStrictEqual(sessions.map((s) => s.launchId), ['L1', null]);
 });
 
 test('buildLiveSessions takes the branch from branchBySession and the list from branchesBySession', () => {

@@ -21,12 +21,13 @@ function sessionState(s) {
   return s.live ? ' · live' : '';
 }
 
-// Projects whose ended sessions are shown one by one. Kept for the page's lifetime
-// only, and read again by every renderSessions call so the 5 s poll keeps it.
-const expandedProjects = new Set();
+// Groups whose sessions are shown one by one, by item.key (groupSessions in
+// public/session-groups.js). Kept for the page's lifetime only, and read again by
+// every renderSessions call so the 5 s poll keeps it.
+const expandedGroups = new Set();
 let lastLiveSessions = null;
-// Each group row's toggle button by project. renderSessions replaces the tbody, so it
-// uses this map to move keyboard focus to the new button for the same project.
+// Each group row's toggle button by key. renderSessions replaces the tbody, so it
+// uses this map to move keyboard focus to the new button for the same group.
 let sessionToggles = new Map();
 
 // Runs on every renderPayload, like renderLimits, and rebuilds when the payload,
@@ -39,8 +40,8 @@ export function renderSessions(live) {
   panel.hidden = !live || !live.sessions.length || state.currentDays !== 'today';
   if (panel.hidden) return;
   lastLiveSessions = live;
-  // expandedProjects is in the key, so a group toggle's own call redraws.
-  sessionsGuard.draw([live, [...expandedProjects]], () => drawSessions(live));
+  // expandedGroups is in the key, so a group toggle's own call redraws.
+  sessionsGuard.draw([live, [...expandedGroups]], () => drawSessions(live));
 }
 
 function drawSessions(live) {
@@ -50,14 +51,18 @@ function drawSessions(live) {
   const now = Date.now();
   const cell = (text, cls) => el('td', cls ? { class: cls, text } : { text });
   const lines = (added, removed) => `+${added} −${removed}`;
-  // ⬢ for a live session, ⬡ for any other. The Last active cell still says the state in words.
-  const sessionCell = (s) => el('td', {}, [
-    el('span', { class: 'session-hex', 'aria-hidden': 'true', text: s.live ? '⬢' : '⬡' }),
+  // The hexagon, the title and the project · branch line. ⬢ for a live session or a
+  // launch group with a live session, ⬡ for any other. The Last active cell still
+  // says the state in words. lead goes before the hexagon, such as a group's toggle.
+  const titleParts = (s, live, lead = []) => [
+    ...lead,
+    el('span', { class: 'session-hex', 'aria-hidden': 'true', text: live ? '⬢' : '⬡' }),
     ...(s.title
       ? [el('span', { class: s.titleSource === 'prompt' ? 'session-title from-prompt' : 'session-title', title: s.title, text: s.title })]
       : []),
     contextLine(s),
-  ]);
+  ];
+  const sessionCell = (s) => el('td', {}, titleParts(s, s.live));
   // The number is text. The bar behind it is one series in one colour, its width the
   // row's share of the day's highest cost (costShare), so it needs no texture. The
   // tooltip carries the whole-session counter, which includes earlier days.
@@ -83,36 +88,45 @@ function drawSessions(live) {
     costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, costShare(s.costTodayUsd, maxCost)),
     cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
   ]);
+  // A project group shows the project name. A launch group (sessions of one claude
+  // process, split by /clear) reads like its newest session's row with a toggle in
+  // front, and says live when one of its sessions is.
   const groupRow = (g) => {
-    const name = g.project || '—';
-    const open = expandedProjects.has(g.project);
+    const launch = g.kind === 'launch';
+    const name = launch ? g.head.title || g.project || '—' : g.project || '—';
+    const open = expandedGroups.has(g.key);
+    const what = launch ? `${g.sessions.length} sessions of ${name}` : `${g.sessions.length} ended sessions of ${name}`;
     const toggle = el('button', {
       type: 'button',
       class: 'row-toggle',
       'aria-expanded': String(open),
-      'aria-label': `${open ? 'Collapse' : 'Expand'} ${g.sessions.length} ended sessions of ${name}`,
+      'aria-label': `${open ? 'Collapse' : 'Expand'} ${what}`,
     });
     toggle.addEventListener('click', () => {
-      if (expandedProjects.has(g.project)) expandedProjects.delete(g.project);
-      else expandedProjects.add(g.project);
+      if (expandedGroups.has(g.key)) expandedGroups.delete(g.key);
+      else expandedGroups.add(g.key);
       renderSessions(lastLiveSessions);
     });
-    toggles.set(g.project, toggle);
+    toggles.set(g.key, toggle);
+    const live = launch && g.live;
     const counts = [[g.cleared, 'cleared'], [g.ended, 'ended']]
       .filter(([n]) => n)
       .map(([n, word]) => ` · ${n} ${word}`)
       .join('');
-    return el('tr', { class: 'session-group' }, [
-      el('td', {}, [
+    const first = launch
+      ? el('td', {}, titleParts(g.head, live, [toggle]))
+      : el('td', {}, [
         toggle,
         el('span', { class: 'session-hex', 'aria-hidden': 'true', text: '⬡' }),
         document.createTextNode(name),
-      ]),
+      ]);
+    return el('tr', { class: launch ? 'session-group launch-group' : 'session-group' }, [
+      first,
       cell(String(g.prompts), 'num'),
       cell(formatDuration(g.durationMs), 'num'),
       cell(lines(g.linesAdded, g.linesRemoved), 'num'),
       costCell(g.costTodayUsd, `Session totals since they started: ${formatCost(g.costUsd)}`, costShare(g.costTodayUsd, maxCost)),
-      cell(formatAgo(g.lastActiveAt, now) + counts),
+      cell(formatAgo(g.lastActiveAt, now) + (live ? ' · live' : '') + counts, live ? 'is-live' : ''),
     ]);
   };
   const rows = [];
@@ -122,7 +136,7 @@ function drawSessions(live) {
       continue;
     }
     rows.push(groupRow(item));
-    if (expandedProjects.has(item.project)) {
+    if (expandedGroups.has(item.key)) {
       for (const s of item.sessions) rows.push(sessionRow(s, 'session-child'));
     }
   }
