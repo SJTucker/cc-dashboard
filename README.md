@@ -318,7 +318,11 @@ now is ordered by the start of each session's first span today (`runningSessions
 working or ⏸ waiting on you. Doing now shows the running tool, such as `Bash: npm
 test`, and the subagent count. Both show "—" without the mod (see "Live state").
 Today lists every session of the day, live ones included, sorted by Cost today with
-the highest first. Ended sessions of one project collapse into a single expandable
+the highest first. Sessions started inside one `claude` process collapse into a single
+expandable row when there are two or more of them, so a session a `/clear` started
+sits with the one it replaced. The row shows the newest session's title, ⬢ and "live"
+while one of them is live, and how many were cleared or ended. This needs the mod (see
+"Live state"). Other ended sessions of one project collapse into a single expandable
 row when the project has two or more of them. The bar behind each Cost today value in
 Today is that session's share of the day's highest single-session Cost today. Prompts
 counts the prompts typed in the session today. The Total row sums Prompts, Lines and
@@ -524,7 +528,7 @@ public/layout.js       orderRowKeys: the saved panel row order merged with the d
 public/main.mjs        Starts the page: fetches the API routes, draws every panel, runs the 5 s live poll and the range picker
 public/poll.js         Runs the 5 s live poll so one poll finishes before the next one starts
 public/reviews.js      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath
-public/session-groups.js  Groups ended sessions into rows of the Today table, and the running-session and activity labels
+public/session-groups.js  Groups the Today table's rows by claude launch, then ended sessions by project, and the running-session and activity labels
 public/state.mjs       The selected range and the hidden panels, shared by the modules
 public/stats.js        median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/style.css       All styling, including the @font-face rules for public/fonts/

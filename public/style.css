@@ -904,6 +904,11 @@ html, body {
 .sessions-table .is-attention { color: var(--text-primary); font-weight: 600; }
 .sessions-table .session-child td:first-child { padding-left: 24px; }
 .sessions-table .session-group .row-toggle { padding-right: 4px; }
+/* In a launch group row the toggle sits before the hex glyph, so the project and
+   branch line starts further in to stay under the title. */
+.sessions-table .launch-group .session-hex ~ .session-title ~ .session-context {
+  padding-left: calc(2ch + 12px);
+}
 
 /* A table wider than a narrow screen scrolls inside the panel, not the page. A long
    table stops at 20rem and scrolls inside its wrapper, with the header row and the
