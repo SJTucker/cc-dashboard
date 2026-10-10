@@ -326,7 +326,7 @@ setupRowOrder();
 // A chart drawn while its row was collapsed has the 200px fallback width. The
 // changes charts are redrawn only when the expanded row holds them.
 setupCollapsibleRows({
-  onExpand: (row) => redrawCharts({ changes: row.id === 'sessionStartPanel' || row.id === 'beforeAfterPanel' }),
+  onExpand: (row) => redrawCharts({ changes: row.id === 'beforeAfterPanel' }),
 });
 // The other panel of a pair widens to the full row.
 setupHiding({ onWidthChange: () => redrawCharts({ changes: false }), onResume: resumeRequests });

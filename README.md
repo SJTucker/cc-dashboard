@@ -341,7 +341,7 @@ browser. Reset layout restores the panel order only and leaves hidden panels hid
 A hidden panel is not drawn. A request is skipped when every panel and card it feeds
 is hidden:
 
-- `/api/changes`: both Setup changes panels
+- `/api/changes`: the Setup changes panel
 - `/api/rtk`: both rtk panels
 - `/api/sessions/live`: Live sessions and Session timeline
 - `/api/reviews`: Session reviews

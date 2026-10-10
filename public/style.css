@@ -1029,13 +1029,8 @@ html, body {
 .changes-legend { flex-wrap: wrap; margin-top: 8px; }
 .marker-icon { color: inherit; flex: none; }
 .marker-glyph { fill: none; stroke: currentColor; stroke-width: 1.5; }
-.marker-guide { stroke: var(--text-tertiary); stroke-width: 1; stroke-dasharray: 1 4; opacity: 0.7; }
 .session-dot { fill: var(--text-secondary); stroke: var(--text-secondary); stroke-width: 1.2; }
 .session-dot.hollow { fill: var(--surface); }
-.step-line { fill: none; stroke: var(--accent-cost); stroke-width: 2.5; }
-.step-swatch { width: 16px; height: 0; border-top: 2.5px solid var(--accent-cost); }
-.marker-overflow { font-family: var(--font-data); font-size: 10px; fill: var(--text-secondary); cursor: default; }
-.step-label { font-family: var(--font-data); font-size: 10px; fill: var(--accent-cost); }
 
 .day-bar.outside { fill: var(--border); }
 .day-bar.before { stroke: var(--text-secondary); stroke-width: 1; }
@@ -1066,39 +1061,6 @@ html, body {
 .lane-cell.picked .marker-glyph { fill: var(--accent-cost); stroke: var(--accent-cost); }
 .window-bar.after { fill: var(--accent-cost); }
 .plot-empty { font-family: var(--font-data); font-size: 11px; fill: var(--text-tertiary); }
-
-.marker-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
-.marker-btn, .marker-day-btn {
-  font: inherit;
-  font-size: 11px;
-  color: var(--text-secondary);
-  background: var(--surface-raised);
-  border: 1px solid var(--border);
-  border-radius: 4px;
-  padding: 4px 8px;
-  cursor: pointer;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-.marker-btn:hover, .marker-day-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
-.marker-btn[aria-pressed="true"] { color: var(--bg); background: var(--accent-cost); border-color: var(--accent-cost); }
-.marker-btn:focus-visible, .marker-day-btn:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 2px; }
-
-/* An open day takes a full line, so its changes sit directly under it. The
-   arrow and the bold text mark state without relying on colour. */
-.marker-day.open { flex-basis: 100%; }
-.marker-day-btn::after { content: '▸'; }
-.marker-day-btn[aria-expanded="true"]::after { content: '▾'; }
-.marker-day-btn.has-selected { color: var(--text-primary); border-color: var(--accent-cost); font-weight: 600; }
-.marker-day-items {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  margin-top: 6px;
-  padding-left: 10px;
-  border-left: 1px solid var(--border);
-}
 
 .ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
 @media (max-width: 860px) { .ba-grid { grid-template-columns: 1fr; } }
@@ -1237,10 +1199,9 @@ html, body {
   color: var(--text-secondary);
 }
 
-/* The setup changes panels load on their own schedule (Task 2), and the two
-   banners carry errors and the limits warning, so none dims with the
-   range-dependent content. */
-main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#sessionStartPanel):not(#beforeAfterPanel) { opacity: 0.5; }
+/* The setup changes panel loads on its own schedule, and the two banners carry
+   errors and the limits warning, so none dims with the range-dependent content. */
+main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfterPanel) { opacity: 0.5; }
 
 /* ---------- Plan usage ---------- */
 

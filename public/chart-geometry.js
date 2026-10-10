@@ -135,34 +135,6 @@ function rangeDomain(fullDomain, days) {
   return [Math.max(fullDomain[0], fullDomain[1] - days * 24 * 60 * 60 * 1000), fullDomain[1]];
 }
 
-// Rows for glyphs drawn in order at the given x positions. A glyph closer than gap
-// px to the one before it continues a chain and sits one row lower. A chain shows
-// at most cap glyphs; the rest are hidden and collected in one overflow per chain.
-// Returns { glyphs: [{ row, hidden }] per input x, overflows: [{ x, row, indices }],
-// rows }. An overflow's x is the x of the chain's first hidden glyph, and its row is
-// cap, the row after the last shown glyph. rows is the row count the rail needs.
-function stackGlyphs(xs, gap = 12, cap = 5) {
-  const glyphs = [];
-  const overflows = [];
-  let rows = xs.length ? 1 : 0;
-  let lastX = -Infinity;
-  let row = 0;
-  xs.forEach((x, i) => {
-    row = x - lastX < gap ? row + 1 : 0;
-    lastX = x;
-    const hidden = row >= cap;
-    glyphs.push({ row: hidden ? cap : row, hidden });
-    if (!hidden) {
-      rows = Math.max(rows, row + 1);
-      return;
-    }
-    if (row === cap) overflows.push({ x, row: cap, indices: [] });
-    overflows[overflows.length - 1].indices.push(i);
-    rows = Math.max(rows, cap + 1);
-  });
-  return { glyphs, overflows, rows };
-}
-
 // The Setup changes timeline. Lane kinds, top to bottom. A kind that is not listed
 // draws in the 'other' lane, as MARKER_SHAPES in public/charts/setup-changes.mjs does.
 const LANE_KINDS = ['claude-code', 'claude-md', 'skill', 'plugin', 'hook', 'config', 'rtk', 'model', 'effort', 'other'];
@@ -262,6 +234,6 @@ function domainDays(domain) {
 }
 
 if (typeof module === 'object') module.exports = {
-  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs,
+  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
 };

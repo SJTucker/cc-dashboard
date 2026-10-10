@@ -32,8 +32,8 @@ test('off Today the sessions request is never needed', () => {
 });
 
 test('a request shared by two panels stays needed until both are hidden', () => {
-  assert.ok(neededRequests(new Set(['sessionStart']), 'today').has('changes'));
-  assert.ok(!neededRequests(new Set(['sessionStart', 'beforeAfter']), 'today').has('changes'));
+  assert.ok(neededRequests(new Set(), 'today').has('changes'));
+  assert.ok(!neededRequests(new Set(['beforeAfter']), 'today').has('changes'));
   assert.ok(neededRequests(new Set(['rtkDaily']), 7).has('rtk'));
   assert.ok(!neededRequests(new Set(['rtkDaily', 'rtkCommands']), 7).has('rtk'));
   assert.ok(neededRequests(new Set(['timeline']), 'today').has('sessions'));

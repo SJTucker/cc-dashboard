@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const {
-  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain, stackGlyphs,
+  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
 } = require('../public/chart-geometry');
 
@@ -152,49 +152,6 @@ test('rangeDomain starts at the data start when the range is longer than the dat
 test('rangeDomain returns the full domain for null', () => {
   const full = [5, 500];
   assert.strictEqual(rangeDomain(full, null), full);
-});
-
-test('stackGlyphs puts glyphs that are far apart on row 0', () => {
-  const r = stackGlyphs([0, 20, 40]);
-  assert.deepStrictEqual(r.glyphs, [{ row: 0, hidden: false }, { row: 0, hidden: false }, { row: 0, hidden: false }]);
-  assert.deepStrictEqual(r.overflows, []);
-  assert.strictEqual(r.rows, 1);
-});
-
-test('stackGlyphs stacks a chain of 3 one row lower each', () => {
-  const r = stackGlyphs([0, 5, 10]);
-  assert.deepStrictEqual(r.glyphs.map((g) => g.row), [0, 1, 2]);
-  assert.strictEqual(r.rows, 3);
-});
-
-test('stackGlyphs hides the 6th and later glyphs of a chain and reports one overflow', () => {
-  const r = stackGlyphs(Array.from({ length: 16 }, (_, i) => i));
-  assert.strictEqual(r.glyphs.filter((g) => !g.hidden).length, 5);
-  assert.strictEqual(r.glyphs.filter((g) => g.hidden).length, 11);
-  assert.deepStrictEqual(r.glyphs.slice(0, 5).map((g) => g.row), [0, 1, 2, 3, 4]);
-  assert.strictEqual(r.overflows.length, 1);
-  assert.deepStrictEqual(r.overflows[0], { x: 5, row: 5, indices: [5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15] });
-  assert.strictEqual(r.rows, 6);
-});
-
-test('stackGlyphs shows a chain of exactly 5 with no overflow', () => {
-  const r = stackGlyphs([0, 1, 2, 3, 4]);
-  assert.deepStrictEqual(r.overflows, []);
-  assert.ok(r.glyphs.every((g) => !g.hidden));
-  assert.strictEqual(r.rows, 5);
-});
-
-test('stackGlyphs starts a new chain after a gap', () => {
-  const r = stackGlyphs([0, 5, 100, 105, 110]);
-  assert.deepStrictEqual(r.glyphs.map((g) => g.row), [0, 1, 0, 1, 2]);
-  assert.strictEqual(r.rows, 3);
-});
-
-test('stackGlyphs reports an overflow for each long chain', () => {
-  const xs = [...Array.from({ length: 7 }, (_, i) => i), ...Array.from({ length: 6 }, (_, i) => 100 + i)];
-  const r = stackGlyphs(xs);
-  assert.deepStrictEqual(r.overflows.map((o) => o.indices), [[5, 6], [12]]);
-  assert.deepStrictEqual(r.overflows.map((o) => o.x), [5, 105]);
 });
 
 test('barSlots keeps every bar inside the plot, with no minimum width', () => {

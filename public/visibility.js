@@ -8,7 +8,7 @@
 // /api/limits are not listed, because they are always fetched: the summary feeds
 // most of the page, and the limits banner shows on every range and has no "x".
 const REQUEST_CONSUMERS = {
-  changes: ['sessionStart', 'beforeAfter'],
+  changes: ['beforeAfter'],
   rtk: ['rtkDaily', 'rtkCommands'],
   sessions: ['sessions', 'timeline'],
   reviews: ['reviews'],
