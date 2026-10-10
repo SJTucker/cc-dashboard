@@ -3,15 +3,20 @@
 // colour is enough and no texture is needed.
 import { el, showTooltip, hideTooltip, focusedRowName } from '../dom.mjs';
 
-// What each row shows. size(row) sets the bar's length against scaleMax, value(row)
-// is the text beside the bar, and label(row) is the name cell.
-export function barRows(rows, { size, scaleMax, value, label = (row) => row.name }) {
-  return rows.map((row) => ({
-    name: row.name,
-    label: label(row),
-    width: scaleMax > 0 ? (size(row) / scaleMax) * 100 : 0,
-    value: value(row),
-  }));
+// What each row shows. size(row) sets the bar's length against the scale, value(row)
+// is the text beside the bar, and label(row) is the name cell. The scale runs from
+// scaleMin (0 unless a list holds negative values, as the rtk lists can) to
+// scaleMax. left and width are percents of the track: a negative bar ends at zero,
+// a positive one starts there.
+export function barRows(rows, { size, scaleMax, scaleMin = 0, value, label = (row) => row.name }) {
+  const span = scaleMax - scaleMin;
+  // Written as 0 - scaleMin because -scaleMin is -0 when scaleMin is 0, and -0 is not 0 to deepStrictEqual.
+  const zero = span > 0 ? ((0 - scaleMin) / span) * 100 : 0;
+  return rows.map((row) => {
+    const s = size(row);
+    const width = span > 0 ? (Math.abs(s) / span) * 100 : 0;
+    return { name: row.name, label: label(row), left: s < 0 ? zero - width : zero, width, value: value(row) };
+  });
 }
 
 // Draws rows into container. With onSelect, each row is a toggle button and the
@@ -37,6 +42,7 @@ export function drawHBars(container, rows, options) {
 function barNode(row, bar, { tooltip, valueClass = 'usage-pct', onSelect, selectedName }) {
   const fill = el('i');
   fill.style.width = bar.width + '%';
+  if (bar.left) fill.style.marginLeft = bar.left + '%';
   const selected = row.name === selectedName;
   const node = el('div', { class: 'usage-row' + (onSelect ? ' selectable' : '') + (selected ? ' selected' : '') }, [
     el('span', { class: 'usage-name', text: bar.label, title: row.name }),
