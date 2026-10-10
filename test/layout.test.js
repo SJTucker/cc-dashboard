@@ -40,3 +40,9 @@ test('a saved value that is not a list of strings gives the default order', () =
     assert.deepStrictEqual(orderRowKeys(['a', 'b', 'c'], saved), ['a', 'b', 'c']);
   }
 });
+
+test('a saved order from before Plan usage and Where usage goes shared a row puts the row at Plan usage', () => {
+  const saved = ['Session timeline', 'Where usage goes', 'Plan usage', 'Live sessions'];
+  const defaults = ['Plan usage', 'Session timeline', 'Live sessions'];
+  assert.deepStrictEqual(orderRowKeys(defaults, saved), ['Session timeline', 'Plan usage', 'Live sessions']);
+});

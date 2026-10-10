@@ -39,13 +39,22 @@ function hideName(element) {
 }
 
 // setupRowDrag and setupCollapsibleRows put a row's handle and toggle in its first
-// heading. When the first panel of a pair is hidden, they move to the heading of
-// the panel still showing, and back when the first panel returns.
+// heading. When the first panel of a pair is hidden, by the user or by its renderer
+// (Plan usage shows on Today only), they move to the heading of the panel still
+// showing, and back when the first panel returns.
 function placeRowControls(row, panel) {
   const heading = panel.querySelector(':scope > .panel-head > h2');
   const toggle = row.querySelector(':scope > .panel > .panel-head > h2 > .row-toggle');
   const handle = row.querySelector(':scope > .panel > .panel-head > h2 > .row-handle');
   if (heading && toggle && toggle.parentElement !== heading) heading.prepend(...[toggle, handle].filter(Boolean));
+}
+
+// The panel whose heading holds a row's handle and toggle: the first panel showing,
+// else the first panel. A panel is not showing when the user hid it
+// (data-user-hidden) or its renderer hid it (hidden). Reads only those two, so the
+// tests can pass plain objects.
+export function controlsPanel(panels) {
+  return panels.find((panel) => !panel.hidden && !panel.hasAttribute('data-user-hidden')) || panels[0];
 }
 
 function applyHidden() {
@@ -56,7 +65,7 @@ function applyHidden() {
     const panels = [...row.querySelectorAll(':scope > .panel')];
     const visible = panels.filter((panel) => !panel.hasAttribute('data-user-hidden'));
     row.toggleAttribute('data-user-hidden', visible.length === 0);
-    placeRowControls(row, visible[0] || panels[0]);
+    placeRowControls(row, controlsPanel(panels));
   }
   renderHiddenMenu();
 }
@@ -133,4 +142,12 @@ export function setupHiding(callbacks) {
     menu.style.right = `${document.documentElement.clientWidth - box.right}px`;
   });
   applyHidden();
+  // Renderers set `hidden` on their own panels (renderLimits, renderNowPanels,
+  // renderAttribution), and applyHidden does not run then. One observer per pair
+  // moves the handle and toggle whenever a panel in it is hidden or shown.
+  for (const row of document.querySelectorAll('#app > .panel-row')) {
+    const panels = [...row.querySelectorAll(':scope > .panel')];
+    const observer = new MutationObserver(() => placeRowControls(row, controlsPanel(panels)));
+    for (const panel of panels) observer.observe(panel, { attributes: true, attributeFilter: ['hidden'] });
+  }
 }

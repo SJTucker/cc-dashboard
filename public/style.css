@@ -855,8 +855,32 @@ html, body {
 
 .usage-grid .usage-group + .usage-group { margin-top: 0; }
 
-@media (max-width: 900px) {
+/* Where usage goes is half the row beside Plan usage on Today, and the whole row on
+   other ranges. Its two columns follow the panel's own width, not the viewport's.
+   814px is the full-width panel's content box at a 900px viewport (900 − 48 page
+   padding − 2 border − 36 panel padding), so the full-width panel switches where
+   it always did with overlay scrollbars. With classic scrollbars the container is
+   narrower than the viewport by the scrollbar width, about 15px, so it switches
+   slightly later. At half width, two columns wrapped each legend's percentage onto
+   the line under its label. */
+#attributionPanel { container-type: inline-size; }
+
+@container (max-width: 814px) {
   .usage-grid { grid-template-columns: 1fr; }
+}
+
+/* .usage-row gives the name column up to 280px before the bar track gets any space.
+   Beside Plan usage the panel is half the row, so the name column took nearly all of
+   it and the Skills and Subagents bars shrank to 2px or less at 960px. Here the name
+   column is capped at 40% of the row. The rule sits in a min-width media query so the
+   max-width: 720px rule for .usage-row, which hides the track, is not overridden: an
+   id selector would beat it. The Tool calls panel is outside #attributionPanel and
+   keeps its 280px column. */
+@media (min-width: 721px) {
+  #attributionPanel .usage-row { grid-template-columns: minmax(0, min(280px, 40%)) 1fr auto; }
+}
+
+@media (max-width: 900px) {
   .chart-with-legend { flex-direction: column; }
   .chart-side { max-width: none; }
   .side-legend { flex-direction: row; flex-wrap: wrap; }
@@ -1085,9 +1109,11 @@ html, body {
 
 @media (max-width: 720px) {
   /* auto, not a fixed 40px: a count such as "869 · 7.4% err" is wider than 40px,
-     and .usage-count's 96px minimum pushed it past the panel edge. */
+     and .usage-count's 96px minimum pushed it past the panel edge. The track is
+     hidden in drawHBars rows only. Plan usage meters (.limit-row) use the same
+     class and keep their bars at every width. */
   .usage-row { grid-template-columns: minmax(0, 1fr) auto; }
-  .usage-track { display: none; }
+  .usage-row .usage-track { display: none; }
 }
 
 /* ---------- Setup changes ---------- */
@@ -1411,8 +1437,10 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
    showing its panel cannot undo the user's choice. */
 [data-user-hidden] { display: none !important; }
 
-/* The panel left in a pair takes the whole row. */
-.panel-row:has(> [data-user-hidden]) { grid-template-columns: 1fr; }
+/* The panel left in a pair takes the whole row, whether the user hid the other one
+   or its renderer did (Plan usage is hidden off Today, Where usage goes when the
+   range has no cost). */
+.panel-row:has(> [data-user-hidden], > [hidden]) { grid-template-columns: 1fr; }
 
 /* The "x" follows the panel note and any heading button, all pushed right. */
 .panel-head > h2 { margin-right: auto; }
