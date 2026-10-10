@@ -18,3 +18,11 @@ test('commandRows keeps the DETAIL_LIMIT largest magnitudes, negative included, 
   const kept = out.map((c) => c.keptOut);
   assert.deepStrictEqual(kept, [...kept].sort((a, b) => b - a));
 });
+
+test('pickCommand keeps a shown selection and otherwise falls back to the first shown row', async () => {
+  const { pickCommand } = await load();
+  const rows = [{ name: 'a' }, { name: 'b' }];
+  assert.strictEqual(pickCommand(rows, 'b').name, 'b');
+  assert.strictEqual(pickCommand(rows, 'gone').name, 'a');
+  assert.strictEqual(pickCommand(rows, null).name, 'a');
+});

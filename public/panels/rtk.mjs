@@ -46,13 +46,17 @@ export function commandRows(commands) {
     .sort((a, b) => b.keptOut - a.keptOut);
 }
 
-function renderRtkCommands(commands) {
-  if (!commands.some((c) => c.name === selectedRtkCommand)) {
-    selectedRtkCommand = commands[0].name;
-  }
-  const current = commands.find((c) => c.name === selectedRtkCommand);
+// The selected row of the shown list, or its first row when the selection is not in
+// it: a range change can move the stored command out of the shown DETAIL_LIMIT.
+export function pickCommand(rows, name) {
+  return rows.find((c) => c.name === name) || rows[0];
+}
 
+function renderRtkCommands(commands) {
   const shown = commandRows(commands);
+  const current = pickCommand(shown, selectedRtkCommand);
+  selectedRtkCommand = current.name;
+
   drawHBars(document.getElementById('rtkCommandBars'), shown, {
     ...RTK_BARS,
     ...scaleOf(shown),
