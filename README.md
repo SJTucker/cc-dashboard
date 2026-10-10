@@ -73,6 +73,8 @@ what Anthropic billed. Do not add one to the other.
 
 On the Today range, a panel shows the two limits from Claude Code's `/usage` screen:
 the current session (the 5-hour window) and the current week across all models.
+The panel sits beside Where usage goes. On the other ranges, or when one of the two
+is hidden, the other panel takes the whole row.
 The dashboard reads two possible sources and shows whichever was updated more
 recently. It makes no network request of its own.
 
@@ -558,7 +560,7 @@ public/panels/timeline.mjs  The Session timeline: one lane per session with acti
 public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown and its errors
 public/panels/usage.mjs  Daily cost, daily tokens, cumulative cost, token types and the weekday and hour heatmap
 public/ui/collapse.mjs Collapsible rows of panels, and the collapsible Skills and Subagents lists
-public/ui/hidden.mjs   Hides a panel or card with its x button, and shows it again from the header menu
+public/ui/hidden.mjs   Hides a panel or card with its x button, shows it again from the header menu, and keeps a row's handle and toggle on a panel that shows
 public/ui/panel-light.mjs  Lights the border of the panel under the pointer
 public/ui/row-order.mjs  Drag to reorder rows of panels; the order is saved in localStorage
 public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by style.css, with their SIL OFL licence files
