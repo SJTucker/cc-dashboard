@@ -133,12 +133,12 @@ test('stats takes lists that are already cut to a span', () => {
 test('buildReport attaches before/after windows and rtk entries in range order', () => {
   const markers = [{ t: T0, kind: 'plugin', label: 'x', source: 'plugin' }];
   assert.deepStrictEqual(windowRanges(markers), [[T0 - WEEK_MS, T0], [T0, T0 + WEEK_MS]]);
-  const rtk = [{ commands: 1, keptPerCommand: 300, filteredShare: 0.6 }, { commands: 2, keptPerCommand: 100, filteredShare: 0.8 }];
+  const rtk = [{ commands: 1, reachedPerCommand: 300, keptOutShare: 0.6 }, { commands: 2, reachedPerCommand: 100, keptOutShare: 0.8 }];
   const report = buildReport({ calls: [call(T0 + 1)], prompts: [] }, markers, rtk, { path: '/x', status: 'missing' });
   assert.strictEqual(report.sessions.length, 1);
   assert.deepStrictEqual(report.daily.sessionStart, [{ date: '2026-09-10', n: 1, value: 1000 }]);
-  assert.strictEqual(report.markers[0].before.rtk.keptPerCommand, 300);
-  assert.strictEqual(report.markers[0].after.rtk.keptPerCommand, 100);
+  assert.strictEqual(report.markers[0].before.rtk.reachedPerCommand, 300);
+  assert.strictEqual(report.markers[0].after.rtk.reachedPerCommand, 100);
   assert.strictEqual(report.markers[0].after.sessions, 1);
   assert.deepStrictEqual(report.changesFile, { path: '/x', status: 'missing' });
   assert.strictEqual(buildReport({ calls: [], prompts: [] }, markers, null, {}).markers[0].before.rtk, null);
