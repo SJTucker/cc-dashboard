@@ -313,6 +313,24 @@ function round6(n) {
   return Math.round(n * 1e6) / 1e6;
 }
 
+test('buildLiveSessions lists each session\'s cache rebuilds, oldest first', () => {
+  const snaps = [snapshot({ sessionId: 's1', lastActiveAt: NOW - 60_000 }), snapshot({ sessionId: 's2', lastActiveAt: NOW - 60_000 })];
+  const r = (cause, premium) => ({ cause, reason: null, tokens: 50_000, gapMs: 600_000, premium });
+  const calls = [
+    { sessionId: 's1', t: NOW - 2_000, main: false, context: 1, output: 1, cost: 0.1, rebuild: r('expired', 0.2) },
+    { sessionId: 's1', t: NOW - 9_000, main: true, context: 1, output: 1, cost: 0.1, rebuild: r('tools', 0.3) },
+    { sessionId: 's1', t: NOW - 5_000, main: true, context: 1, output: 1, cost: 0.1 },
+    { sessionId: 's2', t: NOW - 5_000, main: true, context: 1, output: 1, cost: 0.1 },
+  ];
+  const { sessions } = buildLiveSessions(snaps, calls, NOW);
+  const s1 = sessions.find((s) => s.rebuilds.length);
+  assert.deepStrictEqual(s1.rebuilds, [
+    { t: NOW - 9_000, main: true, ...r('tools', 0.3) },
+    { t: NOW - 2_000, main: false, ...r('expired', 0.2) },
+  ]);
+  assert.deepStrictEqual(sessions.map((s) => s.rebuilds.length).sort(), [0, 2]);
+});
+
 test('buildLiveSessions joins tokens and lines by sessionId and totals the rows', () => {
   const snaps = [
     snapshot({ sessionId: 's1', costUsd: 1.5, lastActiveAt: NOW - 60_000 }),
