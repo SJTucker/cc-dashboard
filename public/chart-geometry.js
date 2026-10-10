@@ -86,6 +86,20 @@ function donutSlices(values, cx, cy, rOuter, rInner) {
   });
 }
 
+// The Model mix donut's entries for one measure, 'tokens' or 'cost', largest first.
+// Each entry is a copy of the model with value set to m[measure]. In the cost view an
+// unpriced model's cost is 0 because no rate is known, not because it cost nothing,
+// so it goes in unpriced instead of getting a 0% slice.
+function mixEntries(models, measure) {
+  const unpriced = measure === 'cost' ? models.filter((m) => !m.priced) : [];
+  const shown = models
+    .filter((m) => !unpriced.includes(m))
+    .map((m) => ({ ...m, value: m[measure] }))
+    .sort((a, b) => b.value - a.value);
+  const total = shown.reduce((sum, m) => sum + m.value, 0);
+  return { shown, unpriced, total };
+}
+
 // Hour boundaries in local time for the Session timeline's x axis, from start
 // rounded down to the hour to end rounded up to the hour. There are always at
 // least two, so the axis has a width when start and end share an hour.
@@ -234,6 +248,6 @@ function domainDays(domain) {
 }
 
 if (typeof module === 'object') module.exports = {
-  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, hourTicks, laneLayout, rangeDomain,
+  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
 };

@@ -317,6 +317,10 @@
         <section class="panel" id="modelMixPanel" data-hide-key="modelMix">
           <div class="panel-head">
             <h2>Model mix</h2>
+            <div class="mix-measure" id="mixMeasure" role="group" aria-label="Size slices by">
+              <button type="button" data-measure="tokens" aria-pressed="true">Tokens</button>
+              <button type="button" data-measure="cost" aria-pressed="false">Cost</button>
+            </div>
           </div>
           <div id="modelMixChart" class="mix-donut"></div>
         </section>

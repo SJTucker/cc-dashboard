@@ -511,7 +511,7 @@ bin/review-session     Lists ended sessions to review and records Haiku's sugges
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
 public/apple-touch-icon.png  Home-screen icon, linked from index.html
-public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, donut slices and the Session timeline's hour ticks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
+public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, donut slices, mixEntries (the Model mix donut's entries per measure) and the Session timeline's hour ticks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
 public/constants.mjs   Numbers the page shares with the server; test/front-end-constants.test.js keeps them equal
 public/dom.mjs         Element builders (el, svgEl) and the tooltip
 public/favicon.ico     Tab icon, linked from index.html
@@ -531,7 +531,7 @@ public/style.css       All styling, including the @font-face rules for public/fo
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
 public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, the signed y axis for charts with negative values, and the Setup changes y axis with a 0 label and headroom
 public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
-public/charts/donut.mjs  drawModelMix: each model's share of tokens as a donut with its legend
+public/charts/donut.mjs  drawModelMix: each model's share of tokens or of cost as a donut with its legend; flipDonut turns the donut between the two views
 public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and rtk commands
 public/charts/heatmap.mjs  drawActivityHeatmap: cost by weekday and hour
 public/charts/line.mjs The four token types on a log-axis line chart, and the token legend
