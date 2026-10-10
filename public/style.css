@@ -989,6 +989,8 @@ html, body {
 }
 .timeline-label.prompt-title { font-style: italic; }
 .timeline-bar:hover { stroke: var(--text-primary); stroke-width: 1; }
+.timeline-rebuild:hover { stroke: var(--text-primary); stroke-width: 2; }
+.timeline-rebuild-count { font-size: 9px; fill: var(--text-secondary); pointer-events: none; }
 /* The list scrolls inside the panel past 48rem, as the Live sessions tables do at
    20rem. The wrapper is in index.html, so the 5 s redraw keeps its scroll position. */
 .review-scroll { overflow: auto; max-height: 48rem; }

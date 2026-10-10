@@ -21,7 +21,6 @@ then on.
 | [Cost per unit of work](cost-per-unit-of-work.md) | Open: spend per commit or per Edit and Write call; repository counting and noise open |
 | [Setup changes: long-history labels](setup-changes-long-history-labels.md) | Open: Monday date labels collide below about 2.3px per day and weekly lane counts below about 3.5px per day; a month-start step and month cells are the possible fix |
 | [Horizontal scroll at 400px](narrow-viewport-horizontal-scroll.md) | Open: the page is 416px wide on 30d and All because of `#modelMixPanel`; which element sets the width open |
-| [Cache rebuild cost](cache-rebuilds.md) | Open: find calls that rewrote the cache mid-session and name the cause (idle gap past the TTL, compaction, model change); each rebuild marked on the Session timeline; threshold, subagents, marker shape and the other ranges open |
 | [Where the time goes](turn-durations.md) | Open: read the unused `turn_duration` lines for model hours per day and turn length; subagent coverage and tool time open |
 | [Plan limit warning inside Claude Code](limit-warning-in-claude-code.md) | Open: the mod shows a dismissable toast or band when a window passes 75%; what a dismissal covers, repeat rule and shared warned state open |
 | [What fills the context](context-fillers.md) | Open: largest tool results and repeated reads across the range; result size storage and grouping open |

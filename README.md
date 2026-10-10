@@ -351,7 +351,16 @@ The axis runs from the hour of the earliest call to the next whole hour after no
 and a dashed line marks now. A live session has solid bars, and its last bar ends in
 an arrowhead at now if its last call was within the last 10 minutes. Every other
 session has striped bars. Hover a bar for the session's title, project and branch,
-the bar's time range, cost today and prompt count. The panel hides when no session
+the bar's time range, cost today and prompt count.
+A diamond on a lane marks a call that rebuilt the session's prompt cache: it wrote
+most of its context to the cache again instead of reading it. Hover it for the
+cause, the tokens rewritten and the premium over a cache read. The cause is Claude
+Code's own `cache_miss_reason` when the call carries one. Otherwise it is "model
+changed" after a model switch, "cache expired" after a gap longer than the cache's
+5-minute or 1-hour lifetime, or "cause unknown". A filled diamond is the main
+thread, and a hollow one a subagent. Rebuilds closer than 8px join into one diamond
+with a count. Writes under 20,000 tokens are left out. The panel note adds the
+day's rebuild count and total premium. The panel hides when no session
 has a call today.
 
 The Where usage goes panel shows where total cost went: main thread against
@@ -514,7 +523,7 @@ lib/config-dir.js      loadConfig: the one place the server reads the environmen
 lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
 lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeouts, and the server's one shared handle
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window, for the Setup changes panel
-lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts, slash commands and per-session summaries
+lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts, slash commands and per-session summaries, and tags the calls that rebuilt the prompt cache (markRebuilds)
 lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
 lib/net-guard.js       Host-header check and security headers
@@ -541,7 +550,7 @@ bin/review-session     Lists ended sessions to review and records Haiku's sugges
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
 public/apple-touch-icon.png  Home-screen icon, linked from index.html
-public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, donut slices, mixEntries (the Model mix donut's entries per measure) and the Session timeline's hour ticks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
+public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, donut slices, mixEntries (the Model mix donut's entries per measure) and the Session timeline's hour ticks, cache rebuild marks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
 public/constants.mjs   Numbers the page shares with the server; test/front-end-constants.test.js keeps them equal
 public/dom.mjs         Element builders (el, svgEl) and the tooltip
 public/favicon.ico     Tab icon, linked from index.html
@@ -579,7 +588,7 @@ public/panels/records.mjs  The Record day card and the 7d total lines; fetches /
 public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Not useful, Undo and Copy prompt; fetches /api/reviews
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
 public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
-public/panels/timeline.mjs  The Session timeline: one lane per session with activity today
+public/panels/timeline.mjs  The Session timeline: one lane per session with activity today, with its cache rebuild marks
 public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown, its errors and an error table per model
 public/panels/usage.mjs  Daily cost, daily tokens, cumulative cost, token types and the weekday and hour heatmap
 public/ui/collapse.mjs Collapsible rows of panels, and the collapsible Skills and Subagents lists
