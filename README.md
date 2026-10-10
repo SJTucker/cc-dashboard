@@ -351,7 +351,8 @@ The axis runs from the hour of the earliest call to the next whole hour after no
 and a dashed line marks now. A live session has solid bars, and its last bar ends in
 an arrowhead at now if its last call was within the last 10 minutes. Every other
 session has striped bars. Hover a bar for the session's title, project and branch,
-the bar's time range, cost today and prompt count.
+the bar's time range, cost today and prompt count. The panel hides when no session
+has a call today.
 A diamond on a lane marks a call that rebuilt the session's prompt cache: it wrote
 most of its context to the cache again instead of reading it. Hover it for the
 cause, the tokens rewritten and the premium over a cache read. The cause is Claude
@@ -359,9 +360,8 @@ Code's own `cache_miss_reason` when the call carries one. Otherwise it is "model
 changed" after a model switch, "cache expired" after a gap longer than the cache's
 5-minute or 1-hour lifetime, or "cause unknown". A filled diamond is the main
 thread, and a hollow one a subagent. Rebuilds closer than 8px join into one diamond
-with a count. Writes under 20,000 tokens are left out. The panel note adds the
-day's rebuild count and total premium. The panel hides when no session
-has a call today.
+with a count. Writes under 20,000 tokens are left out, and so is the first call after a `/compact`.
+The panel note adds the day's rebuild count and total premium.
 
 The Where usage goes panel shows where total cost went: main thread against
 subagents, calls over against under 150k of context, and the Skills and Subagents

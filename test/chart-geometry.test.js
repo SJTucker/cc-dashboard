@@ -184,6 +184,11 @@ test('rebuildMarks joins rebuilds closer than minGapPx into one mark, in time or
   assert.deepStrictEqual(marks.map((m) => [m.x, m.items, m.main]), [[60, [early, late], false], [80, [apart], false]]);
 });
 
+test('rebuildMarks gives two rebuilds exactly minGapPx apart two marks', () => {
+  const marks = rebuildMarks([rb(at(10)), rb(at(10, 8))], xOf, 8);
+  assert.deepStrictEqual(marks.map((m) => m.items.length), [1, 1]);
+});
+
 test('rebuildMarks measures the gap from the mark\'s first item, so a chain does not grow without end', () => {
   const marks = rebuildMarks([rb(at(10)), rb(at(10, 5)), rb(at(10, 10))], xOf, 8);
   assert.deepStrictEqual(marks.map((m) => m.items.length), [2, 1]);

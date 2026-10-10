@@ -55,9 +55,11 @@ function rebuildTooltip(mark) {
   if (mark.items.length === 1) return rebuildLine(mark.items[0]);
   const shown = mark.items.slice(0, REBUILD_TOOLTIP_ITEMS).map(rebuildLine);
   const more = mark.items.length - shown.length;
-  const total = mark.items.reduce((sum, r) => sum + (r.premium || 0), 0);
   const moreLine = more > 0 ? `<br>and ${more} more` : '';
-  return `<b>${mark.items.length} cache rebuilds</b><br><br>${shown.join('<br><br>')}${moreLine}<br><br>Total +${formatCost(total)}`;
+  // Unpriced rebuilds have no premium. With none priced there is no total to show.
+  const priced = mark.items.filter((r) => typeof r.premium === 'number');
+  const totalLine = priced.length ? `<br><br>Total +${formatCost(priced.reduce((sum, r) => sum + r.premium, 0))}` : '';
+  return `<b>${mark.items.length} cache rebuilds</b><br><br>${shown.join('<br><br>')}${moreLine}${totalLine}`;
 }
 
 // One lane's rebuild marks, drawn over its bars. A mark of two or more rebuilds has
@@ -210,8 +212,9 @@ export function renderTimeline(live) {
   hideTooltip();
   const drawn = drawTimeline(container, live.sessions, width, now);
   const rebuilds = live.sessions.flatMap((s) => s.rebuilds || []);
-  const premium = rebuilds.reduce((sum, r) => sum + (r.premium || 0), 0);
-  const rebuildNote = rebuilds.length ? ` · ${plural(rebuilds.length, 'cache rebuild', 'cache rebuilds')}, +${formatCost(premium)}` : '';
+  const priced = rebuilds.filter((r) => typeof r.premium === 'number');
+  const premium = priced.length ? `, +${formatCost(priced.reduce((sum, r) => sum + r.premium, 0))}` : '';
+  const rebuildNote = rebuilds.length ? ` · ${plural(rebuilds.length, 'cache rebuild', 'cache rebuilds')}${premium}` : '';
   document.getElementById('timelineNote').textContent =
     `${plural(drawn.lanes, 'session', 'sessions')} today · ${drawn.live} live${rebuildNote}`;
 }

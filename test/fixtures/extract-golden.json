@@ -48,8 +48,7 @@
           "Bash",
           "Edit",
           "Write"
-        ],
-        "missReason": null
+        ]
       },
       {
         "key": "m-a3:r-a3",
@@ -72,8 +71,7 @@
           "Skill",
           "unknown",
           "Bash"
-        ],
-        "missReason": null
+        ]
       },
       {
         "key": null,
@@ -90,8 +88,7 @@
         "attributionAgent": null,
         "tools": [
           "Bash"
-        ],
-        "missReason": null
+        ]
       },
       {
         "key": null,
@@ -106,8 +103,7 @@
         },
         "attributionSkill": null,
         "attributionAgent": null,
-        "tools": [],
-        "missReason": null
+        "tools": []
       },
       {
         "key": "m-gpt:r-gpt",
@@ -122,8 +118,7 @@
         },
         "attributionSkill": null,
         "attributionAgent": null,
-        "tools": [],
-        "missReason": null
+        "tools": []
       },
       {
         "key": "m-nomodel:r-nomodel",
@@ -138,8 +133,7 @@
         },
         "attributionSkill": null,
         "attributionAgent": null,
-        "tools": [],
-        "missReason": null
+        "tools": []
       },
       {
         "key": "m-big:r-big",
@@ -155,8 +149,7 @@
         },
         "attributionSkill": null,
         "attributionAgent": null,
-        "tools": [],
-        "missReason": null
+        "tools": []
       },
       {
         "key": "m-sub:r-sub",
@@ -171,8 +164,7 @@
         },
         "attributionSkill": null,
         "attributionAgent": "Explore",
-        "tools": [],
-        "missReason": null
+        "tools": []
       }
     ],
     "toolUses": [
@@ -452,8 +444,7 @@
           "Bash",
           "Edit",
           "Write"
-        ],
-        "missReason": null
+        ]
       },
       {
         "key": "m-b1:r-b1",
@@ -474,8 +465,7 @@
         },
         "attributionSkill": "review",
         "attributionAgent": null,
-        "tools": [],
-        "missReason": null
+        "tools": []
       },
       {
         "key": "m-b2:r-b2",
@@ -490,8 +480,7 @@
         },
         "attributionSkill": null,
         "attributionAgent": null,
-        "tools": [],
-        "missReason": null
+        "tools": []
       },
       {
         "key": "m-b3:r-b3",
@@ -506,8 +495,7 @@
         },
         "attributionSkill": null,
         "attributionAgent": null,
-        "tools": [],
-        "missReason": null
+        "tools": []
       }
     ],
     "toolUses": [
@@ -658,8 +646,7 @@
         "attributionAgent": null,
         "tools": [
           "Edit"
-        ],
-        "missReason": null
+        ]
       }
     ],
     "toolUses": [
@@ -728,8 +715,7 @@
         },
         "attributionSkill": null,
         "attributionAgent": null,
-        "tools": [],
-        "missReason": null
+        "tools": []
       },
       {
         "key": "m-d2:r-d2",
@@ -744,8 +730,7 @@
         },
         "attributionSkill": null,
         "attributionAgent": null,
-        "tools": [],
-        "missReason": null
+        "tools": []
       }
     ],
     "toolUses": [],
@@ -795,8 +780,7 @@
         "attributionAgent": null,
         "tools": [
           "Bash"
-        ],
-        "missReason": null
+        ]
       },
       {
         "key": "m-e2:r-e2",
@@ -813,8 +797,7 @@
         "attributionAgent": null,
         "tools": [
           "Edit"
-        ],
-        "missReason": null
+        ]
       },
       {
         "key": "m-e3:r-e3",
@@ -832,8 +815,7 @@
         "tools": [
           "Bash",
           "Read"
-        ],
-        "missReason": null
+        ]
       }
     ],
     "toolUses": [

@@ -40,9 +40,17 @@ async function callsOf(lines) {
   return (await extractFile(writeTranscript(lines))).calls;
 }
 
-test('a call row carries Claude Code\'s cache miss reason, or null', async () => {
+test('a call row carries Claude Code\'s cache miss reason only when it gave one', async () => {
   const calls = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 1, msg: 'b', write: 100_000, reason: 'tools_changed' })]);
-  assert.deepStrictEqual(calls.map((c) => c.missReason), [null, 'tools_changed']);
+  assert.strictEqual('missReason' in calls[0], false);
+  assert.strictEqual(calls[1].missReason, 'tools_changed');
+});
+
+test('a reason on a later line of a response reaches the merged call row', async () => {
+  const first = cached({ msg: 'a', write: 100_000 });
+  const later = cached({ msg: 'a', write: 100_000, reason: 'tools_changed' });
+  const calls = await callsOf([cached({ msg: 'z', write: 100_000 }), first, later]);
+  assert.strictEqual(calls[1].missReason, 'tools_changed');
 });
 
 test('each cache_miss_reason type maps to a cause, and an unknown type to other', async () => {
@@ -128,6 +136,62 @@ test('the first call of a subagent file is not a rebuild', async () => {
   ]);
   assert.strictEqual('rebuild' in calls[0], false);
   assert.strictEqual(calls[1].rebuild.cause, 'expired');
+});
+
+const compactLine = (min, sidechain = false) => ({ type: 'system', subtype: 'compact_boundary', timestamp: atMin(min), sessionId: 's1', isSidechain: sidechain });
+
+test('the first call after a compact_boundary starts a conversation and is not a rebuild', async () => {
+  const calls = await callsOf([
+    cached({ min: 0, msg: 'a', write: 100_000 }),
+    compactLine(1),
+    cached({ min: 2, msg: 'b', write: 100_000, reason: 'tools_changed' }),
+  ]);
+  assert.strictEqual('rebuild' in calls[1], false);
+});
+
+test('after a compaction the TTL is 5 minutes again and gapMs counts from the post-compaction call', async () => {
+  const calls = await callsOf([
+    cached({ min: 0, msg: 'a', write: 100_000, ttl: '1h' }),
+    compactLine(1),
+    cached({ min: 2, msg: 'b', write: 100_000 }),
+    cached({ min: 10, msg: 'c', write: 100_000 }),
+  ]);
+  assert.strictEqual('rebuild' in calls[1], false);
+  assert.deepStrictEqual(calls[2].rebuild, { cause: 'expired', reason: null, tokens: 100_000, gapMs: 8 * 60_000 });
+});
+
+test('a sidechain call after a main-thread compact_boundary is unaffected', async () => {
+  const calls = await callsOf([
+    cached({ min: 0, msg: 's1', write: 100_000, sidechain: true }),
+    compactLine(1),
+    cached({ min: 2, msg: 's2', write: 100_000, sidechain: true, reason: 'tools_changed' }),
+  ]);
+  assert.strictEqual(calls[1].rebuild.cause, 'tools');
+});
+
+test('a sidechain compact_boundary does not start a main-thread conversation', async () => {
+  const calls = await callsOf([
+    cached({ min: 0, msg: 'a', write: 100_000 }),
+    compactLine(1, true),
+    cached({ min: 2, msg: 'b', write: 100_000, reason: 'tools_changed' }),
+  ]);
+  assert.strictEqual(calls[1].rebuild.cause, 'tools');
+});
+
+test('extractFile does not return the compaction times', async () => {
+  const result = await extractFile(writeTranscript([cached({ msg: 'a', write: 100_000 }), compactLine(1)]));
+  assert.strictEqual('compactions' in result, false);
+});
+
+test('a cache write of exactly 80% of the context, with no reason, is not a rebuild', async () => {
+  // input 5 + write 20_000 + read 5_000 - 5 = 25_000 context, so the write is 80%.
+  const calls = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 10, msg: 'b', write: 20_000, read: 4_995 })]);
+  assert.strictEqual('rebuild' in calls[1], false);
+});
+
+test('a cache_miss_reason decides the cause even when the model changed', async () => {
+  const calls = await callsOf([cached({ msg: 'a', write: 100_000 }), cached({ min: 1, msg: 'b', write: 100_000, reason: 'tools_changed', model: 'claude-sonnet-5' })]);
+  assert.strictEqual(calls[1].rebuild.cause, 'tools');
 });
 
 test('markRebuilds leaves the order of the calls array alone', () => {
