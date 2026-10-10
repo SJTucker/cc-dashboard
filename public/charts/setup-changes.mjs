@@ -36,7 +36,7 @@ const MARKER_SHAPES = {
 
 const MARKER_KIND_NAMES = {
   plugin: 'plugin', hook: 'hook', skill: 'skill', 'claude-md': 'CLAUDE.md', rtk: 'rtk',
-  config: 'config', effort: 'effort', model: 'model', 'claude-code': 'Claude Code update', other: 'other',
+  config: 'config', effort: 'effort', model: 'model', 'claude-code': 'Claude Code', other: 'other',
 };
 
 // Session dots: shape by model, most-used model first.
@@ -265,8 +265,9 @@ function markerWindow(marker, row, domain) {
 const BEFORE_INK = '#7f93b8';
 const PATTERN_SCOPE = 'ba';
 
-// Where the plot starts. Task 3 widens it to the lane gutter.
-const PLOT_LEFT = CHART_PAD_LEFT;
+// Where the plot starts: the left gutter holds each lane's glyph and name, and the
+// y-axis labels. .ba-under in style.css indents the legend by the same amount.
+export const PLOT_LEFT = 110;
 const RIGHT_PAD = 10;
 const PLOT_HEIGHT = 170;
 const LANES_TOP = 6;
@@ -403,20 +404,127 @@ function drawDateAxis(svg, g, marker) {
   }
 }
 
-// The daily chart for the row the reader picked, over the shared time axis domain.
-export function drawMetricChart(container, report, marker, row, domain) {
+function laneY(g, laneIndex) {
+  return g.lanesTop + laneIndex * LANE_HEIGHT + LANE_HEIGHT / 2;
+}
+
+// The gutter text for each lane and a faint rule under it.
+function drawLaneRows(svg, kinds, g) {
+  kinds.forEach((kind, i) => {
+    const y = laneY(g, i);
+    svg.appendChild(markerGlyph(kind, 10, y));
+    const name = svgEl('text', { class: 'lane-name', x: 22, y: y + 3.5 });
+    name.textContent = MARKER_KIND_NAMES[kind] || kind;
+    svg.appendChild(name);
+    svg.appendChild(svgEl('line', { class: 'lane-rule', x1: g.left, x2: g.right, y1: y + LANE_HEIGHT / 2, y2: y + LANE_HEIGHT / 2 }));
+  });
+}
+
+// Amber outline and tint over the picked change's day, across every lane.
+function drawPickedColumn(svg, marker, g) {
+  if (!marker || marker.t < g.domain[0] || marker.t > g.domain[1]) return;
+  svg.appendChild(svgEl('rect', {
+    class: 'lane-picked', x: g.xOf(localMidnight(marker.t)), y: g.lanesTop - 3,
+    width: Math.max(g.dayWidth, 4), height: g.lanesBottom - g.lanesTop + 6, rx: 3,
+  }));
+}
+
+function cellLabel(cell) {
+  const weekly = cell.end - cell.start > 2 * DAY_MS;
+  const day = new Date(cell.start).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+  const n = cell.markers.length;
+  return `${weekly ? 'Week of ' : ''}${day}, ${MARKER_KIND_NAMES[cell.kind]}, ${n} change${n === 1 ? '' : 's'}`;
+}
+
+// One line per change: time, glyph, label.
+function cellTooltip(cell) {
+  return cell.markers.map((m) => `${escapeHtml(markerDate(m.t))} ${markerIcon(m.kind).outerHTML} ${escapeHtml(m.label)}`).join('<br>');
+}
+
+// A focusable cell: the glyph at the centre of its day or week, a count beside it when
+// it holds more than one change, and a hit area as wide as the cell. A week at the edge
+// of the domain centres on the part inside the domain.
+function laneCellNode(cell, laneIndex, g, pickedKey, onPick) {
+  const lo = Math.max(cell.start, g.domain[0]);
+  const hi = Math.min(cell.end, g.domain[1]);
+  const many = cell.markers.length > 1;
+  const cx = g.xOf((lo + hi) / 2) - (many ? 4 : 0);
+  const y = laneY(g, laneIndex);
+  const picked = cell.markers.some((m) => markerKey(m) === pickedKey);
+  const node = svgEl('g', {
+    class: picked ? 'lane-cell picked' : 'lane-cell', tabindex: 0, role: 'button',
+    'aria-label': cellLabel(cell), 'data-name': `${cell.kind}|${cell.start}`,
+  });
+  node.appendChild(svgEl('rect', { class: 'lane-hit', x: g.xOf(lo), y: y - LANE_HEIGHT / 2, width: g.xOf(hi) - g.xOf(lo), height: LANE_HEIGHT }));
+  node.appendChild(markerGlyph(cell.kind, cx, y));
+  if (many) {
+    const count = svgEl('text', { class: 'lane-count', x: cx + 7, y: y + 3.5 });
+    count.textContent = String(cell.markers.length);
+    node.appendChild(count);
+  }
+  const pick = () => onPick(pickInCell(cell));
+  node.addEventListener('click', pick);
+  node.addEventListener('keydown', (evt) => {
+    if (evt.key !== 'Enter' && evt.key !== ' ') return;
+    evt.preventDefault();
+    pick();
+  });
+  const html = cellTooltip(cell);
+  return withFocusTooltip(withTooltip(node, html), html);
+}
+
+// The lanes: gutter names, the picked day's column, then one cell per kind per day.
+function drawChangeLanes(svg, lanes, marker, g, onPick) {
+  drawLaneRows(svg, lanes.kinds, g);
+  drawPickedColumn(svg, marker, g);
+  const pickedKey = marker ? markerKey(marker) : null;
+  for (const cell of lanes.cells) {
+    svg.appendChild(laneCellNode(cell, lanes.kinds.indexOf(cell.kind), g, pickedKey, onPick));
+  }
+}
+
+// Hatched from 7 days before the change to the change, solid amber from the change
+// to 7 days after or to now, whichever is earlier. The bar sits under the lanes.
+function drawWindowBar(svg, win, g, now) {
+  const y = g.lanesBottom + 10;
+  const a = g.clampX(g.xOf(win.t - WEEK_MS));
+  const b = g.clampX(g.xOf(win.t));
+  const c = g.clampX(g.xOf(Math.min(win.t + WEEK_MS, now)));
+  svg.appendChild(svgEl('rect', { class: 'window-bar before', x: a, y, width: b - a, height: 6, fill: fillFor(PATTERN_SCOPE, 'diag', BEFORE_INK) }));
+  svg.appendChild(svgEl('rect', { class: 'window-bar after', x: b, y, width: Math.max(c - b, 0), height: 6 }));
+}
+
+// The lane kinds and cells for the markers inside the domain. The cell size depends
+// on the day width the plot will have.
+function laneModel(markers, domain, width) {
+  const inView = markersInDomain(markers, domain);
+  const dayWidth = ((width - RIGHT_PAD - PLOT_LEFT) * DAY_MS) / (domain[1] - domain[0]);
+  return { kinds: laneKinds(inView), cells: laneCells(inView, domain, dayWidth) };
+}
+
+function drawNoData(svg, row, g) {
+  const text = svgEl('text', { class: 'plot-empty', x: (g.left + g.right) / 2, y: (g.top + g.bottom) / 2, 'text-anchor': 'middle' });
+  text.textContent = `No data for ${row.name} in this range.`;
+  svg.appendChild(text);
+}
+
+// Lanes, window bar, daily chart and date axis in one SVG on one x scale. A row with
+// no data in the domain still draws the lanes, with a note in the plot area.
+export function drawMetricChart(container, report, marker, row, domain, onPick) {
   hideTooltip();
   container.innerHTML = '';
+  const width = chartWidth(container);
+  const lanes = laneModel(report.markers, domain, width);
+  const layout = plotLayout(domain, width, lanes.kinds.length);
   const days = daysInDomain(report, row, domain);
-  if (!days.length) {
-    container.appendChild(el('div', { class: 'bar-empty', text: `No data for ${row.name} yet.` }));
-    return;
-  }
-  const layout = plotLayout(domain, chartWidth(container), 0);
+  const win = markerWindow(marker, row, domain);
   const svg = svgEl('svg', { viewBox: `0 0 ${layout.width} ${layout.height}`, height: layout.height, class: 'changes-chart' });
   appendPatternDefs(svg, PATTERN_SCOPE, [{ texture: 'diag', color: BEFORE_INK }]);
   drawWeekends(svg, layout);
-  drawPlot(svg, days, row, markerWindow(marker, row, domain), layout);
+  drawChangeLanes(svg, lanes, marker, layout, onPick);
+  if (win) drawWindowBar(svg, win, layout, Date.now());
+  if (days.length) drawPlot(svg, days, row, win, layout);
+  else drawNoData(svg, row, layout);
   drawDateAxis(svg, layout, marker);
   container.appendChild(svg);
 }

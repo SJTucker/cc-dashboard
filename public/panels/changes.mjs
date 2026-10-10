@@ -135,7 +135,7 @@ function selectRow(report, marker, key) {
   document.getElementById('baChartTitle').textContent = row.title;
   const chart = document.getElementById('baDailyChart');
   chart.setAttribute('aria-label', row.title);
-  drawMetricChart(chart, report, marker, row, chartDomain(report));
+  drawMetricChart(chart, report, marker, row, chartDomain(report), (m) => selectMarker(report, m));
   drawMetricLegend(document.getElementById('baLegend'));
 }
 

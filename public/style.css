@@ -1054,6 +1054,16 @@ html, body {
 .window-median.before { stroke: var(--text-primary); stroke-dasharray: 5 3; }
 .window-median.after { stroke: var(--accent-cost); }
 .marker-line { stroke: var(--accent-cost); stroke-width: 1.5; }
+.lane-name { font-family: var(--font-data); font-size: 10.5px; fill: var(--text-secondary); }
+.lane-rule { stroke: var(--border); opacity: 0.35; }
+.lane-count { font-family: var(--font-data); font-size: 9.5px; fill: var(--text-primary); pointer-events: none; }
+.lane-picked { fill: var(--accent-cost); fill-opacity: 0.08; stroke: var(--accent-cost); stroke-opacity: 0.6; pointer-events: none; }
+.lane-hit { fill: transparent; stroke: none; }
+.lane-cell { cursor: pointer; outline: none; }
+.lane-cell:focus-visible .lane-hit { stroke: var(--text-primary); stroke-width: 1.5; }
+.lane-cell.picked .marker-glyph { fill: var(--accent-cost); stroke: var(--accent-cost); }
+.window-bar.after { fill: var(--accent-cost); }
+.plot-empty { font-family: var(--font-data); font-size: 11px; fill: var(--text-tertiary); }
 
 .marker-list { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }
 .marker-btn, .marker-day-btn {
