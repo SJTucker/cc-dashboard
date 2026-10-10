@@ -76,13 +76,20 @@ function baRow(row, before, after, onSelect) {
   return tr;
 }
 
+// A change younger than 7 days has a partial after window. The header says how many
+// days it covers. th text is uppercased by style.css.
+function afterHeading(marker, now) {
+  if (marker.t + WEEK_MS <= now) return 'after';
+  return `after · ${afterDaysSoFar(marker.t, now)} of 7 days`;
+}
+
 function renderBeforeAfter(report, marker) {
   const table = document.getElementById('beforeAfterTable');
   const note = document.getElementById('overlapNote');
   table.replaceChildren();
   note.textContent = '';
   if (!marker) return;
-  const head = el('tr', {}, ['7 days', 'before', 'after', 'change'].map((text, i) => el('th', { text, class: i ? 'num' : '' })));
+  const head = el('tr', {}, ['7 days', 'before', afterHeading(marker, Date.now()), 'change'].map((text, i) => el('th', { text, class: i ? 'num' : '' })));
   const pick = (row) => () => selectRow(report, marker, row.key);
   const body = el('tbody', {}, BA_ROWS.map((row) => baRow(row, marker.before, marker.after, pick(row))));
   if (marker.before.rtk || marker.after.rtk) {
@@ -193,6 +200,13 @@ function renderChangesFileNote(file) {
   else note.hidden = true;
 }
 
+// The lanes, chart, table and day list show together or not at all. With no change
+// in the range they give way to one line.
+function showBody(visible) {
+  document.getElementById('baBody').hidden = !visible;
+  document.getElementById('baEmpty').hidden = visible;
+}
+
 function renderChanges(report) {
   changesReport = report;
   document.getElementById('beforeAfterPanel').hidden = false;
@@ -201,7 +215,12 @@ function renderChanges(report) {
   // calls loadChanges or redrawCharts, which calls redrawChanges.
   if (!shown('beforeAfter')) return;
   const marker = resolvePicked(report.markers, selectedMarkerKey, chartDomain(report));
-  if (marker) selectMarker(report, marker);
+  showBody(Boolean(marker));
+  if (!marker) {
+    hideTooltip();
+    return;
+  }
+  selectMarker(report, marker);
 }
 
 const CHANGES_CHARTS = ['baDailyChart'];
@@ -215,8 +234,8 @@ function showChangesLoading() {
   // block would leave the previous report in place, and a later redraw (e.g. a
   // row expand) would show stale data instead of the error state it just set.
   changesReport = null;
+  showBody(true);
   document.getElementById('beforeAfterPanel').hidden = false;
-  document.getElementById('baBody').hidden = false;
   for (const id of CHANGES_CHARTS) {
     document.getElementById(id).replaceChildren(
       el('div', { class: 'chart-loading' }, [spinnerNode(), document.createTextNode('Loading setup changes…')])
@@ -245,6 +264,7 @@ export async function loadChanges() {
     // before/after panel has nothing to show without a report.
     for (const id of CHANGES_CHARTS) document.getElementById(id).replaceChildren();
     document.getElementById('baBody').hidden = true;
+    document.getElementById('baEmpty').hidden = true;
     document.getElementById('beforeAfterPanel').hidden = false;
     const note = document.getElementById('changesFileNote');
     note.hidden = false;
