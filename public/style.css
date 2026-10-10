@@ -1069,6 +1069,8 @@ html, body {
 .ba-under { margin-left: 110px; }
 .ba-under .usage-group-title { margin: -2px 0 6px; }
 .ba-grid { margin-top: 10px; }
+/* The before/after table needs about 390px. Below that its column scrolls sideways instead of widening the page. */
+.ba-grid > div:first-child { overflow-x: auto; }
 
 .day-list { max-height: 320px; overflow-y: auto; border-left: 2px solid var(--accent-cost); padding: 2px 0 2px 12px; }
 .day-list-head { margin-bottom: 4px; }
