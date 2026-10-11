@@ -69,7 +69,7 @@ function dailyShareRow(today) {
   return el('div', { class: 'limit-row' }, [
     el('span', { class: 'limit-name', text: 'Today (share of the week)' }),
     track,
-    el('span', { class: 'limit-pct', text: `${Math.round(today.share)}% of the week` }),
+    el('span', { class: 'limit-pct', text: `${Math.round(today.share)}% used` }),
     el('span', { class: 'limit-reset', text: notes.join(' · ') }),
   ]);
 }
