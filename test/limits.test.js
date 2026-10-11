@@ -231,17 +231,7 @@ test('readLimits falls back to the usage cache when the rate-limits file is malf
   assert.strictEqual(result.fetchedAt, FETCHED);
 });
 
-test('bin/record-limits exits 0 with no output on bad JSON', () => {
-  const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'record-limits')], {
-    input: 'not json at all',
-    encoding: 'utf8',
-  });
-  assert.strictEqual(result.status, 0);
-  assert.strictEqual(result.stdout, '');
-  assert.strictEqual(result.stderr, '');
-});
-
-test('bin/record-limits writes rate-limits.json under CLAUDE_CONFIG_DIR with valid input', () => {
+test('bin/record-statusline writes rate-limits.json under CLAUDE_CONFIG_DIR with valid input', () => {
   const transcript = makeTranscript(FETCHED);
   const config = helpers.tmpDir(null, 'limits-cfg');
   const file = path.join(config, 'rate-limits.json');
@@ -249,7 +239,7 @@ test('bin/record-limits writes rate-limits.json under CLAUDE_CONFIG_DIR with val
     transcript_path: transcript,
     rate_limits: { five_hour: { used_percentage: 12.5, resets_at: Math.floor(NOW / 1000) + 3600 } },
   });
-  const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'record-limits')], {
+  const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'record-statusline')], {
     input,
     encoding: 'utf8',
     env: { ...process.env, CLAUDE_CONFIG_DIR: config },

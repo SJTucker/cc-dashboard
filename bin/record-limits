@@ -1,6 +1,0 @@
-#!/usr/bin/env node
-'use strict';
-
-// The old name for bin/record-statusline, kept so statusline scripts that call
-// record-limits keep working. It runs record-statusline in this process.
-require('./record-statusline');
