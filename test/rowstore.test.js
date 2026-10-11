@@ -837,3 +837,154 @@ test('a file that grows after the stat pass keeps the stat-pass size and is read
   await rows.refresh();
   assert.strictEqual(reads.length, 2, 'the entry holds the smaller size, so the file is out of date');
 });
+
+// A stand-in for withPool that counts the pools it opens and runs files through `extract`.
+function fakePool(extract) {
+  const opened = [];
+  const openPool = (size, fn) => {
+    opened.push(size);
+    return fn({ extract });
+  };
+  return { opened, openPool };
+}
+
+test('a run with few files, or few bytes, reads on the main thread', async () => {
+  const { dir } = makeProjects();
+  for (let i = 0; i < 3; i++) writeFile(dir, `f${i}`, [String(i)], 2 * DAY_MS);
+  const pool = fakePool(extractFile);
+  const reads = [];
+  const read = (file) => { reads.push(file); return extractFile(file); };
+  // Three files do not pass the file limit, and their few bytes do not pass the byte limit.
+  const few = createRowStore({ projectsDir: () => dir, openPool: pool.openPool, poolLimits: { files: 3, bytes: 0 }, extract: read });
+  await few.refresh();
+  const small = createRowStore({ projectsDir: () => dir, openPool: pool.openPool, poolLimits: { files: 0, bytes: 1e9 }, extract: read });
+  await small.refresh();
+  assert.deepStrictEqual(pool.opened, []);
+  assert.strictEqual(reads.length, 6);
+});
+
+test('a run over both limits opens one pool of poolSize() workers and reads every file through it', async () => {
+  const { poolSize } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const files = [0, 1, 2].map((i) => writeFile(dir, `f${i}`, [String(i)], 2 * DAY_MS + i * HOUR_MS));
+  const viaPool = [];
+  const pool = fakePool((file) => { viaPool.push(file); return extractFile(file); });
+  const rows = createRowStore({ projectsDir: () => dir, openPool: pool.openPool, poolLimits: { files: 2, bytes: 0 } });
+
+  await rows.refresh();
+
+  assert.deepStrictEqual(pool.opened, [poolSize()]);
+  assert.deepStrictEqual(viaPool, files, 'dispatched newest first');
+  assert.strictEqual(rows.entries().length, 3);
+});
+
+test('an injected extract is used whatever the limits are, and no pool starts', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1'], 2 * DAY_MS);
+  const reads = [];
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    poolLimits: { files: 0, bytes: 0 },
+    extract: (f) => { reads.push(f); return extractFile(f); },
+  });
+
+  await rows.refresh();
+
+  assert.deepStrictEqual(reads, [file]);
+});
+
+test('rows read by real worker threads equal the rows read on the main thread', async () => {
+  const { withPool } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const files = [0, 1, 2].map((i) => writeFile(dir, `f${i}`, [String(i), `${i}b`], 2 * DAY_MS + i * HOUR_MS));
+  let pools = 0;
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    openPool: (size, fn) => { pools += 1; return withPool(size, fn); },
+    poolLimits: { files: 0, bytes: 0 },
+  });
+
+  await rows.refresh();
+
+  assert.strictEqual(pools, 1, 'the files were read through a real pool');
+  for (const entry of rows.entries()) {
+    assert.deepStrictEqual(entry.rows, await extractFile(entry.path));
+    assert.strictEqual(Object.getPrototypeOf(entry.rows.sessions), null);
+  }
+  assert.strictEqual(rows.entries().length, files.length);
+});
+
+test('a file the pool could not read keeps its previous entry, and the others are still read', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const { failedRows } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const a = writeFile(dir, 'a', ['1'], 2 * HOUR_MS);
+  const b = writeFile(dir, 'b', ['2'], 3 * HOUR_MS);
+  const failing = new Set();
+  const pool = fakePool((file) => (failing.has(file) ? Promise.resolve(failedRows()) : extractFile(file)));
+  const clock = { now: Date.now() };
+  const rows = createRowStore({ projectsDir: () => dir, now: () => clock.now, openPool: pool.openPool, poolLimits: { files: 0, bytes: 0 } });
+  await rows.refresh();
+
+  fs.appendFileSync(a, usageLine('3', new Date().toISOString()) + '\n');
+  fs.appendFileSync(b, usageLine('4', new Date().toISOString()) + '\n');
+  failing.add(b);
+  clock.now += REFRESH_SHARE_MS + 1;
+  await rows.refresh();
+
+  const byPath = Object.fromEntries(rows.entries().map((e) => [e.path, e.rows]));
+  assert.strictEqual(byPath[a].calls.length, 2, 'the readable file is updated');
+  assert.strictEqual(byPath[b].calls.length, 1, 'the failed file keeps its earlier rows');
+  assert.strictEqual(byPath[b].ok, true);
+});
+
+test('when worker threads cannot run, the files are extracted on the main thread and the store has current entries', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const { withPool } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const files = [0, 1, 2].map((i) => writeFile(dir, `f${i}`, [String(i)], 2 * DAY_MS + i * HOUR_MS));
+  const workerFile = path.join(__dirname, 'fixtures', 'exit-worker.js');
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    openPool: (size, fn) => withPool(2, fn, { workerFile }),
+    poolLimits: { files: 0, bytes: 0 },
+  });
+
+  await rows.refresh();
+
+  const entries = rows.entries();
+  assert.deepStrictEqual(entries.map((e) => e.path), files.slice().sort());
+  assert.ok(entries.every((e) => e.rows.ok && e.rows.calls.length === 1));
+  assert.ok(entries.every((e) => e.version === EXTRACT_VERSION));
+});
+
+test('after a worker has returned a result, a worker that dies leaves its file failed and the previous entry stays', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const { withPool } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const files = [0, 1, 2].map((i) => writeFile(dir, `f${i}`, [String(i)], 2 * HOUR_MS + i * HOUR_MS));
+  const workerFile = path.join(__dirname, 'fixtures', 'die-after-first-worker.js');
+  const limits = { files: 99, bytes: 0 };
+  const clock = { now: Date.now() };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    now: () => clock.now,
+    openPool: (size, fn) => withPool(1, fn, { workerFile }),
+    poolLimits: limits,
+  });
+  await rows.refresh(); // three files, under the file limit: read on the main thread
+
+  // The first file is the newest, so it is the one the single worker reads before it dies.
+  files.forEach((file, i) => {
+    fs.appendFileSync(file, usageLine(`x${i}`, new Date().toISOString()) + '\n');
+    const seconds = Date.now() / 1000 - i * 60;
+    fs.utimesSync(file, seconds, seconds);
+  });
+  limits.files = 0;
+  clock.now += REFRESH_SHARE_MS + 1;
+  await rows.refresh();
+
+  const byPath = Object.fromEntries(rows.entries().map((e) => [e.path, e.rows]));
+  assert.deepStrictEqual(files.map((f) => byPath[f].calls.length), [2, 1, 1], 'only the newest file was read before the worker died');
+  assert.ok(files.every((f) => byPath[f].ok));
+});
