@@ -47,6 +47,12 @@ let hasLogged = false
 // this runtime has crypto.randomUUID is not known. The value fits SESSION_ID_PATTERN
 // in lib/session-id.js, which recordSession checks.
 let launchId: string | undefined
+// The session id the last /clear in this process ended. statuslineInput sends it as
+// cleared_from with every measure of a later session, and lib/sessions.js stores it, so
+// the Session timeline draws the new session's lane under the old one. session.end sets
+// it on a /clear and drops it on any other end, so the session an in-process /resume
+// opens carries no link. A reload drops it too.
+let clearedFrom: string | undefined
 
 function fail($: EngineInterface, text: string) {
   if (hasLogged) return
@@ -181,6 +187,7 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
     workspace: { project_dir: root },
     model: { display_name: displayName(await $.session.model()) },
   }
+  if (clearedFrom && clearedFrom !== id) input.cleared_from = clearedFrom
   if (e.cost) {
     const { startedAt } = await $.session.usage()
     input.cost = { total_cost_usd: e.cost.usd, total_duration_ms: Math.max(0, (await $.clock.now()) - startedAt) }
@@ -813,12 +820,14 @@ export const register: Register = (on) => {
 
   // Marks the session's snapshot as ended, so the Live sessions panel shows it as
   // cleared or ended at once instead of live for 10 minutes. A /clear arrives here
-  // with reason 'clear'. The process goes on after a /clear and after an in-process
+  // with reason 'clear'. That reason also sets clearedFrom, which links the next
+  // session to this one. The process goes on after a /clear and after an in-process
   // /resume (reason 'resume'), and no session.start follows either, so the review
   // of the ended session starts here. After any other end, the next session.start
   // reviews it.
   on('session.end', async ($, e, next) => {
     forgetSession(e.sessionId)
+    clearedFrom = e.reason === 'clear' ? e.sessionId : undefined
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)

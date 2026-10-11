@@ -59,7 +59,7 @@ const CONTRACT = [
   { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
   { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
   { "script": "record-statusline", "args": [], "stdin": {
-    "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
+    "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "cleared_from": "prev-1","transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
     "model": { "display_name": "Opus 5.5 (1M context)" }, "cost": { "total_cost_usd": 0.42, "total_duration_ms": 60000 },
     "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 }, "seven_day": { "used_percentage": 41, "resets_at": 1791192600 } } } },
 ]
@@ -346,6 +346,43 @@ test('after a /clear the next measure keeps the same launch_id', async ($, on) =
   expect(sent.map((s) => s.session_id)).toEqual(['s1', 's2'])
   expect(typeof sent[0].launch_id).toBe('string')
   expect(sent[1].launch_id).toBe(sent[0].launch_id)
+})
+
+// The stdin of each record-statusline run, in order. ran also holds record-session-end runs.
+const statuslines = (ran: Ran[]) => ran.filter((r) => r.argv[0] === '/repo/bin/record-statusline').map((r) => r.stdin as Record<string, unknown>)
+
+test('after a /clear the new session\'s measures send cleared_from', async ($, on) => {
+  const { ran, state } = world(on)
+  await $.session.measure(measure([FIVE]))
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  state.id = 's2'
+  await $.session.measure(measure([FIVE]))
+  await $.session.measure(measure([FIVE]))
+  expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual([null, 's1', 's1'])
+})
+
+test('a /clear of a session this process never measured still links the new session', async ($, on) => {
+  const { ran, state } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  state.id = 's2'
+  await $.session.measure(measure([FIVE]))
+  expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual(['s1'])
+})
+
+test('after an in-process /resume the next measure sends no cleared_from', async ($, on) => {
+  const { ran, state } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await $.session.end({ reason: 'resume', sessionId: 's2', resume: { id: 's3' } })
+  state.id = 's3'
+  await $.session.measure(measure([FIVE]))
+  expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual([null])
+})
+
+test('a measure of the cleared session itself sends no cleared_from', async ($, on) => {
+  const { ran } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await $.session.measure(measure([FIVE]))
+  expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual([null])
 })
 
 test('model ids become the names the statusline shows', async ($, on) => {
@@ -703,7 +740,7 @@ const stdinShape = (stdin: unknown) => (typeof stdin === 'string' ? 'text' : Obj
 const callKey = (c: { script: string; args: readonly string[]; stdin: unknown }) => JSON.stringify([c.script, c.args, stdinShape(c.stdin)])
 
 test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) => {
-  const { ran, reviewRan, clock } = world(on, {
+  const { ran, reviewRan, clock, state } = world(on, {
     scripts: judging,
     reviews: reviewing(),
     replies: [{ isAnswered: true, text: VERDICT }, { isAnswered: true, text: VERDICT }, { isAnswered: true, text: '{"suggestions":[]}' }, { isAnswered: true, text: '{"suggestions":[]}' }],
@@ -711,8 +748,10 @@ test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) 
   await $.command.run(backfill)
   await $.session.start(start)
   await clock.settle()
-  await $.session.measure(measure([FIVE, WEEK]))
+  // Only a measure after a /clear sends cleared_from, so the one measure here follows one.
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  state.id = 's2'
+  await $.session.measure(measure([FIVE, WEEK]))
   await clock.settle()
   const made = [...ran, ...reviewRan].map((r) =>
     callKey({ script: r.argv[0]?.split('/').pop() ?? '', args: r.argv.slice(1), stdin: r.stdin }),
