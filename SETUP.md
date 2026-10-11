@@ -153,11 +153,24 @@ Claude Code 2.1.251 or later. It prints nothing before the session's first reply
 It reads and writes no files and always exits 0.
 
 Add two lines to the statusline script that `statusLine.command` in
-`~/.claude/settings.json` points at, after the lines it already prints. On the
-no-mod route, keep the `record-statusline` line too. Both read the same `$input`.
+`~/.claude/settings.json` points at, after the lines it already prints. They read
+the statusline JSON from `$input`, so the script must save its stdin near the top
+with `input=$(cat)`. On the no-mod route, keep the `record-statusline` line too.
+Both read the same `$input`.
 
 ```bash
-CACHE=$(echo "$input" | /path/to/cc-dashboard/bin/cache-line)
+CACHE=$(printf '%s' "$input" | /path/to/cc-dashboard/bin/cache-line)
+[ -n "$CACHE" ] && echo "$CACHE"
+```
+
+With no statusline script yet, this minimal one shows the model and the cache line.
+Save it, make it executable with `chmod +x`, and point `statusLine.command` at it.
+
+```bash
+#!/bin/bash
+input=$(cat)
+printf '%s' "$input" | jq -r '.model.display_name'
+CACHE=$(printf '%s' "$input" | /path/to/cc-dashboard/bin/cache-line)
 [ -n "$CACHE" ] && echo "$CACHE"
 ```
 
