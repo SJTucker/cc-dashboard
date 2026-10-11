@@ -44,3 +44,29 @@ in the phase 3 review of Live sessions on 2026-10-06.
 - **A subagent with its own mode.** An agent definition's `permissionMode` can
   override the parent's. The mode that decides a subagent's ask may differ from the
   session's.
+
+## Parked on 2026-10-11
+
+The user parked this idea. On this machine, 2,599 of 2,602 `permission-mode` lines in
+the transcripts are `auto`, and in `auto` mode no dialog opens. The feature would fire
+only in the rare `default` session. Restart it if sessions move off `auto`.
+
+Findings from the 2026-10-11 plan, on Claude Code 2.1.296:
+
+- A mod still cannot read the session's mode. `$.session` has no mode method, and
+  `ToolCheckInput` carries none.
+- A subagent's mode is available at spawn. `AgentSpawnInput.permissionMode` is the
+  parent's mode, which the subagent inherits. `AgentSpawnResult.agentId` is the
+  `agentId` that later `tool.call` and `tool.check` events carry. The mod can store
+  the mode per agent id and count an `ask` only when that mode is `default`,
+  `acceptEdits` or `plan`.
+- The main loop's mode is in the transcript: `{"type":"permission-mode"}` lines and
+  `permissionMode` on user lines. Subagent transcripts and `*.meta.json` files carry
+  no mode.
+- The reviewer's `turnOpen` flag is not needed. Pending asks can live in their own
+  map, which the main loop's `turn.complete` never clears.
+- `⏸` is the "waiting on you" glyph in `ACTIVITY_STATES`, so a new state needs another
+  glyph, such as `⚠`.
+- Not verified live: that `tool.check` fires for a subagent's call and resolves to
+  `ask` while the dialog is open. A plan restarted from here should check that first,
+  with a throwaway mod driven by `expect`.
