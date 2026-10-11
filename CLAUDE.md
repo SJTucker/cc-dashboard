@@ -11,8 +11,7 @@ same change whenever that change does any of these:
 - adds, moves or removes a file or folder under `<cfg>/cc-dashboard/`, or any other
   path outside the repo that the server, the `bin/` scripts or the mod read or write
 - changes a file the mod reads to record setup changes
-- changes how the mod is installed or finds `bin/`, or what the "Without the mod"
-  route needs in `settings.json` or the statusline script
+- changes how the mod is installed or finds `bin/`
 - adds a network request or a model call
 
 `bin/setup` runs the steps in "Quick setup". When a change alters a step it runs

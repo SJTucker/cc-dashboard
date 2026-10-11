@@ -3,7 +3,7 @@ import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, setti
 import type { Kind, SetupEntry, Snapshot } from './setup'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
-// in bin/ that a statusline script used to run, and judges new Claude Code releases
+// in bin/, and judges new Claude Code releases
 // for the setup changes markers through bin/judge-updates, and reviews ended sessions
 // for setup suggestions through bin/review-session. At each interactive session start it
 // also compares the setup files with stored copies and writes a marker for each change

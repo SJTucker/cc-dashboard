@@ -1,10 +1,11 @@
 #!/usr/bin/env node
 'use strict';
 
-// Run by Claude Code's SessionEnd hook, which pipes one JSON object on stdin with
-// the ending session's session_id and the reason it ended. Claude Code shows this
-// script's stdout to the user as the session ends, so it must never print
-// anything or exit non-zero, whatever stdin contains. It marks the session's
+// Run by the mod's session.end hook (mod/hooks/register.ts), which pipes one JSON
+// object on stdin with the ending session's session_id and the reason it ended.
+// The mod reports a non-zero exit as a failure in the transcript, so this script
+// must exit 0 whatever stdin contains. It never prints anything, because the mod
+// does not use its stdout. It marks the session's
 // snapshot as ended (lib/sessions.js).
 
 const { loadConfig } = require('../lib/config-dir');

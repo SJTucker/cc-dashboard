@@ -36,8 +36,7 @@ already sits at the link path, `bin/setup` stops, names the path and leaves it i
 place.
 
 `bin/setup` does not start the server or edit `settings.json`. The sections below
-give the same steps by hand. They also cover the "Without the mod" route, which
-`bin/setup` does not run.
+give the same steps by hand.
 
 ## Run the server
 
@@ -85,62 +84,14 @@ your statusline script or to `settings.json`.
 - **A failure shows as one transcript line** starting `cc-dashboard:`.
   `claude plugin validate` says what Claude Code refuses to load.
 
-## Without the mod
-
-The scripts in `bin/` also run from your own statusline and hooks. Use this route or
-the mod, not both.
-
-This route records plan usage, the session snapshots and the cleared and ended marks.
-It gives no session reviews, no State or Doing now columns, no subagent counts, no
-Claude Code release markers and no automatic setup change markers.
-
-Replace `/path/to/cc-dashboard` below with the clone's path. `pwd` in the clone
-prints it.
-
-Add one line to the statusline script that `statusLine.command` in
-`~/.claude/settings.json` points at:
-
-```bash
-echo "$input" | /path/to/cc-dashboard/bin/record-statusline
-```
-
-`record-statusline` prints nothing and always exits 0, so it does not change what the
-statusline shows. Do not point `statusLine.command` straight at it, because the
-statusline would be blank. With no statusline script yet, a minimal one looks like
-this:
-
-```bash
-#!/bin/bash
-input=$(cat)
-echo "$input" | /path/to/cc-dashboard/bin/record-statusline
-echo "$input" | jq -r '.model.display_name'
-```
-
-`bin/record-limits` is the old name of `bin/record-statusline` and still works.
-
-For the cleared and ended marks in Live sessions, run `bin/record-session-end` as a
-`SessionEnd` hook. Add this key to the `"hooks"` object in `~/.claude/settings.json`.
-If the file has no `"hooks"` object, create one at the top level and put the key
-inside it. Do not add a second `"hooks"` key. JSON keeps only the last one, and the
-hooks in the other are dropped.
-
-```json
-"SessionEnd": [
-  { "hooks": [{ "type": "command", "command": "/path/to/cc-dashboard/bin/record-session-end" }] }
-]
-```
-
-`record-session-end` prints nothing and always exits 0.
-
-With neither the mod nor this route, the Plan usage panel reads only the usage cache
-in `~/.claude.json`, which updates when you run `/usage`. Live sessions has no Length
-column data and no cleared or ended marks.
+Without the mod, the Plan usage panel reads only the usage cache in `~/.claude.json`,
+which updates when you run `/usage`. Live sessions has no Length column data and no
+cleared or ended marks.
 
 ## Cache countdown in the statusline
 
-Optional, with or without the mod. `bin/cache-line` prints one line about the
-session's prompt cache: how long until it expires, and what the next reply pays to
-write the context back into it.
+Optional. `bin/cache-line` prints one line about the session's prompt cache: how
+long until it expires, and what the next reply pays to write the context back into it.
 
 ```
 cache 4 min left · rebuild $0.38
@@ -155,8 +106,7 @@ It reads and writes no files and always exits 0.
 Add two lines to the statusline script that `statusLine.command` in
 `~/.claude/settings.json` points at, after the lines it already prints. They read
 the statusline JSON from `$input`, so the script must save its stdin near the top
-with `input=$(cat)`. On the no-mod route, keep the `record-statusline` line too.
-Both read the same `$input`. Keep the `if` block at the end. Claude Code blanks the
+with `input=$(cat)`. Keep the `if` block at the end. Claude Code blanks the
 whole statusline when the script's last command exits non-zero, and
 `[ -n "$CACHE" ] && echo "$CACHE"` exits 1 when the cache line is empty.
 
@@ -230,9 +180,9 @@ tests can avoid the one in the clone.
 | `<cfg>/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/plugins/installed_plugins.json` | `CLAUDE_CONFIG_DIR` | Claude Code |
-| `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` |
+| `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, run by the mod |
 | `<cfg>/skills/cc-dashboard` (a symlink to the clone's `mod/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
-| `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, `bin/record-session-end`. `bin/record-statusline` deletes snapshots older than a day. With the mod, each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
+| `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod. The server deletes files older than a day when the page shows the Today range. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
