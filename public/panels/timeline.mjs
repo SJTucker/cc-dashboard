@@ -1,7 +1,7 @@
 // The Session timeline: one lane per session with activity today.
 import { svgEl, withTooltip, hideTooltip, chartWidth } from '../dom.mjs';
-import { formatCost, escapeHtml } from '../format.mjs';
-import { appendPatternDefs, fillFor } from '../charts/palette.mjs';
+import { formatCost, formatTokens, formatDuration, escapeHtml } from '../format.mjs';
+import { appendPatternDefs, fillFor, TOKEN_SERIES } from '../charts/palette.mjs';
 import { state } from '../state.mjs';
 import { LIVE_WINDOW_MS } from '../constants.mjs';
 
@@ -18,6 +18,69 @@ const TIMELINE_BAR_HEIGHT = 10;
 const TIMELINE_AXIS_HEIGHT = 20;
 const TIMELINE_GUTTER = 200;
 const TIMELINE_RIGHT_PAD = 10;
+
+// Prompt-cache rebuild marks (rebuildMarks in public/chart-geometry.js). A mark is a
+// diamond on the lane's bar line. A main-thread rebuild is filled with the Cache
+// write series colour and outlined in --surface. A subagent's rebuild is filled
+// with --surface and outlined in that colour, so it reads as hollow on a bar. The
+// key under the chart says so in words, so the two never depend on colour.
+const REBUILD_COLOR = TOKEN_SERIES.find((s) => s.key === 'cacheCreate').color;
+const REBUILD_SURFACE = '#0b1222'; // --surface in public/style.css
+const REBUILD_SIZE = 8;
+const REBUILD_TOOLTIP_ITEMS = 5;
+
+const REBUILD_CAUSES = {
+  messages: 'earlier messages changed',
+  tools: 'tool list changed',
+  system: 'system prompt changed',
+  model: 'model changed',
+  unavailable: 'cache unavailable',
+  unknown: 'cause unknown',
+};
+
+function causeText(r) {
+  if (r.cause === 'expired') return `cache expired after ${formatDuration(r.gapMs)} idle`;
+  if (r.cause === 'other') return `cache miss: ${r.reason}`;
+  return REBUILD_CAUSES[r.cause] || REBUILD_CAUSES.unknown;
+}
+
+function rebuildLine(r) {
+  const who = r.main ? 'Cache rebuild' : 'Subagent cache rebuild';
+  // An unpriced model has no premium, and an amount of $0.00 would be wrong.
+  const premium = r.premium == null ? '' : ` · +${formatCost(r.premium)} over a cache read`;
+  return `<b>${who}</b> · ${clockTime(r.t)}<br>${escapeHtml(causeText(r))}<br>${formatTokens(r.tokens)} tokens rewritten${premium}`;
+}
+
+function rebuildTooltip(mark) {
+  if (mark.items.length === 1) return rebuildLine(mark.items[0]);
+  const shown = mark.items.slice(0, REBUILD_TOOLTIP_ITEMS).map(rebuildLine);
+  const more = mark.items.length - shown.length;
+  const moreLine = more > 0 ? `<br>and ${more} more` : '';
+  // Unpriced rebuilds have no premium. With none priced there is no total to show.
+  const priced = mark.items.filter((r) => typeof r.premium === 'number');
+  const totalLine = priced.length ? `<br><br>Total +${formatCost(priced.reduce((sum, r) => sum + r.premium, 0))}` : '';
+  return `<b>${mark.items.length} cache rebuilds</b><br><br>${shown.join('<br><br>')}${moreLine}${totalLine}`;
+}
+
+// One lane's rebuild marks, drawn over its bars. A mark of two or more rebuilds has
+// its count to the right of the diamond.
+function drawRebuilds(svg, rebuilds, xOf, mid) {
+  const h = REBUILD_SIZE / 2;
+  for (const mark of rebuildMarks(rebuilds, xOf, REBUILD_SIZE)) {
+    const { x } = mark;
+    svg.appendChild(withTooltip(svgEl('path', {
+      class: 'timeline-rebuild',
+      d: `M${x},${mid - h} L${x + h},${mid} L${x},${mid + h} L${x - h},${mid} Z`,
+      fill: mark.main ? REBUILD_COLOR : REBUILD_SURFACE,
+      stroke: mark.main ? REBUILD_SURFACE : REBUILD_COLOR,
+      'stroke-width': mark.main ? 1 : 1.5,
+    }), rebuildTooltip(mark)));
+    if (mark.items.length < 2) continue;
+    const count = svgEl('text', { class: 'timeline-rebuild-count', x: x + h + 2, y: mid - 2 });
+    count.textContent = String(mark.items.length);
+    svg.appendChild(count);
+  }
+}
 
 // The redraw tears down the SVG, which would kill an open tooltip, so an unchanged
 // payload within the same minute and width skips it. The minute is in the signature
@@ -54,7 +117,7 @@ function timelineKey(live, width, now) {
   return JSON.stringify([
     width,
     Math.floor(now / 60_000),
-    live.sessions.map((s) => [s.spans, s.live, s.title, s.titleSource, s.project, s.branch, s.costTodayUsd, s.prompts]),
+    live.sessions.map((s) => [s.spans, s.live, s.title, s.titleSource, s.project, s.branch, s.costTodayUsd, s.prompts, s.rebuilds]),
   ]);
 }
 
@@ -71,7 +134,7 @@ function drawHourGrid(svg, ticks, { xOf, width, gutter, plotHeight, height }) {
 }
 
 // One session's label in the gutter and its bars.
-function drawLane(svg, { session: s, lane, bars }, maxChars) {
+function drawLane(svg, { session: s, lane, bars }, maxChars, xOf) {
   const mid = lane * TIMELINE_LANE_HEIGHT + TIMELINE_LANE_HEIGHT / 2;
   const label = svgEl('text', { class: 'timeline-label', x: 0, y: mid + 4 });
   if (s.titleSource === 'prompt') label.classList.add('prompt-title');
@@ -98,6 +161,9 @@ function drawLane(svg, { session: s, lane, bars }, maxChars) {
       }));
     }
   }
+  // A server started before rebuilds existed sends none. public/ is read from disk
+  // on each request, so this page can meet that server.
+  drawRebuilds(svg, s.rebuilds || [], xOf, mid);
 }
 
 // Draws the lanes into container. Returns the number of lanes and of live lanes.
@@ -121,7 +187,7 @@ function drawTimeline(container, sessions, width, now) {
   appendPatternDefs(svg, 'timeline', [{ texture: 'diag', color: TIMELINE_COLOR }]);
   drawHourGrid(svg, ticks, { xOf, width, gutter, plotHeight, height });
   const maxChars = Math.floor((gutter - 8 - 14) / 6.6);
-  for (const lane of lanes) drawLane(svg, lane, maxChars);
+  for (const lane of lanes) drawLane(svg, lane, maxChars, xOf);
   svg.appendChild(svgEl('line', {
     class: 'timeline-now', x1: xOf(now), x2: xOf(now), y1: 0, y2: plotHeight,
     stroke: 'var(--text-secondary)', 'stroke-width': 1, 'stroke-dasharray': '4 3',
@@ -145,6 +211,10 @@ export function renderTimeline(live) {
   timelineSignature = signature;
   hideTooltip();
   const drawn = drawTimeline(container, live.sessions, width, now);
+  const rebuilds = live.sessions.flatMap((s) => s.rebuilds || []);
+  const priced = rebuilds.filter((r) => typeof r.premium === 'number');
+  const premium = priced.length ? `, +${formatCost(priced.reduce((sum, r) => sum + r.premium, 0))}` : '';
+  const rebuildNote = rebuilds.length ? ` · ${plural(rebuilds.length, 'cache rebuild', 'cache rebuilds')}${premium}` : '';
   document.getElementById('timelineNote').textContent =
-    `${plural(drawn.lanes, 'session', 'sessions')} today · ${drawn.live} live`;
+    `${plural(drawn.lanes, 'session', 'sessions')} today · ${drawn.live} live${rebuildNote}`;
 }

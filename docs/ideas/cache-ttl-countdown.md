@@ -7,7 +7,7 @@ prompt cache expires. Recorded on 2026-10-10, from the second round of research
 ## Why
 
 A reply after the cache expires pays to write the whole context to the cache again
-(see [Cache rebuild cost](cache-rebuilds.md)). A session at 150k of context that has
+(the Session timeline marks each rebuild). A session at 150k of context that has
 waited 4 minutes on a 5-minute TTL is worth answering now, or worth a `/clear` before
 the next prompt.
 

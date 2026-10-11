@@ -141,6 +141,26 @@ function laneLayout(sessions, xOf, now, minWidth = 3, liveWindowMs = 10 * 60 * 1
     });
 }
 
+// The Session timeline's prompt-cache rebuild marks for one lane, in time order.
+// A rebuild less than minGapPx right of the current mark's x joins that mark, so a
+// burst of subagent rebuilds draws as one mark with a count. The gap is measured
+// from the mark's first item, so a chain of close rebuilds still splits. main is
+// true when any item is a main-thread rebuild, and the page draws such a mark filled.
+function rebuildMarks(rebuilds, xOf, minGapPx = 8) {
+  const marks = [];
+  for (const r of [...rebuilds].sort((a, b) => a.t - b.t)) {
+    const x = xOf(r.t);
+    const last = marks[marks.length - 1];
+    if (last && x - last.x < minGapPx) {
+      last.items.push(r);
+      last.main = last.main || r.main;
+    } else {
+      marks.push({ x, items: [r], main: r.main });
+    }
+  }
+  return marks;
+}
+
 // The time axis for a range of the picker. days is a number of days or null (all
 // history). The end stays at the full domain's end. The start never goes before
 // the full domain's start, so a range longer than the data shows the data only.
@@ -248,6 +268,6 @@ function domainDays(domain) {
 }
 
 if (typeof module === 'object') module.exports = {
-  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rangeDomain,
+  labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
 };

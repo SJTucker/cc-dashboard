@@ -24,7 +24,8 @@
         "tools": [
           "Bash",
           "Read"
-        ]
+        ],
+        "missReason": null
       },
       {
         "key": "m-a2:r-a2",
@@ -419,7 +420,8 @@
         "tools": [
           "Bash",
           "Read"
-        ]
+        ],
+        "missReason": null
       },
       {
         "key": "m-a2:r-a2",
