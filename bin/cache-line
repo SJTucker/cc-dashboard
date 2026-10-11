@@ -1,0 +1,27 @@
+#!/usr/bin/env node
+'use strict';
+
+// Piped the statusLine JSON on stdin by a user's statusline script. Prints the
+// prompt cache line (cacheStatusLine in lib/cache.js), or nothing. A statusline
+// script that fails goes blank, so this exits 0 whatever stdin contains. It sets
+// process.exitCode instead of calling process.exit(), because a pipe write is
+// asynchronous on macOS and process.exit() can drop the line.
+
+const { cacheStatusLine } = require('../lib/cache');
+
+let input = '';
+process.stdin.on('data', (chunk) => {
+  input += chunk;
+});
+process.stdin.on('error', () => {
+  process.exitCode = 0;
+});
+process.stdin.on('end', () => {
+  try {
+    const line = cacheStatusLine(JSON.parse(input), Date.now());
+    if (line) process.stdout.write(line + '\n');
+  } catch {
+    // Bad JSON: print nothing.
+  }
+  process.exitCode = 0;
+});
