@@ -991,6 +991,7 @@ html, body {
   fill: var(--text-primary);
 }
 .timeline-label.prompt-title { font-style: italic; }
+.timeline-rebuild-total { font-family: var(--font-data); font-size: 11px; fill: var(--text-secondary); }
 .timeline-bar:hover { stroke: var(--text-primary); stroke-width: 1; }
 .timeline-rebuild:hover { stroke: var(--text-primary); stroke-width: 2; }
 .timeline-rebuild-count { font-size: 9px; fill: var(--text-secondary); pointer-events: none; }

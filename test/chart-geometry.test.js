@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const {
   labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
+  rebuildTotals, rebuildRowText,
 } = require('../public/chart-geometry');
 
 test('labelStep keeps at most 12 labels on a wide chart', () => {
@@ -409,4 +410,41 @@ test('domainDays lists the local noon of each day inside the domain', () => {
   assert.deepStrictEqual(domainDays([atLocal(9, 1, 12), atLocal(9, 2, 12)]), [atLocal(9, 1), atLocal(9, 2)]);
   assert.deepStrictEqual(domainDays([atLocal(9, 1, 13), atLocal(9, 2, 13)]), [atLocal(9, 2)]);
   assert.deepStrictEqual(domainDays([Infinity, -Infinity]), []);
+});
+
+test('rebuildTotals gives zero and null premium for an empty or missing list', () => {
+  assert.deepStrictEqual(rebuildTotals([]), { count: 0, premium: null });
+  assert.deepStrictEqual(rebuildTotals(undefined), { count: 0, premium: null });
+});
+
+test('rebuildTotals counts rebuilds and sums their premiums', () => {
+  assert.deepStrictEqual(rebuildTotals([{ premium: 0.5 }, { premium: 0.75 }]), { count: 2, premium: 1.25 });
+});
+
+test('rebuildTotals counts every rebuild but sums only the priced ones', () => {
+  assert.deepStrictEqual(rebuildTotals([{ premium: 1 }, { premium: null }, { premium: 2 }]), { count: 3, premium: 3 });
+});
+
+test('rebuildTotals gives a null premium when no rebuild is priced', () => {
+  assert.deepStrictEqual(rebuildTotals([{ premium: null }, {}]), { count: 2, premium: null });
+});
+
+test('rebuildTotals counts main and subagent rebuilds', () => {
+  assert.strictEqual(rebuildTotals([{ main: true, premium: 1 }, { main: false, premium: 1 }]).count, 2);
+});
+
+test('rebuildRowText gives null when there are no rebuilds', () => {
+  const usd = (n) => '$' + n.toFixed(2);
+  assert.strictEqual(rebuildRowText([], usd), null);
+  assert.strictEqual(rebuildRowText(undefined, usd), null);
+});
+
+test('rebuildRowText joins the count and the premium with a middle dot', () => {
+  const usd = (n) => '$' + n.toFixed(2);
+  assert.strictEqual(rebuildRowText([{ premium: 0.7 }, { premium: 0.5 }], usd), '2 · +$1.20');
+});
+
+test('rebuildRowText gives only the count when no rebuild is priced', () => {
+  const usd = (n) => '$' + n.toFixed(2);
+  assert.strictEqual(rebuildRowText([{ premium: null }], usd), '1');
 });
