@@ -991,6 +991,8 @@ html, body {
   fill: var(--text-primary);
 }
 .timeline-label.prompt-title { font-style: italic; }
+/* The ↳ before the label of a lane that a /clear started (drawLane in public/panels/timeline.mjs). */
+.timeline-follow { fill: var(--text-tertiary); font-style: normal; }
 .timeline-rebuild-cell { font-family: var(--font-data); font-size: 11px; fill: var(--text-secondary); }
 /* The Rebuilds column heading, styled as the sessions table headings. */
 .timeline-column-head { font-family: var(--font-data); font-size: 10px; letter-spacing: 0.5px; fill: var(--text-tertiary); }
