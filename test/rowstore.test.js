@@ -703,3 +703,137 @@ test('version 1 rows of a deleted transcript get each tool use model from its ca
   assert.deepStrictEqual(data.tools[0].byModel.map((m) => [m.label, m.calls]), [['Opus 5', 1]]);
   store.close();
 });
+
+const HOUR_MS = 60 * 60 * 1000;
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+// Rows with nothing in them, for tests that only care when a file finishes loading.
+const emptyRows = () => ({ ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], commands: [], sessions: Object.create(null), minT: null, maxT: null });
+
+// Moves a file's mtime one second later, which makes its stored entry out of date.
+function bump(file) {
+  const seconds = fs.statSync(file).mtimeMs / 1000 + 1;
+  fs.utimesSync(file, seconds, seconds);
+}
+
+// A row store whose extract returns empty rows. While ctl.hold is true, each file
+// waits until the test calls release(file). `reads` lists the files extract was
+// called for, in call order. `clock` is the store's `now`.
+function gatedStore(dir, { store = null } = {}) {
+  const gates = new Map();
+  const reads = [];
+  const ctl = { hold: false };
+  const gateFor = (file) => {
+    if (!gates.has(file)) {
+      let open;
+      const promise = new Promise((resolve) => { open = resolve; });
+      gates.set(file, { promise, open });
+    }
+    return gates.get(file);
+  };
+  const clock = { now: Date.now() };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    store,
+    now: () => clock.now,
+    extract: async (file) => {
+      reads.push(file);
+      if (ctl.hold) await gateFor(file).promise;
+      return emptyRows();
+    },
+  });
+  return { rows, reads, ctl, clock, release: (file) => gateFor(file).open() };
+}
+
+test('out-of-date files are read in descending mtime order', async () => {
+  const { dir } = makeProjects();
+  const mid = writeFile(dir, 'a-mid', ['1'], 2 * HOUR_MS);
+  const old = writeFile(dir, 'b-old', ['2'], 3 * DAY_MS);
+  const fresh = writeFile(dir, 'c-new', ['3'], 0);
+  const { reads, refresh } = harness(dir);
+
+  await refresh();
+
+  assert.deepStrictEqual(reads, [fresh, mid, old]);
+});
+
+test('entries() lists files on disk in walk order whatever order they were read in', async () => {
+  const { findJsonlFiles } = require('../lib/transcript-files');
+  const { dir } = makeProjects();
+  writeFile(dir, 'a-old', ['1'], 3 * DAY_MS);
+  writeFile(dir, 'b-new', ['2'], 0);
+  writeFile(dir, 'c-mid', ['3'], 2 * HOUR_MS);
+  const { rows, refresh } = harness(dir);
+
+  await refresh();
+
+  assert.deepStrictEqual(rows.entries().map((e) => e.path), findJsonlFiles(dir));
+});
+
+test('entries() holds only files that have an entry while a run reads new files', async () => {
+  const { findJsonlFiles } = require('../lib/transcript-files');
+  const { dir } = makeProjects();
+  const fresh = writeFile(dir, 'a', ['1'], 0);
+  const old = writeFile(dir, 'b', ['2'], 2 * DAY_MS);
+  const g = gatedStore(dir);
+  g.ctl.hold = true;
+
+  const run = g.rows.refresh();
+  assert.deepStrictEqual(g.rows.entries(), [], 'no file has been read yet');
+
+  g.release(fresh);
+  await tick();
+  assert.deepStrictEqual(g.rows.entries().map((e) => e.path), [fresh]);
+  assert.ok(g.rows.entries().every((e) => e !== undefined));
+
+  g.release(old);
+  await run;
+  assert.deepStrictEqual(g.rows.entries().map((e) => e.path), findJsonlFiles(dir));
+});
+
+test('generation goes up as each file is loaded during a run', async () => {
+  const { dir } = makeProjects();
+  const fresh = writeFile(dir, 'a', ['1'], 0);
+  const old = writeFile(dir, 'b', ['2'], 2 * DAY_MS);
+  const g = gatedStore(dir);
+  g.ctl.hold = true;
+  const start = g.rows.generation;
+
+  const run = g.rows.refresh();
+  g.release(fresh);
+  await tick();
+  const afterFirst = g.rows.generation;
+  assert.ok(afterFirst > start, 'the newest file is in, the older one is still being read');
+
+  g.release(old);
+  await run;
+  assert.ok(g.rows.generation > afterFirst);
+});
+
+test('a file that grows after the stat pass keeps the stat-pass size and is read again on the next refresh', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1'], 2 * HOUR_MS);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const reads = [];
+  const clock = { now: Date.now() };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    now: () => clock.now,
+    extract: async (f) => {
+      reads.push(f);
+      if (reads.length === 1) await gate;
+      return extractFile(f);
+    },
+  });
+
+  const run = rows.refresh();
+  fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+  release();
+  await run;
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 2, 'the read sees the whole file');
+
+  clock.now += REFRESH_SHARE_MS + 1;
+  await rows.refresh();
+  assert.strictEqual(reads.length, 2, 'the entry holds the smaller size, so the file is out of date');
+});
