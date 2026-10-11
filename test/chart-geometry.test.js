@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const {
   labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
-  rebuildTotals, rebuildRowText,
+  rebuildTotals,
 } = require('../public/chart-geometry');
 
 test('labelStep keeps at most 12 labels on a wide chart', () => {
@@ -433,18 +433,5 @@ test('rebuildTotals counts main and subagent rebuilds', () => {
   assert.strictEqual(rebuildTotals([{ main: true, premium: 1 }, { main: false, premium: 1 }]).count, 2);
 });
 
-test('rebuildRowText gives null when there are no rebuilds', () => {
-  const usd = (n) => '$' + n.toFixed(2);
-  assert.strictEqual(rebuildRowText([], usd), null);
-  assert.strictEqual(rebuildRowText(undefined, usd), null);
-});
 
-test('rebuildRowText joins the count and the premium with a middle dot', () => {
-  const usd = (n) => '$' + n.toFixed(2);
-  assert.strictEqual(rebuildRowText([{ premium: 0.7 }, { premium: 0.5 }], usd), '2 · +$1.20');
-});
 
-test('rebuildRowText gives only the count when no rebuild is priced', () => {
-  const usd = (n) => '$' + n.toFixed(2);
-  assert.strictEqual(rebuildRowText([{ premium: null }], usd), '1');
-});
