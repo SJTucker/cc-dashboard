@@ -517,7 +517,7 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
   assert.strictEqual(body.sessions[0].live, true);
   assert.strictEqual(body.sessions[0].ended, null);
   assert.strictEqual(body.sessions[0].project, 'demo');
-  assert.strictEqual('sessionId' in body.sessions[0], false);
+  assert.strictEqual(body.sessions[0].sessionId, 'sess-a');
   assert.ok(body.sessions[0].costTodayUsd > 0);
   assert.strictEqual(body.total.costTodayUsd, body.sessions[0].costTodayUsd);
   assert.strictEqual(body.total.costUsd, 0.42);
@@ -545,7 +545,7 @@ test('GET /api/sessions/live marks a session that ended', async (t) => {
   const body = await res.json();
   assert.strictEqual(body.sessions[0].ended, 'clear');
   assert.strictEqual(body.sessions[0].live, false);
-  assert.strictEqual('sessionId' in body.sessions[0], false);
+  assert.strictEqual(body.sessions[0].sessionId, 'sess-b');
 });
 
 test('GET /api/sessions/live joins the activity file of a session', async (t) => {
