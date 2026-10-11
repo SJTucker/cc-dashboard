@@ -9,6 +9,7 @@ const { createRowStore, REFRESH_SHARE_MS, formatBytes, formatElapsed } = require
 const { extractFile, EXTRACT_VERSION } = require('../lib/extract');
 const { openStore } = require('../lib/store');
 const { aggregate } = require('../lib/aggregate');
+const sqlite = require('../lib/sqlite');
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -1255,4 +1256,117 @@ test('the startup line writes sizes and times in the units a reader expects', ()
   assert.strictEqual(formatBytes(90), '90 B');
   assert.strictEqual(formatElapsed(5400), '5.4 s');
   assert.strictEqual(formatElapsed(70.4), '70 ms');
+});
+
+// Compaction drops usage keys from rows in memory only. store.put() writes entry.rows,
+// so the database must keep the full usage object, the only copy once a transcript is deleted.
+const FAT_USAGE = { iterations: [{ n: 1 }], output_tokens_details: { thinking_tokens: 7 } };
+
+// A real extract whose call rows also carry usage keys the aggregate never reads.
+// Each refresh advances the clock past REFRESH_SHARE_MS, so none shares an earlier run.
+function fatStore(dir, store) {
+  const clock = { now: Date.now() };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    store,
+    now: () => clock.now,
+    extract: async (file) => {
+      const extracted = await extractFile(file);
+      for (const call of extracted.calls) Object.assign(call.usage, FAT_USAGE);
+      return extracted;
+    },
+  });
+  return {
+    entries: () => rows.entries(),
+    refresh: async () => {
+      clock.now += REFRESH_SHARE_MS + 1;
+      await rows.refresh();
+    },
+  };
+}
+
+// The usage objects of every call in the database, read with a separate handle.
+function storedUsages(dbFile) {
+  const raw = new sqlite.DatabaseSync(dbFile);
+  try {
+    return raw.prepare('SELECT data FROM files').all().flatMap((r) => JSON.parse(r.data).calls.map((c) => c.usage));
+  } finally {
+    raw.close();
+  }
+}
+
+const hasFatKeys = (usage) => 'iterations' in usage && 'output_tokens_details' in usage;
+
+test('a file written to the database is compacted in memory after the write, and the database keeps the full usage', async () => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const rows = fatStore(dir, store);
+
+  await rows.refresh();
+
+  const usage = rows.entries()[0].rows.calls[0].usage;
+  assert.deepStrictEqual(usage, { input_tokens: 100, output_tokens: 50 });
+  const stored = storedUsages(dbFile);
+  assert.strictEqual(stored.length, 1);
+  assert.ok(hasFatKeys(stored[0]));
+  store.close();
+});
+
+test('a file that is not written to the database keeps its full usage in memory', async () => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'today', ['1'], 0);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const rows = fatStore(dir, store);
+
+  await rows.refresh();
+
+  assert.ok(hasFatKeys(rows.entries()[0].rows.calls[0].usage));
+  assert.deepStrictEqual(storedUsages(dbFile), []);
+  store.close();
+});
+
+test('a stored file whose transcript is deleted is written with its full usage, then compacted in memory', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'b', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const rows = fatStore(dir, store);
+  await rows.refresh();
+  const saved = fs.readFileSync(file);
+  fs.unlinkSync(file);
+  await rows.refresh();
+
+  // The file reappears with a line from today, so its entry is newer than the database row.
+  fs.writeFileSync(file, saved);
+  fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+  await rows.refresh();
+  assert.ok(rows.entries()[0].rows.calls.every((c) => hasFatKeys(c.usage)));
+  fs.unlinkSync(file);
+  await rows.refresh();
+
+  const stored = storedUsages(dbFile);
+  assert.strictEqual(stored.length, 2);
+  assert.ok(stored.every(hasFatKeys));
+  assert.ok(rows.entries()[0].rows.calls.every((c) => !('iterations' in c.usage)));
+  store.close();
+});
+
+test('rows loaded from the database are compacted in memory and stay full in the database', async () => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const seed = openStore(dbFile);
+  await fatStore(dir, seed).refresh();
+  seed.close();
+
+  const store = openStore(dbFile);
+  const rows = fatStore(dir, store);
+  await rows.refresh();
+
+  assert.deepStrictEqual(rows.entries()[0].rows.calls[0].usage, { input_tokens: 100, output_tokens: 50 });
+  assert.ok(storedUsages(dbFile).every(hasFatKeys));
+  store.close();
 });
