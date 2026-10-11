@@ -242,8 +242,9 @@ function createServer(config) {
 
   // Today's sessions from the snapshots in cc-dashboard/sessions/ (lib/sessions.js),
   // each with its tokens, cost today and lines changed from the Today scan. Read-only:
-  // bin/record-statusline writes the snapshots, run by the mod in mod/. Each session's `activity` comes from cc-dashboard/activity/
-  // (lib/activity.js), written by the mod. Session ids stay on the server.
+  // bin/record-statusline writes the snapshots, run by the mod in mod/. Each
+  // session's `activity` comes from cc-dashboard/activity/ (lib/activity.js), written
+  // by the mod. Session ids stay on the server.
   app.get('/api/sessions/live', async (req, res) => {
     try {
       const data = await scan('today', 'hour');

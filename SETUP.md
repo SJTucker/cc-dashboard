@@ -90,7 +90,10 @@ cleared or ended marks.
 
 ## Cache countdown in the statusline
 
-Optional. `bin/cache-line` prints one line about the session's prompt cache: how
+Optional. Replace `/path/to/cc-dashboard` below with the clone's path. `pwd` in
+the clone prints it.
+
+`bin/cache-line` prints one line about the session's prompt cache: how
 long until it expires, and what the next reply pays to write the context back into it.
 
 ```
