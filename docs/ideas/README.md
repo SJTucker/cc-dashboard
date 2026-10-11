@@ -26,5 +26,5 @@ then on.
 | [What fills the context](context-fillers.md) | Open: largest tool results and repeated reads across the range; result size storage and grouping open |
 | [Cost by plugin](plugin-cost-rows.md) | Open: a Plugins list in Where usage goes from the unused `attributionPlugin` field, and MCP servers from `attributionMcpServer`; invocation counts and subagent calls open |
 | [Costliest prompts](costliest-prompts.md) | Open: rank prompts by cost with a drill-down; storing prompt text open |
-| [Cache expiry countdown](cache-ttl-countdown.md) | Running now part shipped 2026-10-11 (time left and rebuild cost); statusline through the mod is open |
+| [Cache expiry countdown](cache-ttl-countdown.md) | Running now and statusline parts shipped 2026-10-11; open: the page reading `prompt_cache` from the statusline JSON |
 | [Guard: rows when a transcript loses lines](transcript-rewrites.md) | Open: the rewrite report was not reproduced on Claude Code 2.1.296; a warning when a re-read file loses stored call keys, and whether to merge rows, open |

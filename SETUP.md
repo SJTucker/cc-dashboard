@@ -136,6 +136,41 @@ With neither the mod nor this route, the Plan usage panel reads only the usage c
 in `~/.claude.json`, which updates when you run `/usage`. Live sessions has no Length
 column data and no cleared or ended marks.
 
+## Cache countdown in the statusline
+
+Optional, with or without the mod. `bin/cache-line` prints one line about the
+session's prompt cache: how long until it expires, and what the next reply pays to
+write the context back into it.
+
+```
+cache 4 min left · rebuild $0.38
+cache under 1 min · rebuild $0.38
+cache expired · rebuild $0.38
+```
+
+It reads the `prompt_cache` block Claude Code sends the statusline, which needs
+Claude Code 2.1.251 or later. It prints nothing before the session's first reply.
+It reads and writes no files and always exits 0.
+
+Add two lines to the statusline script that `statusLine.command` in
+`~/.claude/settings.json` points at, after the lines it already prints. On the
+no-mod route, keep the `record-statusline` line too. Both read the same `$input`.
+
+```bash
+CACHE=$(echo "$input" | /path/to/cc-dashboard/bin/cache-line)
+[ -n "$CACHE" ] && echo "$CACHE"
+```
+
+Claude Code reruns the statusline after each reply and when a warm cache expires,
+but not while a session sits idle. To keep the minutes counting down, add
+`refreshInterval`, in seconds, to `statusLine` in `~/.claude/settings.json`:
+
+```json
+"statusLine": { "type": "command", "command": "~/.claude/statusline.sh", "refreshInterval": 15 }
+```
+
+Each refresh runs the whole statusline script, so keep the script fast.
+
 ## rtk
 
 The two rtk panels read rtk's `history.db` read-only. The default path is
