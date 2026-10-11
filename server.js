@@ -135,8 +135,9 @@ function createServer(config) {
   const serverDb = createServerDb(storePath);
   const getReviewDb = createReviewDbGetter(serverDb.get, legacyReviewsDir(config.configDir));
   let rowStore = null;
-  // Opened on the first scan, so a transcripts.db that cannot be opened is reported
-  // by the request that needs it.
+  // Opened by warmUp when the server starts listening, which reports a
+  // transcripts.db that cannot be opened through console.warn. A request that
+  // arrives first opens it itself.
   function getRowStore() {
     if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, store: openStore(storePath, serverDb.get), log: (line) => console.log(line) });
     return rowStore;

@@ -95,14 +95,19 @@ test('an unreadable file warns once per change in the count, per range', async (
 
 test('a numeric or Today range asks the row store to wait for the files modified since the range starts', async () => {
   const { memo, rowStore } = memoWith();
-  const now = Date.now();
+  const before = Date.now();
   await memo.scan('today', 'hour');
   await memo.scan(7);
   await memo.scan(30);
+  const after = Date.now();
 
+  // Each scan reads its own clock, so a midnight during the test moves a start by a
+  // day. Each start must equal the one computed before or after the scans.
   const since = rowStore.refreshArgs.map(([opts]) => opts.since);
   assert.strictEqual(rowStore.refreshArgs.length, 3);
-  assert.deepStrictEqual(since, [windowStart('today', now), windowStart(7, now), windowStart(30, now)]);
+  ['today', 7, 30].forEach((days, i) => {
+    assert.ok([windowStart(days, before), windowStart(days, after)].includes(since[i]), `start for ${days}`);
+  });
 });
 
 test('the all-time range waits for the whole run: refresh gets no since', async () => {
