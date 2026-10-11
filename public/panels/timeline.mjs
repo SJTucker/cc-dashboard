@@ -18,6 +18,15 @@ const TIMELINE_BAR_HEIGHT = 10;
 const TIMELINE_AXIS_HEIGHT = 20;
 const TIMELINE_GUTTER = 200;
 const TIMELINE_RIGHT_PAD = 10;
+// The Rebuilds column at the right: its heading row above the lanes, the gap between
+// the plot and the column, and the narrowest plot that still gets the column. Below
+// that width the column is left out and the header note carries the total.
+const TIMELINE_HEAD_HEIGHT = 18;
+const REBUILD_COLUMN_GAP = 16;
+const REBUILD_COLUMN_MIN_PLOT = 160;
+// Column text widths: 11px data font, and the 10px heading with its letter spacing.
+const DATA_CHAR_PX = 6.6;
+const HEAD_CHAR_PX = 6.5;
 
 // Prompt-cache rebuild marks (rebuildMarks in public/chart-geometry.js). A mark is a
 // diamond on the lane's bar line. A main-thread rebuild is filled with the Cache
@@ -122,10 +131,10 @@ function timelineKey(live, width, now) {
 }
 
 // A gridline per hour tick, with a label on every step-th one.
-function drawHourGrid(svg, ticks, { xOf, width, gutter, plotHeight, height }) {
+function drawHourGrid(svg, ticks, { xOf, width, gutter, top, plotHeight, height }) {
   const step = labelStep(ticks.length, width - gutter);
   ticks.forEach((t, i) => {
-    svg.appendChild(svgEl('line', { x1: xOf(t), x2: xOf(t), y1: 0, y2: plotHeight, stroke: 'var(--border)', 'stroke-width': 1 }));
+    svg.appendChild(svgEl('line', { x1: xOf(t), x2: xOf(t), y1: top, y2: top + plotHeight, stroke: 'var(--border)', 'stroke-width': 1 }));
     if (i % step !== 0) return;
     const label = svgEl('text', { class: 'axis-label', x: xOf(t), y: height - 4, 'text-anchor': 'middle' });
     label.textContent = `${String(new Date(t).getHours()).padStart(2, '0')}:00`;
@@ -133,9 +142,46 @@ function drawHourGrid(svg, ticks, { xOf, width, gutter, plotHeight, height }) {
   });
 }
 
-// One session's label in the gutter and its bars.
-function drawLane(svg, { session: s, lane, bars }, maxChars, xOf, width) {
-  const mid = lane * TIMELINE_LANE_HEIGHT + TIMELINE_LANE_HEIGHT / 2;
+// The Rebuilds column's layout, or null when no session has a rebuild or the plot
+// would get narrower than REBUILD_COLUMN_MIN_PLOT. Each row shows the rebuild mark and
+// count right-aligned at countRight, and the premium right-aligned at the edge.
+function rebuildColumn(sessions, width, gutter) {
+  const rows = sessions.map((s) => rebuildTotals(s.rebuilds)).filter((t) => t.count);
+  if (!rows.length) return null;
+  const countChars = Math.max(...rows.map((t) => `◆ ${t.count}`.length));
+  const costChars = Math.max(0, ...rows.map((t) => (t.premium === null ? 0 : `+${formatCost(t.premium)}`.length)));
+  const costWidth = Math.ceil(costChars * DATA_CHAR_PX);
+  const rowWidth = Math.ceil(countChars * DATA_CHAR_PX) + (costWidth ? 10 + costWidth : 0);
+  const columnWidth = Math.max(rowWidth, Math.ceil('REBUILDS'.length * HEAD_CHAR_PX));
+  const plotRight = width - TIMELINE_RIGHT_PAD - columnWidth - REBUILD_COLUMN_GAP;
+  if (plotRight - gutter < REBUILD_COLUMN_MIN_PLOT) return null;
+  return { plotRight, countRight: costWidth ? width - costWidth - 10 : width };
+}
+
+// One row of the Rebuilds column: a filled diamond when any rebuild was the main
+// session's, a hollow one when all were subagents', then the count and the premium.
+function drawRebuildCell(svg, rebuilds, column, width, mid) {
+  const totals = rebuildTotals(rebuilds);
+  if (!totals.count) return;
+  const anyMain = rebuilds.some((r) => r.main !== false);
+  const what = plural(totals.count, anyMain ? 'cache rebuild' : 'subagent cache rebuild', anyMain ? 'cache rebuilds' : 'subagent cache rebuilds');
+  const tipText = totals.premium === null ? what : `${what}, +${formatCost(totals.premium)} over cache reads`;
+  const tip = () => { const t = svgEl('title', {}); t.textContent = tipText; return t; };
+
+  const count = svgEl('text', { class: 'timeline-rebuild-cell', x: column.countRight, y: mid + 4, 'text-anchor': 'end' });
+  const mark = svgEl('tspan', { fill: REBUILD_COLOR, 'aria-hidden': 'true' });
+  mark.textContent = anyMain ? '◆' : '◇';
+  count.append(mark, ` ${totals.count}`, tip());
+  svg.appendChild(count);
+  if (totals.premium === null) return;
+  const cost = svgEl('text', { class: 'timeline-rebuild-cell', x: width, y: mid + 4, 'text-anchor': 'end' });
+  cost.append(`+${formatCost(totals.premium)}`, tip());
+  svg.appendChild(cost);
+}
+
+// One session's label in the gutter, its bars and its Rebuilds cell.
+function drawLane(svg, { session: s, lane, bars }, maxChars, xOf, { top, column, width }) {
+  const mid = top + lane * TIMELINE_LANE_HEIGHT + TIMELINE_LANE_HEIGHT / 2;
   const label = svgEl('text', { class: 'timeline-label', x: 0, y: mid + 4 });
   if (s.titleSource === 'prompt') label.classList.add('prompt-title');
   const fullName = s.title || s.project || '—';
@@ -164,36 +210,23 @@ function drawLane(svg, { session: s, lane, bars }, maxChars, xOf, width) {
   // A server started before rebuilds existed sends none. public/ is read from disk
   // on each request, so this page can meet that server.
   drawRebuilds(svg, s.rebuilds || [], xOf, mid);
-
-  // The row's rebuild count and cost, right-aligned at the SVG's right edge.
-  const rowText = rebuildRowText(s.rebuilds, formatCost);
-  if (rowText) {
-    const totals = rebuildTotals(s.rebuilds);
-    const text = svgEl('text', { class: 'timeline-rebuild-total', x: width, y: mid + 4, 'text-anchor': 'end' });
-    const tip = svgEl('title', {});
-    tip.textContent = totals.premium === null
-      ? plural(totals.count, 'cache rebuild', 'cache rebuilds')
-      : `${plural(totals.count, 'cache rebuild', 'cache rebuilds')}, +${formatCost(totals.premium)} over cache reads`;
-    text.append(rowText, tip);
-    svg.appendChild(text);
-  }
+  if (column) drawRebuildCell(svg, s.rebuilds || [], column, width, mid);
 }
 
-// Draws the lanes into container. Returns the number of lanes and of live lanes.
+// Draws the lanes into container. Returns the number of lanes, of live lanes, and
+// whether the Rebuilds column was drawn.
 function drawTimeline(container, sessions, width, now) {
   const starts = sessions.flatMap((s) => s.spans.map((span) => span[0]));
   const ticks = hourTicks(Math.min(...starts), now);
   const domain = [ticks[0], ticks[ticks.length - 1]];
   const gutter = Math.min(TIMELINE_GUTTER, Math.round(width * 0.4));
-  // Each row with rebuilds ends in a text of its count and cost. The plot stops short
-  // of the widest one (about 6.6px a character, as for the left labels).
-  const rowChars = Math.max(0, ...sessions.map((s) => (rebuildRowText(s.rebuilds, formatCost) || '').length));
-  const rightGutter = rowChars ? Math.ceil(rowChars * 6.6) + 12 : 0;
-  const plotRight = width - TIMELINE_RIGHT_PAD - rightGutter;
+  const column = rebuildColumn(sessions, width, gutter);
+  const plotRight = column ? column.plotRight : width - TIMELINE_RIGHT_PAD;
+  const top = column ? TIMELINE_HEAD_HEIGHT : 0;
   const xOf = (t) => gutter + ((t - domain[0]) / (domain[1] - domain[0])) * (plotRight - gutter);
   const lanes = laneLayout(sessions, xOf, now, 3, LIVE_WINDOW_MS);
   const plotHeight = lanes.length * TIMELINE_LANE_HEIGHT;
-  const height = plotHeight + TIMELINE_AXIS_HEIGHT;
+  const height = top + plotHeight + TIMELINE_AXIS_HEIGHT;
   const liveLanes = lanes.filter((l) => l.session.live).length;
 
   const svg = svgEl('svg', {
@@ -203,15 +236,20 @@ function drawTimeline(container, sessions, width, now) {
     'aria-label': `Session timeline: ${plural(lanes.length, 'session', 'sessions')} today, ${liveLanes} live`,
   });
   appendPatternDefs(svg, 'timeline', [{ texture: 'diag', color: TIMELINE_COLOR }]);
-  drawHourGrid(svg, ticks, { xOf, width: plotRight + TIMELINE_RIGHT_PAD, gutter, plotHeight, height });
+  drawHourGrid(svg, ticks, { xOf, width: plotRight + TIMELINE_RIGHT_PAD, gutter, top, plotHeight, height });
+  if (column) {
+    const head = svgEl('text', { class: 'timeline-column-head', x: width, y: TIMELINE_HEAD_HEIGHT - 6, 'text-anchor': 'end' });
+    head.textContent = 'REBUILDS';
+    svg.appendChild(head);
+  }
   const maxChars = Math.floor((gutter - 8 - 14) / 6.6);
-  for (const lane of lanes) drawLane(svg, lane, maxChars, xOf, width);
+  for (const lane of lanes) drawLane(svg, lane, maxChars, xOf, { top, column, width });
   svg.appendChild(svgEl('line', {
-    class: 'timeline-now', x1: xOf(now), x2: xOf(now), y1: 0, y2: plotHeight,
+    class: 'timeline-now', x1: xOf(now), x2: xOf(now), y1: top, y2: top + plotHeight,
     stroke: 'var(--text-secondary)', 'stroke-width': 1, 'stroke-dasharray': '4 3',
   }));
   container.replaceChildren(svg);
-  return { lanes: lanes.length, live: liveLanes };
+  return { lanes: lanes.length, live: liveLanes, column: Boolean(column) };
 }
 
 export function renderTimeline(live) {
@@ -231,7 +269,9 @@ export function renderTimeline(live) {
   const drawn = drawTimeline(container, live.sessions, width, now);
   const totals = rebuildTotals(live.sessions.flatMap((s) => s.rebuilds || []));
   const premium = totals.premium === null ? '' : `, +${formatCost(totals.premium)}`;
-  const rebuildNote = totals.count ? ` · ${plural(totals.count, 'cache rebuild', 'cache rebuilds')}${premium}` : '';
+  // With the Rebuilds column drawn, the rows carry the rebuilds. Without it (a narrow
+  // panel) the note carries the day's total.
+  const rebuildNote = totals.count && !drawn.column ? ` · ${plural(totals.count, 'cache rebuild', 'cache rebuilds')}${premium}` : '';
   document.getElementById('timelineNote').textContent =
     `${plural(drawn.lanes, 'session', 'sessions')} today · ${drawn.live} live${rebuildNote}`;
 }

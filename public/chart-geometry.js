@@ -275,16 +275,8 @@ function rebuildTotals(rebuilds) {
   return { count: list.length, premium: priced.length ? priced.reduce((sum, r) => sum + r.premium, 0) : null };
 }
 
-// The text at the right end of a timeline row: "2 · +$1.20", or "2" when no rebuild
-// is priced. null when the session has no rebuilds. formatUsd formats the premium.
-function rebuildRowText(rebuilds, formatUsd) {
-  const { count, premium } = rebuildTotals(rebuilds);
-  if (count === 0) return null;
-  return premium === null ? `${count}` : `${count} \u00b7 +${formatUsd(premium)}`;
-}
-
 if (typeof module === 'object') module.exports = {
-  rebuildTotals, rebuildRowText,
+  rebuildTotals,
   labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
 };
