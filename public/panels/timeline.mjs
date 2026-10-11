@@ -57,8 +57,8 @@ function rebuildTooltip(mark) {
   const more = mark.items.length - shown.length;
   const moreLine = more > 0 ? `<br>and ${more} more` : '';
   // Unpriced rebuilds have no premium. With none priced there is no total to show.
-  const priced = mark.items.filter((r) => typeof r.premium === 'number');
-  const totalLine = priced.length ? `<br><br>Total +${formatCost(priced.reduce((sum, r) => sum + r.premium, 0))}` : '';
+  const { premium } = rebuildTotals(mark.items);
+  const totalLine = premium === null ? '' : `<br><br>Total +${formatCost(premium)}`;
   return `<b>${mark.items.length} cache rebuilds</b><br><br>${shown.join('<br><br>')}${moreLine}${totalLine}`;
 }
 
@@ -134,7 +134,7 @@ function drawHourGrid(svg, ticks, { xOf, width, gutter, plotHeight, height }) {
 }
 
 // One session's label in the gutter and its bars.
-function drawLane(svg, { session: s, lane, bars }, maxChars, xOf) {
+function drawLane(svg, { session: s, lane, bars }, maxChars, xOf, width) {
   const mid = lane * TIMELINE_LANE_HEIGHT + TIMELINE_LANE_HEIGHT / 2;
   const label = svgEl('text', { class: 'timeline-label', x: 0, y: mid + 4 });
   if (s.titleSource === 'prompt') label.classList.add('prompt-title');
@@ -164,6 +164,19 @@ function drawLane(svg, { session: s, lane, bars }, maxChars, xOf) {
   // A server started before rebuilds existed sends none. public/ is read from disk
   // on each request, so this page can meet that server.
   drawRebuilds(svg, s.rebuilds || [], xOf, mid);
+
+  // The row's rebuild count and cost, right-aligned at the SVG's right edge.
+  const rowText = rebuildRowText(s.rebuilds, formatCost);
+  if (rowText) {
+    const totals = rebuildTotals(s.rebuilds);
+    const text = svgEl('text', { class: 'timeline-rebuild-total', x: width, y: mid + 4, 'text-anchor': 'end' });
+    const tip = svgEl('title', {});
+    tip.textContent = totals.premium === null
+      ? plural(totals.count, 'cache rebuild', 'cache rebuilds')
+      : `${plural(totals.count, 'cache rebuild', 'cache rebuilds')}, +${formatCost(totals.premium)} over cache reads`;
+    text.append(rowText, tip);
+    svg.appendChild(text);
+  }
 }
 
 // Draws the lanes into container. Returns the number of lanes and of live lanes.
@@ -172,7 +185,12 @@ function drawTimeline(container, sessions, width, now) {
   const ticks = hourTicks(Math.min(...starts), now);
   const domain = [ticks[0], ticks[ticks.length - 1]];
   const gutter = Math.min(TIMELINE_GUTTER, Math.round(width * 0.4));
-  const xOf = (t) => gutter + ((t - domain[0]) / (domain[1] - domain[0])) * (width - gutter - TIMELINE_RIGHT_PAD);
+  // Each row with rebuilds ends in a text of its count and cost. The plot stops short
+  // of the widest one (about 6.6px a character, as for the left labels).
+  const rowChars = Math.max(0, ...sessions.map((s) => (rebuildRowText(s.rebuilds, formatCost) || '').length));
+  const rightGutter = rowChars ? Math.ceil(rowChars * 6.6) + 12 : 0;
+  const plotRight = width - TIMELINE_RIGHT_PAD - rightGutter;
+  const xOf = (t) => gutter + ((t - domain[0]) / (domain[1] - domain[0])) * (plotRight - gutter);
   const lanes = laneLayout(sessions, xOf, now, 3, LIVE_WINDOW_MS);
   const plotHeight = lanes.length * TIMELINE_LANE_HEIGHT;
   const height = plotHeight + TIMELINE_AXIS_HEIGHT;
@@ -185,9 +203,9 @@ function drawTimeline(container, sessions, width, now) {
     'aria-label': `Session timeline: ${plural(lanes.length, 'session', 'sessions')} today, ${liveLanes} live`,
   });
   appendPatternDefs(svg, 'timeline', [{ texture: 'diag', color: TIMELINE_COLOR }]);
-  drawHourGrid(svg, ticks, { xOf, width, gutter, plotHeight, height });
+  drawHourGrid(svg, ticks, { xOf, width: plotRight + TIMELINE_RIGHT_PAD, gutter, plotHeight, height });
   const maxChars = Math.floor((gutter - 8 - 14) / 6.6);
-  for (const lane of lanes) drawLane(svg, lane, maxChars, xOf);
+  for (const lane of lanes) drawLane(svg, lane, maxChars, xOf, width);
   svg.appendChild(svgEl('line', {
     class: 'timeline-now', x1: xOf(now), x2: xOf(now), y1: 0, y2: plotHeight,
     stroke: 'var(--text-secondary)', 'stroke-width': 1, 'stroke-dasharray': '4 3',
@@ -211,10 +229,9 @@ export function renderTimeline(live) {
   timelineSignature = signature;
   hideTooltip();
   const drawn = drawTimeline(container, live.sessions, width, now);
-  const rebuilds = live.sessions.flatMap((s) => s.rebuilds || []);
-  const priced = rebuilds.filter((r) => typeof r.premium === 'number');
-  const premium = priced.length ? `, +${formatCost(priced.reduce((sum, r) => sum + r.premium, 0))}` : '';
-  const rebuildNote = rebuilds.length ? ` · ${plural(rebuilds.length, 'cache rebuild', 'cache rebuilds')}${premium}` : '';
+  const totals = rebuildTotals(live.sessions.flatMap((s) => s.rebuilds || []));
+  const premium = totals.premium === null ? '' : `, +${formatCost(totals.premium)}`;
+  const rebuildNote = totals.count ? ` · ${plural(totals.count, 'cache rebuild', 'cache rebuilds')}${premium}` : '';
   document.getElementById('timelineNote').textContent =
     `${plural(drawn.lanes, 'session', 'sessions')} today · ${drawn.live} live${rebuildNote}`;
 }
