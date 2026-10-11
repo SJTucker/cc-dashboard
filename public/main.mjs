@@ -61,6 +61,11 @@ let drawErrorShown = false;
 // sets it to null, because renderPayload reads state.currentDays and would draw the old
 // range's buckets with the new range's rules.
 let lastPayload = null;
+// True from the start of a fetchAll until the newest load's all-settled step. Between
+// the first draw of a load and that step, lastPayload still holds the previous load,
+// and a resize that redrew it would draw old data over the new. redrawCharts loads
+// instead while this is set. A superseded load never clears it, so the newest load does.
+let loadInFlight = false;
 
 // Time of the last successful summary load, shown as Sync in the status strip.
 let lastLoadedAt = null;
@@ -151,6 +156,7 @@ const FETCH_ALL_OPTIONAL = ['rtk', 'sessions', 'reviews'];
 async function fetchAll({ busy = false } = {}) {
   const isLatest = loads.next();
   drawErrorShown = false;
+  loadInFlight = true;
 
   // Only user-started loads show the busy state. Whichever request is newest
   // clears it when it settles, even a quiet poll, because an older busy request's
@@ -194,6 +200,7 @@ async function fetchAll({ busy = false } = {}) {
     reportDrawError,
     onAllSettled: ({ summary, rtk, limits, sessions, reviews }) => {
       setBusy(false);
+      loadInFlight = false;
       lastPayload = { data: summary, rtk, limits, sessions, reviews: reviewsSince(mark, reviews) };
     },
   });
@@ -299,14 +306,14 @@ function reportDrawError(err) {
   // Must never throw: loadPanels calls it from a catch, and a throw here would skip
   // the all-settled step, so the busy state would never clear. Each step is guarded
   // on its own so one failure does not stop the others.
-  try { console.error(err); } catch { /* nothing left to report to */ }
+  console.error(err);
   drawErrorShown = true;
+  clearSignatures();
   try {
     const banner = document.getElementById('statusBanner');
     banner.hidden = false;
     banner.textContent = `Couldn't draw the page: ${err?.message ?? err}`;
   } catch { /* the banner is missing or err has a throwing message getter */ }
-  try { clearSignatures(); } catch { /* assigning two module variables cannot fail */ }
   try { resetTimeline(); } catch { /* the timeline is redrawn by the next load */ }
 }
 
@@ -356,7 +363,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 function redrawCharts({ changes = true, refetch = false } = {}) {
   clearSignatures(); // the width changed, so the same data still needs redrawing
   resetTimeline();
-  if (refetch || !lastPayload) {
+  if (refetch || !lastPayload || loadInFlight) {
     runLoad();
   } else {
     try {
