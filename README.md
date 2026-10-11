@@ -514,6 +514,8 @@ lib/config-dir.js      loadConfig: the one place the server reads the environmen
 lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
 lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeouts, and the server's one shared handle
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window, for the Setup changes panel
+lib/extract-pool.js    Runs extractFile on worker threads, and reports whether the threads could start
+lib/extract-worker.js  The body of one pool worker thread
 lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts, slash commands and per-session summaries, and tags the calls that rebuilt the prompt cache (markRebuilds)
 lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
