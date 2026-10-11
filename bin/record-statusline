@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 'use strict';
 
-// Piped one line of statusLine JSON on stdin by a user's statusline script.
-// Its own stdout becomes part of the rendered statusline, so this script must
-// never print anything or exit non-zero, whatever stdin contains.
+// Piped one line of statusLine-shaped JSON on stdin by the mod's session.measure
+// hook (mod/hooks/register.ts). The mod reports a non-zero exit as a failure in
+// the transcript, so this script must exit 0 whatever stdin contains. It never
+// prints anything, because the mod does not use its stdout.
 // It records two things: the plan rate limits (lib/limits.js) and a snapshot of
 // the session's cost block (lib/sessions.js). Each runs on its own, so a failure
 // in one does not stop the other.

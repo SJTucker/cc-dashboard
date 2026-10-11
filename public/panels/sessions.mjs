@@ -33,8 +33,8 @@ let sessionToggles = new Map();
 // Runs on every renderPayload, like renderLimits, and rebuilds when the payload,
 // the expanded groups or the clock minute changed. The minute is there because
 // "Last active" moves with the clock even when the payload does not. Hidden off
-// Today and when no session has a snapshot, for example with no statusline hook
-// set up. The Running now table hides when no session is live.
+// Today and when no session has a snapshot, for example without the mod. The Running
+// now table hides when no session is live.
 export function renderSessions(live) {
   const panel = document.getElementById('sessionsPanel');
   panel.hidden = !live || !live.sessions.length || state.currentDays !== 'today';

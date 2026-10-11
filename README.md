@@ -88,9 +88,8 @@ recently. It makes no network request of its own.
   The dashboard's Claude Code mod runs it after each turn (see "Setting up the
   recorder" below). It writes the rate limits to
   `~/.claude/rate-limits.json`, or `$CLAUDE_CONFIG_DIR/rate-limits.json` when that
-  is set. With the mod, its numbers change after each main turn, and when a
-  rate-limit window moves 1 point. Without the mod, they change after every API
-  response in any running session, as before.
+  is set. Its numbers change after each main turn, and when a rate-limit window
+  moves 1 point.
   The same script also keeps one small snapshot per session, holding that
   session's cost and duration, in
   `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`).
@@ -105,8 +104,7 @@ recently. It makes no network request of its own.
   it started". That counter is Claude Code's own and includes calls that write no
   transcript line, such as session titles. So it is usually the higher of the two.
   Cost today can be higher while subagents run. Subagent calls reach the
-  transcripts right away. The counter updates after the main session's next turn,
-  or on the next statusline render without the mod.
+  transcripts right away. The counter updates after the main session's next turn.
 
 ### Setting up the recorder
 
@@ -273,12 +271,6 @@ show "—". Subagent tool calls do not change the state of the main loop. A Bash
 command's first 60 characters are stored in the activity file and shown on the page,
 so the text can contain what you typed in that command.
 
-### Without the mod
-
-The scripts in `bin/` also run from your own statusline script and a `SessionEnd`
-hook. SETUP.md has the steps and lists what that route leaves out. Use that route or
-the mod, not both.
-
 ### What the panels show
 
 When either window reaches 75%, a warning banner at the top of the page shows on
@@ -333,8 +325,7 @@ Cost today.
 
 The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
 any other end, such as quitting or `/resume`. It reads this from
-`bin/record-session-end`, which the mod runs when a session ends. Without the mod,
-the `SessionEnd` hook from SETUP.md's "Without the mod" runs it. With neither, a
+`bin/record-session-end`, which the mod runs when a session ends. Without the mod, a
 session shows as live for 10 minutes after its last response. So after a `/clear`, the
 old session and the new one both show as live for up to 10 minutes. A resumed session keeps its
 session id, so its row shows as live again after its next response.
@@ -543,8 +534,7 @@ lib/store.js           The transcript database, transcripts.db, through node:sql
 lib/transcript-files.js  Finds the transcripts: getProjectsDir (<config dir>/projects) and findJsonlFiles
 lib/updates.js         Verdicts on Claude Code releases: parses the changelog, lists versions in transcripts, writes updates.json
 bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
-bin/record-limits      Old name for bin/record-statusline, kept as a wrapper
-bin/record-session-end Marks a session snapshot ended, from SessionEnd hook JSON on stdin
+bin/record-session-end Marks a session snapshot ended, from the mod's session-end JSON on stdin
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/review-session     Lists ended sessions to review and records Haiku's suggestions in transcripts.db
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes

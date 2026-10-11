@@ -222,7 +222,7 @@ test('bin/record-statusline records with a PORT that the server would refuse', (
   assert.strictEqual(readSnapshot(sessions).sessionId, 'abc-123');
 });
 
-for (const name of ['record-statusline', 'record-limits']) {
+for (const name of ['record-statusline']) {
   test(`bin/${name} writes the session snapshot and the rate limits`, () => {
     const { config, sessions, limits } = configDir();
     const input = statuslineInput({ rate_limits: { five_hour: { used_percentage: 12.5, resets_at: null } } });
@@ -252,7 +252,7 @@ for (const name of ['record-statusline', 'record-limits']) {
 }
 
 test('every bin script is executable', () => {
-  for (const name of ['record-statusline', 'record-limits', 'record-session-end']) {
+  for (const name of ['record-statusline', 'record-session-end']) {
     const mode = fs.statSync(path.join(__dirname, '..', 'bin', name)).mode;
     assert.ok(mode & 0o100, `${name} has the owner exec bit`);
   }

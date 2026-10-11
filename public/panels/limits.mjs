@@ -27,8 +27,8 @@ function formatReset(ms) {
 
 // The usage-cache source only refreshes while Claude Code runs, and /usage itself
 // stops trusting cached bars after 60 minutes, so the panel says so past that age.
-// The statusline source changes after every API response, so it only reaches this
-// age when no session has run for an hour. The same threshold applies to it.
+// The rate-limits file the mod writes changes after each main turn, so it only reaches
+// this age when no session has run for an hour. The same threshold applies to it.
 const LIMITS_STALE_MS = 60 * 60 * 1000;
 
 // Plan usage describes right now, not a date range. The panel shows only on
