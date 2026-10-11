@@ -857,7 +857,7 @@ test('a run over both limits opens one pool of poolSize() workers and reads ever
 
   await rows.refresh();
 
-  assert.deepStrictEqual(pool.opened, [poolSize()]);
+  assert.deepStrictEqual(pool.opened, [Math.min(poolSize(), 3)]);
   assert.deepStrictEqual(viaPool, files, 'dispatched newest first');
   assert.strictEqual(rows.entries().length, 3);
 });
@@ -1202,8 +1202,42 @@ test('the line counts only the files that were out of date, and names the worker
   await rows.refresh();
 
   assert.strictEqual(spy.lines.length, 1);
-  assert.match(spy.lines[0], new RegExp(`^\\[rows\\] Read 2 of 2 transcripts \\(\\d+ (B|KB)\\) in \\d+(\\.\\d)? (ms|s) with ${poolSize()} workers?$`));
+  assert.match(spy.lines[0], new RegExp(`^\\[rows\\] Read 2 of 2 transcripts \\(\\d+ (B|KB)\\) in \\d+(\\.\\d)? (ms|s) with ${Math.min(poolSize(), 2)} workers?$`));
   second.close();
+});
+
+test('a refresh issued from a rejected refresh settles instead of joining the failed run', { timeout: 5000 }, async () => {
+  const rows = createRowStore({ projectsDir: () => { throw new Error('no projects dir'); } });
+  const second = await rows.refresh({ since: 0 }).then(() => 'resolved', () => rows.refresh({ since: 0 }).then(() => 'resolved', (err) => `rejected: ${err.message}`));
+  assert.match(second, /^(resolved|rejected)/);
+});
+
+test('after the main-thread fallback the startup line names no workers', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const { withPool } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  [0, 1, 2].forEach((i) => writeFile(dir, `f${i}`, [String(i)], 2 * DAY_MS + i * HOUR_MS));
+  const lines = [];
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    log: (line) => lines.push(line),
+    openPool: (size, fn) => withPool(2, fn, { workerFile: path.join(__dirname, 'fixtures', 'exit-worker.js') }),
+    poolLimits: { files: 0, bytes: 0 },
+  });
+  await rows.refresh();
+  assert.strictEqual(lines.length, 1);
+  assert.match(lines[0], /^\[rows\] Read 3 of 3 transcripts/);
+  assert.doesNotMatch(lines[0], / with /);
+});
+
+test('the pool is opened with no more workers than files', async () => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'only', ['1'], 2 * DAY_MS);
+  const sizes = [];
+  const pool = fakePool(extractFile);
+  const rows = createRowStore({ projectsDir: () => dir, openPool: (size, fn) => { sizes.push(size); return pool.openPool(size, fn); }, poolLimits: { files: 0, bytes: 0 } });
+  await rows.refresh();
+  assert.deepStrictEqual(sizes, [1]);
 });
 
 test('a store with no log option prints nothing', async (t) => {
