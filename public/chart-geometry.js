@@ -118,27 +118,84 @@ function hourTicks(start, end) {
   return ticks;
 }
 
-// One lane per session that has a span, earliest first span at the top. Each bar
-// is { start, end, x, width, open }. The last span of a live session runs to now
-// and is open, but only when its last call is within liveWindowMs of now. A session
-// counts as live on its transcript's mtime, which can be newer than its last call,
-// and stretching the bar then would draw activity that did not happen. A bar is at
-// least minWidth px wide, so a one-call span still shows. liveWindowMs matches
-// LIVE_WINDOW_MS in lib/sessions.js.
+// Each listed session's parent lane: the session a /clear ended to start it
+// (clearedFrom), skipping a cleared session that has no span today. A session whose
+// link leads to no listed session with a span has no parent. A loop is cut where it
+// is found, so every session still gets a lane.
+function clearParents(sessions, shown) {
+  const byId = new Map(sessions.filter((s) => typeof s.sessionId === 'string').map((s) => [s.sessionId, s]));
+  const parent = new Map();
+  for (const s of shown) {
+    const seen = new Set([s]);
+    for (let p = byId.get(s.clearedFrom); p && !seen.has(p); p = byId.get(p.clearedFrom)) {
+      if (p.spans.length) {
+        parent.set(s, p);
+        break;
+      }
+      seen.add(p);
+    }
+  }
+  for (const s of shown) {
+    const seen = new Set([s]);
+    for (let p = parent.get(s); p; p = parent.get(p)) {
+      if (seen.has(p)) {
+        parent.delete(s);
+        break;
+      }
+      seen.add(p);
+    }
+  }
+  return parent;
+}
+
+// One lane per session that has a span. Top-level lanes are ordered by first span
+// start. A session a /clear started sits directly under the session it replaced
+// (clearParents), with follows set to that session's lane; two such sessions go
+// earliest first. Each bar is { start, end, x, width, open }. The last span of a live
+// session runs to now and is open, but only when its last call is within
+// liveWindowMs of now. A session counts as live on its transcript's mtime, which can
+// be newer than its last call, and stretching the bar then would draw activity that
+// did not happen. A bar is at least minWidth px wide, so a one-call span still shows.
+// liveWindowMs matches LIVE_WINDOW_MS in lib/sessions.js.
 function laneLayout(sessions, xOf, now, minWidth = 3, liveWindowMs = 10 * 60 * 1000) {
-  return sessions
-    .filter((s) => s.spans.length)
-    .sort((a, b) => a.spans[0][0] - b.spans[0][0])
-    .map((session, lane) => {
-      const last = session.spans.length - 1;
-      const bars = session.spans.map(([start, end], i) => {
-        const open = i === last && session.live === true && now - end <= liveWindowMs;
-        const to = open ? now : end;
-        const x = xOf(start);
-        return { start, end: to, x, width: Math.max(minWidth, xOf(to) - x), open };
-      });
-      return { session, lane, bars };
+  const shown = sessions.filter((s) => s.spans.length);
+  const parent = clearParents(sessions, shown);
+  const byStart = (a, b) => a.spans[0][0] - b.spans[0][0];
+  const children = new Map();
+  for (const [s, p] of parent) {
+    if (!children.has(p)) children.set(p, []);
+    children.get(p).push(s);
+  }
+  const ordered = [];
+  const visit = (s) => {
+    ordered.push(s);
+    for (const child of (children.get(s) || []).sort(byStart)) visit(child);
+  };
+  for (const s of shown.filter((x) => !parent.has(x)).sort(byStart)) visit(s);
+
+  const laneOf = new Map();
+  return ordered.map((session, lane) => {
+    const last = session.spans.length - 1;
+    const bars = session.spans.map(([start, end], i) => {
+      const open = i === last && session.live === true && now - end <= liveWindowMs;
+      const to = open ? now : end;
+      const x = xOf(start);
+      return { start, end: to, x, width: Math.max(minWidth, xOf(to) - x), open };
     });
+    const result = { session, lane, bars, follows: parent.has(session) ? laneOf.get(parent.get(session)) : null };
+    laneOf.set(session, result);
+    return result;
+  });
+}
+
+// The Session timeline's /clear link: a cubic curve from (x1, y1), the end of the
+// old session's last bar, to (x2, y2), the start of the new session's first bar. It
+// leaves and arrives horizontally. The control points sit 60% of the gap in from each
+// end, and at least 10px, so a next session that starts before the old one's bar
+// ends still gets a curve.
+function linkPath(x1, y1, x2, y2) {
+  const k = Math.max(10, (x2 - x1) * 0.6);
+  return `M${x1},${y1} C${x1 + k},${y1} ${x2 - k},${y2} ${x2},${y2}`;
 }
 
 // The Session timeline's prompt-cache rebuild marks for one lane, in time order.
@@ -276,7 +333,7 @@ function rebuildTotals(rebuilds) {
 }
 
 if (typeof module === 'object') module.exports = {
-  rebuildTotals,
+  rebuildTotals, linkPath,
   labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
 };
