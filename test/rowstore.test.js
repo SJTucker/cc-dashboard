@@ -707,42 +707,25 @@ test('version 1 rows of a deleted transcript get each tool use model from its ca
 const HOUR_MS = 60 * 60 * 1000;
 const tick = () => new Promise((resolve) => setImmediate(resolve));
 
-// Rows with nothing in them, for tests that only care when a file finishes loading.
-const emptyRows = () => ({ ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], commands: [], sessions: Object.create(null), minT: null, maxT: null });
-
 // Moves a file's mtime one second later, which makes its stored entry out of date.
 function bump(file) {
   const seconds = fs.statSync(file).mtimeMs / 1000 + 1;
   fs.utimesSync(file, seconds, seconds);
 }
 
-// A row store whose extract returns empty rows. While ctl.hold is true, each file
-// waits until the test calls release(file). `reads` lists the files extract was
-// called for, in call order. `clock` is the store's `now`.
-function gatedStore(dir, { store = null } = {}) {
-  const gates = new Map();
-  const reads = [];
-  const ctl = { hold: false };
-  const gateFor = (file) => {
-    if (!gates.has(file)) {
-      let open;
-      const promise = new Promise((resolve) => { open = resolve; });
-      gates.set(file, { promise, open });
-    }
-    return gates.get(file);
-  };
+// A row store whose extract is gatedExtract() (test/helpers.js). `clock` is the
+// store's `now`. With `pool`, the files are asked for through a fake pool all at once,
+// as the worker pool does, instead of one after another.
+function gatedStore(dir, { store = null, pool = false } = {}) {
+  const g = helpers.gatedExtract();
   const clock = { now: Date.now() };
   const rows = createRowStore({
     projectsDir: () => dir,
     store,
     now: () => clock.now,
-    extract: async (file) => {
-      reads.push(file);
-      if (ctl.hold) await gateFor(file).promise;
-      return emptyRows();
-    },
+    ...(pool ? { openPool: (size, fn) => fn({ extract: g.extract }), poolLimits: { files: 0, bytes: 0 } } : { extract: g.extract }),
   });
-  return { rows, reads, ctl, clock, release: (file) => gateFor(file).open() };
+  return { rows, reads: g.reads, ctl: g.ctl, clock, release: g.release };
 }
 
 test('out-of-date files are read in descending mtime order', async () => {
@@ -987,4 +970,192 @@ test('after a worker has returned a result, a worker that dies leaves its file f
   const byPath = Object.fromEntries(rows.entries().map((e) => [e.path, e.rows]));
   assert.deepStrictEqual(files.map((f) => byPath[f].calls.length), [2, 1, 1], 'only the newest file was read before the worker died');
   assert.ok(files.every((f) => byPath[f].ok));
+});
+
+// True when `promise` settles within 200 ms.
+const settlesSoon = (promise) => Promise.race([promise.then(() => true, () => true), new Promise((resolve) => setTimeout(() => resolve(false), 200))]);
+
+// Four transcripts that already have entries, and are then modified so that each one
+// is out of date. Their ages are 0, 1 hour, 3 days and 20 days. The store holds from
+// here on, so a read waits for release(file).
+async function staleFiles(g, dir) {
+  const files = {
+    today: writeFile(dir, 'a-today', ['1'], 0),
+    hour: writeFile(dir, 'b-hour', ['2'], HOUR_MS),
+    week: writeFile(dir, 'c-week', ['3'], 3 * DAY_MS),
+    old: writeFile(dir, 'd-old', ['4'], 20 * DAY_MS),
+  };
+  await g.rows.refresh();
+  for (const file of Object.values(files)) bump(file);
+  g.clock.now += REFRESH_SHARE_MS + 1;
+  g.ctl.hold = true;
+  return files;
+}
+
+test('refresh({ since }) resolves once the out-of-date files at or after since are loaded, before the older ones', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir);
+  const f = await staleFiles(g, dir);
+  const phaseOneReads = g.reads.length;
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS }).then(() => { resolved = true; });
+  g.release(f.today);
+  await tick();
+  assert.strictEqual(resolved, false, 'the file modified an hour ago is still being read');
+
+  g.release(f.hour);
+  await waiting;
+  assert.ok(!g.reads.slice(phaseOneReads).includes(f.old), 'the 20-day-old file has not been read');
+
+  g.release(f.week);
+  g.release(f.old);
+  await g.rows.refresh();
+});
+
+test('refresh({ since }) does not resolve early when loads finish out of dispatch order', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir, { pool: true });
+  const f = await staleFiles(g, dir);
+  const phaseOneReads = g.reads.length;
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS }).then(() => { resolved = true; });
+  assert.deepStrictEqual(g.reads.slice(phaseOneReads), [f.today, f.hour, f.week, f.old], 'every file is asked for at once, newest first');
+
+  g.release(f.hour);
+  g.release(f.old);
+  await tick();
+  assert.strictEqual(resolved, false, 'two files are loaded but the newest is not');
+
+  g.release(f.today);
+  await waiting;
+  g.release(f.week);
+  await g.rows.refresh();
+});
+
+test('on a store with no entries, refresh({ since }) waits for every file', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const files = [writeFile(dir, 'a', ['1'], 0), writeFile(dir, 'b', ['2'], 3 * DAY_MS), writeFile(dir, 'c', ['3'], 20 * DAY_MS)];
+  const g = gatedStore(dir);
+  g.ctl.hold = true;
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: Date.now() + DAY_MS }).then(() => { resolved = true; });
+  g.release(files[0]);
+  g.release(files[1]);
+  await tick();
+  assert.strictEqual(resolved, false, 'the 20-day-old file has no entry yet');
+
+  g.release(files[2]);
+  await waiting;
+  assert.strictEqual(g.rows.entries().length, 3);
+});
+
+test('a file with no entry is waited for whatever its mtime, next to an out-of-date file that has one', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir, { pool: true });
+  const today = writeFile(dir, 'a-today', ['1'], 0);
+  const week = writeFile(dir, 'b-week', ['2'], 3 * DAY_MS);
+  await g.rows.refresh();
+  const fresh = writeFile(dir, 'c-new-old', ['3'], 5 * DAY_MS);
+  bump(today);
+  bump(week);
+  g.clock.now += REFRESH_SHARE_MS + 1;
+  g.ctl.hold = true;
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS }).then(() => { resolved = true; });
+  g.release(today);
+  await tick();
+  assert.strictEqual(resolved, false, 'the new file is not loaded');
+
+  g.release(fresh);
+  await waiting;
+  g.release(week);
+  await g.rows.refresh();
+});
+
+test('a since later than every out-of-date file resolves once the stat pass is done', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir);
+  const f = await staleFiles(g, dir);
+
+  const waiting = g.rows.refresh({ since: Date.now() + DAY_MS });
+  assert.strictEqual(await settlesSoon(waiting), true);
+
+  for (const file of Object.values(f)) g.release(file);
+  await g.rows.refresh();
+});
+
+test('a file whose mtime equals since is waited for', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir);
+  const f = await staleFiles(g, dir);
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: fs.statSync(f.hour).mtimeMs }).then(() => { resolved = true; });
+  g.release(f.today);
+  await tick();
+  assert.strictEqual(resolved, false);
+
+  g.release(f.hour);
+  await waiting;
+  g.release(f.week);
+  g.release(f.old);
+  await g.rows.refresh();
+});
+
+test('a caller that joins after its files have loaded resolves at once, and a run that finished under 2 s ago is reused', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir);
+  const f = await staleFiles(g, dir);
+
+  const run = g.rows.refresh();
+  g.release(f.today);
+  g.release(f.hour);
+  await tick();
+  const late = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS });
+  assert.strictEqual(await settlesSoon(late), true);
+
+  g.release(f.week);
+  g.release(f.old);
+  await run;
+  const readsAfterRun = g.reads.length;
+  assert.strictEqual(await settlesSoon(g.rows.refresh({ since: 0 })), true);
+  assert.strictEqual(g.reads.length, readsAfterRun, 'no new run started');
+});
+
+test('refresh({ since }) resolves before persist, and refresh() waits for it', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const store = openStore(tmpDb());
+  let puts = 0;
+  const realPut = store.put.bind(store);
+  store.put = (...args) => {
+    puts += 1;
+    return realPut(...args);
+  };
+  const g = gatedStore(dir, { store });
+  const f = await staleFiles(g, dir);
+  const putsBefore = puts;
+
+  const full = g.rows.refresh();
+  const partial = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS });
+  g.release(f.today);
+  g.release(f.hour);
+  await partial;
+  assert.strictEqual(puts, putsBefore, 'the 3-day and 20-day-old files are not read yet, so nothing is written');
+
+  g.release(f.week);
+  g.release(f.old);
+  await full;
+  assert.ok(puts >= putsBefore + 2, 'the two old files are written before refresh() resolves');
+  store.close();
+});
+
+test('a run that throws rejects the callers that passed since, instead of leaving them waiting', { timeout: 5000 }, async () => {
+  const rows = createRowStore({ projectsDir: () => { throw new Error('no projects root'); } });
+
+  await assert.rejects(rows.refresh({ since: 0 }), /no projects root/);
+  await assert.rejects(rows.refresh(), /no projects root/, 'the next refresh starts a new run');
 });
