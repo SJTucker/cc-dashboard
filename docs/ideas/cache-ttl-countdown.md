@@ -11,18 +11,38 @@ A reply after the cache expires pays to write the whole context to the cache aga
 waited 4 minutes on a 5-minute TTL is worth answering now, or worth a `/clear` before
 the next prompt.
 
-## What exists
+## Shipped 2026-10-11: Running now
 
-- Running now shows ⏸ waiting on you and Last active per session
-  (`public/panels/sessions.mjs`).
-- Each call's cache write is split into `ephemeral_5m_input_tokens` and
-  `ephemeral_1h_input_tokens`, which says which TTL the session's last call wrote.
+A session waiting on you shows a second line under "⏸ waiting on you":
+
+- `cache 4 min left · $0.38 to rebuild after`
+- `cache expires in under 1 min · $0.38 to rebuild after`
+- `cache expired · next reply pays $0.38 to rebuild`
+
+The cost clause is left out for an unpriced model. Sessions that are working, or
+that have no mod activity, show no line.
+
+How it is worked out (`cacheOf` in `lib/sessions.js`, `cacheLine` in
+`public/session-groups.js`):
+
+- The TTL comes from the session's main-thread calls in time order, using `nextTtl`
+  from `lib/extract.js`: a 1-hour write gives 1 hour, a 5-minute write gives 5
+  minutes, and a pure read keeps the earlier TTL. Subagent calls are ignored.
+- The cache expires at the newest main call's timestamp plus the TTL.
+- The rebuild cost is the newest main call's context written at the TTL's write
+  price, minus the same tokens read, at today's price.
+- The page has no timer. `minutesLeft` changes in the payload once a minute and the
+  5 s poll redraws it.
+
+Known limits:
+
+- The countdown counts from the transcript line's timestamp. The API counts the TTL
+  from the start of the request, so the real expiry can be earlier than shown by up
+  to the response time.
+- It assumes a cache read refreshes a 1-hour entry to a full hour. The prompt
+  caching docs do not state this for 1-hour entries.
 
 ## Open questions
 
-- Whether a cache read refreshes the TTL as well as a write. Anthropic's prompt
-  caching docs say a hit refreshes it, which needs a check.
-- What to show past expiry: the cost the next reply will pay to rebuild, at the
-  session's current context size.
 - Whether the countdown belongs in Claude Code's statusline through the mod, where
   the user is looking, instead of on the page.
