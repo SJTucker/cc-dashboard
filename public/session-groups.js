@@ -116,6 +116,19 @@ function activityLabel(activity) {
   return { ...s, text: `${s.glyph} ${s.label}` };
 }
 
+// Second line of the State cell for a session waiting on the user: how long its
+// prompt cache lasts and what the next reply pays to rebuild it. `cache` is the
+// session's cache field from lib/sessions.js, and a negative minutesLeft means it
+// expired. `formatUsd` is formatCost from format.mjs, passed in because this file is
+// a plain script and cannot import it. Null without a cache.
+function cacheLine(cache, formatUsd) {
+  if (!cache) return null;
+  const cost = cache.rebuildUsd == null ? null : formatUsd(cache.rebuildUsd);
+  if (cache.minutesLeft < 0) return cost ? `cache expired · next reply pays ${cost} to rebuild` : 'cache expired';
+  const left = cache.minutesLeft === 0 ? 'cache expires in under 1 min' : `cache ${cache.minutesLeft} min left`;
+  return cost ? `${left} · ${cost} to rebuild after` : left;
+}
+
 // Doing now column: the running tool's name, then the subagent count. Null when
 // nothing is running. The tool's detail is left out: a long Bash command widened the
 // column and moved the table on every 5 s poll.
@@ -127,4 +140,4 @@ function doingNow(activity) {
   return parts.length ? parts.join(' · ') : null;
 }
 
-if (typeof module === 'object') module.exports = { groupSessions, itemCost, costShare, runningSessions, activityLabel, doingNow };
+if (typeof module === 'object') module.exports = { groupSessions, itemCost, costShare, runningSessions, activityLabel, cacheLine, doingNow };
