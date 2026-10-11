@@ -992,8 +992,12 @@ html, body {
 .timeline-rebuild:hover { stroke: var(--text-primary); stroke-width: 2; }
 .timeline-rebuild-count { font-size: 9px; fill: var(--text-secondary); pointer-events: none; }
 /* The list scrolls inside the panel past 48rem, as the Live sessions tables do at
-   20rem. The wrapper is in index.html, so the 5 s redraw keeps its scroll position. */
-.review-scroll { overflow: auto; max-height: 48rem; }
+   20rem. The wrapper is in index.html, so the 5 s redraw keeps its scroll position.
+   A suggestion row reaches 6px past the text on each side for its hover background
+   (margin: 0 -6px below). The wrapper's 6px padding holds that, so the row does
+   not overflow and scroll sideways. The matching negative margin keeps the text
+   lined up with the panel heading. */
+.review-scroll { overflow: auto; max-height: 48rem; margin: 0 -6px; padding: 0 6px; }
 .review-scroll:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 .reviews-list { list-style: none; margin: 0; padding: 0; }
 .review { padding: 8px 0; border-top: 1px solid var(--border); }
