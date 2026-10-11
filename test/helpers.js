@@ -84,6 +84,8 @@ function testConfig(t, name = 'cfg') {
 // config.configDir until the first request: the row store opens on the first scan.
 async function bootServer(t, config = testConfig(t, 'boot')) {
   const { createServer } = require('../server');
+  // The row store logs a "[rows] Read ..." line when its first read finishes.
+  t.mock.method(console, 'log', () => {});
   const server = createServer(config);
   t.after(async () => {
     await new Promise((resolve) => {
@@ -139,4 +141,30 @@ function freshServerDb(t) {
   return { serverDb, base, file };
 }
 
-module.exports = { tmpDir, removeTree, testConfig, bootServer, holdWriteLock, freshServerDb };
+// Rows with nothing in them, for tests that only care when a file finishes loading.
+const emptyRows = () => ({ ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], commands: [], sessions: Object.create(null), minT: null, maxT: null });
+
+// An async extract that returns emptyRows(). While ctl.hold is true, each file waits
+// until the test calls release(file). `reads` lists the files extract was called for,
+// in call order.
+function gatedExtract() {
+  const gates = new Map();
+  const reads = [];
+  const ctl = { hold: false };
+  const gateFor = (file) => {
+    if (!gates.has(file)) {
+      let open;
+      const promise = new Promise((resolve) => { open = resolve; });
+      gates.set(file, { promise, open });
+    }
+    return gates.get(file);
+  };
+  const extract = async (file) => {
+    reads.push(file);
+    if (ctl.hold) await gateFor(file).promise;
+    return emptyRows();
+  };
+  return { extract, reads, ctl, release: (file) => gateFor(file).open() };
+}
+
+module.exports = { emptyRows, gatedExtract, tmpDir, removeTree, testConfig, bootServer, holdWriteLock, freshServerDb };

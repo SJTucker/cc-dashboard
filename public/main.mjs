@@ -2,6 +2,8 @@ import { state, shown } from './state.mjs';
 
 import { createSequence } from './guards.mjs';
 
+import { loadPanels } from './load.mjs';
+
 import { getJson } from './api.mjs';
 
 import { escapeHtml } from './format.mjs';
@@ -32,25 +34,45 @@ const LIVE_POLL_MS = 5000;
 // (createPoller in public/poll.js), so a slow scan delays the next poll instead of
 // overlapping it.
 const livePoller = createPoller(() => runLoad(), LIVE_POLL_MS);
-// Signature of the last rendered payload. A 5s poll that redraws unconditionally
-// would tear down the SVG under the cursor and kill any open tooltip, so an
-// unchanged payload skips rendering entirely.
-let lastSignature = null;
+// Signatures of the last rendered summary and the last rendered rtk response. A 5s
+// poll that redraws unconditionally would tear down the SVG under the cursor and kill
+// any open tooltip, so an unchanged response skips rendering entirely. The two are
+// kept apart because the two requests settle at different times and each draws when
+// its own request settles.
+let lastSummarySignature = null;
+let lastRtkSignature = null;
+
+// Forces the next draw of every panel, for a change that the data does not show: a
+// new range, a new width, a draw that threw.
+function clearSignatures() {
+  lastSummarySignature = null;
+  lastRtkSignature = null;
+}
 // Numbers each fetchAll (see createSequence). A 30d request issued before a
 // Today click lands after it, and is dropped.
 const loads = createSequence();
-// The newest payload fetchAll returned. redrawCharts draws from it after a resize,
-// a hide or an expand, so a change of width makes no request. The range picker
+// True once a draw of the current load threw and reportDrawError wrote its banner.
+// renderMetaBanner leaves the banner alone while it is set, because the summary
+// usually settles last and would otherwise hide the error. fetchAll resets it.
+let drawErrorShown = false;
+// The newest payload fetchAll collected once all five requests settled. redrawCharts
+// draws from it after a resize, a hide or an expand, so a change of width makes no
+// request. The range picker
 // sets it to null, because renderPayload reads state.currentDays and would draw the old
 // range's buckets with the new range's rules.
 let lastPayload = null;
+// True from the start of a fetchAll until the newest load's all-settled step. Between
+// the first draw of a load and that step, lastPayload still holds the previous load,
+// and a resize that redrew it would draw old data over the new. redrawCharts loads
+// instead while this is set. A superseded load never clears it, so the newest load does.
+let loadInFlight = false;
 
 // Time of the last successful summary load, shown as Sync in the status strip.
 let lastLoadedAt = null;
 
-// Fills the status strip under the title. loadAndRender calls it on every
-// successful summary load, before renderPayload's unchanged-payload check, so Sync
-// moves on a quiet poll too. While live, the ring pulses once per call.
+// Fills the status strip under the title. drawSummary calls it on every successful
+// summary load, before drawSummaryPanels' unchanged-response check, so Sync moves on
+// a quiet poll too. While live, the ring pulses once per call.
 function renderStatusStrip(summary) {
   const active = document.querySelector('#rangePicker button.active');
   const status = formatStatus({
@@ -106,7 +128,7 @@ function setLive(on) {
 // On Today the summary cards sit in the sticky header in a compact form, so they
 // stay in view while scrolling. Other ranges show them as full cards in the page.
 // The one #summaryCards element moves between the two slots, so every card id
-// stays unique and renderPayload fills it the same way wherever it is.
+// stays unique and drawSummaryPanels fills it the same way wherever it is.
 function placeSummaryCards() {
   const cards = document.getElementById('summaryCards');
   const today = state.currentDays === 'today';
@@ -114,7 +136,7 @@ function placeSummaryCards() {
   cards.classList.toggle('cards-compact', today);
   // Hidden off Today, so the empty slot cannot wrap onto a line of its own.
   document.getElementById('headerCards').hidden = !today;
-  // renderPayload hides these two on Today too, but only once the load finishes.
+  // renderCards hides these two on Today too, but only once the load finishes.
   // Hiding them here keeps the old range's values out of the header meanwhile.
   if (today) {
     document.getElementById('burnCard').hidden = true;
@@ -127,22 +149,26 @@ function placeSummaryCards() {
 // load and is needed again.
 const FETCH_ALL_OPTIONAL = ['rtk', 'sessions', 'reviews'];
 
-// Issues the five requests and waits for all of them. Returns { data, rtk, limits,
-// sessions, reviews }, or null when a newer load started while this one waited.
+// Issues the five requests and draws each panel as its own request settles
+// (loadPanels in public/load.mjs). Resolves to { summary, rtk, limits, sessions,
+// reviews } once all five have settled, or to null when a newer load started while
+// this one waited.
 async function fetchAll({ busy = false } = {}) {
   const isLatest = loads.next();
+  drawErrorShown = false;
+  loadInFlight = true;
 
   // Only user-started loads show the busy state. Whichever request is newest
   // clears it when it settles, even a quiet poll, because an older busy request's
-  // response is dropped below and would never clear it.
+  // response is dropped and would never clear it.
   if (busy) setBusy(true);
 
   // Every request is issued before any is awaited, so the summary never
   // waits on the others. None of the promises rejects (getJson never does). rtk
   // and limits are optional and resolve to null on failure, so an absent or
   // unreadable source hides its panel. A failed summary resolves to an error
-  // payload, which renderPayload turns into the error banner after limits have
-  // rendered.
+  // payload, which drawSummaryPanels turns into the error banner after limits have
+  // rendered (loadPanels keeps that order).
   const summaryRequest = getJson(`/api/summary?days=${state.currentDays}`);
   // A request whose every panel is hidden is skipped (see neededRequests in
   // visibility.js), and its panels render from null, as on a failed request.
@@ -158,35 +184,54 @@ async function fetchAll({ busy = false } = {}) {
   const mark = reviewsMark();
   const reviewsRequest = needed.has('reviews') ? requestReviews() : Promise.resolve(null);
 
-  const [data, rtk, limits, sessions, reviews] = await Promise.all([summaryRequest, rtkRequest, limitsRequest, sessionsRequest, reviewsRequest]);
-  if (!isLatest()) return null; // a newer request superseded this response
-  setBusy(false);
-  if (!data.error) lastLoadedAt = Date.now();
-  // A dismiss or undo during the requests keeps the reviews on screen (reviewsSince).
-  lastPayload = { data, rtk, limits, sessions, reviews: reviewsSince(mark, reviews) };
-  return lastPayload;
+  // The range rule runs before the first draw of this load.
+  applyRangeRule();
+  return loadPanels({
+    requests: { summary: summaryRequest, rtk: rtkRequest, limits: limitsRequest, sessions: sessionsRequest, reviews: reviewsRequest },
+    draws: {
+      limits: drawLimitsPanels,
+      // A dismiss or undo during the requests keeps the reviews on screen (reviewsSince).
+      reviews: (reviews) => { if (shown('reviews')) renderReviews(reviewsSince(mark, reviews)); },
+      sessions: drawSessionPanels,
+      rtk: drawRtk,
+      summary: drawSummary,
+    },
+    isLatest,
+    reportDrawError,
+    onAllSettled: ({ summary, rtk, limits, sessions, reviews }) => {
+      setBusy(false);
+      loadInFlight = false;
+      lastPayload = { data: summary, rtk, limits, sessions, reviews: reviewsSince(mark, reviews) };
+    },
+  });
+}
+
+// Plan usage, the sessions and the timeline show on Today only. Their renderers set
+// that, but a hidden panel's renderer is skipped, so the range rule is applied here
+// too.
+function applyRangeRule() {
+  if (state.currentDays === 'today') return;
+  for (const id of ['limitsPanel', 'sessionsPanel', 'timelinePanel']) document.getElementById(id).hidden = true;
 }
 
 // Plan usage describes right now: its "stale" suffix and its reset wording
 // (today vs. a dated form) depend on the clock, not on the fetched numbers, so
-// this has to run on every settled response. That includes one whose summary
-// failed, and one the payload signature would otherwise treat as unchanged.
-// These three panels show on Today only. Their renderers set that, but a hidden
-// panel's renderer is skipped, so the range rule is applied here too.
-function renderNowPanels({ limits, sessions, reviews }) {
-  if (state.currentDays !== 'today') {
-    for (const id of ['limitsPanel', 'sessionsPanel', 'timelinePanel']) document.getElementById(id).hidden = true;
-  }
+// this runs on every settled response, including one the summary signature would
+// treat as unchanged.
+function drawLimitsPanels(limits) {
   if (shown('limits')) renderLimits(limits);
+  renderLimitsBanner(limits);
+}
+
+function drawSessionPanels(sessions) {
   if (shown('sessions')) renderSessions(sessions);
   if (shown('timeline')) renderTimeline(sessions);
-  if (shown('reviews')) renderReviews(reviews);
-  renderLimitsBanner(limits);
 }
 
 // The status banner after a summary loaded: hidden, or a note that the projects
 // folder or its session files are missing.
 function renderMetaBanner(meta) {
+  if (drawErrorShown) return;
   const banner = document.getElementById('statusBanner');
   banner.hidden = true;
   if (!meta.dirExists) {
@@ -198,59 +243,86 @@ function renderMetaBanner(meta) {
   }
 }
 
-// Draws a payload from fetchAll, one call per section. lastSignature is set on the
-// last line, after every renderer has run. A renderer that throws therefore
-// leaves the previous signature, and reportDrawError clears that one. The panel
-// draw guards keep no key for a draw that threw, so those panels need no clearing.
-function renderPayload(payload) {
-  const { data, rtk } = payload;
-  renderNowPanels(payload);
+// Draws everything the summary feeds: the banner, cards, charts, models, attribution
+// and tools. lastSummarySignature is set on the last line, after every renderer has
+// run. A renderer that throws therefore leaves the previous signature, and
+// reportDrawError clears that one. The panel draw guards keep no key for a draw that
+// threw, so those panels need no clearing.
+function drawSummaryPanels(data) {
   if (data.error) {
     const banner = document.getElementById('statusBanner');
     banner.hidden = false;
     banner.textContent = `Couldn't load usage data: ${data.error}`;
-    lastSignature = null;
+    lastSummarySignature = null;
     return;
   }
-  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, rtk && rtk.summary]);
-  if (signature === lastSignature) return;
+  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models]);
+  if (signature === lastSummarySignature) return;
   renderMetaBanner(data.meta);
   renderCards(data);
   renderUsageCharts(data);
   renderModels(data);
   renderAttribution(data);
   if (shown('tools')) renderTools(data.tools || [], data.toolTotals);
+  lastSummarySignature = signature;
+}
+
+// The summary request's draw. The first one of the page's life, a failure included,
+// ends the "Loading…" lines (.first-load in style.css). Sync moves on every successful
+// load, a quiet poll included, so lastLoadedAt is set before the status strip reads it.
+function drawSummary(data) {
+  document.body.classList.remove('first-load');
+  if (!data.error) {
+    lastLoadedAt = Date.now();
+    renderStatusStrip(data.summary);
+  }
+  drawSummaryPanels(data);
+}
+
+// The rtk request's draw. The rtk panels depend on the summary of the rtk response only.
+function drawRtk(rtk) {
+  const signature = JSON.stringify([rtk && rtk.summary]);
+  if (signature === lastRtkSignature) return;
   renderRtk(rtk);
-  lastSignature = signature;
+  lastRtkSignature = signature;
 }
 
-async function loadAndRender(options) {
-  const payload = await fetchAll(options);
-  if (!payload) return;
-  // Sync moves on every successful load, a quiet poll included, so the strip is
-  // filled before renderPayload's unchanged-payload check.
-  if (!payload.data.error) renderStatusStrip(payload.data.summary);
-  renderPayload(payload);
+// Draws every panel from a payload that fetchAll collected, with no request. Used for
+// a redraw: a resize, a hidden-panel toggle or an expand. It does not move lastLoadedAt
+// or the status strip, which belong to a load.
+function renderPayload({ data, rtk, limits, sessions, reviews }) {
+  applyRangeRule();
+  drawLimitsPanels(limits);
+  drawSessionPanels(sessions);
+  if (shown('reviews')) renderReviews(reviews);
+  drawSummaryPanels(data);
+  drawRtk(rtk);
 }
 
-// A renderer that throws would otherwise reject loadAndRender with nothing to catch
-// it, and leave the page half drawn with no message. The banner names the error,
-// and clearing lastSignature makes the next poll draw every panel again.
+// A renderer that throws would otherwise leave the page half drawn with no message.
+// The banner names the error, and clearing the signatures makes the next poll draw
+// every panel again.
 function reportDrawError(err) {
+  // Must never throw: loadPanels calls it from a catch, and a throw here would skip
+  // the all-settled step, so the busy state would never clear. Each step is guarded
+  // on its own so one failure does not stop the others.
   console.error(err);
-  const banner = document.getElementById('statusBanner');
-  banner.hidden = false;
-  banner.textContent = `Couldn't draw the page: ${err?.message ?? err}`;
-  lastSignature = null;
-  resetTimeline();
+  drawErrorShown = true;
+  clearSignatures();
+  try {
+    const banner = document.getElementById('statusBanner');
+    banner.hidden = false;
+    banner.textContent = `Couldn't draw the page: ${err?.message ?? err}`;
+  } catch { /* the banner is missing or err has a throwing message getter */ }
+  try { resetTimeline(); } catch { /* the timeline is redrawn by the next load */ }
 }
 
 // Every load goes through runLoad, so no caller leaves a rejection unhandled.
 // runLoad never rejects, which createPoller requires (public/poll.js): a
 // rejected run would end the live poll chain. reportDrawError only writes text
-// to #statusBanner, which index.html always has, so the catch cannot throw.
+// to #statusBanner and never throws, so the catch cannot throw.
 function runLoad(options) {
-  return loadAndRender(options).catch(reportDrawError);
+  return fetchAll(options).catch(reportDrawError);
 }
 
 document.getElementById('rangePicker').addEventListener('click', (evt) => {
@@ -261,7 +333,7 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   const value = btn.dataset.days;
   state.currentDays = value === 'all' || value === 'today' ? value : Number(value);
   placeSummaryCards();
-  lastSignature = null; // the bucket keys change, so force a redraw
+  clearSignatures(); // the bucket keys change, so force a redraw
   lastPayload = null;
   setLive(state.currentDays === 'today');
   redrawChanges();
@@ -271,7 +343,7 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
 // Everything the Refresh button re-fetches. Applying prices calls it too, because
 // costs are computed in the server's scan and the server has just dropped that scan.
 function reloadAll() {
-  lastSignature = null;
+  clearSignatures();
   refreshRecords();
   runLoad({ busy: true });
   loadChanges();
@@ -289,9 +361,9 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 // request. It loads instead when there is no payload yet, or when resumeRequests
 // passes refetch because a request skipped at the last load is needed again.
 function redrawCharts({ changes = true, refetch = false } = {}) {
-  lastSignature = null; // the width changed, so the same data still needs redrawing
+  clearSignatures(); // the width changed, so the same data still needs redrawing
   resetTimeline();
-  if (refetch || !lastPayload) {
+  if (refetch || !lastPayload || loadInFlight) {
     runLoad();
   } else {
     try {

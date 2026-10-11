@@ -29,9 +29,10 @@ While editing the code, run `npm run watch`. Node's `--watch` flag restarts
 the server when `server.js` or any file under `lib/` changes. Files under
 `public/` are read from disk on each request, so a page reload picks them up
 without a restart. A restart keeps the stored rows in `cc-dashboard/transcripts.db`, so
-the first request after it reads the transcripts modified today and any that changed
-since the server stopped. When no database is available (see the Setup changes
-section), nothing is stored and the first request reads every transcript.
+the server starts reading the transcripts modified today, and any that changed since
+it stopped, as soon as it listens. When no database is available (see the Setup
+changes section), nothing is stored and it reads every transcript, on worker threads
+when there are many.
 
 ## rtk savings (optional)
 
@@ -514,6 +515,8 @@ lib/config-dir.js      loadConfig: the one place the server reads the environmen
 lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
 lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeouts, and the server's one shared handle
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window, for the Setup changes panel
+lib/extract-pool.js    Runs extractFile on worker threads, and reports whether the threads could start
+lib/extract-worker.js  The body of one pool worker thread
 lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts, slash commands and per-session summaries, and tags the calls that rebuilt the prompt cache (markRebuilds)
 lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
@@ -523,7 +526,7 @@ lib/price-store.js     Applied price history in prices.json
 lib/pricing.js         Built-in price table, dated price versions, cost calculation
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
-lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript when it changes or `EXTRACT_VERSION` changes, and stores settled ones
+lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript when it changes or `EXTRACT_VERSION` changes (newest first, on worker threads when many are out of date), lets a range wait only for the files it needs, and stores settled ones
 lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command, estimates the tokens kept out of context
 lib/scan-memo.js       Keeps the latest aggregate per range and bucket until a transcript changes or the date rolls over
 lib/session-id.js      Session id and snapshot file name patterns, and the age after which snapshot and activity files are deleted
@@ -550,6 +553,7 @@ public/guards.mjs      Request sequence numbers and per-panel redraw guards
 public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
 public/index.html      Page shell: the panels' markup, the plain scripts, then main.mjs as a module
 public/layout.js       orderRowKeys: the saved panel row order merged with the default order in index.html
+public/load.mjs        loadPanels: draws each panel when its own request settles, with no DOM access
 public/main.mjs        Starts the page: fetches the API routes, draws every panel, runs the 5 s live poll and the range picker
 public/poll.js         Runs the 5 s live poll so one poll finishes before the next one starts
 public/reviews.js      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath

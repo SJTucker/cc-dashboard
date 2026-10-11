@@ -8,8 +8,8 @@ import { createDrawGuard } from '../guards.mjs';
 import { REVIEW_DAYS } from '../constants.mjs';
 import { contextLine } from './sessions.mjs';
 
-// Draw guard for Session reviews, which renderPayload draws on every settled
-// response. redrawCharts leaves it alone, because a change of width does not
+// Draw guard for Session reviews, which main.mjs draws on every settled
+// reviews response. redrawCharts leaves it alone, because a change of width does not
 // change a table.
 const reviewsGuard = createDrawGuard();
 

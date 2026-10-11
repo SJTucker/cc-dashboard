@@ -1537,3 +1537,21 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
 .hidden-menu-item:focus-visible { background: var(--border); color: var(--text-primary); outline: none; }
 .hidden-menu-all { margin-top: 4px; border-top: 1px solid var(--border); border-radius: 0 0 4px 4px; }
 .hidden-menu-empty { margin: 6px 10px; color: var(--text-tertiary); font-size: 12px; }
+
+/* Until the first summary settles, public/main.mjs leaves .first-load on <body> and the
+   summary cards and the empty chart and list containers read "Loading…". The text comes
+   from a pseudo-element, so no renderer has to clear it: the renderers fill each
+   container, and drawSummary removes the class. The cards hold "—" in index.html, so
+   font-size 0 hides it while the pseudo-element sets its own size. */
+.first-load .card-value { font-size: 0; }
+.first-load .card-value::after,
+.first-load #costChart:empty::after,
+.first-load #tokenChart:empty::after,
+.first-load #cumulativeChart:empty::after,
+.first-load #tokenTypeChart:empty::after,
+.first-load #modelList:empty::after,
+.first-load #modelMixChart:empty::after {
+  content: 'Loading\2026';
+  color: var(--text-tertiary);
+  font: 400 13px var(--font-ui);
+}

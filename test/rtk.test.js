@@ -338,6 +338,77 @@ test('readRtkWindows returns one entry per range, exact to the second at the bou
   assert.deepStrictEqual(empty, { commands: 0, reachedPerCommand: null, keptOutShare: null });
 });
 
+test('readRtkWindows runs one query however many windows it is asked for', (t) => {
+  const t0 = new Date('2026-09-04T16:15:00Z').getTime();
+  const file = makeDb([{ timestamp: utcStamp(new Date(t0)), input_tokens: 1000, output_tokens: 100 }]);
+  // The statement class is not exported, so its prototype comes from a throwaway statement.
+  const memory = new DatabaseSync(':memory:');
+  const statementProto = Object.getPrototypeOf(memory.prepare('SELECT 1'));
+  memory.close();
+  const get = t.mock.method(statementProto, 'get');
+  const all = t.mock.method(statementProto, 'all');
+  const ranges = Array.from({ length: 50 }, (_, i) => [t0 - (i + 1) * 3_600_000, t0 + i * 3_600_000]);
+
+  const out = readRtkWindows(ranges, file);
+
+  assert.strictEqual(out.length, 50);
+  assert.strictEqual(get.mock.callCount() + all.mock.callCount(), 1);
+});
+
+// The figures of one row as the SQL computes them. A 'rtk read' command is content, a
+// 'rtk vitest' command is status and any other is 'other'. Every token count in the
+// test rows is under the 7,500-token inline limit.
+function expectedFigures(row) {
+  if (row.rtk_cmd.startsWith('rtk read')) return { without: row.input_tokens, reached: row.output_tokens };
+  if (row.rtk_cmd.startsWith('rtk vitest')) return { without: Math.min(row.input_tokens, 750), reached: row.output_tokens };
+  return { without: row.input_tokens, reached: row.output_tokens };
+}
+
+// What readRtkWindows must return for one window, by filtering the rows in JavaScript.
+function expectedWindow(rows, from, to) {
+  const lo = new Date(from).toISOString().slice(0, 19);
+  const hi = new Date(to).toISOString().slice(0, 19);
+  const inside = rows.filter((r) => r.timestamp >= lo && r.timestamp < hi).map(expectedFigures);
+  const reached = inside.reduce((sum, f) => sum + f.reached, 0);
+  const without = inside.reduce((sum, f) => sum + f.without, 0);
+  return {
+    commands: inside.length,
+    reachedPerCommand: inside.length ? reached / inside.length : null,
+    keptOutShare: without ? (without - reached) / without : null,
+  };
+}
+
+test('readRtkWindows matches a per-window filter for overlapping windows, mixed fraction widths and every command kind', () => {
+  const t0 = new Date('2026-09-04T16:15:00Z').getTime();
+  const rows = [
+    { timestamp: '2026-09-04T16:14:59.999999+00:00', input_tokens: 900, output_tokens: 100 },
+    { timestamp: '2026-09-04T16:14:59+00:00', input_tokens: 800, output_tokens: 80 },
+    { timestamp: '2026-09-04T16:15:00+00:00', input_tokens: 700, output_tokens: 70 }, // the boundary second, no fraction
+    { timestamp: '2026-09-04T16:15:00.123+00:00', input_tokens: 600, output_tokens: 60 }, // 3 digits
+    { timestamp: '2026-09-04T16:15:00.123456+00:00', input_tokens: 500, output_tokens: 50, rtk_cmd: 'rtk read big.txt' }, // 6 digits
+    { timestamp: '2026-09-04T16:15:01+00:00', input_tokens: 4000, output_tokens: 300, rtk_cmd: 'rtk vitest run' },
+    { timestamp: '2026-09-04T17:15:00+00:00', input_tokens: 400, output_tokens: 40 }, // exactly the end of the hour
+    { timestamp: '2026-09-04T17:15:00.5+00:00', input_tokens: 300, output_tokens: 30 },
+    { timestamp: '2026-09-05T16:15:00+00:00', input_tokens: 200, output_tokens: 20 },
+  ].map((r) => ({ rtk_cmd: 'rtk grep foo', ...r }));
+  const file = makeDb(rows);
+  const HOUR = 3_600_000;
+  const ranges = [
+    [t0 - HOUR, t0], [t0, t0 + HOUR], [t0 + HOUR, t0 + 2 * HOUR], // adjacent
+    [t0 - HOUR, t0 + HOUR], [t0 - 2 * HOUR, t0 + 3 * HOUR], // overlapping the ones above
+    [t0, t0 + 1000], [t0 + 500, t0 + 1500], // inside one second and straddling two
+    [0, 1000], [t0 + 10 * 24 * HOUR, t0 + 11 * 24 * HOUR], // no rows
+    [t0 + HOUR, t0], // from after to
+  ];
+
+  assert.deepStrictEqual(readRtkWindows(ranges, file), ranges.map(([from, to]) => expectedWindow(rows, from, to)));
+});
+
+test('readRtkWindows with no ranges returns an empty list for an rtk database', () => {
+  const file = makeDb([{ timestamp: '2026-09-04T16:15:00+00:00' }]);
+  assert.deepStrictEqual(readRtkWindows([], file), []);
+});
+
 test('readRtkWindows returns null when the database is missing or not rtk', () => {
   assert.strictEqual(readRtkWindows([[0, 1]], path.join(os.tmpdir(), 'no-such-rtk.db')), null);
   const junk = path.join(helpers.tmpDir(null, 'rtk'), 'junk.db');

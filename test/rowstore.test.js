@@ -5,7 +5,7 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { createRowStore, REFRESH_SHARE_MS } = require('../lib/rowstore');
+const { createRowStore, REFRESH_SHARE_MS, formatBytes, formatElapsed } = require('../lib/rowstore');
 const { extractFile, EXTRACT_VERSION } = require('../lib/extract');
 const { openStore } = require('../lib/store');
 const { aggregate } = require('../lib/aggregate');
@@ -36,12 +36,13 @@ function writeFile(dir, name, ids, ageMs = 0) {
 
 // A real extract that records which files it read. `clock` is the store's `now`, which
 // the tests advance past REFRESH_SHARE_MS instead of sleeping.
-function harness(dir, { store = null } = {}) {
+function harness(dir, { store = null, log } = {}) {
   const reads = [];
   const clock = { now: Date.now() };
   const rows = createRowStore({
     projectsDir: () => dir,
     store,
+    log,
     now: () => clock.now,
     extract: (file) => {
       reads.push(file);
@@ -702,4 +703,556 @@ test('version 1 rows of a deleted transcript get each tool use model from its ca
   const data = aggregate(rows.entries().map((e) => e.rows), { days: null });
   assert.deepStrictEqual(data.tools[0].byModel.map((m) => [m.label, m.calls]), [['Opus 5', 1]]);
   store.close();
+});
+
+const HOUR_MS = 60 * 60 * 1000;
+const tick = () => new Promise((resolve) => setImmediate(resolve));
+
+// Moves a file's mtime one second later, which makes its stored entry out of date.
+function bump(file) {
+  const seconds = fs.statSync(file).mtimeMs / 1000 + 1;
+  fs.utimesSync(file, seconds, seconds);
+}
+
+// A row store whose extract is gatedExtract() (test/helpers.js). `clock` is the
+// store's `now`. With `pool`, the files are asked for through a fake pool all at once,
+// as the worker pool does, instead of one after another.
+function gatedStore(dir, { store = null, pool = false } = {}) {
+  const g = helpers.gatedExtract();
+  const clock = { now: Date.now() };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    store,
+    now: () => clock.now,
+    ...(pool ? { openPool: (size, fn) => fn({ extract: g.extract }), poolLimits: { files: 0, bytes: 0 } } : { extract: g.extract }),
+  });
+  return { rows, reads: g.reads, ctl: g.ctl, clock, release: g.release };
+}
+
+test('out-of-date files are read in descending mtime order', async () => {
+  const { dir } = makeProjects();
+  const mid = writeFile(dir, 'a-mid', ['1'], 2 * HOUR_MS);
+  const old = writeFile(dir, 'b-old', ['2'], 3 * DAY_MS);
+  const fresh = writeFile(dir, 'c-new', ['3'], 0);
+  const { reads, refresh } = harness(dir);
+
+  await refresh();
+
+  assert.deepStrictEqual(reads, [fresh, mid, old]);
+});
+
+test('entries() lists files on disk in walk order whatever order they were read in', async () => {
+  const { findJsonlFiles } = require('../lib/transcript-files');
+  const { dir } = makeProjects();
+  writeFile(dir, 'a-old', ['1'], 3 * DAY_MS);
+  writeFile(dir, 'b-new', ['2'], 0);
+  writeFile(dir, 'c-mid', ['3'], 2 * HOUR_MS);
+  const { rows, refresh } = harness(dir);
+
+  await refresh();
+
+  assert.deepStrictEqual(rows.entries().map((e) => e.path), findJsonlFiles(dir));
+});
+
+test('entries() holds only files that have an entry while a run reads new files', async () => {
+  const { findJsonlFiles } = require('../lib/transcript-files');
+  const { dir } = makeProjects();
+  const fresh = writeFile(dir, 'a', ['1'], 0);
+  const old = writeFile(dir, 'b', ['2'], 2 * DAY_MS);
+  const g = gatedStore(dir);
+  g.ctl.hold = true;
+
+  const run = g.rows.refresh();
+  assert.deepStrictEqual(g.rows.entries(), [], 'no file has been read yet');
+
+  g.release(fresh);
+  await tick();
+  assert.deepStrictEqual(g.rows.entries().map((e) => e.path), [fresh]);
+  assert.ok(g.rows.entries().every((e) => e !== undefined));
+
+  g.release(old);
+  await run;
+  assert.deepStrictEqual(g.rows.entries().map((e) => e.path), findJsonlFiles(dir));
+});
+
+test('generation goes up as each file is loaded during a run', async () => {
+  const { dir } = makeProjects();
+  const fresh = writeFile(dir, 'a', ['1'], 0);
+  const old = writeFile(dir, 'b', ['2'], 2 * DAY_MS);
+  const g = gatedStore(dir);
+  g.ctl.hold = true;
+  const start = g.rows.generation;
+
+  const run = g.rows.refresh();
+  g.release(fresh);
+  await tick();
+  const afterFirst = g.rows.generation;
+  assert.ok(afterFirst > start, 'the newest file is in, the older one is still being read');
+
+  g.release(old);
+  await run;
+  assert.ok(g.rows.generation > afterFirst);
+});
+
+test('a file that grows after the stat pass keeps the stat-pass size and is read again on the next refresh', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1'], 2 * HOUR_MS);
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  const reads = [];
+  const clock = { now: Date.now() };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    now: () => clock.now,
+    extract: async (f) => {
+      reads.push(f);
+      if (reads.length === 1) await gate;
+      return extractFile(f);
+    },
+  });
+
+  const run = rows.refresh();
+  fs.appendFileSync(file, usageLine('2', new Date().toISOString()) + '\n');
+  release();
+  await run;
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 2, 'the read sees the whole file');
+
+  clock.now += REFRESH_SHARE_MS + 1;
+  await rows.refresh();
+  assert.strictEqual(reads.length, 2, 'the entry holds the smaller size, so the file is out of date');
+});
+
+// A stand-in for withPool that counts the pools it opens and runs files through `extract`.
+function fakePool(extract) {
+  const opened = [];
+  const openPool = (size, fn) => {
+    opened.push(size);
+    return fn({ extract });
+  };
+  return { opened, openPool };
+}
+
+test('a run with few files, or few bytes, reads on the main thread', async () => {
+  const { dir } = makeProjects();
+  for (let i = 0; i < 3; i++) writeFile(dir, `f${i}`, [String(i)], 2 * DAY_MS);
+  const pool = fakePool(extractFile);
+  const reads = [];
+  const read = (file) => { reads.push(file); return extractFile(file); };
+  // Three files do not pass the file limit, and their few bytes do not pass the byte limit.
+  const few = createRowStore({ projectsDir: () => dir, openPool: pool.openPool, poolLimits: { files: 3, bytes: 0 }, extract: read });
+  await few.refresh();
+  const small = createRowStore({ projectsDir: () => dir, openPool: pool.openPool, poolLimits: { files: 0, bytes: 1e9 }, extract: read });
+  await small.refresh();
+  assert.deepStrictEqual(pool.opened, []);
+  assert.strictEqual(reads.length, 6);
+});
+
+test('a run over both limits opens one pool of poolSize() workers and reads every file through it', async () => {
+  const { poolSize } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const files = [0, 1, 2].map((i) => writeFile(dir, `f${i}`, [String(i)], 2 * DAY_MS + i * HOUR_MS));
+  const viaPool = [];
+  const pool = fakePool((file) => { viaPool.push(file); return extractFile(file); });
+  const rows = createRowStore({ projectsDir: () => dir, openPool: pool.openPool, poolLimits: { files: 2, bytes: 0 } });
+
+  await rows.refresh();
+
+  assert.deepStrictEqual(pool.opened, [Math.min(poolSize(), 3)]);
+  assert.deepStrictEqual(viaPool, files, 'dispatched newest first');
+  assert.strictEqual(rows.entries().length, 3);
+});
+
+test('an injected extract is used whatever the limits are, and no pool starts', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1'], 2 * DAY_MS);
+  const reads = [];
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    poolLimits: { files: 0, bytes: 0 },
+    extract: (f) => { reads.push(f); return extractFile(f); },
+  });
+
+  await rows.refresh();
+
+  assert.deepStrictEqual(reads, [file]);
+});
+
+test('rows read by real worker threads equal the rows read on the main thread', async () => {
+  const { withPool } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const files = [0, 1, 2].map((i) => writeFile(dir, `f${i}`, [String(i), `${i}b`], 2 * DAY_MS + i * HOUR_MS));
+  let pools = 0;
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    openPool: (size, fn) => { pools += 1; return withPool(size, fn); },
+    poolLimits: { files: 0, bytes: 0 },
+  });
+
+  await rows.refresh();
+
+  assert.strictEqual(pools, 1, 'the files were read through a real pool');
+  for (const entry of rows.entries()) {
+    assert.deepStrictEqual(entry.rows, await extractFile(entry.path));
+    assert.strictEqual(Object.getPrototypeOf(entry.rows.sessions), null);
+  }
+  assert.strictEqual(rows.entries().length, files.length);
+});
+
+test('a file the pool could not read keeps its previous entry, and the others are still read', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const { failedRows } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const a = writeFile(dir, 'a', ['1'], 2 * HOUR_MS);
+  const b = writeFile(dir, 'b', ['2'], 3 * HOUR_MS);
+  const failing = new Set();
+  const pool = fakePool((file) => (failing.has(file) ? Promise.resolve(failedRows()) : extractFile(file)));
+  const clock = { now: Date.now() };
+  const rows = createRowStore({ projectsDir: () => dir, now: () => clock.now, openPool: pool.openPool, poolLimits: { files: 0, bytes: 0 } });
+  await rows.refresh();
+
+  fs.appendFileSync(a, usageLine('3', new Date().toISOString()) + '\n');
+  fs.appendFileSync(b, usageLine('4', new Date().toISOString()) + '\n');
+  failing.add(b);
+  clock.now += REFRESH_SHARE_MS + 1;
+  await rows.refresh();
+
+  const byPath = Object.fromEntries(rows.entries().map((e) => [e.path, e.rows]));
+  assert.strictEqual(byPath[a].calls.length, 2, 'the readable file is updated');
+  assert.strictEqual(byPath[b].calls.length, 1, 'the failed file keeps its earlier rows');
+  assert.strictEqual(byPath[b].ok, true);
+});
+
+test('when worker threads cannot run, the files are extracted on the main thread and the store has current entries', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const { withPool } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const files = [0, 1, 2].map((i) => writeFile(dir, `f${i}`, [String(i)], 2 * DAY_MS + i * HOUR_MS));
+  const workerFile = path.join(__dirname, 'fixtures', 'exit-worker.js');
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    openPool: (size, fn) => withPool(2, fn, { workerFile }),
+    poolLimits: { files: 0, bytes: 0 },
+  });
+
+  await rows.refresh();
+
+  const entries = rows.entries();
+  assert.deepStrictEqual(entries.map((e) => e.path), files.slice().sort());
+  assert.ok(entries.every((e) => e.rows.ok && e.rows.calls.length === 1));
+  assert.ok(entries.every((e) => e.version === EXTRACT_VERSION));
+});
+
+test('after a worker has returned a result, a worker that dies leaves its file failed and the previous entry stays', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const { withPool } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const files = [0, 1, 2].map((i) => writeFile(dir, `f${i}`, [String(i)], 2 * HOUR_MS + i * HOUR_MS));
+  const workerFile = path.join(__dirname, 'fixtures', 'die-after-first-worker.js');
+  const limits = { files: 99, bytes: 0 };
+  const clock = { now: Date.now() };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    now: () => clock.now,
+    openPool: (size, fn) => withPool(1, fn, { workerFile }),
+    poolLimits: limits,
+  });
+  await rows.refresh(); // three files, under the file limit: read on the main thread
+
+  // The first file is the newest, so it is the one the single worker reads before it dies.
+  files.forEach((file, i) => {
+    fs.appendFileSync(file, usageLine(`x${i}`, new Date().toISOString()) + '\n');
+    const seconds = Date.now() / 1000 - i * 60;
+    fs.utimesSync(file, seconds, seconds);
+  });
+  limits.files = 0;
+  clock.now += REFRESH_SHARE_MS + 1;
+  await rows.refresh();
+
+  const byPath = Object.fromEntries(rows.entries().map((e) => [e.path, e.rows]));
+  assert.deepStrictEqual(files.map((f) => byPath[f].calls.length), [2, 1, 1], 'only the newest file was read before the worker died');
+  assert.ok(files.every((f) => byPath[f].ok));
+});
+
+// True when `promise` settles within 200 ms.
+const settlesSoon = (promise) => Promise.race([promise.then(() => true, () => true), new Promise((resolve) => setTimeout(() => resolve(false), 200))]);
+
+// Four transcripts that already have entries, and are then modified so that each one
+// is out of date. Their ages are 0, 1 hour, 3 days and 20 days. The store holds from
+// here on, so a read waits for release(file).
+async function staleFiles(g, dir) {
+  const files = {
+    today: writeFile(dir, 'a-today', ['1'], 0),
+    hour: writeFile(dir, 'b-hour', ['2'], HOUR_MS),
+    week: writeFile(dir, 'c-week', ['3'], 3 * DAY_MS),
+    old: writeFile(dir, 'd-old', ['4'], 20 * DAY_MS),
+  };
+  await g.rows.refresh();
+  for (const file of Object.values(files)) bump(file);
+  g.clock.now += REFRESH_SHARE_MS + 1;
+  g.ctl.hold = true;
+  return files;
+}
+
+test('refresh({ since }) resolves once the out-of-date files at or after since are loaded, before the older ones', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir);
+  const f = await staleFiles(g, dir);
+  const phaseOneReads = g.reads.length;
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS }).then(() => { resolved = true; });
+  g.release(f.today);
+  await tick();
+  assert.strictEqual(resolved, false, 'the file modified an hour ago is still being read');
+
+  g.release(f.hour);
+  await waiting;
+  assert.ok(!g.reads.slice(phaseOneReads).includes(f.old), 'the 20-day-old file has not been read');
+
+  g.release(f.week);
+  g.release(f.old);
+  await g.rows.refresh();
+});
+
+test('refresh({ since }) does not resolve early when loads finish out of dispatch order', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir, { pool: true });
+  const f = await staleFiles(g, dir);
+  const phaseOneReads = g.reads.length;
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS }).then(() => { resolved = true; });
+  assert.deepStrictEqual(g.reads.slice(phaseOneReads), [f.today, f.hour, f.week, f.old], 'every file is asked for at once, newest first');
+
+  g.release(f.hour);
+  g.release(f.old);
+  await tick();
+  assert.strictEqual(resolved, false, 'two files are loaded but the newest is not');
+
+  g.release(f.today);
+  await waiting;
+  g.release(f.week);
+  await g.rows.refresh();
+});
+
+test('on a store with no entries, refresh({ since }) waits for every file', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const files = [writeFile(dir, 'a', ['1'], 0), writeFile(dir, 'b', ['2'], 3 * DAY_MS), writeFile(dir, 'c', ['3'], 20 * DAY_MS)];
+  const g = gatedStore(dir);
+  g.ctl.hold = true;
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: Date.now() + DAY_MS }).then(() => { resolved = true; });
+  g.release(files[0]);
+  g.release(files[1]);
+  await tick();
+  assert.strictEqual(resolved, false, 'the 20-day-old file has no entry yet');
+
+  g.release(files[2]);
+  await waiting;
+  assert.strictEqual(g.rows.entries().length, 3);
+});
+
+test('a file with no entry is waited for whatever its mtime, next to an out-of-date file that has one', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir, { pool: true });
+  const today = writeFile(dir, 'a-today', ['1'], 0);
+  const week = writeFile(dir, 'b-week', ['2'], 3 * DAY_MS);
+  await g.rows.refresh();
+  const fresh = writeFile(dir, 'c-new-old', ['3'], 5 * DAY_MS);
+  bump(today);
+  bump(week);
+  g.clock.now += REFRESH_SHARE_MS + 1;
+  g.ctl.hold = true;
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS }).then(() => { resolved = true; });
+  g.release(today);
+  await tick();
+  assert.strictEqual(resolved, false, 'the new file is not loaded');
+
+  g.release(fresh);
+  await waiting;
+  g.release(week);
+  await g.rows.refresh();
+});
+
+test('a since later than every out-of-date file resolves once the stat pass is done', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir);
+  const f = await staleFiles(g, dir);
+
+  const waiting = g.rows.refresh({ since: Date.now() + DAY_MS });
+  assert.strictEqual(await settlesSoon(waiting), true);
+
+  for (const file of Object.values(f)) g.release(file);
+  await g.rows.refresh();
+});
+
+test('a file whose mtime equals since is waited for', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir);
+  const f = await staleFiles(g, dir);
+  let resolved = false;
+
+  const waiting = g.rows.refresh({ since: fs.statSync(f.hour).mtimeMs }).then(() => { resolved = true; });
+  g.release(f.today);
+  await tick();
+  assert.strictEqual(resolved, false);
+
+  g.release(f.hour);
+  await waiting;
+  g.release(f.week);
+  g.release(f.old);
+  await g.rows.refresh();
+});
+
+test('a caller that joins after its files have loaded resolves at once, and a run that finished under 2 s ago is reused', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const g = gatedStore(dir);
+  const f = await staleFiles(g, dir);
+
+  const run = g.rows.refresh();
+  g.release(f.today);
+  g.release(f.hour);
+  await tick();
+  const late = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS });
+  assert.strictEqual(await settlesSoon(late), true);
+
+  g.release(f.week);
+  g.release(f.old);
+  await run;
+  const readsAfterRun = g.reads.length;
+  assert.strictEqual(await settlesSoon(g.rows.refresh({ since: 0 })), true);
+  assert.strictEqual(g.reads.length, readsAfterRun, 'no new run started');
+});
+
+test('refresh({ since }) resolves before persist, and refresh() waits for it', { timeout: 5000 }, async () => {
+  const { dir } = makeProjects();
+  const store = openStore(tmpDb());
+  let puts = 0;
+  const realPut = store.put.bind(store);
+  store.put = (...args) => {
+    puts += 1;
+    return realPut(...args);
+  };
+  const g = gatedStore(dir, { store });
+  const f = await staleFiles(g, dir);
+  const putsBefore = puts;
+
+  const full = g.rows.refresh();
+  const partial = g.rows.refresh({ since: Date.now() - 2 * HOUR_MS });
+  g.release(f.today);
+  g.release(f.hour);
+  await partial;
+  assert.strictEqual(puts, putsBefore, 'the 3-day and 20-day-old files are not read yet, so nothing is written');
+
+  g.release(f.week);
+  g.release(f.old);
+  await full;
+  assert.ok(puts >= putsBefore + 2, 'the two old files are written before refresh() resolves');
+  store.close();
+});
+
+test('a run that throws rejects the callers that passed since, instead of leaving them waiting', { timeout: 5000 }, async () => {
+  const rows = createRowStore({ projectsDir: () => { throw new Error('no projects root'); } });
+
+  await assert.rejects(rows.refresh({ since: 0 }), /no projects root/);
+  await assert.rejects(rows.refresh(), /no projects root/, 'the next refresh starts a new run');
+});
+
+// The lines a store logs. Pass `log` as the store's `log` option.
+const logSpy = () => {
+  const lines = [];
+  return { lines, log: (line) => lines.push(line) };
+};
+
+test('the first run logs one line with the files read, the files found, their size and the time, and later runs log nothing', async () => {
+  const spy = logSpy();
+  const { dir } = makeProjects();
+  const a = writeFile(dir, 'a', ['1'], 2 * DAY_MS);
+  writeFile(dir, 'b', ['2'], 3 * DAY_MS);
+  const { rows, refresh } = harness(dir, { log: spy.log });
+
+  await refresh();
+  assert.strictEqual(spy.lines.length, 1);
+  assert.match(spy.lines[0], /^\[rows\] Read 2 of 2 transcripts \(\d+ (B|KB)\) in \d+(\.\d)? (ms|s)$/);
+
+  fs.appendFileSync(a, usageLine('3', new Date().toISOString()) + '\n');
+  await refresh();
+  assert.strictEqual(spy.lines.length, 1);
+  assert.strictEqual(rows.entries().length, 2);
+});
+
+test('the line counts only the files that were out of date, and names the workers when a pool read them', async () => {
+  const spy = logSpy();
+  const { poolSize } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const first = openStore(dbFile);
+  await harness(dir, { store: first }).refresh();
+  first.close();
+  fs.appendFileSync(old, usageLine('2', new Date().toISOString()) + '\n');
+  writeFile(dir, 'fresh', ['3'], 0);
+
+  const second = openStore(dbFile);
+  const rows = createRowStore({ projectsDir: () => dir, store: second, log: spy.log, openPool: fakePool(extractFile).openPool, poolLimits: { files: 0, bytes: 0 } });
+  await rows.refresh({ since: 0 });
+  await rows.refresh();
+
+  assert.strictEqual(spy.lines.length, 1);
+  assert.match(spy.lines[0], new RegExp(`^\\[rows\\] Read 2 of 2 transcripts \\(\\d+ (B|KB)\\) in \\d+(\\.\\d)? (ms|s) with ${Math.min(poolSize(), 2)} workers?$`));
+  second.close();
+});
+
+test('a refresh issued from a rejected refresh settles instead of joining the failed run', { timeout: 5000 }, async () => {
+  const rows = createRowStore({ projectsDir: () => { throw new Error('no projects dir'); } });
+  const second = await rows.refresh({ since: 0 }).then(() => 'resolved', () => rows.refresh({ since: 0 }).then(() => 'resolved', (err) => `rejected: ${err.message}`));
+  assert.match(second, /^(resolved|rejected)/);
+});
+
+test('after the main-thread fallback the startup line names no workers', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const { withPool } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  [0, 1, 2].forEach((i) => writeFile(dir, `f${i}`, [String(i)], 2 * DAY_MS + i * HOUR_MS));
+  const lines = [];
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    log: (line) => lines.push(line),
+    openPool: (size, fn) => withPool(2, fn, { workerFile: path.join(__dirname, 'fixtures', 'exit-worker.js') }),
+    poolLimits: { files: 0, bytes: 0 },
+  });
+  await rows.refresh();
+  assert.strictEqual(lines.length, 1);
+  assert.match(lines[0], /^\[rows\] Read 3 of 3 transcripts/);
+  assert.doesNotMatch(lines[0], / with /);
+});
+
+test('the pool is opened with no more workers than files', async () => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'only', ['1'], 2 * DAY_MS);
+  const sizes = [];
+  const pool = fakePool(extractFile);
+  const rows = createRowStore({ projectsDir: () => dir, openPool: (size, fn) => { sizes.push(size); return pool.openPool(size, fn); }, poolLimits: { files: 0, bytes: 0 } });
+  await rows.refresh();
+  assert.deepStrictEqual(sizes, [1]);
+});
+
+test('a store with no log option prints nothing', async (t) => {
+  const log = t.mock.method(console, 'log', () => {});
+  const { dir } = makeProjects();
+  writeFile(dir, 'a', ['1'], 2 * DAY_MS);
+  await harness(dir).refresh();
+  assert.strictEqual(log.mock.callCount(), 0);
+});
+
+test('the startup line writes sizes and times in the units a reader expects', () => {
+  assert.strictEqual(formatBytes(1.8 * 1024 ** 3), '1.8 GB');
+  assert.strictEqual(formatBytes(23 * 1024 ** 2), '23 MB');
+  assert.strictEqual(formatBytes(412 * 1024), '412 KB');
+  assert.strictEqual(formatBytes(90), '90 B');
+  assert.strictEqual(formatElapsed(5400), '5.4 s');
+  assert.strictEqual(formatElapsed(70.4), '70 ms');
 });

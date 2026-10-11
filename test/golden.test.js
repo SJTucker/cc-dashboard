@@ -53,6 +53,20 @@ test('extractFile over every corpus file at once gives the same rows as one at a
   assert.deepStrictEqual(normalise(Object.fromEntries(shared.map((name, i) => [name, together[i]])), dir), normalise(await extractAll(dir, shared), dir));
 });
 
+// The worker pool (lib/extract-pool.js) must give the same rows as a call on the main
+// thread. The JSON round trip in normalise hides prototypes, so the null prototype of
+// `sessions`, which structured clone drops, is checked directly.
+test('extractFile over the golden corpus in worker threads matches test/fixtures/extract-golden.json', async (t) => {
+  const { withPool } = require('../lib/extract-pool');
+  const dir = helpers.tmpDir(t, 'golden');
+  const { shared } = writeCorpus(dir);
+  await withPool(3, async (pool) => {
+    const results = await Promise.all(shared.map((name) => pool.extract(path.join(dir, name))));
+    checkGolden('extract-golden.json', normalise(Object.fromEntries(shared.map((name, i) => [name, results[i]])), dir));
+    for (const rows of results) assert.strictEqual(Object.getPrototypeOf(rows.sessions), null);
+  });
+});
+
 test('aggregate over the golden corpus matches test/fixtures/aggregate-golden.json', async (t) => {
   const dir = helpers.tmpDir(t, 'golden');
   const { shared } = writeCorpus(dir);

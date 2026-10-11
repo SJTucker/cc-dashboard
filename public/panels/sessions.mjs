@@ -30,7 +30,7 @@ let lastLiveSessions = null;
 // uses this map to move keyboard focus to the new button for the same group.
 let sessionToggles = new Map();
 
-// Runs on every renderPayload, like renderLimits, and rebuilds when the payload,
+// Runs on every settled sessions response and on every redraw, like renderLimits, and rebuilds when the payload,
 // the expanded groups or the clock minute changed. The minute is there because
 // "Last active" moves with the clock even when the payload does not. Hidden off
 // Today and when no session has a snapshot, for example without the mod. The Running
