@@ -1370,3 +1370,26 @@ test('rows loaded from the database are compacted in memory and stay full in the
   assert.ok(storedUsages(dbFile).every(hasFatKeys));
   store.close();
 });
+
+test('a stored file that comes back unchanged after being deleted is written again with its full usage', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'back', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const rows = fatStore(dir, store);
+  await rows.refresh();
+  const saved = fs.readFileSync(file);
+  const { mtime } = fs.statSync(file);
+  fs.unlinkSync(file);
+  await rows.refresh();
+
+  fs.writeFileSync(file, saved);
+  fs.utimesSync(file, mtime, mtime);
+  await rows.refresh();
+
+  const stored = storedUsages(dbFile);
+  assert.strictEqual(stored.length, 1);
+  assert.ok(hasFatKeys(stored[0]));
+  assert.strictEqual(rows.entries().length, 1);
+  store.close();
+});
