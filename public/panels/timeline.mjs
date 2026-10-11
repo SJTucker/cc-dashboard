@@ -206,7 +206,7 @@ function drawLink(svg, { lane, bars, follows }, top) {
     stroke: TIMELINE_COLOR, 'stroke-opacity': LINK_OPACITY, 'stroke-width': 1.25,
   });
   const tip = svgEl('title', {});
-  tip.textContent = 'Started by /clear in this session';
+  tip.textContent = `Started by /clear in ${follows.session.title || follows.session.project || 'the session above'}`;
   path.appendChild(tip);
   svg.appendChild(path);
   for (const [cx, cy] of [[x1, y1], [x2, y2]]) {

@@ -223,7 +223,7 @@ test('linkPath bends at least 10px when the next session starts before the old o
   assert.ok(!d.includes('NaN'));
 });
 
-const rb =(t, main = true) => ({ t, main, cause: 'expired', reason: null, tokens: 50_000, gapMs: 1, premium: 0.1 });
+const rb = (t, main = true) => ({ t, main, cause: 'expired', reason: null, tokens: 50_000, gapMs: 1, premium: 0.1 });
 
 test('rebuildMarks gives each rebuild its own mark when they are far apart', () => {
   const marks = rebuildMarks([rb(at(10)), rb(at(11))], xOf);

@@ -59,7 +59,7 @@ const CONTRACT = [
   { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
   { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
   { "script": "record-statusline", "args": [], "stdin": {
-    "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "cleared_from": "prev-1","transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
+    "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "cleared_from": "prev-1", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
     "model": { "display_name": "Opus 5.5 (1M context)" }, "cost": { "total_cost_usd": 0.42, "total_duration_ms": 60000 },
     "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 }, "seven_day": { "used_percentage": 41, "resets_at": 1791192600 } } } },
 ]
@@ -365,6 +365,15 @@ test('a /clear of a session this process never measured still links the new sess
   const { ran, state } = world(on)
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
   state.id = 's2'
+  await $.session.measure(measure([FIVE]))
+  expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual(['s1'])
+})
+
+test('two /clears with no prompt between link the new session to the first one', async ($, on) => {
+  const { ran, state } = world(on, { exists: (path) => !path.endsWith('/s2.jsonl') })
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  state.id = 's3'
   await $.session.measure(measure([FIVE]))
   expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual(['s1'])
 })

@@ -51,7 +51,8 @@ let launchId: string | undefined
 // cleared_from with every measure of a later session, and lib/sessions.js stores it, so
 // the Session timeline draws the new session's lane under the old one. session.end sets
 // it on a /clear and drops it on any other end, so the session an in-process /resume
-// opens carries no link. A reload drops it too.
+// opens carries no link. A reload drops it too. A /clear of a session with no transcript
+// keeps the earlier link, because that session never gets a row for the next one to link to.
 let clearedFrom: string | undefined
 
 function fail($: EngineInterface, text: string) {
@@ -827,10 +828,13 @@ export const register: Register = (on) => {
   // reviews it.
   on('session.end', async ($, e, next) => {
     forgetSession(e.sessionId)
-    clearedFrom = e.reason === 'clear' ? e.sessionId : undefined
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
+    // The lookup follows run, so the script is not delayed, and follows forgetSession,
+    // so transcriptPath checks the file system instead of the dropped cache.
+    if (e.reason !== 'clear') clearedFrom = undefined
+    else if (!clearedFrom || (await transcriptPath($, await $.session.root(), e.sessionId))) clearedFrom = e.sessionId
     const result = await next(e)
     await running
     if (e.reason === 'clear' || e.reason === 'resume') startReviews($)
