@@ -149,3 +149,61 @@ test('the browser and the server share one median and percentile', () => {
   assert.strictEqual(median, stats.median);
   assert.strictEqual(percentile, stats.percentile);
 });
+
+// windowStats as it was before the binary search: a filter of every list.
+function filteredWindowStats({ starts, deltas, prompts, calls }, from, to) {
+  const inWindow = (x) => x.t >= from && x.t < to;
+  return stats({
+    starts: starts.filter(inWindow),
+    deltas: deltas.filter(inWindow),
+    prompts: prompts.filter(inWindow),
+    calls: calls.filter(inWindow),
+  });
+}
+
+// Four lists sorted by t, with times on both sides of T0 and T0 + WEEK_MS, repeated
+// times at each boundary, and one time well outside.
+function boundaryData() {
+  const times = [T0 - WEEK_MS, T0 - 1, T0, T0, T0 + 1, T0 + H, T0 + WEEK_MS - 1, T0 + WEEK_MS, T0 + WEEK_MS, T0 + WEEK_MS + 1, T0 + 3 * WEEK_MS];
+  return {
+    starts: times.map((t, i) => ({ t, context: 100 + i, model: 'claude-opus-5' })),
+    deltas: times.map((t, i) => ({ t, delta: 10 * (i + 1) })),
+    prompts: times.map((t, i) => ({ t, cost: 0.5 + i, calls: i + 1 })),
+    calls: times.map((t, i) => call(t, { context: 1000 + i, cacheRead: 500 + i })),
+  };
+}
+
+test('windowStats gives the same stats as filtering every list, at the boundaries and with repeated times', () => {
+  const data = boundaryData();
+  const spans = [
+    [T0, T0 + WEEK_MS], [T0 - WEEK_MS, T0], [T0 + WEEK_MS, T0 + 2 * WEEK_MS], [T0 + 2 * WEEK_MS, T0 + 3 * WEEK_MS],
+    [T0, T0], [T0 + WEEK_MS, T0], [T0 + 1, T0 + 1], [0, Infinity], [-Infinity, T0], [NaN, T0],
+  ];
+  for (const [from, to] of spans) {
+    assert.deepStrictEqual(windowStats(data, from, to), filteredWindowStats(data, from, to), `[${from}, ${to})`);
+  }
+});
+
+test('windowStats reads a few elements of a long list, not every one', () => {
+  const calls = Array.from({ length: 10000 }, (_, i) => call(T0 + i * 1000));
+  let reads = 0;
+  const watched = new Proxy(calls, {
+    get(target, key, receiver) {
+      if (typeof key === 'string' && /^\d+$/.test(key)) reads += 1;
+      return Reflect.get(target, key, receiver);
+    },
+  });
+  const w = windowStats({ starts: [], deltas: [], prompts: [], calls: watched }, T0 + 5000 * 1000, T0 + 5010 * 1000);
+  assert.strictEqual(w.callN, 10);
+  assert.ok(reads < 100, `read ${reads} elements`);
+});
+
+test('buildReport leaves the order of the calls it was given unchanged and counts them by time', () => {
+  const calls = [call(T0 + 3000), call(T0 + 1000), call(T0 + 2000), call(T0 - 1000)];
+  const before = calls.map((c) => c.t);
+  const markers = [{ t: T0, kind: 'plugin', label: 'x', source: 'plugin' }];
+  const report = buildReport({ calls, prompts: [] }, markers, null, {});
+  assert.deepStrictEqual(calls.map((c) => c.t), before);
+  assert.strictEqual(report.markers[0].before.callN, 1);
+  assert.strictEqual(report.markers[0].after.callN, 3);
+});
