@@ -161,10 +161,17 @@ function drawSessions(live) {
   document.getElementById('runningSessions').hidden = !running.length;
   document.getElementById('runningTable').replaceChildren(...running.map((s) => {
     const label = activityLabel(s.activity);
+    // A waiting session's cache countdown (cacheLine) goes under its state. The
+    // payload changes once a minute, and the poll redraws it.
+    const cache = cacheLine(s.cache, formatCost);
+    const stateCell = el('td', label?.attention ? { class: 'is-attention' } : {}, [
+      el('span', { text: label ? label.text : '—' }),
+      ...(cache ? [el('span', { class: 'cache-line', text: cache })] : []),
+    ]);
     return el('tr', {}, [
       sessionCell(s),
       // Waiting uses the brighter text colour as well as its glyph.
-      el('td', label?.attention ? { class: 'is-attention', text: label.text } : { text: label ? label.text : '—' }),
+      stateCell,
       cell(doingNow(s.activity) ?? '—'),
       costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, null),
       // A waiting session can be past its live window, so only live rows get is-live.

@@ -244,3 +244,29 @@ test('a null project gets the key project: with nothing after it', () => {
   const [g] = groupSessions([session(null, 20), session(null, 10)]);
   assert.strictEqual(g.key, 'project:');
 });
+
+const { cacheLine } = require('../public/session-groups');
+const usd = (n) => '$' + n.toFixed(2);
+
+test('cacheLine shows minutes left and the rebuild cost', () => {
+  assert.strictEqual(cacheLine({ minutesLeft: 4, rebuildUsd: 0.38 }, usd), 'cache 4 min left · $0.38 to rebuild after');
+});
+
+test('cacheLine says under 1 min when no whole minute is left', () => {
+  assert.strictEqual(cacheLine({ minutesLeft: 0, rebuildUsd: 0.38 }, usd), 'cache expires in under 1 min · $0.38 to rebuild after');
+});
+
+test('cacheLine says expired when minutesLeft is negative', () => {
+  assert.strictEqual(cacheLine({ minutesLeft: -1, rebuildUsd: 0.38 }, usd), 'cache expired · next reply pays $0.38 to rebuild');
+});
+
+test('cacheLine drops the cost clause when rebuildUsd is null', () => {
+  assert.strictEqual(cacheLine({ minutesLeft: 4, rebuildUsd: null }, usd), 'cache 4 min left');
+  assert.strictEqual(cacheLine({ minutesLeft: 0, rebuildUsd: null }, usd), 'cache expires in under 1 min');
+  assert.strictEqual(cacheLine({ minutesLeft: -3, rebuildUsd: null }, usd), 'cache expired');
+});
+
+test('cacheLine is null without a cache', () => {
+  assert.strictEqual(cacheLine(undefined), null);
+  assert.strictEqual(cacheLine(null), null);
+});

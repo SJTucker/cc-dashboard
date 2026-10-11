@@ -402,3 +402,17 @@ test('a call without rebuild gets no rebuild field', () => {
   const data = run([rowSet({ calls: [call()] })]);
   assert.strictEqual('rebuild' in data.efficiency.calls[0], false);
 });
+
+test('a call record carries its 5-minute and 1-hour cache write tokens', () => {
+  const usage = { input_tokens: 5, output_tokens: 10, cache_creation_input_tokens: 300, cache_read_input_tokens: 0, cache_creation: { ephemeral_5m_input_tokens: 100, ephemeral_1h_input_tokens: 200 } };
+  const [rec] = run([rowSet({ calls: [call({ model: 'claude-opus-5-5', usage })] })]).efficiency.calls;
+  assert.strictEqual(rec.write5m, 100);
+  assert.strictEqual(rec.write1h, 200);
+});
+
+test('a call with only the flat cache write total counts it as 5-minute writes', () => {
+  const usage = { input_tokens: 5, output_tokens: 10, cache_creation_input_tokens: 300, cache_read_input_tokens: 0 };
+  const [rec] = run([rowSet({ calls: [call({ model: 'claude-opus-5-5', usage })] })]).efficiency.calls;
+  assert.strictEqual(rec.write5m, 300);
+  assert.strictEqual(rec.write1h, 0);
+});

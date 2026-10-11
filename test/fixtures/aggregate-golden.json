@@ -2219,6 +2219,8 @@
           "version": "2.1.280",
           "context": 53000,
           "cacheRead": 50000,
+          "write5m": 1500,
+          "write1h": 500,
           "output": 367,
           "cost": 0.03213,
           "tools": [
@@ -2234,6 +2236,8 @@
           "version": "2.1.280",
           "context": 800,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 120,
           "cost": 0.0042,
           "tools": [
@@ -2254,6 +2258,8 @@
           "version": "2.1.280",
           "context": 500,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 40,
           "cost": 0.0021,
           "tools": [
@@ -2274,6 +2280,8 @@
           "version": null,
           "context": 30,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 3,
           "cost": 0.000135,
           "tools": [
@@ -2288,6 +2296,8 @@
           "version": null,
           "context": 30,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 3,
           "cost": 0.000135,
           "tools": []
@@ -2300,6 +2310,8 @@
           "version": null,
           "context": 400,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 40,
           "cost": 0,
           "tools": []
@@ -2312,6 +2324,8 @@
           "version": null,
           "context": 20,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 2,
           "cost": 0,
           "tools": []
@@ -2324,6 +2338,8 @@
           "version": null,
           "context": 162000,
           "cacheRead": 160000,
+          "write5m": 0,
+          "write1h": 0,
           "output": 900,
           "cost": 0.1125,
           "tools": []
@@ -2336,6 +2352,8 @@
           "version": null,
           "context": 300,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 30,
           "cost": 0.00045,
           "tools": []
@@ -2348,6 +2366,8 @@
           "version": null,
           "context": 52700,
           "cacheRead": 50000,
+          "write5m": 1500,
+          "write1h": 500,
           "output": 70,
           "cost": 0.026775,
           "tools": []
@@ -2360,6 +2380,8 @@
           "version": null,
           "context": 200,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 20,
           "cost": 0.0003,
           "tools": []
@@ -2372,6 +2394,8 @@
           "version": null,
           "context": 100,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 10,
           "cost": 0.00045,
           "tools": []
@@ -2384,6 +2408,8 @@
           "version": null,
           "context": 900,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 90,
           "cost": 0.00405,
           "tools": [
@@ -2398,6 +2424,8 @@
           "version": null,
           "context": 50,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 5,
           "cost": 0.000225,
           "tools": []
@@ -2410,6 +2438,8 @@
           "version": null,
           "context": 60,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 6,
           "cost": 0.00027,
           "tools": []
@@ -2422,6 +2452,8 @@
           "version": null,
           "context": 110,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 11,
           "cost": 0.000495,
           "tools": [
@@ -2436,6 +2468,8 @@
           "version": null,
           "context": 120,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 12,
           "cost": 0.00054,
           "tools": [
@@ -2450,6 +2484,8 @@
           "version": null,
           "context": 130,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 13,
           "cost": 0.000585,
           "tools": [
@@ -4433,6 +4469,8 @@
           "version": "2.1.280",
           "context": 53000,
           "cacheRead": 50000,
+          "write5m": 1500,
+          "write1h": 500,
           "output": 367,
           "cost": 0.03213,
           "tools": [
@@ -4448,6 +4486,8 @@
           "version": "2.1.280",
           "context": 800,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 120,
           "cost": 0.0042,
           "tools": [
@@ -4468,6 +4508,8 @@
           "version": "2.1.280",
           "context": 500,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 40,
           "cost": 0.0021,
           "tools": [
@@ -4488,6 +4530,8 @@
           "version": null,
           "context": 30,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 3,
           "cost": 0.000135,
           "tools": [
@@ -4502,6 +4546,8 @@
           "version": null,
           "context": 30,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 3,
           "cost": 0.000135,
           "tools": []
@@ -4514,6 +4560,8 @@
           "version": null,
           "context": 400,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 40,
           "cost": 0,
           "tools": []
@@ -4526,6 +4574,8 @@
           "version": null,
           "context": 20,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 2,
           "cost": 0,
           "tools": []
@@ -4538,6 +4588,8 @@
           "version": null,
           "context": 162000,
           "cacheRead": 160000,
+          "write5m": 0,
+          "write1h": 0,
           "output": 900,
           "cost": 0.1125,
           "tools": []
@@ -4550,6 +4602,8 @@
           "version": null,
           "context": 300,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 30,
           "cost": 0.00045,
           "tools": []
@@ -4562,6 +4616,8 @@
           "version": null,
           "context": 52700,
           "cacheRead": 50000,
+          "write5m": 1500,
+          "write1h": 500,
           "output": 70,
           "cost": 0.026775,
           "tools": []
@@ -4574,6 +4630,8 @@
           "version": null,
           "context": 200,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 20,
           "cost": 0.0003,
           "tools": []
@@ -4586,6 +4644,8 @@
           "version": null,
           "context": 100,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 10,
           "cost": 0.00045,
           "tools": []
@@ -4598,6 +4658,8 @@
           "version": null,
           "context": 50,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 5,
           "cost": 0.000225,
           "tools": []
@@ -4610,6 +4672,8 @@
           "version": null,
           "context": 60,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 6,
           "cost": 0.00027,
           "tools": []
@@ -4622,6 +4686,8 @@
           "version": null,
           "context": 110,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 11,
           "cost": 0.000495,
           "tools": [
@@ -4636,6 +4702,8 @@
           "version": null,
           "context": 120,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 12,
           "cost": 0.00054,
           "tools": [
@@ -4650,6 +4718,8 @@
           "version": null,
           "context": 130,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 13,
           "cost": 0.000585,
           "tools": [
@@ -6566,6 +6636,8 @@
           "version": "2.1.280",
           "context": 53000,
           "cacheRead": 50000,
+          "write5m": 1500,
+          "write1h": 500,
           "output": 367,
           "cost": 0.03213,
           "tools": [
@@ -6581,6 +6653,8 @@
           "version": "2.1.280",
           "context": 800,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 120,
           "cost": 0.0042,
           "tools": [
@@ -6601,6 +6675,8 @@
           "version": "2.1.280",
           "context": 500,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 40,
           "cost": 0.0021,
           "tools": [
@@ -6621,6 +6697,8 @@
           "version": null,
           "context": 30,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 3,
           "cost": 0.000135,
           "tools": [
@@ -6635,6 +6713,8 @@
           "version": null,
           "context": 30,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 3,
           "cost": 0.000135,
           "tools": []
@@ -6647,6 +6727,8 @@
           "version": null,
           "context": 400,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 40,
           "cost": 0,
           "tools": []
@@ -6659,6 +6741,8 @@
           "version": null,
           "context": 20,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 2,
           "cost": 0,
           "tools": []
@@ -6671,6 +6755,8 @@
           "version": null,
           "context": 162000,
           "cacheRead": 160000,
+          "write5m": 0,
+          "write1h": 0,
           "output": 900,
           "cost": 0.1125,
           "tools": []
@@ -6683,6 +6769,8 @@
           "version": null,
           "context": 300,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 30,
           "cost": 0.00045,
           "tools": []
@@ -6695,6 +6783,8 @@
           "version": null,
           "context": 52700,
           "cacheRead": 50000,
+          "write5m": 1500,
+          "write1h": 500,
           "output": 70,
           "cost": 0.026775,
           "tools": []
@@ -6707,6 +6797,8 @@
           "version": null,
           "context": 200,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 20,
           "cost": 0.0003,
           "tools": []
@@ -6719,6 +6811,8 @@
           "version": null,
           "context": 100,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 10,
           "cost": 0.00045,
           "tools": []
@@ -6731,6 +6825,8 @@
           "version": null,
           "context": 130,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 13,
           "cost": 0.000585,
           "tools": [
@@ -8774,6 +8870,8 @@
           "version": "2.1.280",
           "context": 53000,
           "cacheRead": 50000,
+          "write5m": 1500,
+          "write1h": 500,
           "output": 367,
           "cost": 0.03213,
           "tools": [
@@ -8789,6 +8887,8 @@
           "version": "2.1.280",
           "context": 800,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 120,
           "cost": 0.0042,
           "tools": [
@@ -8809,6 +8909,8 @@
           "version": "2.1.280",
           "context": 500,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 40,
           "cost": 0.0021,
           "tools": [
@@ -8829,6 +8931,8 @@
           "version": null,
           "context": 30,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 3,
           "cost": 0.000135,
           "tools": [
@@ -8843,6 +8947,8 @@
           "version": null,
           "context": 30,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 3,
           "cost": 0.000135,
           "tools": []
@@ -8855,6 +8961,8 @@
           "version": null,
           "context": 400,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 40,
           "cost": 0,
           "tools": []
@@ -8867,6 +8975,8 @@
           "version": null,
           "context": 20,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 2,
           "cost": 0,
           "tools": []
@@ -8879,6 +8989,8 @@
           "version": null,
           "context": 162000,
           "cacheRead": 160000,
+          "write5m": 0,
+          "write1h": 0,
           "output": 900,
           "cost": 0.1125,
           "tools": []
@@ -8891,6 +9003,8 @@
           "version": null,
           "context": 300,
           "cacheRead": 0,
+          "write5m": 0,
+          "write1h": 0,
           "output": 30,
           "cost": 0.00045,
           "tools": []

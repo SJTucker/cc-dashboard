@@ -650,3 +650,108 @@ test('buildLiveSessions keeps a stale waiting session with subagents as waiting 
   const [row] = buildLiveSessions([old], [], NOW, {}, {}, [], map).sessions;
   assert.deepStrictEqual(row.activity, { state: 'waiting', since: NOW - 30_000, tool: null, subagents: 0 });
 });
+
+// Cache countdown: the `cache` field of a session waiting on the user.
+const TTL_5M = 5 * 60_000;
+const TTL_1H = 60 * 60_000;
+
+function waitingMap(sessionId = 's1') {
+  return new Map([[sessionId, activityEntry({ state: 'waiting', tool: null, subagents: 0, updatedAt: NOW - 30_000 })]]);
+}
+
+function cacheCall(overrides = {}) {
+  return { sessionId: 's1', t: NOW - 60_000, main: true, model: 'claude-opus-5-5', context: 100_000, output: 10, cost: 0.1, write5m: 0, write1h: 0, ...overrides };
+}
+
+function liveCache(calls, activity = waitingMap()) {
+  return buildLiveSessions([snapshot()], calls, NOW, {}, {}, [], activity).sessions[0].cache;
+}
+
+test('a waiting session with a 5-minute write has a 5-minute cache', () => {
+  const t = NOW - 60_000;
+  const cache = liveCache([cacheCall({ t, write5m: 100_000 })]);
+  assert.strictEqual(cache.ttl, '5m');
+  assert.strictEqual(cache.expiresAt, t + TTL_5M);
+  assert.strictEqual(cache.minutesLeft, 4);
+});
+
+test('a waiting session with a 1-hour write has a 1-hour cache', () => {
+  const t = NOW - 10 * 60_000;
+  const cache = liveCache([cacheCall({ t, write1h: 100_000 })]);
+  assert.strictEqual(cache.ttl, '1h');
+  assert.strictEqual(cache.expiresAt, t + TTL_1H);
+  assert.strictEqual(cache.minutesLeft, 50);
+});
+
+test('a newest call that only read the cache keeps the earlier TTL', () => {
+  const t = NOW - 2 * 60_000;
+  const cache = liveCache([
+    cacheCall({ t: NOW - 20 * 60_000, write1h: 100_000 }),
+    cacheCall({ t, write1h: 0, write5m: 0 }),
+  ]);
+  assert.strictEqual(cache.ttl, '1h');
+  assert.strictEqual(cache.expiresAt, t + TTL_1H);
+});
+
+test('the TTL is found in time order, whatever the order of the calls', () => {
+  const cache = liveCache([
+    cacheCall({ t: NOW - 2 * 60_000 }),
+    cacheCall({ t: NOW - 20 * 60_000, write1h: 100_000 }),
+  ]);
+  assert.strictEqual(cache.ttl, '1h');
+});
+
+test('a session with only reads defaults to a 5-minute cache', () => {
+  assert.strictEqual(liveCache([cacheCall()]).ttl, '5m');
+});
+
+test('an expired cache has a negative minutesLeft', () => {
+  const t = NOW - 6 * 60_000;
+  const cache = liveCache([cacheCall({ t, write5m: 100_000 })]);
+  assert.strictEqual(cache.expiresAt, t + TTL_5M);
+  assert.strictEqual(cache.minutesLeft, -1);
+});
+
+test('a cache with under a minute left has minutesLeft 0', () => {
+  const cache = liveCache([cacheCall({ t: NOW - TTL_5M + 30_000, write5m: 100_000 })]);
+  assert.strictEqual(cache.minutesLeft, 0);
+});
+
+test('a working session has no cache field', () => {
+  const working = new Map([['s1', activityEntry({ state: 'working', tool: null, subagents: 0, updatedAt: NOW - 1000 })]]);
+  const row = buildLiveSessions([snapshot()], [cacheCall({ write5m: 1 })], NOW, {}, {}, [], working).sessions[0];
+  assert.strictEqual('cache' in row, false);
+});
+
+test('a session without the mod has no cache field', () => {
+  const row = buildLiveSessions([snapshot()], [cacheCall({ write5m: 1 })], NOW).sessions[0];
+  assert.strictEqual('cache' in row, false);
+});
+
+test('a waiting session with no main calls has no cache field', () => {
+  const row = buildLiveSessions([snapshot()], [cacheCall({ main: false, write5m: 1 })], NOW, {}, {}, [], waitingMap()).sessions[0];
+  assert.strictEqual('cache' in row, false);
+});
+
+test('subagent calls do not move the cache expiry or its size', () => {
+  const t = NOW - 60_000;
+  const cache = liveCache([
+    cacheCall({ t, write5m: 100_000 }),
+    cacheCall({ t: NOW - 1000, main: false, write1h: 500_000, context: 500_000, model: 'claude-haiku-4-5' }),
+  ]);
+  assert.strictEqual(cache.ttl, '5m');
+  assert.strictEqual(cache.expiresAt, t + TTL_5M);
+});
+
+// Opus 5.5 in lib/pricing.js: input $4/M, 5m write 1.25x, 1h write 2x, read 0.05x.
+test('rebuildUsd is the write cost of the newest context minus its read cost', () => {
+  const five = liveCache([cacheCall({ write5m: 100_000, context: 100_000 })]);
+  assert.strictEqual(round6(five.rebuildUsd), 0.48);
+  const hour = liveCache([cacheCall({ write1h: 100_000, context: 100_000 })]);
+  assert.strictEqual(round6(hour.rebuildUsd), 0.78);
+});
+
+test('rebuildUsd is null for an unpriced model', () => {
+  assert.strictEqual(liveCache([cacheCall({ model: 'claude-unknown-9', write5m: 100_000 })]).rebuildUsd, null);
+  assert.strictEqual(liveCache([cacheCall({ model: null, write5m: 100_000 })]).rebuildUsd, null);
+});
