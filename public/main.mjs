@@ -51,8 +51,13 @@ function clearSignatures() {
 // Numbers each fetchAll (see createSequence). A 30d request issued before a
 // Today click lands after it, and is dropped.
 const loads = createSequence();
-// The newest payload fetchAll collected once all five requests settled. redrawCharts draws from it after a resize,
-// a hide or an expand, so a change of width makes no request. The range picker
+// True once a draw of the current load threw and reportDrawError wrote its banner.
+// renderMetaBanner leaves the banner alone while it is set, because the summary
+// usually settles last and would otherwise hide the error. fetchAll resets it.
+let drawErrorShown = false;
+// The newest payload fetchAll collected once all five requests settled. redrawCharts
+// draws from it after a resize, a hide or an expand, so a change of width makes no
+// request. The range picker
 // sets it to null, because renderPayload reads state.currentDays and would draw the old
 // range's buckets with the new range's rules.
 let lastPayload = null;
@@ -145,6 +150,7 @@ const FETCH_ALL_OPTIONAL = ['rtk', 'sessions', 'reviews'];
 // this one waited.
 async function fetchAll({ busy = false } = {}) {
   const isLatest = loads.next();
+  drawErrorShown = false;
 
   // Only user-started loads show the busy state. Whichever request is newest
   // clears it when it settles, even a quiet poll, because an older busy request's
@@ -218,6 +224,7 @@ function drawSessionPanels(sessions) {
 // The status banner after a summary loaded: hidden, or a note that the projects
 // folder or its session files are missing.
 function renderMetaBanner(meta) {
+  if (drawErrorShown) return;
   const banner = document.getElementById('statusBanner');
   banner.hidden = true;
   if (!meta.dirExists) {
@@ -293,6 +300,7 @@ function reportDrawError(err) {
   // the all-settled step, so the busy state would never clear. Each step is guarded
   // on its own so one failure does not stop the others.
   try { console.error(err); } catch { /* nothing left to report to */ }
+  drawErrorShown = true;
   try {
     const banner = document.getElementById('statusBanner');
     banner.hidden = false;
@@ -309,7 +317,6 @@ function reportDrawError(err) {
 function runLoad(options) {
   return fetchAll(options).catch(reportDrawError);
 }
-
 
 document.getElementById('rangePicker').addEventListener('click', (evt) => {
   const btn = evt.target.closest('button[data-days]');

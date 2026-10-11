@@ -1535,7 +1535,6 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
 .hidden-menu-all { margin-top: 4px; border-top: 1px solid var(--border); border-radius: 0 0 4px 4px; }
 .hidden-menu-empty { margin: 6px 10px; color: var(--text-tertiary); font-size: 12px; }
 
-
 /* Until the first summary settles, public/main.mjs leaves .first-load on <body> and the
    summary cards and the empty chart and list containers read "Loading…". The text comes
    from a pseudo-element, so no renderer has to clear it: the renderers fill each
