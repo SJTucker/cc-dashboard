@@ -5,7 +5,7 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { createRowStore, REFRESH_SHARE_MS } = require('../lib/rowstore');
+const { createRowStore, REFRESH_SHARE_MS, formatBytes, formatElapsed } = require('../lib/rowstore');
 const { extractFile, EXTRACT_VERSION } = require('../lib/extract');
 const { openStore } = require('../lib/store');
 const { aggregate } = require('../lib/aggregate');
@@ -36,12 +36,13 @@ function writeFile(dir, name, ids, ageMs = 0) {
 
 // A real extract that records which files it read. `clock` is the store's `now`, which
 // the tests advance past REFRESH_SHARE_MS instead of sleeping.
-function harness(dir, { store = null } = {}) {
+function harness(dir, { store = null, log } = {}) {
   const reads = [];
   const clock = { now: Date.now() };
   const rows = createRowStore({
     projectsDir: () => dir,
     store,
+    log,
     now: () => clock.now,
     extract: (file) => {
       reads.push(file);
@@ -1158,4 +1159,66 @@ test('a run that throws rejects the callers that passed since, instead of leavin
 
   await assert.rejects(rows.refresh({ since: 0 }), /no projects root/);
   await assert.rejects(rows.refresh(), /no projects root/, 'the next refresh starts a new run');
+});
+
+// The lines a store logs. Pass `log` as the store's `log` option.
+const logSpy = () => {
+  const lines = [];
+  return { lines, log: (line) => lines.push(line) };
+};
+
+test('the first run logs one line with the files read, the files found, their size and the time, and later runs log nothing', async () => {
+  const spy = logSpy();
+  const { dir } = makeProjects();
+  const a = writeFile(dir, 'a', ['1'], 2 * DAY_MS);
+  writeFile(dir, 'b', ['2'], 3 * DAY_MS);
+  const { rows, refresh } = harness(dir, { log: spy.log });
+
+  await refresh();
+  assert.strictEqual(spy.lines.length, 1);
+  assert.match(spy.lines[0], /^\[rows\] Read 2 of 2 transcripts \(\d+ (B|KB)\) in \d+(\.\d)? (ms|s)$/);
+
+  fs.appendFileSync(a, usageLine('3', new Date().toISOString()) + '\n');
+  await refresh();
+  assert.strictEqual(spy.lines.length, 1);
+  assert.strictEqual(rows.entries().length, 2);
+});
+
+test('the line counts only the files that were out of date, and names the workers when a pool read them', async () => {
+  const spy = logSpy();
+  const { poolSize } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const first = openStore(dbFile);
+  await harness(dir, { store: first }).refresh();
+  first.close();
+  fs.appendFileSync(old, usageLine('2', new Date().toISOString()) + '\n');
+  writeFile(dir, 'fresh', ['3'], 0);
+
+  const second = openStore(dbFile);
+  const rows = createRowStore({ projectsDir: () => dir, store: second, log: spy.log, openPool: fakePool(extractFile).openPool, poolLimits: { files: 0, bytes: 0 } });
+  await rows.refresh({ since: 0 });
+  await rows.refresh();
+
+  assert.strictEqual(spy.lines.length, 1);
+  assert.match(spy.lines[0], new RegExp(`^\\[rows\\] Read 2 of 2 transcripts \\(\\d+ (B|KB)\\) in \\d+(\\.\\d)? (ms|s) with ${poolSize()} workers?$`));
+  second.close();
+});
+
+test('a store with no log option prints nothing', async (t) => {
+  const log = t.mock.method(console, 'log', () => {});
+  const { dir } = makeProjects();
+  writeFile(dir, 'a', ['1'], 2 * DAY_MS);
+  await harness(dir).refresh();
+  assert.strictEqual(log.mock.callCount(), 0);
+});
+
+test('the startup line writes sizes and times in the units a reader expects', () => {
+  assert.strictEqual(formatBytes(1.8 * 1024 ** 3), '1.8 GB');
+  assert.strictEqual(formatBytes(23 * 1024 ** 2), '23 MB');
+  assert.strictEqual(formatBytes(412 * 1024), '412 KB');
+  assert.strictEqual(formatBytes(90), '90 B');
+  assert.strictEqual(formatElapsed(5400), '5.4 s');
+  assert.strictEqual(formatElapsed(70.4), '70 ms');
 });

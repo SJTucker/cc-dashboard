@@ -29,9 +29,10 @@ While editing the code, run `npm run watch`. Node's `--watch` flag restarts
 the server when `server.js` or any file under `lib/` changes. Files under
 `public/` are read from disk on each request, so a page reload picks them up
 without a restart. A restart keeps the stored rows in `cc-dashboard/transcripts.db`, so
-the first request after it reads the transcripts modified today and any that changed
-since the server stopped. When no database is available (see the Setup changes
-section), nothing is stored and the first request reads every transcript.
+the server starts reading the transcripts modified today, and any that changed since
+it stopped, as soon as it listens. When no database is available (see the Setup
+changes section), nothing is stored and it reads every transcript, on worker threads
+when there are many.
 
 ## rtk savings (optional)
 
@@ -525,7 +526,7 @@ lib/price-store.js     Applied price history in prices.json
 lib/pricing.js         Built-in price table, dated price versions, cost calculation
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
-lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript when it changes or `EXTRACT_VERSION` changes, and stores settled ones
+lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript when it changes or `EXTRACT_VERSION` changes (newest first, on worker threads when many are out of date), lets a range wait only for the files it needs, and stores settled ones
 lib/rtk.js             Reads rtk's history.db read-only, aggregates by day and command, estimates the tokens kept out of context
 lib/scan-memo.js       Keeps the latest aggregate per range and bucket until a transcript changes or the date rolls over
 lib/session-id.js      Session id and snapshot file name patterns, and the age after which snapshot and activity files are deleted

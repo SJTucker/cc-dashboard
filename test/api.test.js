@@ -64,6 +64,25 @@ test('createServer returns a server that is not listening yet', (t) => {
   t.after(() => server.emit('close'));
 });
 
+test('warmUp starts the first read of the transcripts before any request', async (t) => {
+  const { createServer } = require('../server');
+  const config = helpers.testConfig(t, 'warm');
+  fs.writeFileSync(path.join(config.configDir, 'projects', 'demo', 'session.jsonl'), JSON.stringify({
+    timestamp: new Date().toISOString(),
+    requestId: 'req-1',
+    message: { id: 'msg-1', model: 'claude-sonnet-4-6-20260115', usage: { input_tokens: 1, output_tokens: 1 } },
+  }) + '\n');
+  const log = t.mock.method(console, 'log', () => {});
+  const server = createServer(config);
+  t.after(() => server.emit('close'));
+
+  server.warmUp();
+
+  const logged = () => log.mock.calls.some((c) => /^\[rows\] Read 1 of 1 transcripts/.test(String(c.arguments[0])));
+  for (let i = 0; i < 100 && !logged(); i++) await new Promise((resolve) => setTimeout(resolve, 20));
+  assert.ok(logged(), 'the row store read the transcript with no request made');
+});
+
 test('two servers in one process each read their own config folder', async (t) => {
   const one = helpers.testConfig(t, 'one');
   const two = helpers.testConfig(t, 'two');

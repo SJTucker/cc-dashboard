@@ -114,7 +114,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
   });
 }
 
-test('SIGTERM before any request, with no database open, exits 0', async (t) => {
+test('SIGTERM right after start, before any request, exits 0', async (t) => {
   const server = await startServerProcess(t);
   server.child.kill('SIGTERM');
   assert.deepStrictEqual(await within(server.exited, 2000), { code: 0, signal: null });

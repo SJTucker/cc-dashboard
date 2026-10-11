@@ -138,7 +138,7 @@ function createServer(config) {
   // Opened on the first scan, so a transcripts.db that cannot be opened is reported
   // by the request that needs it.
   function getRowStore() {
-    if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, store: openStore(storePath, serverDb.get) });
+    if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, store: openStore(storePath, serverDb.get), log: (line) => console.log(line) });
     return rowStore;
   }
 
@@ -367,6 +367,18 @@ function createServer(config) {
 
   const server = http.createServer(app);
   server.on('close', () => serverDb.close());
+  // Starts the first read of the transcripts without a request. The listen callback
+  // calls it, so the stat pass and the synchronous store.loadAll run before the
+  // browser's first request arrives instead of while that request waits. Nothing
+  // awaits the result: the requests that need the rows wait for them themselves, and a
+  // failed read is reported again by each of those requests.
+  server.warmUp = () => {
+    try {
+      getRowStore().refresh().catch((err) => console.warn(`[rows] The first read failed: ${err.message}`));
+    } catch (err) {
+      console.warn(`[rows] The first read could not start: ${err.message}`);
+    }
+  };
   return server;
 }
 
@@ -382,6 +394,7 @@ if (require.main === module) {
     console.log(`\nClaude Code Dashboard running at http://localhost:${port}`);
     console.log(`Reading logs from: ${getProjectsDir(config.configDir)}`);
     console.log('Bound to localhost only. The one outbound request is Check prices, to platform.claude.com.\n');
+    server.warmUp();
     if (process.argv.includes('--open')) {
       import('open').then((mod) => mod.default(`http://localhost:${port}`)).catch(() => {});
     }

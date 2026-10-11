@@ -84,6 +84,8 @@ function testConfig(t, name = 'cfg') {
 // config.configDir until the first request: the row store opens on the first scan.
 async function bootServer(t, config = testConfig(t, 'boot')) {
   const { createServer } = require('../server');
+  // The row store logs a "[rows] Read ..." line when its first read finishes.
+  t.mock.method(console, 'log', () => {});
   const server = createServer(config);
   t.after(async () => {
     await new Promise((resolve) => {
