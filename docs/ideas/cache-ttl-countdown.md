@@ -45,7 +45,22 @@ Known limits:
   session that has waited since before midnight shows no line, though its cache has
   expired and the rebuild cost would still apply.
 
+## Shipped 2026-10-11: statusline
+
+`bin/cache-line` prints `cache 4 min left · rebuild $0.38` for a statusline
+script, from the `prompt_cache` block Claude Code sends the statusline command
+(`cacheStatusLine` in `lib/cache.js`). SETUP.md has the setup. Claude Code computes
+`ttl` and `expires_at` itself, so the statusline needs none of the page's
+transcript work. The rebuild is priced from `recache_tokens_if_cold` with the same
+`rebuildUsd` as the page.
+
+A mod could not draw this line. `$.ui.status` draws above the statusline with a
+`⚠ <plugin>:` prefix, and the `PromptHint` tail draws at the end of the mode row.
+
 ## Open questions
 
-- Whether the countdown belongs in Claude Code's statusline through the mod, where
-  the user is looking, instead of on the page.
+- The page could read `prompt_cache.expires_at`, `expected_rebuilds` and
+  `miss_causes` in place of transcript timestamps and the `nextTtl` guess. Only
+  the no-mod route's `bin/record-statusline` sees that JSON. The mod builds its
+  own statusline-shaped input in `statuslineInput` (`mod/hooks/register.ts`),
+  which has no `prompt_cache`.
