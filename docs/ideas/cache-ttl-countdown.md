@@ -41,6 +41,9 @@ Known limits:
   to the response time.
 - It assumes a cache read refreshes a 1-hour entry to a full hour. The prompt
   caching docs do not state this for 1-hour entries.
+- `/api/sessions/live` reads the Today scan, so `cacheOf` sees today's calls only. A
+  session that has waited since before midnight shows no line, though its cache has
+  expired and the rebuild cost would still apply.
 
 ## Open questions
 
