@@ -156,11 +156,15 @@ Add two lines to the statusline script that `statusLine.command` in
 `~/.claude/settings.json` points at, after the lines it already prints. They read
 the statusline JSON from `$input`, so the script must save its stdin near the top
 with `input=$(cat)`. On the no-mod route, keep the `record-statusline` line too.
-Both read the same `$input`.
+Both read the same `$input`. Keep the `if` block at the end. Claude Code blanks the
+whole statusline when the script's last command exits non-zero, and
+`[ -n "$CACHE" ] && echo "$CACHE"` exits 1 when the cache line is empty.
 
 ```bash
 CACHE=$(printf '%s' "$input" | /path/to/cc-dashboard/bin/cache-line)
-[ -n "$CACHE" ] && echo "$CACHE"
+if [ -n "$CACHE" ]; then
+  echo "$CACHE"
+fi
 ```
 
 With no statusline script yet, this minimal one shows the model and the cache line.
@@ -171,7 +175,9 @@ Save it, make it executable with `chmod +x`, and point `statusLine.command` at i
 input=$(cat)
 printf '%s' "$input" | jq -r '.model.display_name'
 CACHE=$(printf '%s' "$input" | /path/to/cc-dashboard/bin/cache-line)
-[ -n "$CACHE" ] && echo "$CACHE"
+if [ -n "$CACHE" ]; then
+  echo "$CACHE"
+fi
 ```
 
 Claude Code reruns the statusline after each reply and when a warm cache expires,
