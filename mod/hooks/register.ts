@@ -571,6 +571,8 @@ function forgetSession(id: string) {
 // written, and 'failed' when the write gave up. Any entry blocks a second handoff
 // until turn.start removes it, so each idle gap gets one at most.
 const HANDOFF_STATUS = 'handoff ready · /clear to resume'
+// $.ui.status() with no text clears the status. On Claude Code 2.1.296, $.ui.status('')
+// pins an empty "⚠ cc-dashboard:" line above the input instead.
 const HANDOFF_STEP_TIMEOUT_MS = 5000
 type Handoff = { state: 'writing' | 'failed' } | { state: 'ready'; resume: string }
 const handoffs = new Map<string, Handoff>()
@@ -629,7 +631,7 @@ async function dropHandoff($: EngineInterface) {
     const id = await $.session.id()
     const handoff = handoffs.get(id)
     handoffs.delete(id)
-    if (handoff?.state === 'ready' || !statusCleared) $.ui.status('')
+    if (handoff?.state === 'ready' || !statusCleared) $.ui.status()
     statusCleared = true
   } catch (err) {
     fail($, `handoff failed (${errorName(err)})`)
@@ -653,7 +655,7 @@ function prefillAfterClear($: EngineInterface, resume: string) {
 // It does nothing when that session has a turn running or the box has text, because
 // a fill then would be sent as a prompt or would overwrite the user's draft.
 async function fillResume($: EngineInterface, resume: string) {
-  $.ui.status('')
+  $.ui.status()
   const id = await $.session.id()
   if (activities.get(id)?.state === 'working') return
   const draft = await $.prompt.read()
@@ -938,7 +940,7 @@ export const register: Register = (on) => {
     forgetSession(e.sessionId)
     if (handoff?.state === 'ready') {
       if (e.reason === 'clear') prefillAfterClear($, handoff.resume)
-      else $.ui.status('')
+      else $.ui.status()
     }
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.

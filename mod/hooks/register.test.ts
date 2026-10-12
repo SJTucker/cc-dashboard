@@ -119,7 +119,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const ran: Ran[] = []
   const commandRan: string[] = []
   const forked: string[] = []
-  const statuses: string[] = []
+  const statuses: (string | undefined)[] = []
   const fills: string[] = []
   const reviewRan: Ran[] = []
   const endSawRan: number[] = []
@@ -1463,14 +1463,14 @@ test('an idle auto compaction writes a handoff from a fork and shows the status'
   expect(forked.length).toBe(1)
   expect(forked[0]).toContain('feat/Handoff X')
   expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
-  expect(statuses).toEqual(['', READY])
+  expect(statuses).toEqual([undefined, READY])
 })
 
 test('the first turn after a load clears the status once, for a status an earlier load left', async ($, on) => {
   const { statuses } = world(on)
   await idleTurn($)
   await idleTurn($)
-  expect(statuses).toEqual([''])
+  expect(statuses).toEqual([undefined])
 })
 
 test('the compaction passes on before the fork answers', async ($, on) => {
@@ -1537,7 +1537,7 @@ test('after the next turn, a later idle compaction writes again and the status c
   await $.session.compact(compacting())
   await clock.settle()
   expect(forked.length).toBe(2)
-  expect(statuses).toEqual(['', READY, '', READY])
+  expect(statuses).toEqual([undefined, READY, undefined, READY])
 })
 
 test('a fork with no answer writes nothing, sets no status and logs the reason', async ($, on) => {
@@ -1546,7 +1546,7 @@ test('a fork with no answer writes nothing, sets no status and logs the reason',
   await $.session.compact(compacting())
   await clock.settle()
   expect(writes[HANDOFF]).toBe(undefined)
-  expect(statuses).toEqual([''])
+  expect(statuses).toEqual([undefined])
   expect(logged).toEqual(['handoff failed (fork empty-reply)'])
 })
 
@@ -1601,7 +1601,7 @@ test('a turn that starts while the fork runs gets the file but no status', async
   await clock.advance(30_000)
   await clock.settle()
   expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
-  expect(statuses).toEqual([''])
+  expect(statuses).toEqual([undefined])
 })
 
 test('a fork from an earlier idle gap does not mark the later gap ready', async ($, on) => {
@@ -1616,7 +1616,7 @@ test('a fork from an earlier idle gap does not mark the later gap ready', async 
   await clock.advance(30_000)
   await clock.settle()
   expect(forked.length).toBe(2)
-  expect(statuses.slice(statuses.lastIndexOf('') + 1)).toEqual([READY])
+  expect(statuses.slice(statuses.lastIndexOf(undefined) + 1)).toEqual([READY])
 })
 
 const RESUME = `Read ${HANDOFF}, check Preconditions, then continue from "Next steps".`
@@ -1634,7 +1634,7 @@ test('a /clear after a handoff fills the resume prompt 4 s later and clears the 
   await clock.advance(1)
   await clock.settle()
   expect(fills).toEqual([RESUME])
-  expect(statuses).toEqual(['', READY, ''])
+  expect(statuses).toEqual([undefined, READY, undefined])
 })
 
 test('a prompt sent within 4 s of the /clear is not followed by the resume prompt', async ($, on) => {
@@ -1669,7 +1669,7 @@ test('text typed after the /clear is not replaced', async ($, on) => {
   await clock.advance(4_000)
   await clock.settle()
   expect(fills).toEqual([])
-  expect(statuses).toEqual(['', READY, ''])
+  expect(statuses).toEqual([undefined, READY, undefined])
 })
 
 test('a /clear after the user kept working fills nothing', async ($, on) => {
@@ -1694,7 +1694,7 @@ test('a /clear while the fork runs fills nothing, and the file is still written'
   await clock.settle()
   expect(fills).toEqual([])
   expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
-  expect(statuses).toEqual([''])
+  expect(statuses).toEqual([undefined])
 })
 
 test('an exit with a ready handoff clears the status and fills nothing', async ($, on) => {
@@ -1706,5 +1706,5 @@ test('an exit with a ready handoff clears the status and fills nothing', async (
   await clock.advance(5_000)
   await clock.settle()
   expect(fills).toEqual([])
-  expect(statuses).toEqual(['', READY, ''])
+  expect(statuses).toEqual([undefined, READY, undefined])
 })
