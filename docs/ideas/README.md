@@ -13,10 +13,7 @@ then on.
 | [Subagent permission prompts](subagent-permission-prompts.md) | Parked 2026-10-11: sessions here run in `auto`, where no dialog opens; findings on reading a subagent's mode at spawn recorded |
 | [Row store growth](row-store-growth.md) | Open: compaction cut loaded rows from 61 MB to 37 MB over 44 days; the thresholds that start a per-call column store (All aggregate above 500 ms, row heap above 400 MB, stat pass above 100 ms) are recorded, and nothing else is built yet |
 | [Feed "not useful" dismissals to Haiku](feed-dismissals-to-haiku.md) | Open: which dismissals to send, how to word them, token cost, and how to measure whether it helped |
-| [Per-project breakdown](per-project-breakdown.md) | Open: usage and cost per project; decoding folder names or using `cwd`, worktrees, and whether estimates are worth showing open |
-| [Five-hour window blocks](five-hour-windows.md) | Open: bucket usage into 5-hour windows like `/usage`; how a window starts and where it shows open |
 | [Same-week model comparison](same-week-model-comparison.md) | Open: compare two models used in one week; minimum calls, mixed-model prompts and where it shows open |
-| [Cost per unit of work](cost-per-unit-of-work.md) | Open: spend per commit or per Edit and Write call; repository counting and noise open |
 | [Setup changes: long-history labels](setup-changes-long-history-labels.md) | Open: Monday date labels collide below about 2.3px per day and weekly lane counts below about 3.5px per day; a month-start step and month cells are the possible fix |
 | [Horizontal scroll at 400px](narrow-viewport-horizontal-scroll.md) | Open: the page is 416px wide on 30d and All because of `#modelMixPanel`; which element sets the width open |
 | [Where the time goes](turn-durations.md) | Open: read the unused `turn_duration` lines for model hours per day and turn length; subagent coverage and tool time open |
