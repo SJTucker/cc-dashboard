@@ -593,9 +593,10 @@ async function repoState($: EngineInterface, cwd: string): Promise<StepOutput[]>
 // The fork reads the conversation from before the compaction, from the cache, and
 // adds no transcript line. The file is written even when a turn or a /clear has come
 // since, because it is still a record of the session. Only the status and the
-// prefill need the entry to still be 'writing'. fs.write creates the handoffs folder
+// prefill need the entry to still be the one this call started, so a fork from an
+// earlier idle gap cannot change a later gap's entry. fs.write creates the handoffs folder
 // when it is missing.
-async function writeHandoff($: EngineInterface, id: string) {
+async function writeHandoff($: EngineInterface, id: string, entry: Handoff) {
   const cwd = await $.session.cwd()
   const plan = planHandoff(await repoState($, cwd), cwd)
   if (!plan) throw new Error('no timestamp')
@@ -604,7 +605,7 @@ async function writeHandoff($: EngineInterface, id: string) {
   const doc = handoffDocument(reply.text)
   if (!doc) throw new Error('fork empty')
   await $.fs.write(plan.path, doc)
-  if (handoffs.get(id)?.state !== 'writing') return
+  if (handoffs.get(id) !== entry) return
   handoffs.set(id, { state: 'ready', resume: resumePrompt(plan.path) })
   $.ui.status(HANDOFF_STATUS)
 }
@@ -612,9 +613,10 @@ async function writeHandoff($: EngineInterface, id: string) {
 // Starts the handoff and returns at once. A failure is logged each time, because it
 // happens at most once per idle gap.
 function startHandoff($: EngineInterface, id: string) {
-  handoffs.set(id, { state: 'writing' })
-  writeHandoff($, id).catch((err) => {
-    if (handoffs.get(id)?.state === 'writing') handoffs.set(id, { state: 'failed' })
+  const entry: Handoff = { state: 'writing' }
+  handoffs.set(id, entry)
+  writeHandoff($, id, entry).catch((err) => {
+    if (handoffs.get(id) === entry) handoffs.set(id, { state: 'failed' })
     note($, `handoff failed (${errorText(err)})`)
   })
 }
@@ -647,6 +649,9 @@ function prefillAfterClear($: EngineInterface, resume: string) {
   })
 }
 
+// Clears the status, then puts the resume prompt in the input box of the new session.
+// It does nothing when that session has a turn running or the box has text, because
+// a fill then would be sent as a prompt or would overwrite the user's draft.
 async function fillResume($: EngineInterface, resume: string) {
   $.ui.status('')
   const id = await $.session.id()

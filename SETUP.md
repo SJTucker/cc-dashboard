@@ -244,10 +244,11 @@ The mod also reads these files to record setup changes. It writes none of them.
   idle for about 54 minutes and holds at least 200,000 tokens of context. The fork
   reads the whole conversation from the prompt cache and sends the output of
   `git rev-parse`, `git branch`, `git log`, `git worktree list`, `git status`,
-  `git diff --stat` and `git stash list` for the session's folder. It writes no
-  transcript line, so the dashboard's totals leave out its cost. Setting
+  `git diff --stat` and `git stash list` for the session's folder, and the current
+  date. It writes no transcript line, so the dashboard's totals leave out its cost. Setting
   `"idleCompaction": false` or `"autoCompactEnabled": false` in `settings.json`, or
-  `DISABLE_AUTO_COMPACT=1`, turns off idle compaction and with it the handoff.
+  `DISABLE_AUTO_COMPACT=1` or `DISABLE_COMPACT=1`, turns off idle compaction and
+  with it the handoff.
 
 ## Check it works
 

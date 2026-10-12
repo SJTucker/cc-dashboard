@@ -1604,15 +1604,31 @@ test('a turn that starts while the fork runs gets the file but no status', async
   expect(statuses).toEqual([''])
 })
 
+test('a fork from an earlier idle gap does not mark the later gap ready', async ($, on) => {
+  const { forked, statuses, clock } = world(on, { commands: REPO, forks: [DOC, DOC], forkMs: 30_000 })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.advance(1_000)
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.advance(29_500)
+  expect(statuses.filter((s) => s === READY).length).toBe(0)
+  await clock.advance(30_000)
+  await clock.settle()
+  expect(forked.length).toBe(2)
+  expect(statuses.slice(statuses.lastIndexOf('') + 1)).toEqual([READY])
+})
+
 const RESUME = `Read ${HANDOFF}, check Preconditions, then continue from "Next steps".`
 const clear = { reason: 'clear' as const, sessionId: 's1', resume: { id: 's1' } }
 
 test('a /clear after a handoff fills the resume prompt 4 s later and clears the status', async ($, on) => {
-  const { fills, statuses, clock } = world(on, { commands: REPO, forks: [DOC] })
+  const { fills, statuses, state, clock } = world(on, { commands: REPO, forks: [DOC] })
   await idleTurn($)
   await $.session.compact(compacting())
   await clock.settle()
   await $.session.end(clear)
+  state.id = 's2'
   await clock.advance(3_999)
   expect(fills).toEqual([])
   await clock.advance(1)

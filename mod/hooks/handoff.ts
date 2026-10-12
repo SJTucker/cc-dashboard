@@ -33,7 +33,7 @@ const INSTRUCTIONS = `Write a handoff document that lets an agent with zero conv
 
 You have no tools in this reply. Write from what you already know from this conversation. Do not paste diffs. Reply with the document only, in Markdown, starting with the line "# Handoff: <task in one line>". Write no preamble and no code fence around the reply.
 
-If the repo state below shows git errors, this is not a git repo. Leave out the Git state section and describe the changed files from the conversation.
+If the Worktree root step failed, this is not a git repo. Leave out the Git state section and describe the changed files from the conversation. Another failed step means only that its output is missing.
 
 Use this structure. Leave out any section that would be empty.
 
@@ -111,10 +111,14 @@ export function branchSlug(branch: string | null) {
   return slug || 'no-branch'
 }
 
+// The text the mod puts in the input box after /clear. It names the handoff file and
+// the sections the next agent reads first.
 export function resumePrompt(path: string) {
   return `Read ${path}, check Preconditions, then continue from "Next steps".`
 }
 
+// The repo state in the fork prompt: one heading per step, with the output, or the
+// error text marked (failed) when the step failed.
 function repoText(outputs: StepOutput[]) {
   return outputs
     .map((o) => `### ${o.label}\n${o.ok ? o.text || '(none)' : `(failed) ${o.text}`}`)
@@ -134,11 +138,12 @@ export function planHandoff(outputs: StepOutput[], cwd: string): { prompt: strin
 }
 
 // The file's text, from the fork's reply. The reply joins all the fork's text
-// blocks, so anything before the first "# Handoff:" is dropped. A reply without
-// that heading is kept whole, because it may still be a usable document. A blank
-// reply gives null.
+// blocks, so anything before the first line that starts with "# Handoff:" is
+// dropped. Prose that quotes the heading mid-line, or a "## Handoff:" line, does not
+// match. A reply without that heading is kept whole, because it may still be a usable
+// document. A blank reply gives null.
 export function handoffDocument(text: string): string | null {
-  const at = text.indexOf('# Handoff:')
+  const at = text.search(/^# Handoff:/m)
   const doc = (at > 0 ? text.slice(at) : text).trim()
   return doc ? `${doc}\n` : null
 }
