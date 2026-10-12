@@ -38,6 +38,22 @@ test('put then loadAll round-trips an entry, and put replaces the same path', ()
   store.close();
 });
 
+test('loadAll drops usage keys the aggregate never reads, and leaves the stored data unchanged', () => {
+  const file = path.join(tmpDir(), 'a.db');
+  const store = openStore(file);
+  const usage = { input_tokens: 1, output_tokens: 2, iterations: [{ n: 1 }], output_tokens_details: { thinking_tokens: 3 } };
+  store.put('/p/one.jsonl', entryOf({ rows: rowsOf({ calls: [{ key: 'k', usage }] }) }));
+  const before = JSON.stringify(rowsOf({ calls: [{ key: 'k', usage }] }));
+
+  const [loaded] = store.loadAll();
+  assert.deepStrictEqual(loaded.rows.calls[0].usage, { input_tokens: 1, output_tokens: 2 });
+  store.close();
+
+  const raw = new sqlite.DatabaseSync(file);
+  assert.strictEqual(raw.prepare('SELECT data FROM files').get().data, before);
+  raw.close();
+});
+
 test('markGone clears onDisk and keeps the rows', () => {
   const store = openStore(path.join(tmpDir(), 'a.db'));
   store.put('/p/one.jsonl', entryOf({ rows: rowsOf({ calls: [{ key: 'k' }] }) }));
