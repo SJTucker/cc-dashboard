@@ -4,14 +4,16 @@ import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, setti
 import type { Kind, SetupEntry, Snapshot } from './setup'
 import { REPO_STEPS, handoffDocument, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
-import { NO_LEVELS, bandText, dismissLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
+import { NO_LEVELS, bandText, dismissLevels, maxLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/, and judges new Claude Code releases for the setup changes markers
 // through bin/judge-updates, and reviews ended sessions
 // for setup suggestions through bin/review-session. At each interactive session start it
 // also compares the setup files with stored copies and writes a marker for each change
-// (checkSetup).
+// (checkSetup). It also shows a dismissable plan limit band above the prompt when the
+// Session or Week window passes 75% or 90%, and shares the dismissal between running
+// sessions through limit-warnings.json.
 // The scripts are the only writers of those files, so the file formats, the atomic
 // writes and the freshness checks are theirs. The activity files are the one
 // exception: the mod writes them itself with $.fs.write, because one writer per
@@ -908,14 +910,16 @@ async function readLevels($: EngineInterface, path: string) {
   return parseLevels(await $.fs.read(path).then(String, () => undefined))
 }
 
-// Stores this reading and resets a window that has dropped below the first level. A
-// measure with no Session or Week window (an API-key login) leaves the band as it is.
+// Stores this reading and resets a window that has dropped below the first level. The
+// levels are the higher of the file's and this session's, so a dismissal whose write
+// failed stays hidden, and the write below retries it. A measure with no Session or Week window (an API-key login) leaves the band as it is.
 async function measureBand($: EngineInterface, limits: readonly SessionRateLimit[]) {
   const readings = readingsOf(limits)
   if (!readings.length) return
   const path = await limitsPath($)
   const stored = path ? await readLevels($, path) : NO_LEVELS
-  const levels = resetLevels(readings, stored)
+  const held = (await read($, band)).levels
+  const levels = resetLevels(readings, maxLevels(stored, held))
   await update($, band, () => ({ readings, levels }))
   if (path && !sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
   if (shownWindows(readings, levels).length) startRecheck($)
@@ -928,12 +932,12 @@ function startRecheck($: EngineInterface) {
   })
 }
 
-// Picks up a dismissal another session wrote and redraws the reset countdown. Stops
+// Picks up a dismissal another session wrote, keeps one this session made, and redraws the reset countdown. Stops
 // once the band shows nothing.
 async function recheckBand($: EngineInterface) {
   const path = await limitsPath($)
   const current = await read($, band)
-  const levels = path ? await readLevels($, path) : current.levels
+  const levels = path ? maxLevels(await readLevels($, path), current.levels) : current.levels
   if (!sameLevels(levels, current.levels)) await update($, band, (b) => ({ ...b, levels }))
   if (shownWindows(current.readings, levels).length) {
     $.ui.invalidate('ui.render')

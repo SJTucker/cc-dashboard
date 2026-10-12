@@ -72,6 +72,11 @@ export function dismissLevels(shown: readonly Reading[], levels: Levels): Levels
   return out
 }
 
+// The higher level of each window, so a dismissal held in one place survives a read of the other.
+export function maxLevels(a: Levels, b: Levels): Levels {
+  return { five_hour: Math.max(a.five_hour, b.five_hour), seven_day: Math.max(a.seven_day, b.seven_day) }
+}
+
 export function sameLevels(a: Levels, b: Levels): boolean {
   return KINDS.every((kind) => a[kind] === b[kind])
 }

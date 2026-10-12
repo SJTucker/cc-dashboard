@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { NO_LEVELS, bandText, dismissLevels, levelOf, parseLevels, readingsOf, resetLevels, resetText, sameLevels, shownWindows } from './limits'
+import { NO_LEVELS, bandText, dismissLevels, levelOf, maxLevels, parseLevels, readingsOf, resetLevels, resetText, sameLevels, shownWindows } from './limits'
 
 const NOW = Date.parse('2026-10-12T12:00:00.000Z')
 const IN_2H10 = '2026-10-12T14:10:00.000Z'
@@ -77,4 +77,8 @@ test('bandText names each shown window with its rounded percent and reset', asyn
     { kind: 'seven_day', percent: 77, resetsAt: IN_3D4H },
   ], NOW)).toBe('⚠ Nearing your plan limit · Session 81% (resets in 2h 10m) · Week 77% (resets in 3d 4h)')
   expect(bandText([{ kind: 'seven_day', percent: 90 }], NOW)).toBe('⚠ Nearing your plan limit · Week 90%')
+})
+
+test('maxLevels keeps the higher level of each window', async () => {
+  expect(maxLevels({ five_hour: 75, seven_day: 0 }, { five_hour: 0, seven_day: 90 })).toEqual({ five_hour: 75, seven_day: 90 })
 })

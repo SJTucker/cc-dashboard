@@ -1711,7 +1711,7 @@ test('an exit with a ready handoff clears the status and fills nothing', async (
   expect(statuses).toEqual(['', READY, ''])
 })
 
-// The plan limit band (limit-band.tsx).
+// The plan limit band (register.ts).
 const LIMITS = '/home/u/.claude/cc-dashboard/limit-warnings.json'
 const BAND = {
   plugin: 'cc-dashboard',
@@ -1823,13 +1823,17 @@ test('the band gives way to a survey', async ($, on) => {
 })
 
 test('a failed write on Dismiss still hides the band here and logs once', async ($, on) => {
-  const { state, logged } = world(on)
+  const { state, logged, clock } = world(on)
   const ui = await $.ui.mount(BAND)
   await $.session.measure(measure([at(81), WEEK]))
   state.writeFails = true
   await ui.press({ key: 'dismiss-limits' })
   expect(await bandLine(ui)).toBeUndefined()
   expect(logged.filter((line) => /limit band/.test(String(line)))).toHaveLength(1)
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  await $.session.measure(measure([at(81), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
   await ui.unmount()
 })
 
