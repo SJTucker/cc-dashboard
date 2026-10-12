@@ -46,4 +46,19 @@ function dailyWarning(today) {
   return share >= budget - DAILY_WARN_MARGIN ? { share, budget, rolling } : null;
 }
 
-if (typeof module === 'object') module.exports = { formatStatus, shareMeter, dailyWarning };
+// Short names for the plan windows in the status strip, by the window keys in
+// WINDOWS (lib/limits.js). An unknown key shows the window's own label.
+const LIMIT_SHORT_NAMES = { five_hour: 'Session', seven_day: 'Week' };
+
+// The one-line form of the Plan usage banner for the sticky status strip. `high` is
+// the windows at or past the warn percent and `dayHigh` is dailyWarning's result.
+// The label is Limit when a window is high and Budget when only today's budget is.
+// Returns { label, value } or null when the banner is hidden.
+function limitStripText(high, dayHigh) {
+  if (!high.length && !dayHigh) return null;
+  const parts = high.map((l) => `${LIMIT_SHORT_NAMES[l.key] || l.label} ${Math.round(l.percent)}%`);
+  if (dayHigh) parts.push(`Today ${dayHigh.share}%`);
+  return { label: high.length ? 'Limit' : 'Budget', value: parts.join(' · ') };
+}
+
+if (typeof module === 'object') module.exports = { formatStatus, shareMeter, dailyWarning, limitStripText };
