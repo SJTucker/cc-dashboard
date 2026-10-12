@@ -126,6 +126,8 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const listed: string[] = []
   const readLog: string[] = []
   const clock = mock.clock(on, { now: 61_000 })
+  // The component core draws when no plugin does. A $.ui.mount needs it beneath the plugins.
+  on('ui.render', () => ({ type: 'engine' as const, ref: 0 }))
   on('fs.stat', (_$, e) => {
     const mtimeMs = state.stats[e.path]
     if (mtimeMs !== undefined) return { value: { kind: 'file' as const, size: 1, mtimeMs, isLink: false } }
@@ -1707,4 +1709,132 @@ test('an exit with a ready handoff clears the status and fills nothing', async (
   await clock.settle()
   expect(fills).toEqual([])
   expect(statuses).toEqual(['', READY, ''])
+})
+
+// The plan limit band (limit-band.tsx).
+const LIMITS = '/home/u/.claude/cc-dashboard/limit-warnings.json'
+const BAND = {
+  plugin: 'cc-dashboard',
+  surface: 'terminal' as const,
+  component: 'AbovePrompt' as const,
+  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 120, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+}
+// A window at `percent` that resets 2 h 10 min after the mock clock's start.
+const at = (percent: number, kind: 'five_hour' | 'seven_day' = 'five_hour'): SessionRateLimit =>
+  ({ kind, percentUsed: percent, resetsAt: new Date(61_000 + 130 * 60_000).toISOString() })
+const bandLine = async (ui: { find: (q: { type?: string; text?: RegExp }) => Promise<{ text: string } | undefined> }) =>
+  (await ui.find({ type: 'Text', text: /Nearing your plan limit/ }))?.text
+
+test('a window at 75% shows the limit band and one at 74.4% does not', async ($, on) => {
+  world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(74.4), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  await $.session.measure(measure([at(74.5), WEEK]))
+  expect(await bandLine(ui)).toBe('⚠ Nearing your plan limit · Session 75% (resets in 2h 10m)')
+  await ui.unmount()
+})
+
+test('Dismiss records the shown levels in limit-warnings.json and hides the band', async ($, on) => {
+  const { writes } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81), at(77, 'seven_day')]))
+  expect(await bandLine(ui)).toBe('⚠ Nearing your plan limit · Session 81% (resets in 2h 10m) · Week 77% (resets in 2h 10m)')
+  await ui.press({ key: 'dismiss-limits' })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 75 })
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('after a dismissal at 75 the band stays hidden at 80% and comes back at 90%', async ($, on) => {
+  world(on, { files: { [LIMITS]: '{"five_hour":75,"seven_day":0}' } })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  await $.session.measure(measure([at(90), WEEK]))
+  expect(await bandLine(ui)).toBe('⚠ Nearing your plan limit · Session 90% (resets in 2h 10m)')
+  await ui.unmount()
+})
+
+test('a window below 75% sets its dismissed level back to 0', async ($, on) => {
+  const { writes } = world(on, { files: { [LIMITS]: '{"five_hour":90,"seven_day":75}' } })
+  await $.session.measure(measure([at(12), at(80, 'seven_day')]))
+  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 0, seven_day: 75 })
+})
+
+test('a measure that changes no level writes no file', async ($, on) => {
+  const { writes } = world(on)
+  await $.session.measure(measure([at(23.5), WEEK]))
+  expect(writes[LIMITS]).toBeUndefined()
+})
+
+test('a measure with no plan windows leaves the band and the file alone', async ($, on) => {
+  const { writes } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81)]))
+  await $.session.measure(measure([{ kind: 'spend_limit', percentUsed: 99 }]))
+  expect(await bandLine(ui)).toBe('⚠ Nearing your plan limit · Session 81% (resets in 2h 10m)')
+  expect(writes[LIMITS]).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a dismissal another session wrote hides the band on the next measure', async ($, on) => {
+  world(on, { files: { [LIMITS]: '{"five_hour":75,"seven_day":0}' } })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a dismissal another session wrote hides the band within a minute', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81), WEEK]))
+  expect(await bandLine(ui)).toBeDefined()
+  state.files[LIMITS] = '{"five_hour":75,"seven_day":0}'
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('the recheck timer redraws the reset countdown', async ($, on) => {
+  const { clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81), WEEK]))
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBe('⚠ Nearing your plan limit · Session 81% (resets in 2h 9m)')
+  await ui.unmount()
+})
+
+test('an unreadable limit-warnings.json counts as no dismissal', async ($, on) => {
+  world(on, { files: { [LIMITS]: 'not json' } })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81), WEEK]))
+  expect(await bandLine(ui)).toBe('⚠ Nearing your plan limit · Session 81% (resets in 2h 10m)')
+  await ui.unmount()
+})
+
+test('the band gives way to a survey', async ($, on) => {
+  world(on)
+  const ui = await $.ui.mount({ ...BAND, props: { ...BAND.props, hasSurvey: true } })
+  await $.session.measure(measure([at(81), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a failed write on Dismiss still hides the band here and logs once', async ($, on) => {
+  const { state, logged } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81), WEEK]))
+  state.writeFails = true
+  await ui.press({ key: 'dismiss-limits' })
+  expect(await bandLine(ui)).toBeUndefined()
+  expect(logged.filter((line) => /limit band/.test(String(line)))).toHaveLength(1)
+  await ui.unmount()
+})
+
+test('a failure in the band code does not stop record-statusline', async ($, on) => {
+  const { ran } = world(on, { files: { [LIMITS]: '{"five_hour":90,"seven_day":0}' }, writeFails: true })
+  await $.session.measure(measure([at(12), WEEK]))
+  expect(ran.map((r) => r.argv[0])).toEqual(['/repo/bin/record-statusline'])
 })

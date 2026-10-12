@@ -1,8 +1,10 @@
+import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
 import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, settingsChanges, snapshotName } from './setup'
 import type { Kind, SetupEntry, Snapshot } from './setup'
 import { REPO_STEPS, handoffDocument, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
+import { NO_LEVELS, bandText, dismissLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/, and judges new Claude Code releases for the setup changes markers
@@ -886,6 +888,71 @@ async function checkSetup($: EngineInterface) {
   await $.store.set(SETUP_KEY, state)
 }
 
+// The plan limit band above the prompt. session.measure stores the latest Session and
+// Week readings and the dismissed levels in $.state. The band lists each window above
+// its dismissed level. Dismiss writes the levels to limit-warnings.json, which every
+// running session reads on its next measure and on the recheck timer.
+
+const RECHECK_MS = 60_000
+const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readings: [], levels: NO_LEVELS })
+
+// A module variable, so a reload drops it. The next measure starts the timer again.
+let recheck: Timer | undefined
+
+async function limitsPath($: EngineInterface) {
+  const dir = await configDir($)
+  return dir ? `${dir}/cc-dashboard/limit-warnings.json` : null
+}
+
+async function readLevels($: EngineInterface, path: string) {
+  return parseLevels(await $.fs.read(path).then(String, () => undefined))
+}
+
+// Stores this reading and resets a window that has dropped below the first level. A
+// measure with no Session or Week window (an API-key login) leaves the band as it is.
+async function measureBand($: EngineInterface, limits: readonly SessionRateLimit[]) {
+  const readings = readingsOf(limits)
+  if (!readings.length) return
+  const path = await limitsPath($)
+  const stored = path ? await readLevels($, path) : NO_LEVELS
+  const levels = resetLevels(readings, stored)
+  await update($, band, () => ({ readings, levels }))
+  if (path && !sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
+  if (shownWindows(readings, levels).length) startRecheck($)
+}
+
+function startRecheck($: EngineInterface) {
+  if (recheck) return
+  recheck = $.clock.every(RECHECK_MS, () => {
+    recheckBand($).catch((err) => fail($, `limit band recheck failed (${errorName(err)})`))
+  })
+}
+
+// Picks up a dismissal another session wrote and redraws the reset countdown. Stops
+// once the band shows nothing.
+async function recheckBand($: EngineInterface) {
+  const path = await limitsPath($)
+  const current = await read($, band)
+  const levels = path ? await readLevels($, path) : current.levels
+  if (!sameLevels(levels, current.levels)) await update($, band, (b) => ({ ...b, levels }))
+  if (shownWindows(current.readings, levels).length) {
+    $.ui.invalidate('ui.render')
+    return
+  }
+  recheck?.cancel()
+  recheck = undefined
+}
+
+// Hides the band in this session first, so a failed write still hides it here.
+async function dismissBand($: EngineInterface) {
+  const current = await read($, band)
+  const path = await limitsPath($)
+  const stored = path ? await readLevels($, path) : NO_LEVELS
+  const levels = dismissLevels(shownWindows(current.readings, current.levels), stored)
+  await update($, band, (b) => ({ ...b, levels }))
+  if (path) await $.fs.write(path, JSON.stringify(levels))
+}
+
 export const register: Register = (on) => {
   // Registers /backfill-updates inline. The version check runs in every session. The
   // reviews and the setup check run in interactive sessions only. All three run from
@@ -921,6 +988,11 @@ export const register: Register = (on) => {
       if (input) await run($, 'record-statusline', input, MEASURE_TIMEOUT_MS)
     } catch (err) {
       fail($, `measure failed (${err instanceof Error ? err.name : 'error'})`)
+    }
+    try {
+      await measureBand($, e.rateLimits)
+    } catch (err) {
+      fail($, `limit band failed (${errorName(err)})`)
     }
     return result
   })
@@ -1039,5 +1111,29 @@ export const register: Register = (on) => {
     const result = await next(e)
     await track($, () => {}, false)
     return result
+  })
+
+  // The plan limit band above the prompt.
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    if (e.props.hasSurvey) return next(e)
+    const current = await read($, band)
+    const shown = shownWindows(current.readings, current.levels)
+    if (!shown.length) return next(e)
+    const now = await $.clock.now()
+    const { Box, Button, Text } = $.ui.resolve(e)
+    return h(
+      Box,
+      { key: 'limit-band', gap: 1 },
+      h(Text, { color: 'warning', wrap: 'truncate-end' }, bandText(shown, now)),
+      h(Button, {
+        key: 'dismiss-limits',
+        label: 'Dismiss',
+        role: 'dismiss',
+        hotkey: 'd',
+        onPress: () => {
+          dismissBand($).catch((err) => fail($, `could not dismiss the limit band (${errorName(err)})`))
+        },
+      }),
+    )
   })
 }

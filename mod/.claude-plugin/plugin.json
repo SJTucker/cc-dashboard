@@ -1,5 +1,6 @@
 {
   "name": "cc-dashboard",
   "version": "0.1.0",
-  "description": "Records rate limits, session snapshots and live session state for cc-dashboard"
+  "description": "Records rate limits, session snapshots and live session state for cc-dashboard",
+  "types": "./types/cc-dashboard.d.ts"
 }
