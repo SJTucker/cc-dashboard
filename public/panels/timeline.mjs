@@ -18,6 +18,17 @@ const TIMELINE_BAR_HEIGHT = 10;
 const TIMELINE_AXIS_HEIGHT = 20;
 const TIMELINE_GUTTER = 200;
 const TIMELINE_RIGHT_PAD = 10;
+// A lane that a /clear started (follows in laneLayout) has its label indented by
+// FOLLOW_INDENT px with a ↳ before its glyph, which together take FOLLOW_CHARS of the
+// label's characters. Its curve from the replaced session's lane is TIMELINE_COLOR at
+// LINK_OPACITY, with a LINK_DOT px dot at each end, and starts LINK_GAP px clear of
+// each bar. An open bar's arrowhead is ARROW_PX wide.
+const FOLLOW_INDENT = 12;
+const FOLLOW_CHARS = 4;
+const LINK_OPACITY = 0.55;
+const LINK_DOT = 2;
+const LINK_GAP = 3;
+const ARROW_PX = 6;
 // The Rebuilds column at the right: its heading row above the lanes, the gap between
 // the plot and the column, and the narrowest plot that still gets the column. Below
 // that width the column is left out and the header note carries the total.
@@ -126,7 +137,7 @@ function timelineKey(live, width, now) {
   return JSON.stringify([
     width,
     Math.floor(now / 60_000),
-    live.sessions.map((s) => [s.spans, s.live, s.title, s.titleSource, s.project, s.branch, s.costTodayUsd, s.prompts, s.rebuilds]),
+    live.sessions.map((s) => [s.sessionId, s.clearedFrom, s.spans, s.live, s.title, s.titleSource, s.project, s.branch, s.costTodayUsd, s.prompts, s.rebuilds]),
   ]);
 }
 
@@ -179,17 +190,47 @@ function drawRebuildCell(svg, rebuilds, column, width, mid) {
   svg.appendChild(cost);
 }
 
-// One session's label in the gutter, its bars and its Rebuilds cell.
-function drawLane(svg, { session: s, lane, bars }, maxChars, xOf, { top, column, width }) {
-  const mid = top + lane * TIMELINE_LANE_HEIGHT + TIMELINE_LANE_HEIGHT / 2;
-  const label = svgEl('text', { class: 'timeline-label', x: 0, y: mid + 4 });
+const laneMid = (top, lane) => top + lane * TIMELINE_LANE_HEIGHT + TIMELINE_LANE_HEIGHT / 2;
+
+// The curve from the end of the replaced session's last bar to the start of this
+// lane's first bar (linkPath in public/chart-geometry.js), with a dot at each end.
+// drawTimeline draws every link before the lanes, so bars sit on top of the curves.
+function drawLink(svg, { lane, bars, follows }, top) {
+  const last = follows.bars[follows.bars.length - 1];
+  const x1 = last.x + last.width + (last.open ? ARROW_PX : 0) + LINK_GAP;
+  const y1 = laneMid(top, follows.lane);
+  const x2 = bars[0].x - LINK_GAP;
+  const y2 = laneMid(top, lane);
+  const path = svgEl('path', {
+    class: 'timeline-link', d: linkPath(x1, y1, x2, y2), fill: 'none',
+    stroke: TIMELINE_COLOR, 'stroke-opacity': LINK_OPACITY, 'stroke-width': 1.25,
+  });
+  const tip = svgEl('title', {});
+  tip.textContent = `Started by /clear in ${follows.session.title || follows.session.project || 'the session above'}`;
+  path.appendChild(tip);
+  svg.appendChild(path);
+  for (const [cx, cy] of [[x1, y1], [x2, y2]]) {
+    svg.appendChild(svgEl('circle', { class: 'timeline-link-end', cx, cy, r: LINK_DOT, fill: TIMELINE_COLOR }));
+  }
+}
+
+// One session's label in the gutter, its bars and its Rebuilds cell. A lane a /clear
+// started has its label indented, with a ↳ before the glyph.
+function drawLane(svg, { session: s, lane, bars, follows }, maxChars, xOf, { top, column, width }) {
+  const mid = laneMid(top, lane);
+  const label = svgEl('text', { class: 'timeline-label', x: follows ? FOLLOW_INDENT : 0, y: mid + 4 });
   if (s.titleSource === 'prompt') label.classList.add('prompt-title');
   const fullName = s.title || s.project || '—';
+  if (follows) {
+    const arrow = svgEl('tspan', { class: 'timeline-follow', 'aria-hidden': 'true' });
+    arrow.textContent = '↳ ';
+    label.appendChild(arrow);
+  }
   const glyph = svgEl('tspan', { 'aria-hidden': 'true' });
   glyph.textContent = s.live ? '⬢' : '⬡';
   const name = svgEl('title', {});
   name.textContent = fullName;
-  label.append(glyph, ` ${cutLabel(fullName, maxChars)}`, name);
+  label.append(glyph, ` ${cutLabel(fullName, follows ? maxChars - FOLLOW_CHARS : maxChars)}`, name);
   svg.appendChild(label);
 
   const fill = fillFor('timeline', s.live ? 'solid' : 'diag', TIMELINE_COLOR);
@@ -243,6 +284,7 @@ function drawTimeline(container, sessions, width, now) {
     svg.appendChild(head);
   }
   const maxChars = Math.floor((gutter - 8 - 14) / 6.6);
+  for (const lane of lanes) if (lane.follows) drawLink(svg, lane, top);
   for (const lane of lanes) drawLane(svg, lane, maxChars, xOf, { top, column, width });
   svg.appendChild(svgEl('line', {
     class: 'timeline-now', x1: xOf(now), x2: xOf(now), y1: top, y2: top + plotHeight,

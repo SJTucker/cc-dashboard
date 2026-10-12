@@ -79,6 +79,29 @@ test('recordSession leaves out a launch_id that is not a safe id string', () => 
   }
 });
 
+test('recordSession stores a cleared_from as clearedFrom', () => {
+  const dir = tmpDir();
+  recordSession(statuslineInput({ cleared_from: 'prev-1' }), dir, NOW);
+  assert.strictEqual(readSnapshot(dir).clearedFrom, 'prev-1');
+});
+
+test('recordSession leaves out a cleared_from that is not a safe id string', () => {
+  for (const cleared_from of [42, { id: 'x' }, '../x', '', 'a b', 'x'.repeat(129)]) {
+    const dir = tmpDir();
+    recordSession(statuslineInput({ cleared_from }), dir, NOW);
+    assert.ok(!('clearedFrom' in readSnapshot(dir)), `cleared_from ${JSON.stringify(cleared_from)} was stored`);
+  }
+});
+
+test('recordSession keeps a stored clearedFrom when a later write has none', () => {
+  const dir = tmpDir();
+  recordSession(statuslineInput({ cleared_from: 'prev-1', transcript_path: makeTranscript(NOW - 60_000) }), dir, NOW);
+  recordSession(statuslineInput({ transcript_path: makeTranscript(NOW - 30_000) }), dir, NOW);
+  const snap = readSnapshot(dir);
+  assert.strictEqual(snap.lastActiveAt, NOW - 30_000);
+  assert.strictEqual(snap.clearedFrom, 'prev-1');
+});
+
 test('recordSession falls back to current_dir, then cwd, for the project', () => {
   const dir = tmpDir();
   recordSession(statuslineInput({ workspace: { current_dir: '/x/fallback' } }), dir, NOW);
@@ -331,6 +354,17 @@ test('buildLiveSessions lists each session\'s cache rebuilds, oldest first', () 
   assert.deepStrictEqual(sessions.map((s) => s.rebuilds.length).sort(), [0, 2]);
 });
 
+test('buildLiveSessions sends each row\'s sessionId and clearedFrom', () => {
+  const snaps = [
+    snapshot({ sessionId: 'old' }),
+    snapshot({ sessionId: 'new', clearedFrom: 'old' }),
+    snapshot({ sessionId: 'odd', clearedFrom: 42 }),
+  ];
+  const { sessions } = buildLiveSessions(snaps, [], NOW);
+  const byId = Object.fromEntries(sessions.map((s) => [s.sessionId, s.clearedFrom]));
+  assert.deepStrictEqual(byId, { old: null, new: 'old', odd: null });
+});
+
 test('buildLiveSessions joins tokens and lines by sessionId and totals the rows', () => {
   const snaps = [
     snapshot({ sessionId: 's1', costUsd: 1.5, lastActiveAt: NOW - 60_000 }),
@@ -347,7 +381,7 @@ test('buildLiveSessions joins tokens and lines by sessionId and totals the rows'
   assert.deepStrictEqual(result.sessions.map((s) => [s.tokens, s.live]), [[1750, true], [15, false]]);
   assert.deepStrictEqual(result.sessions.map((s) => [s.linesAdded, s.linesRemoved]), [[10, 2], [1, 0]]);
   assert.deepStrictEqual(result.sessions.map((s) => round6(s.costTodayUsd)), [0.25, 0.01]);
-  assert.strictEqual('sessionId' in result.sessions[0], false);
+  assert.deepStrictEqual(result.sessions.map((s) => s.sessionId), ['s1', 's2']);
   assert.strictEqual('model' in result.sessions[0], false);
   assert.strictEqual('apiDurationMs' in result.sessions[0], false);
   assert.deepStrictEqual({ ...result.total, costTodayUsd: round6(result.total.costTodayUsd) }, {

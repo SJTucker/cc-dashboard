@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const {
   labelStep, barSlots, axisScale, tooltipPosition, donutSlices, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain,
   markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
-  rebuildTotals,
+  rebuildTotals, linkPath,
 } = require('../public/chart-geometry');
 
 test('labelStep keeps at most 12 labels on a wide chart', () => {
@@ -168,6 +168,59 @@ test('laneLayout does not stretch a live session whose last call is older than t
 test('laneLayout never opens the bar of a session that is not live', () => {
   const [{ bars }] = laneLayout([lane([[at(11, 55), at(11, 58)]], false)], xOf, NOW_T);
   assert.strictEqual(bars[0].open, false);
+});
+
+// A row with a session id and an optional /clear link, as /api/sessions/live sends it.
+const row = (sessionId, spans, clearedFrom = null, live = false) => ({ sessionId, spans, clearedFrom, live });
+const order = (lanes) => lanes.map((l) => [l.session.sessionId, l.follows ? l.follows.session.sessionId : null]);
+
+test('laneLayout puts a session started by /clear directly under the one it replaced', () => {
+  const a = row('a', [[at(9, 10), at(9, 40)]]);
+  const other = row('other', [[at(9, 20), at(10, 30)]]);
+  const b = row('b', [[at(9, 45), at(10, 0)]], 'a');
+  const c = row('c', [[at(10, 5), at(10, 20)]], 'b');
+  const lanes = laneLayout([other, c, b, a], xOf, NOW_T);
+  assert.deepStrictEqual(order(lanes), [['a', null], ['b', 'a'], ['c', 'b'], ['other', null]]);
+  assert.deepStrictEqual(lanes.map((l) => l.lane), [0, 1, 2, 3]);
+  assert.strictEqual(lanes[1].follows, lanes[0]);
+});
+
+test('laneLayout links through a cleared session that has no activity today', () => {
+  const a = row('a', [[at(9, 10), at(9, 40)]]);
+  const b = row('b', [], 'a');
+  const c = row('c', [[at(10, 5), at(10, 20)]], 'b');
+  assert.deepStrictEqual(order(laneLayout([c, b, a], xOf, NOW_T)), [['a', null], ['c', 'a']]);
+});
+
+test('laneLayout puts two sessions cleared from one session under it, earliest first', () => {
+  const a = row('a', [[at(9, 10), at(9, 40)]]);
+  const late = row('late', [[at(10, 30), at(10, 40)]], 'a');
+  const early = row('early', [[at(9, 50), at(10, 0)]], 'a');
+  assert.deepStrictEqual(order(laneLayout([late, a, early], xOf, NOW_T)), [['a', null], ['early', 'a'], ['late', 'a']]);
+});
+
+test('laneLayout makes a session whose cleared session is not listed a top-level lane', () => {
+  const b = row('b', [[at(9, 45), at(10, 0)]], 'yesterday');
+  const x = row('x', [[at(9, 10), at(9, 20)]]);
+  assert.deepStrictEqual(order(laneLayout([b, x], xOf, NOW_T)), [['x', null], ['b', null]]);
+});
+
+test('laneLayout keeps both lanes of a two-session loop', () => {
+  const a = row('a', [[at(9, 10), at(9, 40)]], 'b');
+  const b = row('b', [[at(9, 45), at(10, 0)]], 'a');
+  const lanes = laneLayout([b, a], xOf, NOW_T);
+  assert.strictEqual(lanes.length, 2);
+  assert.strictEqual(lanes.filter((l) => l.follows === null).length, 1);
+});
+
+test('linkPath is a curve that leaves and arrives horizontally', () => {
+  assert.strictEqual(linkPath(100, 11, 130, 33), 'M100,11 C118,11 112,33 130,33');
+});
+
+test('linkPath bends at least 10px when the next session starts before the old one ends', () => {
+  const d = linkPath(100, 11, 90, 33);
+  assert.strictEqual(d, 'M100,11 C110,11 80,33 90,33');
+  assert.ok(!d.includes('NaN'));
 });
 
 const rb = (t, main = true) => ({ t, main, cause: 'expired', reason: null, tokens: 50_000, gapMs: 1, premium: 0.1 });

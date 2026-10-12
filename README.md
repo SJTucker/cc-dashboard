@@ -336,7 +336,10 @@ the row's arrow to list the sessions one by one. Live and idle open sessions kee
 their own rows unless they belong to a launch group.
 
 The Session timeline panel, above Live sessions, shows the same sessions by time on
-the Today range. Each session has one lane, ordered by when it started working today.
+the Today range. Each session has one lane, ordered by when it started working
+today. A session that `/clear` started sits directly under the session it replaced,
+with `↳` before its title and a curve from the old session's last bar to its first
+bar. This needs the mod, which records which session each `/clear` ended.
 A bar covers a stretch of activity: it is built from the times of the session's calls
 today, subagent calls included, and a gap of more than 10 minutes starts a new bar.
 The axis runs from the hour of the earliest call to the next whole hour after now,
