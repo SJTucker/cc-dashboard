@@ -1,6 +1,8 @@
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
 import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, settingsChanges, snapshotName } from './setup'
 import type { Kind, SetupEntry, Snapshot } from './setup'
+import { REPO_STEPS, handoffDocument, planHandoff, resumePrompt } from './handoff'
+import type { StepOutput } from './handoff'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/, and judges new Claude Code releases for the setup changes markers
@@ -54,6 +56,11 @@ let launchId: string | undefined
 // opens carries no link. A reload drops it too. A /clear of a session with no transcript
 // keeps the earlier link, because that session never gets a row for the next one to link to.
 let clearedFrom: string | undefined
+// Whether this module has cleared the status yet. The engine keeps a plugin's status
+// until the plugin replaces or clears it, and a reload empties handoffs. So a status
+// shown before a reload would otherwise stay for the rest of the process. The first
+// turn.start after a load clears it once.
+let statusCleared = false
 
 function fail($: EngineInterface, text: string) {
   if (hasLogged) return
@@ -553,6 +560,78 @@ function forgetSession(id: string) {
   writeTimers.delete(id)
   writing.delete(id)
   lastWritten.delete(id)
+  handoffs.delete(id)
+}
+
+// Handoffs before idle compaction. Claude Code compacts an idle session once 0.9 of
+// its cache TTL has passed, in a 1h-TTL session with at least 200k tokens of context.
+// Just before that, the mod writes a handoff document from a fork of the full
+// conversation, so the user can /clear and resume from the file instead of a summary.
+// A session's entry is 'writing' while the fork runs, 'ready' once the file is
+// written, and 'failed' when the write gave up. Any entry blocks a second handoff
+// until turn.start removes it, so each idle gap gets one at most.
+const HANDOFF_STATUS = 'handoff ready · /clear to resume'
+const HANDOFF_STEP_TIMEOUT_MS = 5000
+type Handoff = { state: 'writing' | 'failed' } | { state: 'ready'; resume: string }
+const handoffs = new Map<string, Handoff>()
+
+// Runs each REPO_STEPS command in cwd. A command that fails or throws is recorded,
+// not raised, because the prompt shows the failure the way the skill shows its errors.
+async function repoState($: EngineInterface, cwd: string): Promise<StepOutput[]> {
+  const outputs: StepOutput[] = []
+  for (const step of REPO_STEPS) {
+    try {
+      const { exitCode, stdout, stderr } = await $.process.run([...step.argv], { cwd, timeoutMs: HANDOFF_STEP_TIMEOUT_MS })
+      outputs.push({ label: step.label, ok: exitCode === 0, text: (exitCode === 0 ? stdout : stderr).trim() })
+    } catch (err) {
+      outputs.push({ label: step.label, ok: false, text: errorName(err) })
+    }
+  }
+  return outputs
+}
+
+// The fork reads the conversation from before the compaction, from the cache, and
+// adds no transcript line. The file is written even when a turn or a /clear has come
+// since, because it is still a record of the session. Only the status and the
+// prefill need the entry to still be 'writing'. fs.write creates the handoffs folder
+// when it is missing.
+async function writeHandoff($: EngineInterface, id: string) {
+  const cwd = await $.session.cwd()
+  const plan = planHandoff(await repoState($, cwd), cwd)
+  if (!plan) throw new Error('no timestamp')
+  const reply = await $.model.fork({ prompt: plan.prompt })
+  if (!reply.isAnswered) throw new Error(`fork ${reply.reason}`)
+  const doc = handoffDocument(reply.text)
+  if (!doc) throw new Error('fork empty')
+  await $.fs.write(plan.path, doc)
+  if (handoffs.get(id)?.state !== 'writing') return
+  handoffs.set(id, { state: 'ready', resume: resumePrompt(plan.path) })
+  $.ui.status(HANDOFF_STATUS)
+}
+
+// Starts the handoff and returns at once. A failure is logged each time, because it
+// happens at most once per idle gap.
+function startHandoff($: EngineInterface, id: string) {
+  handoffs.set(id, { state: 'writing' })
+  writeHandoff($, id).catch((err) => {
+    if (handoffs.get(id)?.state === 'writing') handoffs.set(id, { state: 'failed' })
+    note($, `handoff failed (${errorText(err)})`)
+  })
+}
+
+// A prompt makes the handoff out of date, so turn.start drops it and clears the
+// status. The file stays on disk. The first call after a load also clears a status
+// that an earlier load of this module set.
+async function dropHandoff($: EngineInterface) {
+  try {
+    const id = await $.session.id()
+    const handoff = handoffs.get(id)
+    handoffs.delete(id)
+    if (handoff?.state === 'ready' || !statusCleared) $.ui.status('')
+    statusCleared = true
+  } catch (err) {
+    fail($, `handoff failed (${errorName(err)})`)
+  }
 }
 
 // Setup change markers. At each interactive session start, checkSetup compares the
@@ -844,6 +923,7 @@ export const register: Register = (on) => {
   // A turn that begins is working. turn.start has no agentId: a subagent's run raises
   // none.
   on('turn.start', async ($, e, next) => {
+    await dropHandoff($)
     await track($, (a, now) => setState(a, 'working', now))
     return next(e)
   })
@@ -871,6 +951,23 @@ export const register: Register = (on) => {
       a.tool = null
       setState(a, 'waiting', now)
     })
+    return next(e)
+  })
+
+  // Idle compaction reports trigger 'auto', as threshold compaction does. Threshold
+  // compaction runs inside a turn, so only a main-thread session whose state is
+  // waiting gets a handoff. The hook has 10 s of its own time and the fork takes
+  // longer, so the fork is not awaited. A fork started here keeps running after the
+  // hook returns, and it reads the conversation from before the compaction.
+  on('session.compact', async ($, e, next) => {
+    if (e.trigger === 'auto' && !e.agentId) {
+      try {
+        const id = await $.session.id()
+        if (activities.get(id)?.state === 'waiting' && !handoffs.has(id)) startHandoff($, id)
+      } catch (err) {
+        fail($, `handoff failed (${errorName(err)})`)
+      }
+    }
     return next(e)
   })
 

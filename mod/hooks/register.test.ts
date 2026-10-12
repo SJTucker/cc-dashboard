@@ -43,6 +43,23 @@ type World = {
   writeMs: number[]
   // Files that fs.stat finds, by path, with their mtimeMs. Other paths stat as the plugin's folder.
   stats: Record<string, number>
+  // What $.session.cwd returns.
+  cwd: string
+  // Answers process.run for git and date, keyed by argv joined with spaces. A command
+  // not listed exits 0 with no output. These runs go to commandRan, so `ran` keeps
+  // only bin/ scripts.
+  commands: Record<string, { exitCode: number; stdout: string; stderr?: string }>
+  // model.fork replies in call order. `throws` makes the call reject. With none left,
+  // the fork answers nothing-to-fork.
+  forks: Array<
+    | { isAnswered: true; text: string }
+    | { isAnswered: false; reason: 'nothing-to-fork' | 'empty-reply' | 'aborted' }
+    | { throws: true }
+  >
+  // How long each fork takes on the mock clock.
+  forkMs: number
+  // The input box's text, which $.prompt.read returns.
+  draft: string
 }
 
 const entry = (name: string): Entry => ({ name, kind: name.endsWith('.md') ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -92,9 +109,18 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     writeFails: false,
     writeMs: [],
     stats: {},
+    cwd: '/work/my.demo',
+    commands: {},
+    forks: [],
+    forkMs: 0,
+    draft: '',
     ...w,
   }
   const ran: Ran[] = []
+  const commandRan: string[] = []
+  const forked: string[] = []
+  const statuses: string[] = []
+  const fills: string[] = []
   const reviewRan: Ran[] = []
   const endSawRan: number[] = []
   const listed: string[] = []
@@ -132,6 +158,24 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     if ('throws' in reply) throw new Error('refused')
     return { value: { ...reply, usage } }
   })
+  on('model.fork', async (_$, e) => {
+    forked.push(e.prompt)
+    if (state.forkMs > 0) await clock.sleep(state.forkMs)
+    const reply = state.forks.shift() ?? { isAnswered: false as const, reason: 'nothing-to-fork' as const }
+    if ('throws' in reply) throw new Error('refused')
+    return { value: { ...reply, usage } }
+  })
+  on('session.compact', (_$, e) => ({ messages: e.messages }))
+  on('session.cwd', () => ({ value: state.cwd }))
+  on('ui.status', (_$, e) => {
+    statuses.push(e.text)
+    return { value: undefined }
+  })
+  on('prompt.read', () => ({ value: { text: state.draft, cursor: state.draft.length } }))
+  on('prompt.fill', (_$, e) => {
+    fills.push(e.text)
+    return { isFilled: true }
+  })
   on('store.get', (_$, e) => ({ value: state.store[e.key] }))
   on('store.set', (_$, e) => {
     state.store[e.key] = e.value
@@ -161,6 +205,12 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     return { sessionId: e.sessionId }
   })
   on('process.run', (_$, e) => {
+    if (e.argv[0] === 'git' || e.argv[0] === 'date') {
+      const key = e.argv.join(' ')
+      commandRan.push(key)
+      const out = state.commands[key] ?? { exitCode: 0, stdout: '' }
+      return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     if (e.argv[0]?.endsWith('/review-session')) {
       const stdin = e.init?.stdin
       let parsed: unknown = stdin
@@ -206,7 +256,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('tool.check', () => ({ decision: state.verdict }))
   on('agent.spawn', () => ({ model: 'claude-haiku-4-5', agentId: 'a1' }))
-  return { ran, reviewRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog }
+  return { ran, reviewRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, commandRan, forked, statuses, fills }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -1381,4 +1431,175 @@ test('the first rule in a folder that was empty at the first check is marked add
   state.dirs[`${CFG}/rules`] = ['x.md']
   await startAndSettle($, clock)
   expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 61_000, kind: 'claude-md', name: 'rules/x.md', label: 'added', file: rule }])
+})
+
+const REPO = {
+  'git rev-parse --show-toplevel': { exitCode: 0, stdout: '/work/my.demo\n' },
+  'git branch --show-current': { exitCode: 0, stdout: 'feat/Handoff X\n' },
+  'date +%Y-%m-%d-%H%M%S': { exitCode: 0, stdout: '2026-10-12-154500\n' },
+}
+const HANDOFF = '/work/my.demo/.claude/handoffs/2026-10-12-154500-feat-handoff-x.md'
+const DOC = { isAnswered: true as const, text: '# Handoff: demo\n\nbody\n' }
+const READY = 'handoff ready · /clear to resume'
+const compacting = (over: { trigger?: 'auto' | 'manual'; agentId?: string } = {}) => ({
+  trigger: 'auto' as const,
+  messages: [{ role: 'user' as const, text: 'hi', toolUses: [] }],
+  ...over,
+})
+// One finished main-thread turn, which leaves the session waiting. Named idleTurn
+// because this file already has a constant called idle.
+async function idleTurn($: EngineInterface) {
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await $.turn.complete(turnEnd())
+}
+
+test('an idle auto compaction writes a handoff from a fork and shows the status', async ($, on) => {
+  const { writes, forked, statuses, commandRan, clock } = world(on, { commands: REPO, forks: [DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(commandRan).toContain('git rev-parse --show-toplevel')
+  expect(commandRan).toContain('date +%Y-%m-%d-%H%M%S')
+  expect(forked.length).toBe(1)
+  expect(forked[0]).toContain('feat/Handoff X')
+  expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
+  expect(statuses).toEqual(['', READY])
+})
+
+test('the first turn after a load clears the status once, for a status an earlier load left', async ($, on) => {
+  const { statuses } = world(on)
+  await idleTurn($)
+  await idleTurn($)
+  expect(statuses).toEqual([''])
+})
+
+test('the compaction passes on before the fork answers', async ($, on) => {
+  const { writes, clock } = world(on, { commands: REPO, forks: [DOC], forkMs: 30_000 })
+  await idleTurn($)
+  const result = await $.session.compact(compacting())
+  expect(result.messages.length).toBe(1)
+  await clock.advance(1_000)
+  expect(writes[HANDOFF]).toBe(undefined)
+  await clock.advance(30_000)
+  await clock.settle()
+  expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
+})
+
+test('a manual compaction writes no handoff', async ($, on) => {
+  const { forked, clock } = world(on, { commands: REPO, forks: [DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting({ trigger: 'manual' }))
+  await clock.settle()
+  expect(forked).toEqual([])
+})
+
+test('an auto compaction during a turn writes no handoff', async ($, on) => {
+  const { forked, clock } = world(on, { commands: REPO, forks: [DOC] })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(forked).toEqual([])
+})
+
+test('a subagent compaction writes no handoff', async ($, on) => {
+  const { forked, clock } = world(on, { commands: REPO, forks: [DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting({ agentId: 'a1' }))
+  await clock.settle()
+  expect(forked).toEqual([])
+})
+
+test('with no session state, as after a reload, compaction passes on and writes nothing', async ($, on) => {
+  const { forked, logged, clock } = world(on, { commands: REPO, forks: [DOC] })
+  const result = await $.session.compact(compacting())
+  await clock.settle()
+  expect(result.messages.length).toBe(1)
+  expect(forked).toEqual([])
+  expect(logged).toEqual([])
+})
+
+test('a second idle compaction before the next turn writes nothing more', async ($, on) => {
+  const { forked, clock } = world(on, { commands: REPO, forks: [DOC, DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(forked.length).toBe(1)
+})
+
+test('after the next turn, a later idle compaction writes again and the status clears in between', async ($, on) => {
+  const { forked, statuses, clock } = world(on, { commands: REPO, forks: [DOC, DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(forked.length).toBe(2)
+  expect(statuses).toEqual(['', READY, '', READY])
+})
+
+test('a fork with no answer writes nothing, sets no status and logs the reason', async ($, on) => {
+  const { writes, statuses, logged, clock } = world(on, { commands: REPO, forks: [{ isAnswered: false, reason: 'empty-reply' }] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(writes[HANDOFF]).toBe(undefined)
+  expect(statuses).toEqual([''])
+  expect(logged).toEqual(['handoff failed (fork empty-reply)'])
+})
+
+test('a fork that rejects is logged, and no retry runs in the same idle gap', async ($, on) => {
+  const { forked, logged, clock } = world(on, { commands: REPO, forks: [{ throws: true }, DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(forked.length).toBe(1)
+  // The engine may wrap the handler's error message, so only the prefix is fixed.
+  expect(logged.length).toBe(1)
+  expect(logged[0]).toMatch(/^handoff failed \(/)
+})
+
+test('a blank fork reply counts as no answer', async ($, on) => {
+  const { writes, logged, clock } = world(on, { commands: REPO, forks: [{ isAnswered: true, text: '  \n' }] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(writes[HANDOFF]).toBe(undefined)
+  expect(logged).toEqual(['handoff failed (fork empty)'])
+})
+
+test('without a timestamp no fork runs', async ($, on) => {
+  const commands = { ...REPO, 'date +%Y-%m-%d-%H%M%S': { exitCode: 1, stdout: '', stderr: 'date: failed' } }
+  const { forked, logged, clock } = world(on, { commands, forks: [DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(forked).toEqual([])
+  expect(logged).toEqual(['handoff failed (no timestamp)'])
+})
+
+test('outside a git repo the handoff goes under cwd with no-branch', async ($, on) => {
+  const notGit = { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }
+  const commands = { ...REPO, 'git rev-parse --show-toplevel': notGit, 'git branch --show-current': notGit }
+  const { writes, clock } = world(on, { commands, forks: [DOC], cwd: '/work/plain' })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(writes['/work/plain/.claude/handoffs/2026-10-12-154500-no-branch.md']).toBe('# Handoff: demo\n\nbody\n')
+})
+
+test('a turn that starts while the fork runs gets the file but no status', async ($, on) => {
+  const { writes, statuses, clock } = world(on, { commands: REPO, forks: [DOC], forkMs: 30_000 })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.advance(1_000)
+  await $.turn.start({ text: 'back', turnId: 't2' })
+  await clock.advance(30_000)
+  await clock.settle()
+  expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
+  expect(statuses).toEqual([''])
 })
