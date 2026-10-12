@@ -121,6 +121,12 @@ releases. If an update breaks it, the transcript shows one line starting
 `cc-dashboard:`, or the Plan usage panel's "as of" time stops moving.
 `claude plugin validate mod`, run from this folder, says what the engine refuses.
 
+When the Session or Week plan window reaches 75%, the mod shows a band above the
+prompt. The band lists each window at 75% or more, with its percent and the time
+until it resets. Dismiss hides the band in this session at once and in other running
+sessions within a minute. A window dismissed at 75% shows again at 90%. A window
+dismissed at 90% stays hidden until it resets, and after a reset it warns again at 75%.
+
 ### Claude Code updates
 
 The mod also marks Claude Code releases that could change usage. At each session
