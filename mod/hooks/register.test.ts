@@ -1603,3 +1603,92 @@ test('a turn that starts while the fork runs gets the file but no status', async
   expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
   expect(statuses).toEqual([''])
 })
+
+const RESUME = `Read ${HANDOFF}, check Preconditions, then continue from "Next steps".`
+const clear = { reason: 'clear' as const, sessionId: 's1', resume: { id: 's1' } }
+
+test('a /clear after a handoff fills the resume prompt 4 s later and clears the status', async ($, on) => {
+  const { fills, statuses, clock } = world(on, { commands: REPO, forks: [DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  await $.session.end(clear)
+  await clock.advance(3_999)
+  expect(fills).toEqual([])
+  await clock.advance(1)
+  await clock.settle()
+  expect(fills).toEqual([RESUME])
+  expect(statuses).toEqual(['', READY, ''])
+})
+
+test('a prompt sent within 4 s of the /clear is not followed by the resume prompt', async ($, on) => {
+  const { fills, state, clock } = world(on, { commands: REPO, forks: [DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(1_000)
+  await $.turn.start({ text: 'new work', turnId: 't2' })
+  await clock.advance(3_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+})
+
+test('a /clear with no handoff fills nothing', async ($, on) => {
+  const { fills, clock } = world(on, { commands: REPO })
+  await idleTurn($)
+  await $.session.end(clear)
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+})
+
+test('text typed after the /clear is not replaced', async ($, on) => {
+  const { fills, statuses, clock } = world(on, { commands: REPO, forks: [DOC], draft: 'my own prompt' })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  await $.session.end(clear)
+  await clock.advance(4_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+  expect(statuses).toEqual(['', READY, ''])
+})
+
+test('a /clear after the user kept working fills nothing', async ($, on) => {
+  const { fills, clock } = world(on, { commands: REPO, forks: [DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  await idleTurn($)
+  await $.session.end(clear)
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+})
+
+test('a /clear while the fork runs fills nothing, and the file is still written', async ($, on) => {
+  const { fills, writes, statuses, clock } = world(on, { commands: REPO, forks: [DOC], forkMs: 30_000 })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.advance(1_000)
+  await $.session.end(clear)
+  await clock.advance(31_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+  expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
+  expect(statuses).toEqual([''])
+})
+
+test('an exit with a ready handoff clears the status and fills nothing', async ($, on) => {
+  const { fills, statuses, clock } = world(on, { commands: REPO, forks: [DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+  expect(statuses).toEqual(['', READY, ''])
+})

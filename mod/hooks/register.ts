@@ -634,6 +634,28 @@ async function dropHandoff($: EngineInterface) {
   }
 }
 
+// A /clear raises session.end and no session.start, so the new session is only
+// reachable from a timer set here. On Claude Code 2.1.296, a 4 s timer saw the new
+// session id and filled its input box. The status clears either way. The fill is
+// skipped when the user has typed in the box, and when they already sent a prompt,
+// because a fill during a turn would be sent as the next prompt.
+const PREFILL_DELAY_MS = 4000
+
+function prefillAfterClear($: EngineInterface, resume: string) {
+  $.clock.after(PREFILL_DELAY_MS, () => {
+    fillResume($, resume).catch((err) => note($, `handoff prefill failed (${errorText(err)})`))
+  })
+}
+
+async function fillResume($: EngineInterface, resume: string) {
+  $.ui.status('')
+  const id = await $.session.id()
+  if (activities.get(id)?.state === 'working') return
+  const draft = await $.prompt.read()
+  if (draft.text.trim()) return
+  await $.prompt.fill({ text: resume })
+}
+
 // Setup change markers. At each interactive session start, checkSetup compares the
 // setup files with the copies stored at the last check and writes one entry per
 // change to <config dir>/cc-dashboard/changes/<session id>.json, which
@@ -904,9 +926,15 @@ export const register: Register = (on) => {
   // session to this one. The process goes on after a /clear and after an in-process
   // /resume (reason 'resume'), and no session.start follows either, so the review
   // of the ended session starts here. After any other end, the next session.start
-  // reviews it.
+  // reviews it. A ready handoff turns into a prefill of the next session's input on a
+  // /clear, and its status is cleared on any other end.
   on('session.end', async ($, e, next) => {
+    const handoff = handoffs.get(e.sessionId)
     forgetSession(e.sessionId)
+    if (handoff?.state === 'ready') {
+      if (e.reason === 'clear') prefillAfterClear($, handoff.resume)
+      else $.ui.status('')
+    }
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
