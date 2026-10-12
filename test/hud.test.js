@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { formatStatus, shareMeter, dailyWarning } = require('../public/hud');
+const { formatStatus, shareMeter, dailyWarning, limitStripText } =require('../public/hud');
 
 test('formatStatus shows the load time as 24-hour local HH:MM:SS and counts with separators', () => {
   const loadedAt = new Date(2026, 8, 30, 10, 24, 21).getTime();
@@ -61,4 +61,38 @@ test('dailyWarning falls back to the fixed budget when the rolling budget is unk
 test('dailyWarning never fires at the weekend or without a reading', () => {
   assert.strictEqual(dailyWarning({ share: 50, budget: null, rollingBudget: null }), null);
   assert.strictEqual(dailyWarning(null), null);
+});
+
+const SESSION = { key: 'five_hour', label: 'Current session', percent: 81 };
+const WEEK = { key: 'seven_day', label: 'Current week (all models)', percent: 77 };
+
+test('limitStripText lists every window in high under the Limit label', () => {
+  assert.deepStrictEqual(limitStripText([SESSION, WEEK], null), { label: 'Limit', value: 'Session 81% · Week 77%' });
+});
+
+test('limitStripText names a single window', () => {
+  assert.deepStrictEqual(limitStripText([WEEK], null), { label: 'Limit', value: 'Week 77%' });
+});
+
+test('limitStripText shows only the day budget under the Budget label', () => {
+  assert.deepStrictEqual(limitStripText([], { share: 18, budget: 20, rolling: false }), { label: 'Budget', value: 'Today 18%' });
+});
+
+test('limitStripText appends the day budget after the windows', () => {
+  assert.deepStrictEqual(
+    limitStripText([{ ...WEEK, percent: 92 }], { share: 30, budget: 31, rolling: true }),
+    { label: 'Limit', value: 'Week 92% · Today 30%' }
+  );
+});
+
+test('limitStripText falls back to the label for an unknown window key', () => {
+  assert.deepStrictEqual(limitStripText([{ key: 'opus', label: 'Opus week', percent: 90 }], null), { label: 'Limit', value: 'Opus week 90%' });
+});
+
+test('limitStripText returns null when nothing is high', () => {
+  assert.strictEqual(limitStripText([], null), null);
+});
+
+test('limitStripText rounds the percent', () => {
+  assert.deepStrictEqual(limitStripText([{ ...SESSION, percent: 81.6 }], null), { label: 'Limit', value: 'Session 82%' });
 });

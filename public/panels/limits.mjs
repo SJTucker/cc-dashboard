@@ -118,6 +118,11 @@ function drawLimitsBanner(limits) {
   // dailyWarning (public/hud.js) compares today's share with the rolling budget.
   const dayHigh = dailyWarning(limits ? limits.today : null);
   banner.hidden = !high.length && !dayHigh;
+  // The banner scrolls away, so the sticky header's status strip repeats it in short form.
+  const strip = document.getElementById('stripLimit');
+  const stripText = limitStripText(high, dayHigh);
+  strip.hidden = !stripText;
+  strip.replaceChildren(...(stripText ? [`${stripText.label} `, el('b', { text: stripText.value })] : []));
   banner.replaceChildren(
     el('strong', { text: high.length ? 'Nearing your plan limit' : "Nearing today's budget" }),
     ...high.map((l) => el('div', {

@@ -188,6 +188,13 @@ html, body {
   color: var(--text-primary);
 }
 
+/* The short plan limit warning. The amber left edge matches .status-banner; the
+   Limit or Budget label and the percents carry the meaning, not the colour. */
+.strip-limit {
+  border-left: 3px solid var(--accent-cost);
+  padding-left: 8px;
+}
+
 /* Live shows a cyan ring and "Link live". Paused shows a dim ring and "Paused".
    The words carry the state, so it does not rely on colour. */
 .live-dot {
