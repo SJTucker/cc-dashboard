@@ -63,8 +63,8 @@ loads, and later starts, read only the transcripts that changed. The server crea
 ## Install the mod
 
 The mod in `mod/` records plan usage, live session state, session reviews, Claude Code
-release markers and setup change markers. Link it into your skills folder from the
-clone:
+release markers and setup change markers, and writes a handoff when Claude Code
+compacts an idle session. Link it into your skills folder from the clone:
 
 ```bash
 ln -s "$PWD/mod" ~/.claude/skills/cc-dashboard
@@ -192,6 +192,7 @@ tests can avoid the one in the clone.
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
 | `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session` |
 | `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server, when you click Apply |
+| `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, when Claude Code's idle compaction starts. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
 | rtk's `history.db` | `RTK_DB` | rtk |
 
 `transcripts.db` runs in SQLite WAL mode. While a process has it open,
@@ -238,6 +239,15 @@ The mod also reads these files to record setup changes. It writes none of them.
     with `@path`, rules, skills, agents, and a project's `CLAUDE.md` and
     `CLAUDE.local.md`. Changes to settings files, hook scripts, the statusline script
     and rtk's config are labelled on your machine and not sent.
+- **The mod forks the session's own model** once each time Claude Code compacts an
+  idle session. Idle compaction runs in a session with a 1-hour cache that has sat
+  idle for about 54 minutes and holds at least 200,000 tokens of context. The fork
+  reads the whole conversation from the prompt cache and sends the output of
+  `git rev-parse`, `git branch`, `git log`, `git worktree list`, `git status`,
+  `git diff --stat` and `git stash list` for the session's folder. It writes no
+  transcript line, so the dashboard's totals leave out its cost. Setting
+  `"idleCompaction": false` or `"autoCompactEnabled": false` in `settings.json`, or
+  `DISABLE_AUTO_COMPACT=1`, turns off idle compaction and with it the handoff.
 
 ## Check it works
 
