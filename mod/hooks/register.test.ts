@@ -1768,6 +1768,14 @@ test('a measure that changes no level writes no file', async ($, on) => {
   expect(writes[LIMITS]).toBeUndefined()
 })
 
+test('a measure whose Session reading has already reset does not show the band', async ($, on) => {
+  world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([{ kind: 'five_hour', percentUsed: 81, resetsAt: new Date(61_000 - 1).toISOString() }, WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
 test('a measure with no plan windows leaves the band and the file alone', async ($, on) => {
   const { writes } = world(on)
   const ui = await $.ui.mount(BAND)

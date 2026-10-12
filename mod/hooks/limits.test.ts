@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { NO_LEVELS, bandText, dismissLevels, levelOf, maxLevels, parseLevels, readingsOf, resetLevels, resetText, sameLevels, shownWindows } from './limits'
+import { NO_LEVELS, bandText, dismissLevels, levelOf, liveReadings, maxLevels, parseLevels, readingsOf, resetLevels, resetText, sameLevels, shownWindows } from './limits'
 
 const NOW = Date.parse('2026-10-12T12:00:00.000Z')
 const IN_2H10 = '2026-10-12T14:10:00.000Z'
@@ -81,4 +81,12 @@ test('bandText names each shown window with its rounded percent and reset', asyn
 
 test('maxLevels keeps the higher level of each window', async () => {
   expect(maxLevels({ five_hour: 75, seven_day: 0 }, { five_hour: 0, seven_day: 90 })).toEqual({ five_hour: 75, seven_day: 90 })
+})
+
+test('liveReadings drops a past reset and keeps future, missing and unparseable ones', async () => {
+  const past = { kind: 'five_hour' as const, percent: 80, resetsAt: new Date(NOW - 1).toISOString() }
+  const future = { kind: 'seven_day' as const, percent: 80, resetsAt: new Date(NOW + 1).toISOString() }
+  const missing = { kind: 'five_hour' as const, percent: 80 }
+  const bad = { kind: 'seven_day' as const, percent: 80, resetsAt: 'soon' }
+  expect(liveReadings([past, future, missing, bad], NOW)).toEqual([future, missing, bad])
 })

@@ -37,6 +37,11 @@ export function readingsOf(limits: readonly { kind: string; percentUsed: number;
   return out
 }
 
+// The readings whose window has not reset yet. One with no or an unreadable resetsAt stays.
+export function liveReadings(readings: readonly Reading[], nowMs: number): Reading[] {
+  return readings.filter((r) => r.resetsAt === undefined || !(Date.parse(r.resetsAt) <= nowMs))
+}
+
 // limit-warnings.json as Levels. A missing or unreadable file, or a value other than
 // 75 or 90, counts as 0.
 export function parseLevels(text: string | undefined): Levels {

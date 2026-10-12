@@ -4,7 +4,7 @@ import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, setti
 import type { Kind, SetupEntry, Snapshot } from './setup'
 import { REPO_STEPS, handoffDocument, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
-import { NO_LEVELS, bandText, dismissLevels, maxLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
+import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/, and judges new Claude Code releases for the setup changes markers
@@ -915,7 +915,7 @@ async function readLevels($: EngineInterface, path: string) {
 // is unsaved, and the write below retries it. A measure with no Session or Week window
 // (an API-key login) leaves the band as it is.
 async function measureBand($: EngineInterface, limits: readonly SessionRateLimit[]) {
-  const readings = readingsOf(limits)
+  const readings = liveReadings(readingsOf(limits), await $.clock.now())
   if (!readings.length) return
   const path = await limitsPath($)
   const stored = path ? await readLevels($, path) : NO_LEVELS
@@ -943,7 +943,7 @@ async function recheckBand($: EngineInterface) {
   const file = path ? await readLevels($, path) : undefined
   const now = await $.clock.now()
   await update($, band, (b) => ({
-    readings: b.readings.filter((r) => r.resetsAt === undefined || !(Date.parse(r.resetsAt) <= now)),
+    readings: liveReadings(b.readings, now),
     levels: file ? (b.unsaved ? maxLevels(file, b.levels) : file) : b.levels,
     unsaved: b.unsaved,
   }))

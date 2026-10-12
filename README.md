@@ -122,9 +122,10 @@ releases. If an update breaks it, the transcript shows one line starting
 `claude plugin validate mod`, run from this folder, says what the engine refuses.
 
 When the Session or Week plan window reaches 75%, the mod shows a band above the
-prompt with each window's percent and the time until it resets. Dismiss hides it in
-every running session until that window reaches 90%, and a window that resets starts
-over.
+prompt. The band lists each window at 75% or more, with its percent and the time
+until it resets. Dismiss hides the band in this session at once and in other running
+sessions within a minute. A window dismissed at 75% shows again at 90%. A window
+dismissed at 90% stays hidden until it resets, and after a reset it warns again at 75%.
 
 ### Claude Code updates
 
