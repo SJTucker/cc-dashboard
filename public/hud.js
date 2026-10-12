@@ -50,7 +50,7 @@ function dailyWarning(today) {
 // WINDOWS (lib/limits.js). An unknown key shows the window's own label.
 const LIMIT_SHORT_NAMES = { five_hour: 'Session', seven_day: 'Week' };
 
-// The one-line form of the Plan usage banner for the sticky status strip. `high` is
+// The one-line form of #limitsBanner for the sticky status strip. `high` is
 // the windows at or past the warn percent and `dayHigh` is dailyWarning's result.
 // The label is Limit when a window is high and Budget when only today's budget is.
 // Returns { label, value } or null when the banner is hidden.
