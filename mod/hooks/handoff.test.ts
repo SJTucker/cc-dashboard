@@ -90,12 +90,12 @@ test('an empty successful output shows as (none)', async () => {
 })
 
 test('handoffDocument drops a preamble before the first # Handoff: line', async () => {
-  expect(handoffDocument('Here is the handoff.\n# Handoff: demo\n\nbody')).toBe('# Handoff: demo\n\nbody\n')
+  expect(handoffDocument('Here is the handoff. # Handoff: demo\n\nbody')).toBe('# Handoff: demo\n\nbody\n')
   expect(handoffDocument('  # Handoff: demo\nbody  \n\n')).toBe('# Handoff: demo\nbody\n')
 })
 
-test('handoffDocument starts at a line that begins with # Handoff:, not at quoted text', async () => {
-  expect(handoffDocument('I will write # Handoff: inline.\n# Handoff: real\nbody')).toBe('# Handoff: real\nbody\n')
+test('handoffDocument skips a ## Handoff: sub-heading', async () => {
+  expect(handoffDocument('Notes\n## Handoff: sub\n# Handoff: real\nbody')).toBe('# Handoff: real\nbody\n')
 })
 
 test('the fork prompt calls a repo not a git repo only when the Worktree root step failed', async () => {

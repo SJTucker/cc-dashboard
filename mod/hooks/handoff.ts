@@ -138,12 +138,13 @@ export function planHandoff(outputs: StepOutput[], cwd: string): { prompt: strin
 }
 
 // The file's text, from the fork's reply. The reply joins all the fork's text
-// blocks, so anything before the first line that starts with "# Handoff:" is
-// dropped. Prose that quotes the heading mid-line, or a "## Handoff:" line, does not
-// match. A reply without that heading is kept whole, because it may still be a usable
-// document. A blank reply gives null.
+// blocks with a single space, so a preamble block followed by the document block puts
+// the heading mid-line. Anything before the first "# Handoff:" is dropped, except
+// where a "#" comes right before it, which is a "## Handoff:" sub-heading. A reply
+// without that heading is kept whole, because it may still be a usable document. A
+// blank reply gives null.
 export function handoffDocument(text: string): string | null {
-  const at = text.search(/^# Handoff:/m)
+  const at = text.search(/(?<!#)# Handoff:/)
   const doc = (at > 0 ? text.slice(at) : text).trim()
   return doc ? `${doc}\n` : null
 }
