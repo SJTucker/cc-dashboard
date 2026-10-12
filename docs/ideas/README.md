@@ -29,4 +29,4 @@ then on.
 | [Thinking tokens](thinking-tokens.md) | Open: show the share of output that is thinking, from the stored `thinking_tokens` field; why some calls lack it and where it shows open |
 | [Guard: rows when a transcript loses lines](transcript-rewrites.md) | Open: the rewrite report was not reproduced on Claude Code 2.1.296; a warning when a re-read file loses stored call keys, and whether to merge rows, open |
 | [Today table: group by /clear link](today-table-clear-chains.md) | Open: `launchId` grouping misses a session resumed in a new process and then cleared; join on `clearedFrom` as well or instead open |
-| [Handoff before the cache expires](handoff-before-cache-expiry.md) | Open: write a handoff when the cache has 3 minutes left and context is over 20% full; how the mod starts `/handoff`, 5-minute TTL sessions and the handoff turn resetting the TTL open |
+| [Handoff before the cache expires](handoff-before-cache-expiry.md) | Open: write a handoff when the cache has 3 minutes left and context is over 20% full; how the mod starts a `/handoff` turn, 5-minute TTL sessions and the handoff turn resetting the TTL open |

@@ -11,8 +11,10 @@ instead of paying to write the whole context back into the cache. Recorded on
   or `1h`), `expiresAt`, `minutesLeft` and `rebuildUsd` from the main thread's
   calls. It runs in the server, on the dashboard's poll, and nothing acts on it.
 - The `/handoff` skill in `~/.claude/skills/handoff/` writes the document to
-  `<worktree-root>/.claude/handoffs/<timestamp>-<branch-slug>.md`. Its frontmatter
-  sets `disable-model-invocation: true`, so only the user can start it.
+  `<worktree-root>/.claude/handoffs/<timestamp>-<branch-slug>.md`. On 2026-10-12
+  its frontmatter changed to `disable-model-invocation: false`, so the model can
+  start it during a turn. An idle session has no turn, so something still has to
+  start one.
 - The mod listens for `session.measure`, `turn.start` and `turn.complete` in
   `mod/hooks/register.ts`, and already keeps per-session timers.
 - Each stored call has a `context` token count. The mod reads the model id with
@@ -20,8 +22,8 @@ instead of paying to write the whole context back into the cache. Recorded on
 
 ## Open questions
 
-- How the handoff gets written. The mod can show a toast or a band, but no mod API
-  is known that submits a prompt or runs a skill in the session. Options: a toast
+- How the handoff turn gets started. The mod can show a toast or a band, but no
+  mod API is known that submits a prompt or runs a skill in the session. Options: a toast
   telling the user to run `/handoff`, a mod `model()` call that writes the handoff
   from the transcript outside the session, or a way to submit `/handoff` that is
   not found yet.
