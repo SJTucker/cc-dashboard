@@ -1823,7 +1823,7 @@ test('the band gives way to a survey', async ($, on) => {
 })
 
 test('a failed write on Dismiss still hides the band here and logs once', async ($, on) => {
-  const { state, logged, clock } = world(on)
+  const { state, logged, clock, writes } = world(on)
   const ui = await $.ui.mount(BAND)
   await $.session.measure(measure([at(81), WEEK]))
   state.writeFails = true
@@ -1834,6 +1834,9 @@ test('a failed write on Dismiss still hides the band here and logs once', async 
   expect(await bandLine(ui)).toBeUndefined()
   await $.session.measure(measure([at(81), WEEK]))
   expect(await bandLine(ui)).toBeUndefined()
+  state.writeFails = false
+  await $.session.measure(measure([at(81), WEEK]))
+  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 0 })
   await ui.unmount()
 })
 
@@ -1841,4 +1844,26 @@ test('a failure in the band code does not stop record-statusline', async ($, on)
   const { ran } = world(on, { files: { [LIMITS]: '{"five_hour":90,"seven_day":0}' }, writeFails: true })
   await $.session.measure(measure([at(12), WEEK]))
   expect(ran.map((r) => r.argv[0])).toEqual(['/repo/bin/record-statusline'])
+})
+
+test('a session idle across a reset does not write its old dismissal over the reset', async ($, on) => {
+  const { state, writes } = world(on, { files: { [LIMITS]: '{"five_hour":75,"seven_day":0}' } })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  state.files[LIMITS] = '{"five_hour":0,"seven_day":0}'
+  await $.session.measure(measure([at(78), WEEK]))
+  expect(writes[LIMITS]).toBeUndefined()
+  expect(await bandLine(ui)).toContain('Session 78%')
+  await ui.unmount()
+})
+
+test('a reading whose reset has passed leaves the band', async ($, on) => {
+  const { clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81), WEEK]))
+  expect(await bandLine(ui)).toBeDefined()
+  await clock.advance(131 * 60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
 })

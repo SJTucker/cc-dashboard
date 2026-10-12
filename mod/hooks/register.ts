@@ -896,7 +896,7 @@ async function checkSetup($: EngineInterface) {
 // running session reads on its next measure and on the recheck timer.
 
 const RECHECK_MS = 60_000
-const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readings: [], levels: NO_LEVELS })
+const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readings: [], levels: NO_LEVELS, unsaved: false })
 
 // A module variable, so a reload drops it. The next measure starts the timer again.
 let recheck: Timer | undefined
@@ -911,17 +911,21 @@ async function readLevels($: EngineInterface, path: string) {
 }
 
 // Stores this reading and resets a window that has dropped below the first level. The
-// levels are the higher of the file's and this session's, so a dismissal whose write
-// failed stays hidden, and the write below retries it. A measure with no Session or Week window (an API-key login) leaves the band as it is.
+// file is the source of truth. This session's levels count only while a Dismiss write
+// is unsaved, and the write below retries it. A measure with no Session or Week window
+// (an API-key login) leaves the band as it is.
 async function measureBand($: EngineInterface, limits: readonly SessionRateLimit[]) {
   const readings = readingsOf(limits)
   if (!readings.length) return
   const path = await limitsPath($)
   const stored = path ? await readLevels($, path) : NO_LEVELS
-  const held = (await read($, band)).levels
-  const levels = resetLevels(readings, maxLevels(stored, held))
-  await update($, band, () => ({ readings, levels }))
-  if (path && !sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
+  const held = await read($, band)
+  const levels = resetLevels(readings, held.unsaved ? maxLevels(stored, held.levels) : stored)
+  await update($, band, () => ({ readings, levels, unsaved: held.unsaved }))
+  if (path) {
+    if (!sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
+    await update($, band, (b) => ({ ...b, unsaved: false }))
+  }
   if (shownWindows(readings, levels).length) startRecheck($)
 }
 
@@ -932,14 +936,19 @@ function startRecheck($: EngineInterface) {
   })
 }
 
-// Picks up a dismissal another session wrote, keeps one this session made, and redraws the reset countdown. Stops
-// once the band shows nothing.
+// Picks up a dismissal another session wrote and redraws the reset countdown. A window
+// whose reset time has passed leaves the band. Stops once the band shows nothing.
 async function recheckBand($: EngineInterface) {
   const path = await limitsPath($)
+  const file = path ? await readLevels($, path) : undefined
+  const now = await $.clock.now()
+  await update($, band, (b) => ({
+    readings: b.readings.filter((r) => r.resetsAt === undefined || !(Date.parse(r.resetsAt) <= now)),
+    levels: file ? (b.unsaved ? maxLevels(file, b.levels) : file) : b.levels,
+    unsaved: b.unsaved,
+  }))
   const current = await read($, band)
-  const levels = path ? maxLevels(await readLevels($, path), current.levels) : current.levels
-  if (!sameLevels(levels, current.levels)) await update($, band, (b) => ({ ...b, levels }))
-  if (shownWindows(current.readings, levels).length) {
+  if (shownWindows(current.readings, current.levels).length) {
     $.ui.invalidate('ui.render')
     return
   }
@@ -947,14 +956,18 @@ async function recheckBand($: EngineInterface) {
   recheck = undefined
 }
 
-// Hides the band in this session first, so a failed write still hides it here.
+// Hides the band in this session first, so a failed write still hides it here. The
+// levels stay marked unsaved until the write succeeds.
 async function dismissBand($: EngineInterface) {
   const current = await read($, band)
   const path = await limitsPath($)
   const stored = path ? await readLevels($, path) : NO_LEVELS
-  const levels = dismissLevels(shownWindows(current.readings, current.levels), stored)
-  await update($, band, (b) => ({ ...b, levels }))
-  if (path) await $.fs.write(path, JSON.stringify(levels))
+  const base = current.unsaved ? maxLevels(stored, current.levels) : stored
+  const levels = dismissLevels(shownWindows(current.readings, current.levels), base)
+  await update($, band, (b) => ({ ...b, levels, unsaved: true }))
+  if (!path) return
+  await $.fs.write(path, JSON.stringify(levels))
+  await update($, band, (b) => ({ ...b, unsaved: false }))
 }
 
 export const register: Register = (on) => {

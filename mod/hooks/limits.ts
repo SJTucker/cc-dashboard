@@ -1,4 +1,4 @@
-// Levels and text for the plan limit band (limit-band.tsx). Nothing here takes $, so
+// Levels and text for the plan limit band (register.ts). Nothing here takes $, so
 // limits.test.ts calls these directly.
 
 // The band shows at 75% and again at 90%. 75 must match LIMIT_WARN_PERCENT in
