@@ -59,7 +59,7 @@ let clearedFrom: string | undefined
 // Whether this module has cleared the status yet. The engine keeps a plugin's status
 // until the plugin replaces or clears it, and a reload empties handoffs. So a status
 // shown before a reload would otherwise stay for the rest of the process. The first
-// turn.start after a load clears it once.
+// turn.start after a load clears it once, and deletes the session's stored handoff.
 let statusCleared = false
 
 function fail($: EngineInterface, text: string) {
@@ -570,6 +570,13 @@ function forgetSession(id: string) {
 // A session's entry is 'writing' while the fork runs, 'ready' once the file is
 // written, and 'failed' when the write gave up. Any entry blocks a second handoff
 // until turn.start removes it, so each idle gap gets one at most.
+// A reload empties the map, so a ready entry is also kept in $.store under
+// HANDOFF_KEY + session id, as { resume, at }. session.end reads it when the map has
+// no ready entry. turn.start and session.end delete it. A process that dies without a
+// session.end leaves its key behind, so each new ready entry deletes keys older than
+// HANDOFF_STORE_MAX_AGE_MS.
+const HANDOFF_KEY = 'handoff:'
+const HANDOFF_STORE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 const HANDOFF_STATUS = 'handoff ready · /clear to resume'
 // $.ui.status() with no text clears the status. On Claude Code 2.1.296, $.ui.status('')
 // pins an empty "⚠ cc-dashboard:" line above the input instead.
@@ -608,8 +615,45 @@ async function writeHandoff($: EngineInterface, id: string, entry: Handoff) {
   if (!doc) throw new Error('fork empty')
   await $.fs.write(plan.path, doc)
   if (handoffs.get(id) !== entry) return
-  handoffs.set(id, { state: 'ready', resume: resumePrompt(plan.path) })
+  const resume = resumePrompt(plan.path)
+  const ready: Handoff = { state: 'ready', resume }
+  handoffs.set(id, ready)
   $.ui.status(HANDOFF_STATUS)
+  const now = await $.clock.now()
+  await $.store.set(HANDOFF_KEY + id, { resume, at: now })
+  // A prompt or an end during the write removed the entry and found no key to delete.
+  if (handoffs.get(id) !== ready) await $.store.delete(HANDOFF_KEY + id)
+  await pruneHandoffs($, id, now)
+}
+
+// Deletes the stored handoffs of other sessions that are older than the maximum age.
+// A key whose value has no numeric at is left alone.
+async function pruneHandoffs($: EngineInterface, keep: string, now: number) {
+  for (const key of await $.store.keys()) {
+    if (!key.startsWith(HANDOFF_KEY) || key === HANDOFF_KEY + keep) continue
+    const stored = (await $.store.get(key)) as { at?: unknown } | undefined
+    if (typeof stored?.at === 'number' && now - stored.at > HANDOFF_STORE_MAX_AGE_MS) await $.store.delete(key)
+  }
+}
+
+// The resume prompt that a reload dropped from the map, or undefined when the store
+// has none for the session. A store failure is logged and counts as none.
+async function storedResume($: EngineInterface, id: string): Promise<string | undefined> {
+  try {
+    const stored = (await $.store.get(HANDOFF_KEY + id)) as { resume?: unknown } | undefined
+    return typeof stored?.resume === 'string' ? stored.resume : undefined
+  } catch (err) {
+    note($, `handoff store read failed (${errorText(err)})`)
+    return undefined
+  }
+}
+
+async function deleteStoredHandoff($: EngineInterface, id: string) {
+  try {
+    await $.store.delete(HANDOFF_KEY + id)
+  } catch (err) {
+    note($, `handoff store delete failed (${errorText(err)})`)
+  }
 }
 
 // Starts the handoff and returns at once. A failure is logged each time, because it
@@ -624,14 +668,17 @@ function startHandoff($: EngineInterface, id: string) {
 }
 
 // A prompt makes the handoff out of date, so turn.start drops it and clears the
-// status. The file stays on disk. The first call after a load also clears a status
-// that an earlier load of this module set.
+// status. The file stays on disk. The stored entry is deleted when the map had an
+// entry, and on the first call after a load, because an earlier load of this module
+// may have stored one that the map no longer holds. That first call also clears a
+// status that an earlier load set.
 async function dropHandoff($: EngineInterface) {
   try {
     const id = await $.session.id()
     const handoff = handoffs.get(id)
     handoffs.delete(id)
     if (handoff?.state === 'ready' || !statusCleared) $.ui.status()
+    if (handoff || !statusCleared) await deleteStoredHandoff($, id)
     statusCleared = true
   } catch (err) {
     fail($, `handoff failed (${errorName(err)})`)
@@ -934,17 +981,22 @@ export const register: Register = (on) => {
   // /resume (reason 'resume'), and no session.start follows either, so the review
   // of the ended session starts here. After any other end, the next session.start
   // reviews it. A ready handoff turns into a prefill of the next session's input on a
-  // /clear, and its status is cleared on any other end.
+  // /clear, and its status is cleared on any other end. The handoff is the map's ready
+  // entry, or else the stored one, which survives a reload. The stored entry is deleted
+  // either way. A store failure is logged and does not stop the rest of the hook.
   on('session.end', async ($, e, next) => {
     const handoff = handoffs.get(e.sessionId)
     forgetSession(e.sessionId)
-    if (handoff?.state === 'ready') {
-      if (e.reason === 'clear') prefillAfterClear($, handoff.resume)
-      else $.ui.status()
-    }
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
+    // The store reads follow run, so the script is not delayed by them.
+    const resume = handoff?.state === 'ready' ? handoff.resume : await storedResume($, e.sessionId)
+    if (resume !== undefined) {
+      if (e.reason === 'clear') prefillAfterClear($, resume)
+      else $.ui.status()
+      await deleteStoredHandoff($, e.sessionId)
+    }
     // The lookup follows run, so the script is not delayed, and follows forgetSession,
     // so transcriptPath checks the file system instead of the dropped cache.
     if (e.reason !== 'clear') clearedFrom = undefined

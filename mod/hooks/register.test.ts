@@ -181,6 +181,11 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     state.store[e.key] = e.value
     return { value: undefined }
   })
+  on('store.delete', (_$, e) => {
+    delete state.store[e.key]
+    return { value: undefined }
+  })
+  on('store.keys', () => ({ value: Object.keys(state.store) }))
   on('session.version', () => ({ value: state.version }))
   on('session.start', (_$, e) => ({ cwd: e.cwd }))
   on('command.register', (_$, e) => {
@@ -1685,7 +1690,7 @@ test('a /clear after the user kept working fills nothing', async ($, on) => {
 })
 
 test('a /clear while the fork runs fills nothing, and the file is still written', async ($, on) => {
-  const { fills, writes, statuses, clock } = world(on, { commands: REPO, forks: [DOC], forkMs: 30_000 })
+  const { fills, writes, statuses, state, clock } = world(on, { commands: REPO, forks: [DOC], forkMs: 30_000 })
   await idleTurn($)
   await $.session.compact(compacting())
   await clock.advance(1_000)
@@ -1695,6 +1700,7 @@ test('a /clear while the fork runs fills nothing, and the file is still written'
   expect(fills).toEqual([])
   expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
   expect(statuses).toEqual([undefined])
+  expect(state.store['handoff:s1']).toBeUndefined()
 })
 
 test('an exit with a ready handoff clears the status and fills nothing', async ($, on) => {
@@ -1707,4 +1713,65 @@ test('an exit with a ready handoff clears the status and fills nothing', async (
   await clock.settle()
   expect(fills).toEqual([])
   expect(statuses).toEqual([undefined, READY, undefined])
+})
+
+const RECENT = 60_000
+const DAY_MS = 24 * 60 * 60 * 1000
+
+test('a ready handoff is stored with its resume prompt', async ($, on) => {
+  const { state, clock } = world(on, { commands: REPO, forks: [DOC] })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(state.store['handoff:s1']).toEqual({ resume: RESUME, at: 61_000 })
+})
+
+test('a /clear after a reload still fills the resume prompt and deletes the stored entry', async ($, on) => {
+  const { fills, state, clock } = world(on, { store: { 'handoff:s1': { resume: RESUME, at: RECENT } } })
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(4_000)
+  await clock.settle()
+  expect(fills).toEqual([RESUME])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('the first prompt after a load deletes the stored handoff, so a later /clear fills nothing', async ($, on) => {
+  const { fills, state, clock } = world(on, { store: { 'handoff:s1': { resume: RESUME, at: RECENT } } })
+  await $.turn.start({ text: 'back', turnId: 't1' })
+  expect(state.store['handoff:s1']).toBe(undefined)
+  await $.turn.complete(turnEnd())
+  await $.session.end(clear)
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+})
+
+test('a session.end that is not a /clear deletes the stored handoff and fills nothing', async ($, on) => {
+  const { fills, statuses, state, clock } = world(on, { store: { 'handoff:s1': { resume: RESUME, at: RECENT } } })
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(state.store['handoff:s1']).toBe(undefined)
+  expect(fills).toEqual([])
+  expect(statuses).toEqual([undefined])
+})
+
+test('a new ready handoff prunes stored handoffs older than 7 days and keeps newer ones', async ($, on) => {
+  const { state, clock } = world(on, {
+    commands: REPO,
+    forks: [DOC],
+    store: {
+      'handoff:old': { resume: 'x', at: 61_000 - 8 * DAY_MS },
+      'handoff:new': { resume: 'y', at: 61_000 - 6 * DAY_MS },
+      setup: { folders: [] },
+    },
+  })
+  await idleTurn($)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(state.store['handoff:old']).toBe(undefined)
+  expect(state.store['handoff:new']).toEqual({ resume: 'y', at: 61_000 - 6 * DAY_MS })
+  expect(state.store.setup).toEqual({ folders: [] })
+  expect(state.store['handoff:s1']).toBeDefined()
 })
