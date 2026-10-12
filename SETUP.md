@@ -64,7 +64,8 @@ loads, and later starts, read only the transcripts that changed. The server crea
 
 The mod in `mod/` records plan usage, live session state, session reviews, Claude Code
 release markers and setup change markers, and writes a handoff when Claude Code
-compacts an idle session. Link it into your skills folder from the clone:
+compacts an idle session. It also shows a dismissable band above the prompt when the
+Session or Week plan window reaches 75%. Link it into your skills folder from the clone:
 
 ```bash
 ln -s "$PWD/mod" ~/.claude/skills/cc-dashboard
@@ -190,6 +191,7 @@ tests can avoid the one in the clone.
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
+| `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
 | `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session` |
 | `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server, when you click Apply |
 | `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, when Claude Code's idle compaction starts. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
