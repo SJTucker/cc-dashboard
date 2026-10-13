@@ -205,6 +205,10 @@ html, body {
   color: var(--text-primary);
 }
 
+/* A plan limit warning can take 400px of the strip, and the bar must stay one row.
+   The Sessions and API calls counts give way while the warning shows. */
+.status-strip:has(.strip-limit:not([hidden])) .strip-extra { display: none; }
+
 /* The short plan limit warning. The amber left edge matches .status-banner; the
    Limit or Budget label and the percents carry the meaning, not the colour. */
 .strip-limit {
@@ -1267,15 +1271,27 @@ html, body {
 
 /* ---------- Loading ---------- */
 
+/* Out of the sticky bar's flex flow while the bar fits one row, so a load never changes the
+   bar's height. It overlays the bar's lower left, under the title. */
 .load-status {
+  position: absolute;
+  left: 0;
+  bottom: 2px;
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
   font-size: var(--fs-caption);
   color: var(--text-secondary);
 }
-/* An empty status would still take one flex gap in the sticky bar. */
-.load-status:empty { display: none; }
+/* Below the width where the bar fits one row (a bar 1320px wide or less), the bar
+   wraps, and a status overlaying its lower edge would cover the wrapped rows. It
+   joins the flow there, and an empty one takes no flex gap. The query reads the
+   bar's own width, so .topbar is a container; that does not change its size. */
+.topbar { container-type: inline-size; }
+@container (max-width: 1320px) {
+  .load-status { position: static; }
+  .load-status:empty { display: none; }
+}
 .spinner {
   width: 12px;
   height: 12px;

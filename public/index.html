@@ -25,8 +25,8 @@
       <div class="status-strip" id="statusStrip">
         <span id="liveDot" class="live-dot"><i class="live-ring" aria-hidden="true"></i><span class="live-text">Link live</span></span>
         <span class="strip-item">Sync <b id="stripSync">—</b></span>
-        <span class="strip-item">Sessions <b id="stripSessions">—</b></span>
-        <span class="strip-item">API calls <b id="stripCalls">—</b></span>
+        <span class="strip-item strip-extra">Sessions <b id="stripSessions">—</b></span>
+        <span class="strip-item strip-extra">API calls <b id="stripCalls">—</b></span>
         <span id="stripLimit" class="strip-item strip-limit" hidden></span>
       </div>
       <span id="loadStatus" class="load-status" role="status"></span>
@@ -52,9 +52,11 @@
           <span class="stat-note" id="stickyRecordDate"></span>
         </div>
       </div>
-      <button id="resetLayoutBtn" class="refresh-btn" type="button" title="Put the panels back in their original order" hidden>Reset layout</button>
-      <button id="hiddenMenuBtn" class="refresh-btn menu-btn" type="button" popovertarget="hiddenMenu" aria-label="Hidden panels" title="Hidden panels">&#9776;</button>
-      <div id="hiddenMenu" class="hidden-menu" popover aria-label="Hidden panels"></div>
+      <button id="hiddenMenuBtn" class="refresh-btn menu-btn" type="button" popovertarget="hiddenMenu" aria-label="Hidden panels and layout" title="Hidden panels and layout">&#9776;</button>
+      <div id="hiddenMenu" class="hidden-menu" popover aria-label="Hidden panels and layout">
+        <div id="hiddenMenuList"></div>
+        <button id="resetLayoutBtn" class="hidden-menu-item hidden-menu-all" type="button" title="Put the panels back in their original order" hidden>Reset layout</button>
+      </div>
     </header>
 
     <main id="app">

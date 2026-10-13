@@ -150,6 +150,7 @@ export function setupRowOrder() {
     applyRowOrder(defaults, null);
     saveRowOrder(null);
     resetBtn.hidden = true;
+    document.getElementById('hiddenMenu').hidePopover();
   });
 
   setupRowDrag(() => {

@@ -90,18 +90,27 @@ function showKeys(keys) {
   onResume((request) => after.has(request) && !before.has(request));
 }
 
-// One button per hidden element, in page order, then Show all when two or more
-// are hidden. Choosing one closes the menu, and the popover returns focus to ☰.
+// An element on the tab being shown, or on no tab. Showing a hidden panel of the
+// other tab would change nothing on screen, so the menu lists only this tab's.
+// Reads only closest() and `hidden`, so the tests can pass plain objects.
+export function onShownTab(element) {
+  return !element.closest('.tab')?.hidden;
+}
+
+// One button per hidden element on the tab being shown, in page order, then Show all
+// when two or more are listed. Choosing one closes the menu, and the popover returns
+// focus to ☰. Reset layout (row-order.mjs) sits below the list. The menu is drawn
+// again each time it opens (setupHiding), so it follows the tab.
 function renderHiddenMenu() {
-  const menu = document.getElementById('hiddenMenu');
-  const hidden = [...document.querySelectorAll('[data-hide-key][data-user-hidden]')];
+  const menu = document.getElementById('hiddenMenuList');
+  const hidden = [...document.querySelectorAll('[data-hide-key][data-user-hidden]')].filter(onShownTab);
   menu.replaceChildren();
   if (!hidden.length) {
-    menu.appendChild(el('p', { class: 'hidden-menu-empty', text: 'Nothing hidden' }));
+    menu.appendChild(el('p', { class: 'hidden-menu-empty', text: 'Nothing hidden on this tab' }));
     return;
   }
   const choose = (keys) => {
-    menu.hidePopover();
+    document.getElementById('hiddenMenu').hidePopover();
     showKeys(keys);
   };
   for (const element of hidden) {
@@ -136,6 +145,7 @@ export function setupHiding(callbacks) {
   const menu = document.getElementById('hiddenMenu');
   menu.addEventListener('beforetoggle', (e) => {
     if (e.newState !== 'open') return;
+    renderHiddenMenu();
     const box = menuBtn.getBoundingClientRect();
     menu.style.top = `${box.bottom + 6}px`;
     menu.style.right = `${document.documentElement.clientWidth - box.right}px`;

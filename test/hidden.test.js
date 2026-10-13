@@ -33,3 +33,11 @@ test('controlsPanel falls back to the first panel when none shows', async () => 
   const panels = [panel('a', { hidden: true }), panel('b', { userHidden: true })];
   assert.strictEqual(controlsPanel(panels).name, 'a');
 });
+
+test('onShownTab lists an element on the shown tab, or on no tab, and not one on a hidden tab', async () => {
+  const { onShownTab } = await load();
+  const on = (hidden) => ({ closest: () => (hidden === null ? null : { hidden }) });
+  assert.strictEqual(onShownTab(on(false)), true);
+  assert.strictEqual(onShownTab(on(null)), true);
+  assert.strictEqual(onShownTab(on(true)), false);
+});
