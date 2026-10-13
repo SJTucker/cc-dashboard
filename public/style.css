@@ -522,6 +522,7 @@ html, body {
   width: 28px;
   height: 4px;
   display: inline-block;
+  flex: none;
   vertical-align: middle;
 }
 
@@ -841,9 +842,6 @@ html, body {
 
 .usage-group + .usage-group { margin-top: var(--sp-4); }
 
-/* The split bar's own legend sits under it, not in the panel head. */
-.split-legend { margin-top: var(--sp-2); }
-
 /* A legend beside the plot rather than under it, so this panel is exactly as tall
    as the plain chart it sits next to. The caller reverses the series so the rows
    run in the same order as the lines, cache read down to input. */
@@ -872,10 +870,10 @@ html, body {
 
 .side-legend {
   flex-direction: column;
+  align-items: flex-start;
   gap: var(--sp-2);
+  margin-top: 0;
 }
-
-.side-note { margin: 0; }
 
 /* Two shares side by side rather than stacked: each group is two numbers, and
    four full-width rows made this panel taller than every chart above it. */
@@ -1185,8 +1183,20 @@ html, body {
 .median-label.before { fill: var(--text-primary); }
 .median-label.after { fill: var(--accent-cyan); }
 .axis-label.picked { fill: var(--accent-cyan); font-weight: 700; }
-.median-before-swatch { height: 0; border-top: 2px dashed var(--text-primary); }
-.median-after-swatch { height: 0; border-top: 2px solid var(--accent-cyan); }
+/* A window icon in the Setup changes legend: its bar fill with its median rule across it. */
+.window-swatch { position: relative; overflow: visible; }
+.window-swatch::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  top: 50%;
+  margin-top: -1px;
+  border-top: 2px dashed var(--text-primary);
+}
+.window-swatch.after::after { border-top: 2px solid var(--accent-cyan); }
+.window-swatch.outside::after { content: none; }
+.legend-lead { color: var(--text-tertiary); }
 .window-before { fill: var(--text-primary); opacity: 0.04; }
 .window-after { fill: var(--accent-cyan); opacity: 0.08; }
 .window-median { stroke-width: 2; }
@@ -1591,3 +1601,8 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
   color: var(--text-tertiary);
   font: 400 var(--fs-body) var(--font-ui);
 }
+
+.heat-scale { gap: var(--sp-2); }
+.heat-scale-cells { display: inline-flex; gap: 2px; }
+.heat-scale-cell { width: 18px; height: 10px; border-radius: var(--radius-s); border: 1px solid var(--border); }
+.timeline-follow-key { color: var(--text-tertiary); }

@@ -1,8 +1,9 @@
 // The Setup changes timeline: change lanes, the window bar and the daily chart for
 // the picked row, all in one SVG on one time axis.
 import { el, svgEl, hideTooltip, chartWidth, withTooltip, withFocusTooltip } from '../dom.mjs';
-import { formatTokens, shortDate, localDateStr, escapeHtml } from '../format.mjs';
+import { formatTokens, shortDate, localDateStr, escapeHtml, modelLabel } from '../format.mjs';
 import { drawPlotAxis } from './axes.mjs';
+import { legendRow } from './legend.mjs';
 import { appendPatternDefs, fillFor, textureCss, TOKENS } from './palette.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -458,22 +459,17 @@ export function drawMetricChart(container, report, marker, row, domain, onPick) 
   container.appendChild(svg);
 }
 
-function legendItem(swatch, text) {
-  return el('span', { class: 'legend-item' }, [swatch, document.createTextNode(text)]);
-}
-
-// Row one: the five marks of the chart. Row two, on the Session start row: one dot
-// shape per model that has a session in view.
+// Row one: the three windows. Each icon is the window's bar fill with its median
+// rule across it. Row two, on the Session start row: one dot shape per model that
+// has a session in view.
 export function drawMetricLegend(legend, row, report, domain) {
-  const box = (background) => el('span', { class: 'legend-swatch', style: `background:${background}` });
-  const rule = (cls) => el('span', { class: `legend-line ${cls}` });
-  const rows = [el('div', { class: 'legend changes-legend' }, [
-    legendItem(box(textureCss('diag', BEFORE_INK)), '7 days before'),
-    legendItem(box('var(--accent-cyan)'), '7 days after'),
-    legendItem(box('var(--border)'), 'outside the windows'),
-    legendItem(rule('median-before-swatch'), 'before median'),
-    legendItem(rule('median-after-swatch'), 'after median'),
-  ])];
+  const windowIcon = (kind, background) =>
+    el('span', { class: `legend-swatch window-swatch ${kind}`, style: `background:${background}`, 'aria-hidden': 'true' });
+  const rows = [legendRow([
+    { icon: windowIcon('before', textureCss('diag', BEFORE_INK)), label: 'before', title: '7 days before the picked change: bars, with the median dashed' },
+    { icon: windowIcon('after', 'var(--accent-cyan)'), label: 'after', title: '7 days after the picked change: bars, with the median solid' },
+    { icon: windowIcon('outside', 'var(--border)'), label: 'outside', title: 'Days outside both windows' },
+  ], 'changes-legend')];
   const inView = sessionsInView(report, domain);
   if (row.key === 'sessionStart' && inView.length) rows.push(dotLegendRow(report, inView));
   legend.replaceChildren(...rows);
@@ -481,11 +477,12 @@ export function drawMetricLegend(legend, row, report, domain) {
 
 function dotLegendRow(report, inView) {
   const shapes = modelShapes(report.sessions);
-  const row = el('div', { class: 'legend changes-legend' });
-  for (const model of new Set(inView.map((s) => s.model))) {
+  const items = [...new Set(inView.map((s) => s.model))].map((model) => {
     const icon = svgEl('svg', { width: 10, height: 10, viewBox: '0 0 10 10', 'aria-hidden': 'true' });
     icon.appendChild(sessionDot(shapes.get(model), 5, 5));
-    row.appendChild(legendItem(icon, `session, ${model || 'unknown model'}`));
-  }
+    return { icon, label: model ? modelLabel(model) : 'unknown model', title: model || 'unknown model' };
+  });
+  const row = legendRow(items, 'changes-legend');
+  row.prepend(el('span', { class: 'legend-lead', text: 'sessions:' }));
   return row;
 }

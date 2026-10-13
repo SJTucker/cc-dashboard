@@ -1,7 +1,8 @@
 // Each model's share of tokens or of cost as a donut, with its legend.
 import { el, svgEl, showTooltip, hideTooltip } from '../dom.mjs';
 import { formatCost, formatCostShort, formatTokens, shortModel, escapeHtml } from '../format.mjs';
-import { appendPatternDefs, fillFor, modelColor, modelTexture, segmentTexture } from './palette.mjs';
+import { appendPatternDefs, fillFor, modelColor, modelTexture } from './palette.mjs';
+import { legendRow, swatchIcon } from './legend.mjs';
 
 // How each measure reads in the tooltip, the centre of the ring and the aria-label.
 const MEASURES = {
@@ -69,14 +70,12 @@ export function drawModelMix(container, models, measure = 'tokens') {
   container.appendChild(svg);
 
   // Direct-label each series: identity is never carried by colour alone.
-  const legend = el('div', { class: 'legend', id: 'modelLegend' });
-  const legendItem = (m, text) =>
-    el('span', { class: 'legend-item' }, [
-      el('span', { class: 'legend-swatch', style: segmentTexture(m.family) }),
-      el('span', { text }),
-    ]);
-  for (const m of shown) legend.appendChild(legendItem(m, `${shortModel(m.model)} ${pctOf(m).toFixed(0)}%`));
-  for (const m of unpriced) legend.appendChild(legendItem(m, `${shortModel(m.model)} unpriced`));
+  const swatch = (m) => swatchIcon(modelTexture(m.family), modelColor(m.family));
+  const legend = legendRow([
+    ...shown.map((m) => ({ icon: swatch(m), label: shortModel(m.model), value: `${pctOf(m).toFixed(0)}%` })),
+    ...unpriced.map((m) => ({ icon: swatch(m), label: shortModel(m.model), value: 'unpriced' })),
+  ]);
+  legend.id = 'modelLegend';
   container.appendChild(legend);
 }
 

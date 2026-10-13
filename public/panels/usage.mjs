@@ -36,7 +36,7 @@ export function renderUsageCharts(data) {
     // Reversed so the legend reads in the order the lines actually appear, cache read
     // at the top down to input at the bottom. TOKEN_SERIES is copied, not reversed in
     // place: the line chart's draw order relies on it.
-    drawTokenLegend(document.getElementById('tokenTypeLegend'), data.daily, [...TOKEN_SERIES].reverse(), true);
+    drawTokenLegend(document.getElementById('tokenTypeLegend'), data.daily, [...TOKEN_SERIES].reverse());
     drawLogLineChart(document.getElementById('tokenTypeChart'), data.daily, TOKEN_SERIES);
   }
   // Like the model daily charts, the heatmap shows on multi-day ranges only.

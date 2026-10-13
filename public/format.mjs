@@ -137,3 +137,18 @@ export function shortModel(name) {
   const m = name.match(/claude-([a-z]+)-(\d{1,2}(?!\d)(?:[.-]\d{1,2}(?!\d))*)/i);
   return m ? `${m[1]}-${m[2]}` : name;
 }
+
+// A model family key from lib/pricing.js as a name: "opus" -> "Opus".
+export function familyLabel(family) {
+  return family ? family[0].toUpperCase() + family.slice(1) : '';
+}
+
+// A model id the way people say it: "claude-opus-5-5" -> "Opus 5.5",
+// "claude-haiku-4-5-20251001" -> "Haiku 4.5". An id shortModel does not recognise
+// is returned whole. The full id goes in a title wherever this is shown.
+export function modelLabel(name) {
+  const short = shortModel(name);
+  if (short === name) return name;
+  const [family, ...version] = short.split('-');
+  return `${familyLabel(family)} ${version.join('.')}`;
+}

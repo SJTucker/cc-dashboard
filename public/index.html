@@ -153,7 +153,7 @@
         </div>
         <div class="chart" id="timelineChart"></div>
         <!-- The key sits under the chart: in the panel head it pushed the heading onto two lines. -->
-        <p class="panel-note">Solid: live · Striped: not live · Arrowhead: call in the last 10 min · Dashed: now · ↳ and curve: started by /clear in the linked session · ◆ cache rebuild · ◇ subagent cache rebuild</p>
+        <div id="timelineLegend"></div>
       </section>
 
       <section class="panel" id="sessionsPanel" data-hide-key="sessions" hidden>
@@ -233,14 +233,11 @@
 
         <section class="panel" data-hide-key="tokenTypes">
           <div class="panel-head">
-            <h2>Daily tokens by type</h2>
+            <h2>Daily tokens by type · log</h2>
           </div>
           <div class="chart-with-legend">
             <div id="tokenTypeChart" class="chart" aria-label="Line chart of daily input, output, cache-write and cache-read tokens on a logarithmic scale"></div>
-            <div class="chart-side">
-              <div class="legend side-legend" id="tokenTypeLegend"></div>
-              <p class="panel-note side-note">Log scale: ×10 per gridline</p>
-            </div>
+            <div class="chart-side" id="tokenTypeLegend"></div>
           </div>
         </section>
       </div>

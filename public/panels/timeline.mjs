@@ -1,7 +1,8 @@
 // The Session timeline: one lane per session with activity today.
-import { svgEl, withTooltip, hideTooltip, chartWidth } from '../dom.mjs';
+import { el, svgEl, withTooltip, hideTooltip, chartWidth } from '../dom.mjs';
 import { formatCost, formatTokens, formatDuration, escapeHtml } from '../format.mjs';
 import { appendPatternDefs, fillFor, TOKEN_SERIES, TOKENS } from '../charts/palette.mjs';
+import { legendRow, swatchIcon, glyphIcon } from '../charts/legend.mjs';
 import { state } from '../state.mjs';
 import { LIVE_WINDOW_MS } from '../constants.mjs';
 
@@ -9,7 +10,7 @@ import { LIVE_WINDOW_MS } from '../constants.mjs';
 // public/chart-geometry.js), with a bar per span. A live session's bars are solid
 // and, when its last call was within LIVE_WINDOW_MS, its last bar ends in an
 // arrowhead at now. Every other session's bars carry the diagonal texture. The
-// key in the p.panel-note under the chart (public/index.html) says so in words,
+// legend under the chart (timelineLegend) names both,
 // so the two kinds never depend on colour. An SVG pattern needs a literal colour,
 // so TIMELINE_COLOR is TOKENS.accentCyan.
 const TIMELINE_COLOR = TOKENS.accentCyan;
@@ -82,19 +83,41 @@ function rebuildTooltip(mark) {
   return `<b>${mark.items.length} cache rebuilds</b><br><br>${shown.join('<br><br>')}${moreLine}${totalLine}`;
 }
 
+// A rebuild mark: filled for the main thread, hollow for a subagent.
+function rebuildDiamond(x, y, main) {
+  const h = REBUILD_SIZE / 2;
+  return svgEl('path', {
+    class: 'timeline-rebuild',
+    d: `M${x},${y - h} L${x + h},${y} L${x},${y + h} L${x - h},${y} Z`,
+    fill: main ? REBUILD_COLOR : REBUILD_SURFACE,
+    stroke: main ? REBUILD_SURFACE : REBUILD_COLOR,
+    'stroke-width': main ? 1 : 1.5,
+  });
+}
+
+// The key under the chart. Each icon is drawn with the chart's own marks, and
+// each title keeps the sentence the old text key had.
+function timelineLegend() {
+  const hex = (live) => el('span', { class: 'session-hex', text: live ? '⬢' : '⬡' });
+  const pair = (...parts) => el('span', { class: 'legend-pair', 'aria-hidden': 'true' }, parts);
+  return legendRow([
+    { icon: pair(hex(true), swatchIcon('solid', TIMELINE_COLOR)), label: 'live', title: 'Solid bar and ⬢: live' },
+    { icon: pair(hex(false), swatchIcon('diag', TIMELINE_COLOR)), label: 'ended', title: 'Striped bar and ⬡: not live' },
+    { icon: glyphIcon(svgEl('path', { d: 'M-3,-5 L4,0 L-3,5 Z', fill: TIMELINE_COLOR })), label: 'active <10m', title: 'Arrowhead: a call in the last 10 min' },
+    { icon: glyphIcon(svgEl('line', { x1: 0, x2: 0, y1: -6, y2: 6, stroke: 'var(--text-secondary)', 'stroke-width': 1, 'stroke-dasharray': '4 3' })), label: 'now', title: 'Dashed line: the current time' },
+    { icon: pair(el('span', { class: 'timeline-follow-key', text: '↳' }), glyphIcon(svgEl('path', { d: 'M-5,-4 C0,-4 0,4 5,4', fill: 'none', stroke: TIMELINE_COLOR, 'stroke-opacity': LINK_OPACITY, 'stroke-width': 1.25 }))), label: '/clear', title: '↳ and curve: started by /clear in the linked session' },
+    { icon: glyphIcon(rebuildDiamond(0, 0, true)), label: 'rebuild', title: '◆ cache rebuild' },
+    { icon: glyphIcon(rebuildDiamond(0, 0, false)), label: 'subagent rebuild', title: '◇ subagent cache rebuild' },
+  ]);
+}
+
 // One lane's rebuild marks, drawn over its bars. A mark of two or more rebuilds has
 // its count to the right of the diamond.
 function drawRebuilds(svg, rebuilds, xOf, mid) {
   const h = REBUILD_SIZE / 2;
   for (const mark of rebuildMarks(rebuilds, xOf, REBUILD_SIZE)) {
     const { x } = mark;
-    svg.appendChild(withTooltip(svgEl('path', {
-      class: 'timeline-rebuild',
-      d: `M${x},${mid - h} L${x + h},${mid} L${x},${mid + h} L${x - h},${mid} Z`,
-      fill: mark.main ? REBUILD_COLOR : REBUILD_SURFACE,
-      stroke: mark.main ? REBUILD_SURFACE : REBUILD_COLOR,
-      'stroke-width': mark.main ? 1 : 1.5,
-    }), rebuildTooltip(mark)));
+    svg.appendChild(withTooltip(rebuildDiamond(x, mid, mark.main), rebuildTooltip(mark)));
     if (mark.items.length < 2) continue;
     const count = svgEl('text', { class: 'timeline-rebuild-count', x: x + h + 2, y: mid - 2 });
     count.textContent = String(mark.items.length);
@@ -256,11 +279,14 @@ function drawLane(svg, { session: s, lane, bars, follows }, maxChars, xOf, { top
 
 // Draws the lanes into container. Returns the number of lanes, of live lanes, and
 // whether the Rebuilds column was drawn.
+// The label column's width: the plot starts here, and the legend indents to match.
+const timelineGutter = (width) => Math.min(TIMELINE_GUTTER, Math.round(width * 0.4));
+
 function drawTimeline(container, sessions, width, now) {
   const starts = sessions.flatMap((s) => s.spans.map((span) => span[0]));
   const ticks = hourTicks(Math.min(...starts), now);
   const domain = [ticks[0], ticks[ticks.length - 1]];
-  const gutter = Math.min(TIMELINE_GUTTER, Math.round(width * 0.4));
+  const gutter = timelineGutter(width);
   const column = rebuildColumn(sessions, width, gutter);
   const plotRight = column ? column.plotRight : width - TIMELINE_RIGHT_PAD;
   const top = column ? TIMELINE_HEAD_HEIGHT : 0;
@@ -316,4 +342,7 @@ export function renderTimeline(live) {
   const rebuildNote = totals.count && !drawn.column ? ` · ${plural(totals.count, 'cache rebuild', 'cache rebuilds')}${premium}` : '';
   document.getElementById('timelineNote').textContent =
     `${plural(drawn.lanes, 'session', 'sessions')} today · ${drawn.live} live${rebuildNote}`;
+  const key = document.getElementById('timelineLegend');
+  if (!key.childElementCount) key.appendChild(timelineLegend());
+  key.style.marginLeft = `${timelineGutter(width)}px`;
 }

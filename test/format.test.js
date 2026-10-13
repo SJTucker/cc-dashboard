@@ -123,3 +123,20 @@ test('thinkingNote gives the thinking cost and the share of calls that report it
   assert.equal(thinkingNote({ thinkingCost: 0, thinkingCalls: 0, apiCalls: 9 }), '0% of calls report it');
   assert.equal(thinkingNote({ thinkingCost: 0, thinkingCalls: 0, apiCalls: 0 }), '');
 });
+
+test('modelLabel names a model the way people say it', async () => {
+  const { modelLabel } = await load();
+  assert.equal(modelLabel('claude-opus-5-5'), 'Opus 5.5');
+  assert.equal(modelLabel('claude-opus-5-5[1m]'), 'Opus 5.5');
+  assert.equal(modelLabel('claude-haiku-4-5-20251001'), 'Haiku 4.5');
+  assert.equal(modelLabel('claude-sonnet-4.5'), 'Sonnet 4.5');
+  assert.equal(modelLabel('claude-sonnet-5'), 'Sonnet 5');
+  assert.equal(modelLabel('gpt-x'), 'gpt-x');
+});
+
+test('familyLabel capitalises a family key', async () => {
+  const { familyLabel } = await load();
+  assert.equal(familyLabel('opus'), 'Opus');
+  assert.equal(familyLabel('other'), 'Other');
+  assert.equal(familyLabel(''), '');
+});

@@ -1,7 +1,8 @@
 // Stacked daily bars, one segment per model family.
 import { el, svgEl, showTooltip, hideTooltip, chartWidth } from '../dom.mjs';
-import { formatCost, formatTokens, shortDate, fullDate, axisCost, axisTokens } from '../format.mjs';
+import { formatCost, formatTokens, shortDate, fullDate, axisCost, axisTokens, familyLabel } from '../format.mjs';
 import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawYAxis } from './axes.mjs';
+import { legendRow, swatchIcon } from './legend.mjs';
 import { appendPatternDefs, fillFor, modelColor, modelTexture } from './palette.mjs';
 
 // Stacked bars, one segment per model family. Series order is fixed across
@@ -57,7 +58,7 @@ export function drawModelDailyChart(container, data, models, mode = 'tokens') {
       rect.addEventListener('mousemove', (evt) =>
         showTooltip(
           evt,
-          `<b>${fullDate(d.date)}</b><br>${name}: ${tipFmt(value)}<br>Bucket total: ${tipFmt(totals[i])}`
+          `<b>${fullDate(d.date)}</b><br>${familyLabel(name)}: ${tipFmt(value)}<br>Bucket total: ${tipFmt(totals[i])}`
         )
       );
       rect.addEventListener('mouseleave', hideTooltip);
@@ -75,4 +76,12 @@ export function drawModelDailyChart(container, data, models, mode = 'tokens') {
   });
 
   container.appendChild(svg);
+  // One item per family in the chart, in stacking order, so identity never rests
+  // on the tooltip.
+  const legend = legendRow(order.map((family) => ({
+    icon: swatchIcon(modelTexture(family), modelColor(family)),
+    label: familyLabel(family),
+  })));
+  legend.style.marginLeft = `${CHART_PAD_LEFT}px`; // starts at the plot's left edge
+  container.appendChild(legend);
 }

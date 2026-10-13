@@ -2,7 +2,8 @@
 import { el, svgEl, showTooltip, hideTooltip, chartWidth } from '../dom.mjs';
 import { formatTokens, shortDate, fullDate, axisTokens } from '../format.mjs';
 import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM } from './axes.mjs';
-import { TOKEN_SERIES, textureCss } from './palette.mjs';
+import { TOKEN_SERIES } from './palette.mjs';
+import { legendRow, lineIcon } from './legend.mjs';
 
 // Daily tokens for all four types in one plot. The four span six orders of
 // magnitude on a typical range - 78 input tokens against 452M cache reads - which
@@ -125,33 +126,12 @@ export function drawLogLineChart(container, data, series = TOKEN_SERIES) {
   container.appendChild(svg);
 }
 
-// A legend sample for a line chart: a short SVG line with the series' own colour
-// and dash pattern, so each entry matches its line by dash and not only by colour.
-// 28px holds a whole '9 4 2 4' cycle and the start of the next one. At 16px that
-// pattern looked the same as '9 4'.
-function legendLineSample(ser) {
-  const svg = svgEl('svg', { class: 'legend-line', width: 28, height: 4, viewBox: '0 0 28 4', 'aria-hidden': 'true' });
-  svg.appendChild(
-    svgEl('line', {
-      x1: 0, y1: 2, x2: 28, y2: 2, stroke: ser.color, 'stroke-width': 2,
-      ...(ser.dash ? { 'stroke-dasharray': ser.dash } : {}),
-    })
-  );
-  return svg;
-}
-
-export function drawTokenLegend(container, data, series = TOKEN_SERIES, lineStyle = false) {
-  container.innerHTML = '';
-  for (const ser of series) {
+// The side legend of the token-type chart: a dash sample, the label and the
+// range total per series, in the order the lines run top to bottom.
+export function drawTokenLegend(container, data, series = TOKEN_SERIES) {
+  const items = series.map((ser) => {
     const total = (data || []).reduce((sum, d) => sum + (d[ser.key] || 0), 0);
-
-    container.appendChild(
-      el('span', { class: 'legend-item' }, [
-        lineStyle
-          ? legendLineSample(ser)
-          : el('span', { class: 'legend-swatch', style: `background:${textureCss(ser.texture, ser.color)}` }),
-        el('span', { text: total ? `${ser.label} ${formatTokens(total)}` : ser.label }),
-      ])
-    );
-  }
+    return { icon: lineIcon(ser.color, ser.dash), label: ser.label, value: total ? formatTokens(total) : '' };
+  });
+  container.replaceChildren(legendRow(items, 'side-legend'));
 }
