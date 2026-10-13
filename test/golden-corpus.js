@@ -36,8 +36,8 @@ function meta(sessionId, timestamp, extra = {}) {
   return { type: 'user', sessionId, timestamp, isMeta: true, message: { role: 'user', content: 'meta' }, ...extra };
 }
 
-function assistant(sessionId, timestamp, { msg, req, model = SONNET, use, content = [], extra = {} }) {
-  return { type: 'assistant', sessionId, timestamp, requestId: req, message: { id: msg, model, usage: use, content }, ...extra };
+function assistant(sessionId, timestamp, { msg, req, model = SONNET, use, content = [], stop = 'end_turn', extra = {} }) {
+  return { type: 'assistant', sessionId, timestamp, requestId: req, message: { id: msg, model, usage: use, content, stop_reason: stop }, ...extra };
 }
 
 const toolUse = (id, name, input) => ({ type: 'tool_use', id, name, input });
@@ -160,7 +160,7 @@ function sessionA() {
       isSidechain: true,
       requestId: 'r-sub',
       attributionAgent: 'Explore',
-      message: { id: 'm-sub', model: HAIKU, usage: usage(300, 30), content: [{ type: 'text', text: 'subagent reply' }] },
+      message: { id: 'm-sub', model: HAIKU, usage: usage(300, 30), content: [{ type: 'text', text: 'subagent reply' }], stop_reason: 'end_turn' },
     },
     { type: 'cost-state', sessionId: s, totalCostUSD: 2.25 },
     { type: 'ai-title', sessionId: s, aiTitle: '  Final title  ' },
@@ -206,7 +206,7 @@ function sessionC() {
 // Lines with no sessionId, which are filed under the file path, and odd JSON values.
 function sessionD() {
   return [
-    { type: 'assistant', timestamp: at(10, 12), requestId: 'r-d1', message: { id: 'm-d1', model: SONNET, usage: usage(50, 5) } },
+    { type: 'assistant', timestamp: at(10, 12), requestId: 'r-d1', message: { id: 'm-d1', model: SONNET, usage: usage(50, 5), stop_reason: 'end_turn' } },
     { type: 'ai-title', aiTitle: 'No session id' },
     meta('constructor', at(10, 12, 1), { gitBranch: 'proto' }),
     assistant('constructor', at(10, 12, 2), { msg: 'm-d2', req: 'r-d2', use: usage(60, 6) }),

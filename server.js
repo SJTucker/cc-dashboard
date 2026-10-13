@@ -9,6 +9,7 @@ const { getProjectsDir } = require('./lib/transcript-files');
 const { localDateStr, windowStart } = require('./lib/dates');
 const { aggregate } = require('./lib/aggregate');
 const { createRowStore } = require('./lib/rowstore');
+const { getAgentUsageDir } = require('./lib/agent-steps');
 const { openStore } = require('./lib/store');
 const { createScanMemo } = require('./lib/scan-memo');
 const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
@@ -141,7 +142,7 @@ function createServer(config) {
   // transcripts.db that cannot be opened through console.warn. A request that
   // arrives first opens it itself.
   function getRowStore() {
-    if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, store: openStore(storePath, serverDb.get), log: (line) => console.log(line) });
+    if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, agentUsageDir: () => getAgentUsageDir(config.configDir), store: openStore(storePath, serverDb.get), log: (line) => console.log(line) });
     return rowStore;
   }
 

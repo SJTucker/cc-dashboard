@@ -143,3 +143,15 @@ test('aggregate of compacted rows equals aggregate of raw rows over the golden c
     assert.deepStrictEqual(aggregate(compacted, opts), aggregate(raw, opts));
   }
 });
+
+test('compactRows keeps agentId and noFinal on a call row, and shares the agentId string', () => {
+  const intern = new Map();
+  const a = emptyRows({ calls: [{ key: 'k1', usage: { input_tokens: 1, output_tokens: 2 }, agentId: fresh('a1'), noFinal: true }] });
+  const b = emptyRows({ calls: [{ key: 'k2', usage: { input_tokens: 1, output_tokens: 2 }, agentId: fresh('a1') }] });
+  compactRows(a, intern);
+  compactRows(b, intern);
+  assert.equal(a.calls[0].noFinal, true);
+  assert.equal('noFinal' in b.calls[0], false);
+  assert.equal(a.calls[0].agentId, 'a1');
+  assert.equal(intern.get('a1'), a.calls[0].agentId);
+});

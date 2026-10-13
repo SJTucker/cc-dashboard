@@ -37,11 +37,12 @@ function writeFile(dir, name, ids, ageMs = 0) {
 
 // A real extract that records which files it read. `clock` is the store's `now`, which
 // the tests advance past REFRESH_SHARE_MS instead of sleeping.
-function harness(dir, { store = null, log } = {}) {
+function harness(dir, { store = null, log, agentUsageDir } = {}) {
   const reads = [];
   const clock = { now: Date.now() };
   const rows = createRowStore({
     projectsDir: () => dir,
+    agentUsageDir: () => agentUsageDir ?? null,
     store,
     log,
     now: () => clock.now,
@@ -58,6 +59,18 @@ function harness(dir, { store = null, log } = {}) {
 }
 
 const tmpDb = () => path.join(helpers.tmpDir(null, 'rowstore-db'), 'transcripts.db');
+
+// Writes a step file as the mod does. `ageMs` sets its mtime that far in the past.
+function writeSteps(dir, agentId, steps, ageMs = 0) {
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${agentId}.json`);
+  fs.writeFileSync(file, JSON.stringify({ agentId, steps }));
+  const seconds = (Date.now() - ageMs) / 1000;
+  fs.utimesSync(file, seconds, seconds);
+  return file;
+}
+const STEP = { t: Date.now(), model: 'claude-sonnet-4-6', input: 2, cacheWrite: 10, cacheRead: 20, output: 300, turnId: 't1', index: 0 };
+const stepEntries = (rows) => rows.entries().filter((e) => e.rows.agentSteps);
 
 test('an unchanged file is read once, however many refreshes run', async () => {
   const { dir } = makeProjects();
@@ -1392,4 +1405,80 @@ test('a stored file that comes back unchanged after being deleted is written aga
   assert.ok(hasFatKeys(stored[0]));
   assert.strictEqual(rows.entries().length, 1);
   store.close();
+});
+
+test('step files are read as row sets with agentSteps, and read again when they change', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  const file = writeSteps(stepsDir, 'a1', [STEP], 60_000);
+  const { rows, reads, refresh } = harness(dir, { agentUsageDir: stepsDir });
+  await refresh();
+  assert.deepStrictEqual(stepEntries(rows).map((e) => e.rows.agentSteps.length), [1]);
+  const before = rows.generation;
+
+  writeSteps(stepsDir, 'a1', [STEP, { ...STEP, index: 1, cacheRead: 40 }]);
+  await refresh();
+  assert.deepStrictEqual(stepEntries(rows).map((e) => e.rows.agentSteps.length), [2]);
+  assert.ok(rows.generation > before);
+  assert.strictEqual(reads.filter((r) => r === file).length, 2);
+});
+
+test('a step file that does not parse is read again at the next refresh', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  fs.mkdirSync(stepsDir, { recursive: true });
+  const file = path.join(stepsDir, 'a1.json');
+  fs.writeFileSync(file, '{"agentId":"a1","steps":[{"t":1');
+  const { reads, refresh } = harness(dir, { agentUsageDir: stepsDir });
+  await refresh();
+  await refresh();
+  assert.strictEqual(reads.filter((r) => r === file).length, 2);
+});
+
+test('a persisted step file not written for a day is deleted, and its rows stay', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  const file = writeSteps(stepsDir, 'a1', [STEP], 2 * DAY_MS);
+  const store = openStore(tmpDb());
+  const { rows, refresh } = harness(dir, { store, agentUsageDir: stepsDir });
+  await refresh();
+  assert.strictEqual(fs.existsSync(file), false);
+  await refresh();
+  assert.deepStrictEqual(stepEntries(rows).map((e) => e.rows.agentSteps.length), [1]);
+  store.close();
+});
+
+test('a step file written within the day is kept', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  const file = writeSteps(stepsDir, 'a1', [STEP], 60 * 60 * 1000);
+  const store = openStore(tmpDb());
+  const { refresh } = harness(dir, { store, agentUsageDir: stepsDir });
+  await refresh();
+  assert.strictEqual(fs.existsSync(file), true);
+  store.close();
+});
+
+test('with no store, an old step file is kept', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  const file = writeSteps(stepsDir, 'a1', [STEP], 2 * DAY_MS);
+  const { refresh } = harness(dir, { agentUsageDir: stepsDir });
+  await refresh();
+  assert.strictEqual(fs.existsSync(file), true);
+});
+
+test('a subagent response with no final line is priced at the output in its step file', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  const ts = new Date().toISOString();
+  const usage = { input_tokens: 2, output_tokens: 8, cache_creation_input_tokens: 10, cache_read_input_tokens: 20 };
+  const line = JSON.stringify({ type: 'assistant', timestamp: ts, sessionId: 's1', isSidechain: true, agentId: 'a1', requestId: 'req-1', message: { id: 'msg-1', model: 'claude-sonnet-4-6', stop_reason: null, usage, content: [] } });
+  fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), `${line}\n${line}\n`);
+  writeSteps(stepsDir, 'a1', [{ ...STEP, input: 2, cacheWrite: 10, cacheRead: 20, output: 300 }]);
+  const { rows, refresh } = harness(dir, { agentUsageDir: stepsDir });
+  await refresh();
+  const data = aggregate(rows.entries().map((e) => e.rows), { days: null });
+  assert.strictEqual(data.summary.totalOutput, 300);
+  assert.deepStrictEqual([data.meta.noFinalCalls, data.meta.noFinalCorrected], [1, 1]);
 });

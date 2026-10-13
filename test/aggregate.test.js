@@ -3,7 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { aggregate } = require('../lib/aggregate');
-const { outputRate } = require('../lib/pricing');
+const { outputRate, costForUsage } = require('../lib/pricing');
 
 // A fixed "now" in local time, so a range's cutoff does not depend on when the suite runs.
 const NOW = new Date(2026, 9, 8, 12, 0, 0).getTime();
@@ -490,4 +490,58 @@ test('a range with no calls has zero thinking sums, and empty hour slots carry t
     assert.strictEqual(typeof slot.thinkingCost, 'number', slot.date);
   }
   assert.strictEqual(hourly.daily.find((d) => d.date.endsWith('T09')).thinking, 40);
+});
+
+const stepRows = (steps, over = {}) => ({ ...rowSet(), agentSteps: steps, ...over });
+const NF_USAGE = { input_tokens: 2, output_tokens: 8, cache_creation_input_tokens: 10, cache_read_input_tokens: 20 };
+const STEP_A1 = { agentId: 'a1', t: at(0), model: 'claude-sonnet-4-6', input: 2, cacheWrite: 10, cacheRead: 20, output: 500 };
+const noFinalCall = (over = {}) => call({ key: 'nf', sidechain: true, agentId: 'a1', noFinal: true, usage: NF_USAGE, ...over });
+
+test('a no-final subagent call with a matching step is priced at the recorded output everywhere', () => {
+  const data = run([rowSet({ calls: [noFinalCall()] }), stepRows([STEP_A1])]);
+  const expected = costForUsage({ ...NF_USAGE, output_tokens: 500 }, 'claude-sonnet-4-6', at(0)).cost;
+
+  assert.strictEqual(data.summary.totalOutput, 500);
+  assert.ok(Math.abs(data.summary.totalCost - expected) < 1e-12);
+  assert.ok(Math.abs(data.threads.subagent - expected) < 1e-12);
+  assert.strictEqual(data.daily.find((d) => d.output > 0).output, 500);
+  assert.ok(Math.abs(data.models[0].cost - expected) < 1e-12);
+  assert.strictEqual(data.efficiency.calls[0].output, 500);
+  assert.deepStrictEqual([data.meta.noFinalCalls, data.meta.noFinalCorrected], [1, 1]);
+});
+
+test('the step file may come before the transcript in walk order', () => {
+  const data = run([stepRows([STEP_A1]), rowSet({ calls: [noFinalCall()] })]);
+  assert.strictEqual(data.summary.totalOutput, 500);
+});
+
+test('a no-final call with no matching step keeps its own output and is counted', () => {
+  const data = run([rowSet({ calls: [noFinalCall()] }), stepRows([{ ...STEP_A1, cacheRead: 21 }])]);
+  assert.strictEqual(data.summary.totalOutput, 8);
+  assert.deepStrictEqual([data.meta.noFinalCalls, data.meta.noFinalCorrected], [1, 0]);
+});
+
+test('a call with a final line is never changed by a step', () => {
+  const finished = call({ key: 'f', sidechain: true, agentId: 'a1', usage: NF_USAGE });
+  const data = run([rowSet({ calls: [finished] }), stepRows([STEP_A1])]);
+  assert.strictEqual(data.summary.totalOutput, 8);
+  assert.deepStrictEqual([data.meta.noFinalCalls, data.meta.noFinalCorrected], [0, 0]);
+});
+
+test('a recorded output no larger than the transcript\'s is not used', () => {
+  const data = run([rowSet({ calls: [noFinalCall()] }), stepRows([{ ...STEP_A1, output: 8 }])]);
+  assert.strictEqual(data.summary.totalOutput, 8);
+  assert.strictEqual(data.meta.noFinalCorrected, 0);
+});
+
+test('a no-final call with no agentId is left as it is and not counted', () => {
+  const data = run([rowSet({ calls: [noFinalCall({ agentId: undefined })] }), stepRows([STEP_A1])]);
+  assert.strictEqual(data.summary.totalOutput, 8);
+  assert.strictEqual(data.meta.noFinalCalls, 0);
+});
+
+test('scannedFiles and unreadableFiles count transcripts only, not step files', () => {
+  const data = run([rowSet(), stepRows([STEP_A1]), stepRows([], { ok: false })]);
+  assert.strictEqual(data.meta.scannedFiles, 1);
+  assert.strictEqual(data.meta.unreadableFiles, 0);
 });

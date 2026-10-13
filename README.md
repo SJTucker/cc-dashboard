@@ -320,6 +320,14 @@ show "—". Subagent tool calls do not change the state of the main loop. A Bash
 command's first 60 characters are stored in the activity file and shown on the page,
 so the text can contain what you typed in that command.
 
+The mod also records the usage of each request a subagent makes, in
+`<config dir>/cc-dashboard/agent-usage/<agent id>.json`. In interactive sessions on
+Claude Code 2.1.280 and later, most subagent responses never get their final usage
+line in the transcript, so the transcript's output count is the figure from the
+start of the response. When a response has no final line, the dashboard prices it
+at the output the mod recorded. Responses recorded before the mod did this keep the
+transcript's figure.
+
 ### What the panels show
 
 When either window reaches 75%, a warning banner at the top of the page shows on
@@ -568,6 +576,7 @@ only. History then starts at the oldest transcript on disk. Raising
 ```
 server.js              Express app on 127.0.0.1: serves public/ and the /api routes summary, rtk, limits, changes, records, sessions/live, reviews (with dismiss and undo), refresh and prices (check, apply)
 lib/activity.js        Reads the activity files the mod writes (working or waiting), ignores stale ones, deletes those older than a day
+lib/agent-steps.js     Reads the mod's agent-usage files: the output of each subagent request, for responses whose transcript has no final usage line
 lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill and subagent, plus per-session titles, branches and edited lines
 lib/changes.js         Setup change markers: plugin installs, new models, Claude Code releases, the mod's setup changes, changes.json
 lib/config-dir.js      loadConfig: the one place the server reads the environment (CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB, PORT)

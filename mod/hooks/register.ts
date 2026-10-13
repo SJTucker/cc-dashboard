@@ -2,6 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
 import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, settingsChanges, snapshotName } from './setup'
 import type { Kind, SetupEntry, Snapshot } from './setup'
+import { parseSteps, stepOf, stepsText } from './steps'
+import type { AgentStep } from './steps'
 import { REPO_STEPS, handoffDocument, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
@@ -434,6 +436,11 @@ const writeTimers = new Map<string, Timer>()
 // write to finish is the last one started. The text last written, by session id,
 // lets a write with nothing new be skipped.
 const writing = new Map<string, Promise<void>>()
+
+// Each subagent's recorded steps, and the chain that orders the writes of its file.
+// See steps.ts. A reload starts these empty; recordStep reads the file back.
+const agentSteps = new Map<string, AgentStep[]>()
+const stepWrites = new Map<string, Promise<void>>()
 const lastWritten = new Map<string, string>()
 
 function toolsOf(id: string) {
@@ -509,6 +516,31 @@ async function writeActivity($: EngineInterface, id: string) {
 function queueWrite($: EngineInterface, id: string) {
   const previous = writing.get(id) ?? Promise.resolve()
   writing.set(id, previous.then(() => writeActivity($, id)).catch((err) => fail($, `activity failed (${errorName(err)})`)))
+}
+
+// Adds one step to the agent's list and writes the whole list. The first step of an
+// agent this module instance has not seen reads the agent's file first, so a reload
+// keeps the steps written before it. An agent id that is not a plain name is not
+// used as a file name.
+async function recordStep($: EngineInterface, agentId: string, step: AgentStep) {
+  if (!/^[\w-]+$/.test(agentId)) return
+  const dir = await configDir($)
+  if (!dir) return
+  const file = `${dir}/cc-dashboard/agent-usage/${agentId}.json`
+  let steps = agentSteps.get(agentId)
+  if (!steps) {
+    steps = parseSteps(await $.fs.read(file).then(String, () => undefined))
+    agentSteps.set(agentId, steps)
+  }
+  steps.push(step)
+  await $.fs.write(file, stepsText(agentId, steps))
+}
+
+// Adds a step write to the end of the agent's chain and returns at once. A failed
+// write is logged, and the chain goes on with the next one.
+function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
+  const previous = stepWrites.get(agentId) ?? Promise.resolve()
+  stepWrites.set(agentId, previous.then(() => recordStep($, agentId, step)).catch((err) => fail($, `agent usage failed (${errorName(err)})`)))
 }
 
 // Applies change to the session's state, then queues a write of it. A change within
@@ -1212,6 +1244,26 @@ export const register: Register = (on) => {
       fail($, `handoff timer failed (${errorName(err)})`)
     }
     return next(e)
+  })
+
+  // Records the usage of each subagent model request for the dashboard (steps.ts).
+  // The stream passes through unchanged. For a turn.step hook with no handler, a
+  // throw or a budget overrun makes the engine run next(e) again, which sends a new
+  // model request. So the recording after the stream catches everything and only
+  // queues the write. This hook's .catch handler replays what its own next(e)
+  // settled to, so no request is sent twice.
+  on('turn.step', async function* ($, e, next) {
+    const stream = next(e)
+    for await (const chunk of stream) yield chunk
+    const result = await stream.result
+    try {
+      if (e.agentId && result.usage) queueStep($, e.agentId, stepOf(result.usage, await $.clock.now(), e.turnId, e.index))
+    } catch (err) {
+      fail($, `agent usage failed (${errorName(err)})`)
+    }
+    return result
+  }).catch(async function* ($, e, next) {
+    return yield* next(e)
   })
 
   // Idle compaction reports trigger 'auto', as threshold compaction does. Threshold
