@@ -37,3 +37,23 @@ test('showAllButton names the total, and says Show fewer once expanded', async (
   assert.equal(open.textContent, 'Show fewer');
   assert.equal(open.getAttribute('aria-expanded'), 'true');
 });
+
+test('keepShowAllFocus refocuses the rebuilt button only when focus was inside the container', async () => {
+  const { keepShowAllFocus } = await load();
+  const run = (focusInside) => {
+    let focused = 0;
+    const button = { focus: () => { focused += 1; } };
+    const box = { contains: (n) => n === button };
+    globalThis.document = {
+      activeElement: focusInside ? button : null,
+      getElementById: () => box,
+      querySelector: () => button,
+    };
+    let drew = 0;
+    keepShowAllFocus('x', () => { drew += 1; });
+    return { drew, focused };
+  };
+  assert.deepStrictEqual(run(true), { drew: 1, focused: 1 });
+  assert.deepStrictEqual(run(false), { drew: 1, focused: 0 });
+  installDom();
+});

@@ -21,6 +21,15 @@ export function showAllButton(total, limit, expanded, onToggle) {
   return button;
 }
 
+// Runs draw, which replaces the children of #containerId. When keyboard focus was
+// inside the container, it moves to the rebuilt Show all button. A poll redraw
+// destroys the focused button the same way a click's redraw does.
+export function keepShowAllFocus(containerId, draw) {
+  const hadFocus = document.getElementById(containerId)?.contains(document.activeElement);
+  draw();
+  if (hadFocus) refocusShowAll(containerId);
+}
+
 // The redraw a click starts rebuilds the button, so focus moves to the new one.
 export function refocusShowAll(containerId) {
   document.querySelector(`#${containerId} .show-all`)?.focus({ preventScroll: true });

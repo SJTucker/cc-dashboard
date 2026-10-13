@@ -4,7 +4,7 @@ import { el } from '../dom.mjs';
 import { formatCost, formatDuration, formatAgo } from '../format.mjs';
 import { state } from '../state.mjs';
 import { createDrawGuard } from '../guards.mjs';
-import { visibleRows, showAllButton, refocusShowAll } from '../ui/show-all.mjs';
+import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
 
 const sessionsGuard = createDrawGuard();
 
@@ -163,7 +163,7 @@ function drawSessions(live) {
     renderSessions(lastLiveSessions);
     refocusShowAll('sessionsMore');
   });
-  document.getElementById('sessionsMore').replaceChildren(...(more ? [more] : []));
+  keepShowAllFocus('sessionsMore', () => document.getElementById('sessionsMore').replaceChildren(...(more ? [more] : [])));
   sessionToggles = toggles;
   if (focused) toggles.get(focused[0])?.focus({ preventScroll: true });
 

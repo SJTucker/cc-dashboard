@@ -5,7 +5,7 @@ import { getJson } from '../api.mjs';
 import { el, svgEl, withTooltip, withFocusTooltip } from '../dom.mjs';
 import { formatAgo, localDateStr } from '../format.mjs';
 import { createDrawGuard } from '../guards.mjs';
-import { visibleRows, showAllButton, refocusShowAll } from '../ui/show-all.mjs';
+import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
 import { REVIEW_DAYS } from '../constants.mjs';
 import { contextLine } from './sessions.mjs';
 
@@ -293,7 +293,7 @@ function drawReviews(data) {
     renderReviews(lastReviews);
     refocusShowAll('reviewsMore');
   });
-  document.getElementById('reviewsMore').replaceChildren(...(more ? [more] : []));
+  keepShowAllFocus('reviewsMore', () => document.getElementById('reviewsMore').replaceChildren(...(more ? [more] : [])));
   if (focusKey) [...list.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus({ preventScroll: true });
 
   document.getElementById('reviewsNote').textContent =

@@ -8,7 +8,7 @@ import { createSequence } from '../guards.mjs';
 import {
   WEEK_MS, markerDate, markerIcon, timeDomain, drawMetricChart, drawMetricLegend,
 } from '../charts/setup-changes.mjs';
-import { visibleRows, showAllButton, refocusShowAll } from '../ui/show-all.mjs';
+import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
 
 // Days of history the setup charts show for each range picker value. Today and 7d
 // show 14 days, since a day or a week holds too few sessions to read a trend.
@@ -86,6 +86,10 @@ function afterHeading(marker, now) {
 }
 
 function renderBeforeAfter(report, marker) {
+  keepShowAllFocus('overlapNote', () => drawBeforeAfter(report, marker));
+}
+
+function drawBeforeAfter(report, marker) {
   const table = document.getElementById('beforeAfterTable');
   const box = document.getElementById('overlapNote');
   table.replaceChildren();
@@ -201,7 +205,10 @@ function renderDayList(report, marker) {
 // The one entry for a pick, from a lane cell, a day list row or a range fallback.
 // The picked change is remembered by key, so it survives redraws and range switches.
 function selectMarker(report, marker) {
-  selectedMarkerKey = markerKey(marker);
+  const key = markerKey(marker);
+  // A newly picked change starts with its window list collapsed.
+  if (key !== selectedMarkerKey) showAllWindow = false;
+  selectedMarkerKey = key;
   renderDayList(report, marker);
   renderBeforeAfter(report, marker);
   selectRow(report, marker, selectedRowKey);
