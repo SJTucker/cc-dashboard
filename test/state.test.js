@@ -6,6 +6,8 @@ const assert = require('node:assert');
 test('state starts on the Today range with nothing hidden', async () => {
   const { state } = await import('../public/state.mjs');
   assert.equal(state.currentDays, 'today');
+  assert.equal(state.tab, 'now');
+  assert.equal(state.analysisDays, 7);
   assert.deepStrictEqual([...state.hiddenKeys], []);
 });
 

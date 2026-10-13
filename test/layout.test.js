@@ -46,3 +46,9 @@ test('a saved order from before Plan usage and Where usage goes shared a row put
   const defaults = ['Plan usage', 'Session timeline', 'Live sessions'];
   assert.deepStrictEqual(orderRowKeys(defaults, saved), ['Session timeline', 'Plan usage', 'Live sessions']);
 });
+
+test('one saved list orders each tab: keys of the other tab are dropped', () => {
+  const saved = ['Live sessions', 'Tool calls', 'Plan usage', 'Daily cost', 'Session timeline'];
+  assert.deepStrictEqual(orderRowKeys(['Plan usage', 'Session timeline', 'Live sessions'], saved), ['Live sessions', 'Plan usage', 'Session timeline']);
+  assert.deepStrictEqual(orderRowKeys(['Session reviews', 'Daily cost', 'Tool calls'], saved), ['Session reviews', 'Tool calls', 'Daily cost']);
+});
