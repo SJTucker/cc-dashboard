@@ -74,6 +74,7 @@ const CONTRACT = [
   { "script": "judge-updates", "args": ["record"], "stdin": { "versions": ["2.1.290"], "reply": "[{\"version\":\"2.1.290\",\"relevant\":false}]" } },
   { "script": "review-session", "args": ["prompt"], "stdin": "" },
   { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
+  { "script": "cache-state", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl" } },
   { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
   { "script": "record-statusline", "args": [], "stdin": {
     "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "cleared_from": "prev-1", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },

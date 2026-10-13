@@ -1,0 +1,54 @@
+#!/usr/bin/env node
+'use strict';
+
+// Run by the mod's turn.complete hook (mod/hooks/register.ts), which pipes
+// {"transcript": "<path>"} on stdin. Prints {"ttl": "1h" | "5m", "expiresAt": <ms>}
+// for the main thread's prompt cache, from cacheOf in lib/sessions.js, so the mod
+// arms its handoff timer from the same TTL the dashboard shows. Prints {} when the
+// transcript has no main-thread call or cannot be read. Stdin that is not JSON with a
+// transcript path prints the reason on stderr and exits 1, and the mod logs it.
+
+const { extractFile } = require('../lib/extract');
+const { cacheWriteTokens } = require('../lib/pricing');
+const { cacheOf } = require('../lib/sessions');
+const { readStdin } = require('../lib/stdin');
+
+function fail(message) {
+  process.stderr.write(`cache-state: ${message}\n`);
+  process.exitCode = 1;
+}
+
+// cacheOf reads the per-call records that lib/aggregate.js builds. Only the fields
+// it uses are built here.
+function callsOf(rows) {
+  return rows.map((row) => {
+    const write = cacheWriteTokens(row.usage);
+    return {
+      t: row.t,
+      main: !row.sidechain,
+      model: row.model,
+      context: (row.usage.input_tokens || 0) + write.total + (row.usage.cache_read_input_tokens || 0),
+      write5m: write.write5m,
+      write1h: write.write1h,
+    };
+  });
+}
+
+function transcriptOf(input) {
+  try {
+    const parsed = JSON.parse(input);
+    return typeof parsed?.transcript === 'string' ? parsed.transcript : null;
+  } catch {
+    return null;
+  }
+}
+
+readStdin()
+  .then(async (input) => {
+    const transcript = transcriptOf(input);
+    if (transcript === null) return fail('stdin is not JSON with a transcript path');
+    const { calls } = await extractFile(transcript);
+    const cache = cacheOf(callsOf(calls), Date.now());
+    process.stdout.write(JSON.stringify(cache ? { ttl: cache.ttl, expiresAt: cache.expiresAt } : {}) + '\n');
+  })
+  .catch((err) => fail(err.message));
