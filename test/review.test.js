@@ -141,6 +141,12 @@ test('SYSTEM explains the rules section and asks for broken rules', () => {
   assert.match(review.SYSTEM, /changed after the session started/);
 });
 
+test('SYSTEM explains the earlier suggestions section', () => {
+  assert.match(review.SYSTEM, /EARLIER SUGGESTIONS/);
+  assert.match(review.SYSTEM, /open, done, not useful or duplicate/);
+  assert.match(review.SYSTEM, /Recurring:/);
+});
+
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 const NOW = Date.UTC(2026, 9, 6, 12);
@@ -270,6 +276,51 @@ test('pendingReviews returns sessions with 3 or more prompts and records the res
   assert.deepStrictEqual([rowOf(db, 'lost').status, rowOf(db, 'lost').skip_reason], ['skipped', 'no transcript']);
   assert.strictEqual(rowOf(db, 'running'), undefined);
   assert.deepStrictEqual(await review.pendingReviews({ db, sessionsDir, projects, now: NOW }), []);
+});
+
+test('earlierSuggestions lists suggestions from done reviews in the last 14 days, newest review first, with their state', () => {
+  const { review, db } = fixture();
+  seed(review, db, 'old', {}, [{ kind: 'workflow', text: 'too old' }], NOW - 15 * 24 * HOUR);
+  seed(review, db, 'a', {}, [{ kind: 'claude-md', text: 'first' }, { kind: 'token-waste', text: 'second' }], NOW - 2 * HOUR);
+  seed(review, db, 'b', {}, [{ kind: 'workflow', text: 'newest' }], NOW - HOUR);
+  seed(review, db, 'f', { status: 'failed', error: 'x' }, [], NOW - HOUR);
+  review.setDismissal(db, 'a', 0, 'not_useful', NOW);
+  review.setDismissal(db, 'a', 1, 'duplicate', NOW);
+  assert.strictEqual(review.earlierSuggestions(db, NOW), [
+    '- [open] workflow: newest',
+    '- [not useful] claude-md: first',
+    '- [duplicate] token-waste: second',
+  ].join('\n'));
+});
+
+test('earlierSuggestions is empty with no reviews, and keeps a newline in a text on one line', () => {
+  const { review, db } = fixture();
+  assert.strictEqual(review.earlierSuggestions(db, NOW), '');
+  seed(review, db, 'a', {}, [{ kind: 'workflow', text: 'x' }], NOW - HOUR);
+  db.prepare("UPDATE suggestions SET text = 'two\nlines' WHERE session_id = 'a'").run();
+  assert.strictEqual(review.earlierSuggestions(db, NOW), '- [open] workflow: two lines');
+});
+
+test('earlierSuggestions drops whole lines past 12,000 characters and keeps the newest', () => {
+  const { review, db } = fixture();
+  // Each line is '- [open] workflow: ' (19) plus 280 characters, 300 with its newline.
+  for (let i = 0; i < 60; i++) {
+    const id = `s${String(i).padStart(2, '0')}`;
+    seed(review, db, id, {}, [{ kind: 'workflow', text: `${String(i).padStart(2, '0')} ${'x'.repeat(277)}` }], NOW - HOUR - (60 - i) * 1000);
+  }
+  const lines = review.earlierSuggestions(db, NOW).split('\n');
+  assert.strictEqual(lines.length, 40);
+  assert.ok(lines[0].startsWith('- [open] workflow: 59 '));
+  assert.ok(lines[39].startsWith('- [open] workflow: 20 '));
+});
+
+test('pendingReviews sends earlier suggestions ahead of the digest', async () => {
+  const { review, db, sessionsDir, projects } = fixture();
+  seed(review, db, 'earlier', {}, [{ kind: 'workflow', text: 'batch questions' }], NOW - HOUR);
+  writeSnapshot(sessionsDir, { sessionId: 'big', project: 'demo', endedAt: NOW - 1 });
+  writeSessionTranscript(projects, 'big', 3);
+  const [only] = await review.pendingReviews({ db, sessionsDir, projects, now: NOW });
+  assert.strictEqual(only.prompt, 'EARLIER SUGGESTIONS\n- [open] workflow: batch questions\n\nSESSION DIGEST\nUSER: prompt 0\nUSER: prompt 1\nUSER: prompt 2');
 });
 
 test('pendingReviews puts the session rule files ahead of the digest', async () => {

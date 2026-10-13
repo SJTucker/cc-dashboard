@@ -254,9 +254,13 @@ opens with Enter or Space.
   read as they are at review time and cut to 30,000 characters. A file edited after
   the session started is marked, so a rule added later is not counted as broken.
   Haiku is told not to repeat a rule they hold, and to report a broken one as a
-  suggestion that starts `Broken rule:`. The digest has one line per typed prompt,
-  reply start, tool call, tool error, large tool result and compaction. Prompts are
-  cut to 400 characters and the digest to about 60,000 characters.
+  suggestion that starts `Broken rule:`. Then come the suggestions from every review
+  in the last 14 days, newest first, each marked open, done, not useful or duplicate,
+  cut to 12,000 characters. Haiku is told not to make one of them again. It may repeat
+  an open one, starting `Recurring:`, when the session shows the same problem. The
+  digest has one line per typed prompt, reply start, tool call, tool error, large tool
+  result and compaction. Prompts are cut to 400 characters and the digest to about
+  60,000 characters.
 - **Where results go.** The `reviews` and `suggestions` tables in
   `~/.claude/cc-dashboard/transcripts.db`, written by `bin/review-session`. Rows are
   never deleted. The panel lists reviews finished in the last 7 days. Review files
