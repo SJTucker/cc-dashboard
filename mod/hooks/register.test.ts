@@ -38,6 +38,9 @@ type World = {
   toolFails: boolean
   // Makes fs.write reject.
   writeFails: boolean
+  // What the bottom of turn.step streams and returns.
+  stepChunks: unknown[]
+  stepResult: unknown
   // How long each fs.write takes on the mock clock, in call order. A write past the
   // end of the list takes no time.
   writeMs: number[]
@@ -92,6 +95,12 @@ const CONTRACT = [
 // contract:end
 const contract = CONTRACT
 
+const STEP_USAGE = { input_tokens: 2, output_tokens: 163, cache_read_input_tokens: 33650, cache_creation_input_tokens: 3649, model: 'claude-haiku-4-5' }
+const STEP_CHUNKS = [{ kind: 'text', index: 0, text: 'hi' }, { kind: 'stop', stopReason: 'end_turn', usage: STEP_USAGE }]
+const STEP_RESULT = { turnId: 't1', index: 1, answer: 'hi', toolUses: [], stopReason: 'end_turn', usage: STEP_USAGE }
+const AGENT_FILE = '/home/u/.claude/cc-dashboard/agent-usage/a1.json'
+const stepInput = (over: Record<string, unknown> = {}) => ({ turnId: 't1', index: 1, model: 'claude-haiku-4-5', messageCount: 3, ...over })
+
 // Answers every noun the mod calls, beneath it. `w` is read on each call, so a
 // test can change the session id, the model or the environment between events.
 // Returns what process.run got and the folders fs.list was asked for.
@@ -116,6 +125,8 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     verdict: 'allow',
     toolFails: false,
     writeFails: false,
+    stepChunks: STEP_CHUNKS,
+    stepResult: STEP_RESULT,
     writeMs: [],
     stats: {},
     cwd: '/work/my.demo',
@@ -287,6 +298,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   on('agent.list', () => ({ value: state.agents }))
   on('turn.start', (_$, e) => ({ turnId: e.turnId }))
   on('turn.complete', () => ({ text: '' }))
+  on('turn.step', async function* (_$, e) {
+    for (const chunk of state.stepChunks) yield chunk as never
+    return { ...(state.stepResult as object), turnId: e.turnId, index: e.index } as never
+  })
   on('tool.call', async () => {
     if (state.toolMs > 0) await clock.sleep(state.toolMs)
     if (state.toolFails) throw new Error('tool failed')
@@ -2153,4 +2168,65 @@ test('a reading whose reset has passed leaves the band', async ($, on) => {
   await clock.advance(131 * 60_000)
   expect(await bandLine(ui)).toBeUndefined()
   await ui.unmount()
+})
+
+// Reads a turn.step stream to its end and returns its chunks and its return value.
+// The testing kit's HookStream has no .result, so the result is read from the
+// iterator's final step.
+async function readStep(stream: AsyncGenerator<unknown, unknown>) {
+  const chunks: unknown[] = []
+  for (;;) {
+    const step = await stream.next()
+    if (step.done) return { chunks, result: step.value }
+    chunks.push(step.value)
+  }
+}
+
+test('a subagent step passes through unchanged and is written to the agent usage file', async ($, on) => {
+  const { writes, clock } = world(on)
+  const { chunks, result } = await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  expect(chunks).toEqual(STEP_CHUNKS)
+  expect(result).toEqual(STEP_RESULT)
+  await clock.settle()
+  const file = JSON.parse(writes[AGENT_FILE] ?? 'null')
+  expect(file.agentId).toBe('a1')
+  expect(file.steps.length).toBe(1)
+  expect(file.steps[0]).toMatchObject({ model: 'claude-haiku-4-5', input: 2, cacheWrite: 3649, cacheRead: 33650, output: 163, turnId: 't1', index: 1 })
+})
+
+test('a main-thread step, or one with no usage, writes nothing', async ($, on) => {
+  const { writes, clock, state } = world(on)
+  await readStep($.turn.step(stepInput() as never) as never)
+  state.stepResult = { ...STEP_RESULT, usage: null }
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(Object.keys(writes).filter((p) => p.includes('agent-usage'))).toEqual([])
+})
+
+test('each step of an agent appends to its file', async ($, on) => {
+  const { writes, clock, state } = world(on)
+  await readStep($.turn.step(stepInput({ agentId: 'a1', index: 0 }) as never) as never)
+  state.stepResult = { ...STEP_RESULT, index: 1, usage: { ...STEP_USAGE, cache_read_input_tokens: 40000, output_tokens: 7 } }
+  await readStep($.turn.step(stepInput({ agentId: 'a1', index: 1 }) as never) as never)
+  await clock.settle()
+  const file = JSON.parse(writes[AGENT_FILE] ?? 'null')
+  expect(file.steps.map((s: { output: number }) => s.output)).toEqual([163, 7])
+})
+
+test('the first step of an agent this module has not seen keeps the steps already in its file', async ($, on) => {
+  const earlier = { t: 1, model: 'claude-haiku-4-5', input: 2, cacheWrite: 1, cacheRead: 0, output: 9, turnId: 't0', index: 0 }
+  const { writes, clock } = world(on, { files: { [AGENT_FILE]: JSON.stringify({ agentId: 'a1', steps: [earlier] }) } })
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  const file = JSON.parse(writes[AGENT_FILE] ?? 'null')
+  expect(file.steps.map((s: { output: number }) => s.output)).toEqual([9, 163])
+})
+
+test('a failing write leaves the stream and the result unchanged and logs once', async ($, on) => {
+  const { clock, logged } = world(on, { writeFails: true })
+  const { chunks, result } = await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  expect(chunks).toEqual(STEP_CHUNKS)
+  expect(result).toEqual(STEP_RESULT)
+  await clock.settle()
+  expect(logged.some((line) => line.startsWith('agent usage failed'))).toBe(true)
 })
