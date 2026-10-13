@@ -61,3 +61,10 @@ test('media queries use the three breakpoints', () => {
   const widths = [...css.matchAll(/@media[^{]*?(max|min)-width:\s*(\d+)px/g)].map((m) => `${m[1]}-${m[2]}`);
   assert.deepStrictEqual(widths.filter((w) => !['max-480', 'max-720', 'min-721', 'max-900', 'min-901'].includes(w)), []);
 });
+
+// .ba-under lines the legend up with the plot, so its margin is the plot's left pad in px.
+test('.ba-under margin-left equals PLOT_LEFT', async () => {
+  const { PLOT_LEFT } = await import('../public/charts/setup-changes.mjs');
+  const m = css.match(/\.ba-under\s*\{\s*margin-left:\s*([^;}]+?)\s*[;}]/);
+  assert.strictEqual(m && m[1], `${PLOT_LEFT}px`);
+});

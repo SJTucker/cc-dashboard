@@ -83,7 +83,8 @@ html, body {
 .page {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 0 var(--sp-5) var(--sp-5);
+  /* 64px of page-end space, deliberately off the spacing scale. */
+  padding: 0 var(--sp-5) 64px;
 }
 
 /* ---------- Header ---------- */
@@ -1047,7 +1048,7 @@ html, body {
   grid-template-columns: 13ch minmax(0, 1fr) auto;
   gap: var(--sp-3);
   align-items: start;
-  padding: var(--sp-1) var(--sp-1);
+  padding: var(--sp-1);
   margin: 0 calc(-1 * var(--sp-1));
   border-radius: var(--radius-s);
 }
@@ -1198,8 +1199,9 @@ html, body {
 .ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
 @media (max-width: 900px) { .ba-grid { grid-template-columns: 1fr; } }
 
-/* The legend and title start at the plot's left edge. 110px equals PLOT_LEFT in public/charts/setup-changes.mjs. */
-.ba-under { margin-left: var(--sp-5); }
+/* The legend and title start at the plot's left edge. 110px equals PLOT_LEFT in public/charts/setup-changes.mjs,
+   so it is deliberately off the spacing scale. test/palette-tokens.test.js keeps the two equal. */
+.ba-under { margin-left: 110px; }
 .ba-under .usage-group-title { margin: -2px 0 var(--sp-1); }
 .ba-grid { margin-top: var(--sp-2); }
 /* The before/after table needs about 390px. Below that its column scrolls sideways instead of widening the page. */
@@ -1218,7 +1220,7 @@ html, body {
   width: 100%;
   align-items: flex-start;
   gap: var(--sp-2);
-  padding: var(--sp-1) var(--sp-1);
+  padding: var(--sp-1);
   border: 0;
   border-radius: var(--radius-s);
   background: none;
@@ -1279,7 +1281,7 @@ html, body {
   display: grid;
   grid-template-columns: 3.5em minmax(0, 1fr);
   gap: var(--sp-2);
-  padding: var(--sp-1) var(--sp-1);
+  padding: var(--sp-1);
   cursor: pointer;
   font-size: var(--fs-body);
   list-style: none;
