@@ -620,6 +620,7 @@ html, body {
 
 .model-table .model-name {
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .model-table .swatch {
