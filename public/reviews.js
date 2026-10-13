@@ -9,7 +9,8 @@ const dismissedSuggestions = (review) => review.suggestions.filter((s) => !isOpe
 // True when the review has suggestions and the user has dismissed every one.
 const allDismissed = (review) => review.suggestions.length > 0 && openSuggestions(review).length === 0;
 const countWithOpen = (reviews) => reviews.filter((r) => openSuggestions(r).length > 0).length;
-const dismissalText = (s) => (s.reason === 'done' ? 'Marked done' : 'Marked not useful');
+const DISMISSAL_TEXT = { done: 'Marked done', not_useful: 'Marked not useful', duplicate: 'Marked duplicate' };
+const dismissalText = (s) => DISMISSAL_TEXT[s.reason] ?? 'Marked not useful';
 
 // The prompt the Copy prompt button puts on the clipboard, for a stronger model to
 // check Haiku's suggestions against the transcript. Dismissed suggestions are left

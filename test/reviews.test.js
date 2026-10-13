@@ -55,6 +55,7 @@ test('countWithOpen counts reviews with at least one open suggestion', () => {
 test('dismissalText says the reason in words', () => {
   assert.strictEqual(dismissalText(sug(0, 'a', 'done')), 'Marked done');
   assert.strictEqual(dismissalText(sug(0, 'a', 'not_useful')), 'Marked not useful');
+  assert.strictEqual(dismissalText(sug(0, 'a', 'duplicate')), 'Marked duplicate');
 });
 
 test('reviewPrompt leaves out dismissed suggestions', () => {

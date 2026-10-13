@@ -107,6 +107,8 @@ function sendBusy(res, err) {
 // createServer covers both methods, so a cross-site page cannot dismiss or undo, the same
 // protection the price POST routes have.
 const DISMISS_PATH = '/api/reviews/:sessionId/suggestions/:idx/dismiss';
+const QUOTED_REASONS = DISMISS_REASONS.map((r) => `"${r}"`);
+const REASON_ERROR = `reason must be ${QUOTED_REASONS.slice(0, -1).join(', ')} or ${QUOTED_REASONS.at(-1)}.`;
 
 // The session id and idx from the path, or null after answering 400.
 function suggestionTarget(req, res) {
@@ -301,7 +303,7 @@ function createServer(config) {
     if (!target) return;
     const reason = req.body ? req.body.reason : undefined;
     if (!DISMISS_REASONS.includes(reason)) {
-      res.status(400).json({ error: `reason must be "${DISMISS_REASONS.join('" or "')}".` });
+      res.status(400).json({ error: REASON_ERROR });
       return;
     }
     changeDismissal(res, target, reason);

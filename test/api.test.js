@@ -907,6 +907,16 @@ test('POST dismiss stores the reason and GET /api/reviews shows it, DELETE undoe
   assert.deepStrictEqual(await suggestionState(base, 'sess-a'), [null, null]);
 });
 
+test('POST dismiss accepts duplicate and names all three reasons in its 400 answer', async (t) => {
+  const { base } = await reviewServer(t);
+  const ok = await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'duplicate' });
+  assert.strictEqual(ok.status, 200);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), ['duplicate', null]);
+  const bad = await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'bored' });
+  assert.strictEqual(bad.status, 400);
+  assert.strictEqual((await bad.json()).error, 'reason must be "done", "not_useful" or "duplicate".');
+});
+
 test('POST dismiss answers 400 for a bad reason, a missing body, bad json, a bad session id and a bad idx', async (t) => {
   const { base } = await reviewServer(t);
   for (const body of [{ reason: 'bored' }, {}, { reason: null }, { reason: ['done'] }]) {

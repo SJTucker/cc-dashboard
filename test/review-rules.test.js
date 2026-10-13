@@ -95,6 +95,14 @@ test('reviewPrompt is the digest alone without rules, and puts rules first with 
   assert.strictEqual(rules.reviewPrompt('=== /a ===\nr', 'USER: hi'), 'RULES THE USER ALREADY HAS\n=== /a ===\nr\n\nSESSION DIGEST\nUSER: hi');
 });
 
+test('reviewPrompt puts earlier suggestions between the rules and the digest', () => {
+  assert.strictEqual(rules.reviewPrompt('', 'USER: hi', '- [open] workflow: a'), 'EARLIER SUGGESTIONS\n- [open] workflow: a\n\nSESSION DIGEST\nUSER: hi');
+  assert.strictEqual(
+    rules.reviewPrompt('=== /a ===\nr', 'USER: hi', '- [done] claude-md: b'),
+    'RULES THE USER ALREADY HAS\n=== /a ===\nr\n\nEARLIER SUGGESTIONS\n- [done] claude-md: b\n\nSESSION DIGEST\nUSER: hi',
+  );
+});
+
 test('ruleFiles marks a file changed after the session started', () => {
   const base = tmpDir();
   const file = write(path.join(base, 'CLAUDE.md'), 'rule');

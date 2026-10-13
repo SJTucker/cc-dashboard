@@ -158,7 +158,7 @@ const tableNames = (file) => {
 test('openStore on a newer schema creates no tables and leaves the bytes unchanged', (t) => {
   const file = path.join(tmpDir(), 'v2.db');
   const raw = new sqlite.DatabaseSync(file);
-  raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); CREATE TABLE files_v2 (path TEXT PRIMARY KEY, data TEXT); INSERT INTO meta VALUES ('schema', '3');");
+  raw.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); CREATE TABLE files_v2 (path TEXT PRIMARY KEY, data TEXT); INSERT INTO meta VALUES ('schema', '${SCHEMA_VERSION + 1}');`);
   raw.close();
   const before = fs.readFileSync(file);
   t.mock.method(console, 'warn', () => {});
