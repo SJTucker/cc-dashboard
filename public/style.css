@@ -397,8 +397,8 @@ html, body {
 
 .panel-row .panel { margin-bottom: var(--sp-4); min-width: 0; }
 
-/* Rows whose second panel should be as tall as the first (Cost by model / Model
-   mix). Each panel keeps its own bottom margin, so the bottoms still line up. */
+/* Rows whose second panel should be as tall as the first. Each panel keeps its own
+   bottom margin, so the bottoms still line up. */
 .panel-row.stretch { align-items: stretch; }
 
 /* The pointer light: a 160px cyan gradient at --x/--y, masked to the 1px border.
@@ -756,41 +756,7 @@ html, body {
 .heat-hours span { grid-column: span 1; }
 .heat-hours span:first-child { grid-column-start: 2; }
 
-/* The donut fills the height left under the heading, which is the height of the
-   Cost by model panel beside it. The SVG stays square and the legend sits to its
-   right as a vertical list. */
-#modelMixPanel {
-  display: flex;
-  flex-direction: column;
-}
-
-.mix-donut {
-  flex: 1;
-  min-height: 200px;
-  display: flex;
-  align-items: center;
-  gap: var(--sp-2) var(--sp-4);
-}
-
-.mix-donut svg {
-  height: 100%;
-  min-height: 0;
-  aspect-ratio: 1;
-  max-width: 60%;
-  flex: 0 1 auto;
-}
-
-.mix-donut .legend {
-  flex-direction: column;
-  gap: var(--sp-2);
-  min-width: 0;
-}
-
-.donut-slice { stroke: var(--surface); stroke-width: 2; stroke-linejoin: round; }
-.donut-total { font-size: var(--fs-stat); font-weight: 600; fill: var(--text-primary); }
-.donut-unit { font-size: var(--fs-caption); fill: var(--text-tertiary); }
-
-/* Tokens | Cost in the Model mix head: the .range-picker look at a smaller size.
+/* Tokens | Cost in the Models head: the .range-picker look at a smaller size.
    The pair sits at the right because .panel-head > h2 takes the free space
    (margin-right: auto). The pressed button is inverted (light on dark), so the
    state does not rest on hue. */
@@ -817,17 +783,8 @@ html, body {
 .mix-measure button:hover { color: var(--text-primary); }
 .mix-measure button[aria-pressed="true"] { background: var(--text-primary); color: var(--bg); }
 .mix-measure button:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: -2px; }
-/* A click on the donut switches it too (setupModelMixToggle). user-select: none
-   stops a double click from selecting the centre text. */
-.mix-donut svg { cursor: pointer; user-select: none; }
-
-/* Stacked, the panel is no longer stretched to a neighbour: the chart area
-   falls back to its 200px minimum and the legend may wrap below the donut. This
-   block comes after the base .mix-donut rules so it overrides them. */
-@media (max-width: 900px) {
-  .mix-donut { flex-wrap: wrap; justify-content: center; }
-  .mix-donut svg { height: 200px; max-width: 100%; }
-}
+/* Each model's share of the range as one bar, above the model table. */
+.model-share { margin-bottom: var(--sp-3); }
 
 /* ---------- Attribution bars ---------- */
 
@@ -1573,8 +1530,7 @@ main[aria-busy="true"] .tab > :not(#beforeAfterPanel) { opacity: 0.5; }
 .first-load #tokenChart:empty::after,
 .first-load #cumulativeChart:empty::after,
 .first-load #tokenTypeChart:empty::after,
-.first-load #modelList:empty::after,
-.first-load #modelMixChart:empty::after {
+.first-load #modelList:empty::after {
   content: 'Loading\2026';
   color: var(--text-tertiary);
   font: 400 var(--fs-body) var(--font-ui);

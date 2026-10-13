@@ -11,8 +11,7 @@ export const state = {
   // The data-hide-key values (index.html) of the hidden panels and cards.
   // Filled from localStorage when the page starts.
   hiddenKeys: new Set(),
-  // The Model mix donut's measure: 'tokens' or 'cost'. setupModelMixToggle
-  // (panels/models.mjs) fills it from localStorage when the page starts.
+  // The Models share bar's measure: 'tokens' or 'cost'. setupModelMixToggle (panels/models.mjs) fills it from localStorage when the page starts.
   mixMeasure: 'tokens',
 };
 

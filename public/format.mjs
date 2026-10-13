@@ -7,13 +7,6 @@ export function formatCost(usd) {
   return '$' + usd.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
-// formatCost for a narrow space: whole dollars from $1,000 up, so the Model mix
-// donut's centre total fits inside the ring.
-export function formatCostShort(usd) {
-  if (usd >= 1000) return '$' + Math.round(usd).toLocaleString('en-US');
-  return formatCost(usd);
-}
-
 export function formatTokens(n) {
   if (n == null) return '—';
   if (n < 0) return '-' + formatTokens(-n);

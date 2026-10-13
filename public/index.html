@@ -268,30 +268,22 @@
           <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
         </section>
 
-        <div class="panel-row stretch">
-          <section class="panel" data-hide-key="costByModel">
-            <div class="panel-head">
-              <h2>Cost by model</h2>
+        <section class="panel" id="modelsPanel" data-hide-key="costByModel">
+          <div class="panel-head">
+            <h2>Models</h2>
+            <div class="mix-measure" id="mixMeasure" role="group" aria-label="Share by">
+              <button type="button" data-measure="tokens" aria-pressed="true">Tokens</button>
+              <button type="button" data-measure="cost" aria-pressed="false">Cost</button>
             </div>
-            <div id="modelList" class="model-list"></div>
-            <div class="prices-foot">
-              <p id="pricesSource" class="panel-note"></p>
-              <button id="checkPricesBtn" class="refresh-btn" type="button" title="Compare these prices with Anthropic's pricing page">Check prices</button>
-            </div>
-            <div id="pricesCheck" class="prices-check" hidden></div>
-          </section>
-
-          <section class="panel" id="modelMixPanel" data-hide-key="modelMix">
-            <div class="panel-head">
-              <h2>Model mix</h2>
-              <div class="mix-measure" id="mixMeasure" role="group" aria-label="Size slices by">
-                <button type="button" data-measure="tokens" aria-pressed="true">Tokens</button>
-                <button type="button" data-measure="cost" aria-pressed="false">Cost</button>
-              </div>
-            </div>
-            <div id="modelMixChart" class="mix-donut"></div>
-          </section>
-        </div>
+          </div>
+          <div id="modelShare" class="model-share"></div>
+          <div id="modelList" class="model-list"></div>
+          <div class="prices-foot">
+            <p id="pricesSource" class="panel-note"></p>
+            <button id="checkPricesBtn" class="refresh-btn" type="button" title="Compare these prices with Anthropic's pricing page">Check prices</button>
+          </div>
+          <div id="pricesCheck" class="prices-check" hidden></div>
+        </section>
 
         <section class="panel" id="toolPanel" data-hide-key="tools" hidden>
           <div class="panel-head">

@@ -44,7 +44,7 @@ test('the Analysis tab holds the analysis panels in the spec order', () => {
     'Cumulative cost', 'Daily tokens by type · log',
     'Daily tokens by model', 'Daily cost by model',
     'When usage happens',
-    'Cost by model', 'Model mix',
+    'Models',
     'Tool calls',
     'Output rtk kept out of context',
     'What rtk kept out of context',
@@ -55,4 +55,10 @@ test('the Analysis tab holds the analysis panels in the spec order', () => {
 test('the header has the tab switch, and the Analysis tab starts hidden', () => {
   assert.match(html, /<div class="tab-switch" id="tabSwitch"/);
   assert.match(html, /<div class="tab" id="tabAnalysis" hidden>/);
+});
+
+test('Models is one panel that keeps the Cost by model hide key, and the donut is gone', () => {
+  assert.match(html, /<section class="panel" id="modelsPanel" data-hide-key="costByModel">/);
+  assert.doesNotMatch(html, /modelMixPanel|modelMixChart/);
+  assert.match(html, /<div class="mix-measure" id="mixMeasure"/);
 });

@@ -13,14 +13,6 @@ test('formatCost shows a dash for no value and <$0.01 under a cent', async () =>
   assert.equal(formatCost(1234.5), '$1,234.50');
 });
 
-test('formatCostShort drops cents from $1,000 up', async () => {
-  const { formatCostShort } = await load();
-  assert.equal(formatCostShort(0.004), '<$0.01');
-  assert.equal(formatCostShort(999.99), '$999.99');
-  assert.equal(formatCostShort(1234.5), '$1,235');
-  assert.equal(formatCostShort(12345.67), '$12,346');
-});
-
 test('formatTokens switches unit at each thousand', async () => {
   const { formatTokens } = await load();
   assert.equal(formatTokens(null), '—');
