@@ -32,24 +32,23 @@ function saveHidden() {
 }
 
 // The name in the menu and in the "x" button's label: the panel's heading or the
-// card's label. The row handle and toggle in a heading add no text.
+// card's label. The row handle and toggle sit outside the heading and add no text.
 function hideName(element) {
   const label = element.querySelector('.panel-head h2, .card-label');
   return label ? label.textContent.trim() : element.dataset.hideKey;
 }
 
-// setupRowDrag and setupCollapsibleRows put a row's handle and toggle in its first
-// heading. When the first panel of a pair is hidden, by the user or by its renderer
-// (Plan usage shows on Today only), they move to the heading of the panel still
-// showing, and back when the first panel returns.
+// A row's handle and toggle sit in its first panel head (rowControls in
+// row-order.mjs). When the first panel of a pair is hidden, by the user or by its
+// renderer, they move to the head of the panel still showing, before its "x", and
+// back when the first panel returns.
 function placeRowControls(row, panel) {
-  const heading = panel.querySelector(':scope > .panel-head > h2');
-  const toggle = row.querySelector(':scope > .panel > .panel-head > h2 > .row-toggle');
-  const handle = row.querySelector(':scope > .panel > .panel-head > h2 > .row-handle');
-  if (heading && toggle && toggle.parentElement !== heading) heading.prepend(...[toggle, handle].filter(Boolean));
+  const head = panel.querySelector(':scope > .panel-head');
+  const slot = row.querySelector('.row-controls');
+  if (head && slot && slot.parentElement !== head) head.insertBefore(slot, head.querySelector(':scope > .hide-btn'));
 }
 
-// The panel whose heading holds a row's handle and toggle: the first panel showing,
+// The panel whose head holds a row's handle and toggle: the first panel showing,
 // else the first panel. A panel is not showing when the user hid it
 // (data-user-hidden) or its renderer hid it (hidden). Reads only those two, so the
 // tests can pass plain objects.

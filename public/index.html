@@ -67,7 +67,7 @@
           <section class="panel" id="limitsPanel" data-hide-key="limits" hidden>
             <div class="panel-head">
               <h2>Plan usage</h2>
-              <span class="panel-note" id="limitsNote"></span>
+              <span class="panel-meta" id="limitsNote"></span>
             </div>
             <div id="limitsRows"></div>
           </section>
@@ -75,7 +75,7 @@
           <section class="panel" id="attributionPanel" data-hide-key="attribution" hidden>
             <div class="panel-head">
               <h2>Where usage goes</h2>
-              <span class="panel-note">share of total cost</span>
+              <span class="panel-meta">share of total cost</span>
             </div>
             <div class="usage-grid">
               <div class="usage-group">
@@ -101,7 +101,7 @@
         <section class="panel" id="timelinePanel" data-hide-key="timeline" hidden>
           <div class="panel-head">
             <h2>Session timeline</h2>
-            <span class="panel-note" id="timelineNote"></span>
+            <span class="panel-meta" id="timelineNote"></span>
           </div>
           <div class="chart" id="timelineChart"></div>
           <!-- The key sits under the chart: in the panel head it pushed the heading onto two lines. -->
@@ -111,7 +111,7 @@
         <section class="panel" id="sessionsPanel" data-hide-key="sessions" hidden>
           <div class="panel-head">
             <h2>Live sessions</h2>
-            <span class="panel-note" id="sessionsNote"></span>
+            <span class="panel-meta" id="sessionsNote"></span>
           </div>
           <div id="runningSessions" hidden>
             <h3 class="sessions-subhead" id="runningHeading">Running now</h3>
@@ -201,7 +201,7 @@
         <section class="panel" id="reviewsPanel" data-hide-key="reviews" hidden>
           <div class="panel-head">
             <h2 id="reviewsHeading">Session reviews</h2>
-            <span class="panel-note" id="reviewsNote"></span>
+            <span class="panel-meta" id="reviewsNote"></span>
           </div>
           <p class="review-empty" id="reviewsStatus" role="status" hidden></p>
           <div class="review-scroll" tabindex="0" role="region" aria-labelledby="reviewsHeading">
@@ -263,7 +263,7 @@
         <section class="panel" id="activityPanel" data-hide-key="activity" hidden>
           <div class="panel-head">
             <h2>When usage happens</h2>
-            <span class="panel-note">cost by weekday and hour, local time</span>
+            <span class="panel-meta">cost by weekday and hour, local time</span>
           </div>
           <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
         </section>
@@ -296,7 +296,7 @@
         <section class="panel" id="toolPanel" data-hide-key="tools" hidden>
           <div class="panel-head">
             <h2>Tool calls</h2>
-            <span class="panel-note">pick a tool to break it down</span>
+            <span class="panel-meta">pick a tool to break it down</span>
           </div>
           <div class="usage-grid">
             <div class="usage-group">
@@ -319,16 +319,16 @@
         <section class="panel" id="rtkDailyPanel" data-hide-key="rtkDaily" hidden>
           <div class="panel-head">
             <h2>Output rtk kept out of context</h2>
-            <span class="panel-note">estimated tokens rtk kept out of the model's context, not in cost</span>
           </div>
+          <p class="panel-note">Estimated tokens rtk kept out of the model's context. Not in cost.</p>
           <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk kept out of context per day"></div>
         </section>
 
         <section class="panel" id="rtkCommandPanel" data-hide-key="rtkCommands" hidden>
           <div class="panel-head">
             <h2>What rtk kept out of context</h2>
-            <span class="panel-note">tests and builds count at most 750 tokens without rtk; files and diffs count in full. Pick a command to see its calls</span>
           </div>
+          <p class="panel-note">Tests and builds count at most 750 tokens without rtk; files and diffs count in full. Pick a command to see its calls.</p>
           <div class="usage-grid">
             <div class="usage-group">
               <div class="usage-group-title">By command</div>
@@ -344,7 +344,7 @@
         <section class="panel" id="beforeAfterPanel" data-hide-key="beforeAfter" hidden>
           <div class="panel-head">
             <h2>Setup changes &middot; before and after</h2>
-            <span class="panel-note">7 days before and after the picked change</span>
+            <span class="panel-meta">7 days before and after the picked change</span>
           </div>
           <p id="changesFileNote" class="panel-note changes-file-note" hidden></p>
           <p id="baEmpty" class="bar-empty" hidden>No setup changes in this range.</p>

@@ -5,7 +5,7 @@ import { ROW_SELECTOR } from './tabs.mjs';
 // Each row of panels (a full-width panel or a .panel-row pair) can be moved. The
 // order is kept in localStorage as a list of row keys, so the page reopens as it
 // was left. A row's key is its first heading's text, stored in data-row-key before
-// any control is added to the heading. ui/collapse.mjs reads the same key.
+// any control is added to the row. ui/collapse.mjs reads the same key.
 // Storage can throw (a private window, blocked site data), and then the page keeps
 // the order in index.html.
 const ROW_ORDER_KEY = 'cc-dashboard:row-order';
@@ -46,6 +46,19 @@ function saveRowOrder(keys) {
   }
 }
 
+// The span at the right of a row's first panel head that holds the row's drag handle
+// and collapse toggle, before the "x". Keeping them out of the heading starts every
+// title at the panel's edge. hidden.mjs moves the span to the panel still showing
+// when the first panel of a pair is hidden.
+export function rowControls(row) {
+  let slot = row.querySelector('.row-controls');
+  if (!slot) {
+    slot = el('span', { class: 'row-controls' });
+    row.querySelector('.panel-head').appendChild(slot);
+  }
+  return slot;
+}
+
 // Re-appends each tab's rows in saved order. orderRowKeys drops the keys of the
 // other tab's rows, so the one saved list orders both tabs. defaults pairs each tab
 // with its keys in index.html order. The toolbar and the cards come before the
@@ -61,11 +74,11 @@ function clearDropMarks(row) {
   row.classList.remove('drop-before', 'drop-after');
 }
 
-// Adds a handle to each row's first heading. Pressing the handle makes that row
+// Adds a handle to each row's controls (rowControls). Pressing the handle makes that row
 // draggable, so a drag that starts anywhere else in the row selects text as
 // before. The row under the pointer marks the drop point as a line on its top or
 // bottom edge, whichever half the pointer is in. onDrop runs after each move.
-// The handle's glyph is CSS content, so the heading's textContent is unchanged.
+// The handle's glyph is CSS content, so the handle adds no text.
 function setupRowDrag(onDrop) {
   let dragged = null;
   for (const row of panelRows()) {
@@ -85,7 +98,7 @@ function setupRowDrag(onDrop) {
       document.addEventListener('pointerup', end, { signal: release.signal });
       document.addEventListener('pointercancel', end, { signal: release.signal });
     });
-    row.querySelector('.panel-head h2').prepend(handle);
+    rowControls(row).appendChild(handle);
 
     // A drag of selected text, a link or an image inside the row targets that
     // element, not the row, so only a drag from the handle moves the row.

@@ -2,6 +2,7 @@
 // collapse to their titles.
 import { el } from '../dom.mjs';
 import { ROW_SELECTOR } from './tabs.mjs';
+import { rowControls } from './row-order.mjs';
 
 // Runs after a row is expanded. Set by setupCollapsibleRows.
 let onExpand = () => {};
@@ -53,7 +54,7 @@ export function setupCollapsibleRows(callbacks) {
       // needs a redraw (main.mjs).
       if (!isCollapsed) onExpand(row);
     });
-    headings[0].prepend(toggle);
+    rowControls(row).appendChild(toggle);
     setCollapsed(collapsed.has(key));
   }
 }

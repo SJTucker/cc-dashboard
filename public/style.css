@@ -426,6 +426,7 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: var(--sp-3);
   margin-bottom: var(--sp-3);
 }
 
@@ -514,6 +515,18 @@ html, body {
   font-size: var(--fs-prose);
   color: var(--text-tertiary);
 }
+
+/* Right side of a panel head: short meta text, then any toggle, the row controls
+   and the "x". Longer explanations are a .panel-note under the head. */
+.panel-meta {
+  font-size: var(--fs-body);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.panel-head + .panel-note { margin: calc(-1 * var(--sp-2)) 0 var(--sp-3); }
 
 .cumulative-line {
   stroke: var(--money);
@@ -1511,7 +1524,7 @@ main[aria-busy="true"] .tab > :not(#beforeAfterPanel) { opacity: 0.5; }
   background: none;
   border: 0;
   padding: 0 var(--sp-1);
-  margin-left: var(--sp-2);
+  margin-left: 0;
   color: var(--text-tertiary);
   font-size: var(--fs-title);
   line-height: 1;
@@ -1526,7 +1539,24 @@ main[aria-busy="true"] .tab > :not(#beforeAfterPanel) { opacity: 0.5; }
 .hide-btn:hover { color: var(--text-primary); }
 .hide-btn:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
 /* A touch screen has no hover, so the buttons always show there. */
-@media (hover: none) { .hide-btn { opacity: 1; } }
+@media (hover: none) { .hide-btn, .row-controls { opacity: 1; } }
+
+/* A row's handle and toggle show while the pointer is over the row or focus is
+   inside it. A collapsed row keeps its toggle in view, so it can be opened again. */
+.row-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.panel:hover > .panel-head > .row-controls,
+.panel-row:hover .row-controls,
+.panel:focus-within > .panel-head > .row-controls,
+.panel-row:focus-within .row-controls,
+.row-collapsed .row-controls { opacity: 1; }
+.row-controls .row-toggle,
+.row-controls .row-handle { padding: 0 var(--sp-1); }
 
 /* The ☰ button sits at the right end of the title row. */
 .menu-btn { margin-left: auto; padding: var(--sp-1) var(--sp-2); font-size: var(--fs-title); }
