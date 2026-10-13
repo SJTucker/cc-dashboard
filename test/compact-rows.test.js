@@ -32,7 +32,7 @@ const emptyRows = (over = {}) => ({ ok: true, calls: [], toolUses: [], errors: [
 // A string with the same characters and its own identity.
 const fresh = (s) => JSON.parse(JSON.stringify(s));
 
-test('slimUsage keeps the six fields the aggregate reads and drops the rest', () => {
+test('slimUsage keeps the fields the aggregate reads and drops the rest', () => {
   assert.deepEqual(slimUsage(FULL), {
     input_tokens: 10,
     output_tokens: 20,
@@ -40,7 +40,19 @@ test('slimUsage keeps the six fields the aggregate reads and drops the rest', ()
     cache_creation_input_tokens: 40,
     cache_creation: { ephemeral_5m_input_tokens: 15, ephemeral_1h_input_tokens: 25 },
     speed: 'fast',
+    output_tokens_details: { thinking_tokens: 5 },
   });
+});
+
+test('slimUsage keeps thinking_tokens only, and a 0 is kept', () => {
+  const slim = slimUsage({ output_tokens: 7, output_tokens_details: { thinking_tokens: 0, other: 3 } });
+  assert.deepEqual(slim.output_tokens_details, { thinking_tokens: 0 });
+});
+
+test('slimUsage of a usage with no thinking_tokens has no output_tokens_details', () => {
+  assert.equal('output_tokens_details' in slimUsage({ output_tokens: 7 }), false);
+  assert.equal('output_tokens_details' in slimUsage({ output_tokens: 7, output_tokens_details: null }), false);
+  assert.equal('output_tokens_details' in slimUsage({ output_tokens: 7, output_tokens_details: {} }), false);
 });
 
 test('slimUsage keeps speed only when it is fast', () => {
@@ -99,7 +111,7 @@ test('compactRows keeps the row set shape', () => {
 test('compactRows slims call usage and keeps other call keys', () => {
   const rows = emptyRows({ calls: [{ key: 'k', t: 1, sessionId: 's', model: 'm', version: '1', usage: FULL, attributionSkill: null, attributionAgent: null, tools: ['Bash'] }] });
   compactRows(rows);
-  assert.deepEqual(Object.keys(rows.calls[0].usage).sort(), ['cache_creation', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'input_tokens', 'output_tokens', 'speed']);
+  assert.deepEqual(Object.keys(rows.calls[0].usage).sort(), ['cache_creation', 'cache_creation_input_tokens', 'cache_read_input_tokens', 'input_tokens', 'output_tokens', 'output_tokens_details', 'speed']);
   assert.equal(rows.calls[0].key, 'k');
   assert.deepEqual(rows.calls[0].tools, ['Bash']);
 });
