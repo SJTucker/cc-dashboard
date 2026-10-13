@@ -135,8 +135,10 @@ test('the system prompt names every kind and allows an empty list', () => {
 
 test('SYSTEM explains the rules section and asks for broken rules', () => {
   assert.match(review.SYSTEM, /RULES THE USER ALREADY HAS/);
-  assert.match(review.SYSTEM, /already cover/);
+  assert.match(review.SYSTEM, /already state/);
   assert.match(review.SYSTEM, /Broken rule:/);
+  assert.match(review.SYSTEM, /hook that enforces/);
+  assert.match(review.SYSTEM, /changed after the session started/);
 });
 
 const HOUR = 60 * 60 * 1000;

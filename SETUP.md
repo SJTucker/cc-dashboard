@@ -225,7 +225,10 @@ of them.
 - `CLAUDE.md` and `CLAUDE.local.md` in the session's start folder and in each
   folder above it. The start folder is the `cwd` on the first transcript line that
   has one.
-- `<cfg>/projects/<folder>/memory/MEMORY.md`, next to the session's transcript
+- `<cfg>/projects/<folder>/memory/MEMORY.md`, where `<folder>` names the main
+  checkout of the session's git repo. Outside a repo, or when that file is missing,
+  it is the one next to the session's transcript. Finding the main checkout reads
+  the `.git` file of a worktree and the `commondir` file it points to.
 
 ## Network and model use
 

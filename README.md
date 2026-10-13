@@ -220,8 +220,11 @@ opens with Enter or Space.
 - **What Haiku sees.** The rule files Claude had in the session, then a digest of
   the transcript. The rule files are `<cfg>/CLAUDE.md` and the files it includes
   with an `@path` line, each `CLAUDE.md` and `CLAUDE.local.md` from the session's
-  start folder up to `/`, and the project's memory index,
-  `<cfg>/projects/<folder>/memory/MEMORY.md`. They are cut to 30,000 characters.
+  start folder up to `/`, and the project's memory index. The memory index is the
+  one in the main checkout's folder under `<cfg>/projects/`, which worktree and
+  subfolder sessions share, or else the one next to the transcript. The files are
+  read as they are at review time and cut to 30,000 characters. A file edited after
+  the session started is marked, so a rule added later is not counted as broken.
   Haiku is told not to repeat a rule they hold, and to report a broken one as a
   suggestion that starts `Broken rule:`. The digest has one line per typed prompt,
   reply start, tool call, tool error, large tool result and compaction. Prompts are

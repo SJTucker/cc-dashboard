@@ -95,19 +95,76 @@ test('reviewPrompt is the digest alone without rules, and puts rules first with 
   assert.strictEqual(rules.reviewPrompt('=== /a ===\nr', 'USER: hi'), 'RULES THE USER ALREADY HAS\n=== /a ===\nr\n\nSESSION DIGEST\nUSER: hi');
 });
 
-test('readLaunchDir returns the first cwd', async () => {
+test('readSessionStart returns the first cwd and the first timestamp', async () => {
   const base = tmpDir();
   const file = write(path.join(base, 's.jsonl'), [
     JSON.stringify({ type: 'ai-title', aiTitle: 't' }),
     'not json "cwd"',
-    JSON.stringify({ type: 'user', cwd: '/work/app' }),
-    JSON.stringify({ type: 'user', cwd: '/work/app/sub' }),
+    JSON.stringify({ type: 'user', cwd: '/work/app', timestamp: '2026-10-13T10:00:00.000Z' }),
+    JSON.stringify({ type: 'user', cwd: '/work/app/sub', timestamp: '2026-10-13T11:00:00.000Z' }),
   ].join('\n'));
-  assert.strictEqual(await rules.readLaunchDir(file), '/work/app');
+  assert.deepStrictEqual(await rules.readSessionStart(file), { cwd: '/work/app', startedAt: Date.parse('2026-10-13T10:00:00.000Z') });
 });
 
-test('readLaunchDir is null when no line has a cwd or the file is missing', async () => {
+test('readSessionStart is all null when no line has a cwd or the file is missing', async () => {
   const base = tmpDir();
-  assert.strictEqual(await rules.readLaunchDir(write(path.join(base, 's.jsonl'), '{"type":"user"}\n')), null);
-  assert.strictEqual(await rules.readLaunchDir(path.join(base, 'missing.jsonl')), null);
+  const none = { cwd: null, startedAt: null };
+  assert.deepStrictEqual(await rules.readSessionStart(write(path.join(base, 's.jsonl'), '{"type":"user"}\n')), none);
+  assert.deepStrictEqual(await rules.readSessionStart(path.join(base, 'missing.jsonl')), none);
+});
+
+test('ruleFiles marks a file changed after the session started', () => {
+  const base = tmpDir();
+  const file = write(path.join(base, 'CLAUDE.md'), 'rule');
+  const mtime = fs.statSync(file).mtimeMs;
+  assert.deepStrictEqual(rules.ruleFiles({ configDir: base, home: base, startedAt: mtime - 1000 }).map((f) => f.changed), [true]);
+  assert.deepStrictEqual(rules.ruleFiles({ configDir: base, home: base, startedAt: mtime + 1000 }).map((f) => f.changed), [false]);
+  assert.deepStrictEqual(rules.ruleFiles({ configDir: base, home: base }).map((f) => f.changed), [false]);
+});
+
+test('rulesText says which files changed after the session started', () => {
+  assert.strictEqual(
+    rules.rulesText([{ file: '/a', text: 'one', changed: true }, { file: '/b', text: 'two', changed: false }]),
+    '=== /a (changed after the session started) ===\none\n\n=== /b ===\ntwo',
+  );
+});
+
+// A main checkout at main/ and a worktree of it at wt/, laid out the way git does.
+function repoWithWorktree(base) {
+  fs.mkdirSync(path.join(base, 'main', '.git', 'worktrees', 'wt'), { recursive: true });
+  write(path.join(base, 'main', '.git', 'worktrees', 'wt', 'commondir'), '../..\n');
+  write(path.join(base, 'wt', '.git'), `gitdir: ${path.join(base, 'main', '.git', 'worktrees', 'wt')}\n`);
+  fs.mkdirSync(path.join(base, 'wt', 'sub'), { recursive: true });
+}
+
+const folderName = (dir) => dir.replace(/[^a-zA-Z0-9]/g, '-');
+
+test('memoryIndexPath uses the main checkout memory for a worktree session', () => {
+  const base = tmpDir();
+  repoWithWorktree(base);
+  const projects = path.join(base, 'projects');
+  const memory = write(path.join(projects, folderName(path.join(base, 'main')), 'memory', 'MEMORY.md'), 'facts');
+  const transcript = write(path.join(projects, folderName(path.join(base, 'wt', 'sub')), 's.jsonl'), '');
+  assert.strictEqual(rules.memoryIndexPath({ projects, cwd: path.join(base, 'wt', 'sub'), transcript }), memory);
+});
+
+test('memoryIndexPath uses the repo root memory for a session in a subfolder of the main checkout', () => {
+  const base = tmpDir();
+  repoWithWorktree(base);
+  const projects = path.join(base, 'projects');
+  const memory = write(path.join(projects, folderName(path.join(base, 'main')), 'memory', 'MEMORY.md'), 'facts');
+  fs.mkdirSync(path.join(base, 'main', 'lib'));
+  const transcript = write(path.join(projects, folderName(path.join(base, 'main', 'lib')), 's.jsonl'), '');
+  assert.strictEqual(rules.memoryIndexPath({ projects, cwd: path.join(base, 'main', 'lib'), transcript }), memory);
+});
+
+test('memoryIndexPath falls back to the folder next to the transcript', () => {
+  const base = tmpDir();
+  const projects = path.join(base, 'projects');
+  const transcript = write(path.join(projects, '-work-demo', 's.jsonl'), '');
+  const beside = path.join(projects, '-work-demo', 'memory', 'MEMORY.md');
+  assert.strictEqual(rules.memoryIndexPath({ projects, cwd: path.join(base, 'not-a-repo'), transcript }), beside);
+  assert.strictEqual(rules.memoryIndexPath({ projects, cwd: null, transcript }), beside);
+  repoWithWorktree(base);
+  assert.strictEqual(rules.memoryIndexPath({ projects, cwd: path.join(base, 'wt'), transcript }), beside);
 });
