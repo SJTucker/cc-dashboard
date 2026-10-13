@@ -4,6 +4,7 @@ import { el } from '../dom.mjs';
 import { formatCost, formatDuration, formatAgo } from '../format.mjs';
 import { state } from '../state.mjs';
 import { createDrawGuard } from '../guards.mjs';
+import { visibleRows, showAllButton, refocusShowAll } from '../ui/show-all.mjs';
 
 const sessionsGuard = createDrawGuard();
 
@@ -29,6 +30,11 @@ let lastLiveSessions = null;
 // Each group row's toggle button by key. renderSessions replaces the tbody, so it
 // uses this map to move keyboard focus to the new button for the same group.
 let sessionToggles = new Map();
+// The Today table shows SESSIONS_LIMIT top-level rows until Show all. A group counts
+// once and its expanded child rows do not count. Kept for the page's lifetime, like
+// expandedGroups.
+const SESSIONS_LIMIT = 10;
+let showAllSessions = false;
 
 // Runs on every settled sessions response and on every redraw, like renderLimits, and rebuilds when the payload,
 // the expanded groups or the clock minute changed. The minute is there because
@@ -41,7 +47,7 @@ export function renderSessions(live) {
   if (panel.hidden) return;
   lastLiveSessions = live;
   // expandedGroups is in the key, so a group toggle's own call redraws.
-  sessionsGuard.draw([live, [...expandedGroups]], () => drawSessions(live));
+  sessionsGuard.draw([live, [...expandedGroups], showAllSessions], () => drawSessions(live));
 }
 
 function drawSessions(live) {
@@ -132,16 +138,17 @@ function drawSessions(live) {
   const rows = [];
   for (const item of items) {
     if (item.type === 'session') {
-      rows.push(sessionRow(item.session));
+      rows.push([sessionRow(item.session)]);
       continue;
     }
-    rows.push(groupRow(item));
+    const group = [groupRow(item)];
     if (expandedGroups.has(item.key)) {
-      for (const s of item.sessions) rows.push(sessionRow(s, 'session-child'));
+      for (const s of item.sessions) group.push(sessionRow(s, 'session-child'));
     }
+    rows.push(group);
   }
   const t = live.total;
-  rows.push(el('tr', { class: 'sessions-total' }, [
+  const totalRow = el('tr', { class: 'sessions-total' }, [
     cell('Total'),
     cell(String(live.sessions.reduce((sum, s) => sum + s.prompts, 0)), 'num'),
     // Concurrent sessions overlap, so wall durations do not add up.
@@ -149,8 +156,14 @@ function drawSessions(live) {
     cell(lines(t.linesAdded, t.linesRemoved), 'num'),
     el('td', { class: 'num cost', text: formatCost(t.costTodayUsd) }),
     cell(''),
-  ]));
-  document.getElementById('sessionsTable').replaceChildren(...rows);
+  ]);
+  document.getElementById('sessionsTable').replaceChildren(...visibleRows(rows, SESSIONS_LIMIT, showAllSessions).flat(), totalRow);
+  const more = showAllButton(rows.length, SESSIONS_LIMIT, showAllSessions, () => {
+    showAllSessions = !showAllSessions;
+    renderSessions(lastLiveSessions);
+    refocusShowAll('sessionsMore');
+  });
+  document.getElementById('sessionsMore').replaceChildren(...(more ? [more] : []));
   sessionToggles = toggles;
   if (focused) toggles.get(focused[0])?.focus({ preventScroll: true });
 

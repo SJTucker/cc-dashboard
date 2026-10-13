@@ -8,6 +8,7 @@ import { createSequence } from '../guards.mjs';
 import {
   WEEK_MS, markerDate, markerIcon, timeDomain, drawMetricChart, drawMetricLegend,
 } from '../charts/setup-changes.mjs';
+import { visibleRows, showAllButton, refocusShowAll } from '../ui/show-all.mjs';
 
 // Days of history the setup charts show for each range picker value. Today and 7d
 // show 14 days, since a day or a week holds too few sessions to read a trend.
@@ -86,9 +87,9 @@ function afterHeading(marker, now) {
 
 function renderBeforeAfter(report, marker) {
   const table = document.getElementById('beforeAfterTable');
-  const note = document.getElementById('overlapNote');
+  const box = document.getElementById('overlapNote');
   table.replaceChildren();
-  note.textContent = '';
+  box.replaceChildren();
   if (!marker) return;
   const head = el('tr', {}, ['7 days', 'before', afterHeading(marker, Date.now()), 'change'].map((text, i) => el('th', { text, class: i ? 'num' : '' })));
   const pick = (row) => () => selectRow(report, marker, row.key);
@@ -104,15 +105,23 @@ function renderBeforeAfter(report, marker) {
   // of burying the user's own changes in the list.
   const own = near.filter((o) => o.kind !== 'claude-code');
   const releases = near.filter((o) => o.kind === 'claude-code');
-  const lines = [
-    own.length
-      ? `Also in this window: ${own.map((o) => `${markerDate(o.t)} ${o.label}`).join('; ')}`
-      : 'No other change in this window.',
-  ];
+  const items = visibleRows(own, WINDOW_LIMIT, showAllWindow).map((o) => el('li', {}, [
+    el('span', { class: 'window-time', text: markerDate(o.t) }),
+    markerIcon(o.kind),
+    el('span', { text: o.label }),
+  ]));
+  const parts = [el('div', { class: 'usage-group-title', text: own.length ? 'Also in this window' : 'No other change in this window' })];
+  if (items.length) parts.push(el('ul', { class: 'window-list' }, items));
+  const more = showAllButton(own.length, WINDOW_LIMIT, showAllWindow, () => {
+    showAllWindow = !showAllWindow;
+    renderBeforeAfter(report, marker);
+    refocusShowAll('overlapNote');
+  });
+  if (more) parts.push(more);
   if (releases.length) {
-    lines.push(`Claude Code releases in this window: ${releases.map((o) => o.version).join(', ')}`);
+    parts.push(el('p', { class: 'panel-note', text: `Claude Code releases in this window: ${releases.map((o) => o.version).join(', ')}` }));
   }
-  note.replaceChildren(...lines.flatMap((text, i) => (i ? [el('br'), text] : [text])));
+  box.replaceChildren(...parts);
 }
 
 let changesReport = null;
@@ -121,6 +130,10 @@ let selectedMarkerKey = null;
 // The row whose daily chart shows. Kept across marker changes, redraws and
 // refreshes; a page load starts again on the first row.
 let selectedRowKey = 'sessionStart';
+
+// "Also in this window" shows WINDOW_LIMIT changes until Show all.
+const WINDOW_LIMIT = 5;
+let showAllWindow = false;
 
 // The row the chart shows: the selected one, or the first row when the selected
 // row is an rtk row and the report has no rtk series. selectedRowKey keeps the rtk

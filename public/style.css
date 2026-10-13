@@ -962,25 +962,9 @@ html, body {
   padding-left: calc(2ch + var(--sp-3));
 }
 
-/* A table wider than a narrow screen scrolls inside the panel, not the page. A long
-   table stops at 20rem and scrolls inside its wrapper, with the header row and the
-   Total row pinned. The pinned cells need an opaque background so rows do not show
-   through, and a shadow for the border line, which border-collapse drops on sticky cells. */
-.table-scroll { overflow: auto; max-height: 20rem; }
+/* A table wider than a narrow screen scrolls sideways inside the panel, not the page. */
+.table-scroll { overflow-x: auto; }
 .table-scroll:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
-.sessions-table thead th {
-  position: sticky;
-  top: 0;
-  z-index: 1;
-  padding-top: var(--sp-1);
-  background: var(--surface);
-}
-.sessions-table .sessions-total td {
-  position: sticky;
-  bottom: 0;
-  background: var(--surface);
-  box-shadow: inset 0 1px var(--border);
-}
 
 .sessions-subhead {
   margin: var(--sp-3) 0 var(--sp-1);
@@ -1021,14 +1005,6 @@ html, body {
 .timeline-bar:hover { stroke: var(--text-primary); stroke-width: 1; }
 .timeline-rebuild:hover { stroke: var(--text-primary); stroke-width: 2; }
 .timeline-rebuild-count { font-size: var(--fs-caption); fill: var(--text-secondary); pointer-events: none; }
-/* The list scrolls inside the panel past 48rem, as the Live sessions tables do at
-   20rem. The wrapper is in index.html, so the 5 s redraw keeps its scroll position.
-   A suggestion row reaches 6px past the text on each side for its hover background
-   (margin: 0 -6px below). The wrapper's 6px padding holds that, so the row does
-   not overflow and scroll sideways. The matching negative margin keeps the text
-   lined up with the panel heading. */
-.review-scroll { overflow: auto; max-height: 48rem; margin: 0 calc(-1 * var(--sp-1)); padding: 0 var(--sp-1); }
-.review-scroll:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 .reviews-list { list-style: none; margin: 0; padding: 0; }
 .review { padding: var(--sp-2) 0; border-top: 1px solid var(--border); }
 .review:first-child { border-top: none; }
@@ -1216,14 +1192,8 @@ html, body {
 /* The before/after table needs about 390px. Below that its column scrolls sideways instead of widening the page. */
 .ba-main { overflow-x: auto; }
 
-.day-list { max-height: 320px; overflow-y: auto; border-left: 2px solid var(--accent-cyan); padding: 2px 0 2px var(--sp-3); }
+.day-list { border-left: 2px solid var(--accent-cyan); padding: 2px 0 2px var(--sp-3); }
 .day-list-head { margin-bottom: var(--sp-1); }
-/* Side by side, .ba-side takes the height the table sets for the row (height: 0 plus min-height: 100%), so a busy window scrolls inside the column instead of stretching the panel. The 14em floor holds the 5em list and the 7.5em (five-line) note when the table is shorter. */
-@media (min-width: 901px) {
-  .ba-side { display: flex; flex-direction: column; height: 0; min-height: max(100%, 14em); }
-  .ba-side .day-list { flex: 0 1 auto; min-height: 5em; }
-  .ba-side #overlapNote { flex: 1 1 auto; min-height: 7.5em; overflow-y: auto; }
-}
 .day-change {
   display: flex;
   width: 100%;
@@ -1311,8 +1281,7 @@ html, body {
   font-size: var(--fs-caption);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  max-height: 12em;
-  overflow: auto;
+  overflow-x: auto;
 }
 /* The All tools row sits above the per-tool bars, set apart by a rule under it. */
 .tool-all {
@@ -1615,3 +1584,26 @@ main[aria-busy="true"] .tab > :not(#beforeAfterPanel) { opacity: 0.5; }
 .heat-scale-cells { display: inline-flex; gap: 2px; }
 .heat-scale-cell { width: 18px; height: 10px; border-radius: var(--radius-s); border: 1px solid var(--border); }
 .timeline-follow-key { color: var(--text-tertiary); }
+
+.show-all-box:empty { display: none; }
+.show-all {
+  margin-top: var(--sp-2);
+  padding: var(--sp-1) 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.show-all:hover { color: var(--text-primary); }
+.show-all:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+
+.review-text { font-family: var(--font-ui); font-size: var(--fs-prose); line-height: 1.45; }
+.review-suggestions li,
+.review-dismissed li { align-items: baseline; }
+
+.window-list { list-style: none; margin: 0; padding: 0; font-family: var(--font-ui); font-size: var(--fs-prose); }
+.window-list li { display: flex; align-items: baseline; gap: var(--sp-2); padding: 2px 0; }
+.window-time { flex: none; color: var(--text-tertiary); font-family: var(--font-data); font-size: var(--fs-body); }

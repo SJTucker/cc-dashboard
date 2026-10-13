@@ -5,6 +5,7 @@ import { getJson } from '../api.mjs';
 import { el, svgEl, withTooltip, withFocusTooltip } from '../dom.mjs';
 import { formatAgo, localDateStr } from '../format.mjs';
 import { createDrawGuard } from '../guards.mjs';
+import { visibleRows, showAllButton, refocusShowAll } from '../ui/show-all.mjs';
 import { REVIEW_DAYS } from '../constants.mjs';
 import { contextLine } from './sessions.mjs';
 
@@ -52,6 +53,9 @@ const reviewCopyResults = new Map();
 let reviewFocusKey = null;
 // The text of a failed dismiss or undo, shown in #reviewsStatus.
 let reviewActionError = null;
+// The panel shows REVIEWS_LIMIT reviews, newest first, until Show all.
+const REVIEWS_LIMIT = 5;
+let showAllReviews = false;
 
 // fetchAll calls reviewsMark() before its requests and reviewsSince(mark, fetched)
 // after them. A dismiss or undo in between makes the fetched reviews older than
@@ -178,7 +182,7 @@ function toggleSet(set, id) {
 function dismissedList(review) {
   return el('ul', { class: 'review-dismissed' }, dismissedSuggestions(review).map((s) => el('li', {}, [
     el('span', { class: 'review-kind', text: REVIEW_KINDS[s.kind] || s.kind }),
-    el('span', {}, [
+    el('span', { class: 'review-text' }, [
       document.createTextNode(`${s.text} `),
       el('span', { class: 'review-dismissal', text: `(${dismissalText(s)})` }),
     ]),
@@ -191,7 +195,7 @@ function dismissedList(review) {
 function openList(review) {
   return el('ul', { class: 'review-suggestions' }, openSuggestions(review).map((s) => el('li', {}, [
     el('span', { class: 'review-kind', text: REVIEW_KINDS[s.kind] || s.kind }),
-    el('span', { text: s.text }),
+    el('span', { class: 'review-text', text: s.text }),
     el('span', { class: 'review-actions' }, [
       iconButton('check', `done:${review.sessionId}:${s.idx}`, `Mark done: ${suggestionName(s)}`, TIP_DONE, () => changeSuggestion(review, s, 'done')),
       iconButton('x', `notuseful:${review.sessionId}:${s.idx}`, `Dismiss as not useful: ${suggestionName(s)}`, TIP_NOT_USEFUL, () => changeSuggestion(review, s, 'not_useful')),
@@ -240,7 +244,7 @@ export function renderReviews(data) {
   // The key holds every input of the draw, so a dismiss, an undo, a Show or Hide
   // toggle and a failed action each redraw from their own call.
   reviewsGuard.draw(
-    [data, reviewMutations, [...reviewDismissedShown], [...reviewExpanded], reviewActionError],
+    [data, reviewMutations, [...reviewDismissedShown], [...reviewExpanded], reviewActionError, showAllReviews],
     () => drawReviews(data)
   );
 }
@@ -254,6 +258,7 @@ function drawReviews(data) {
     status.hidden = false;
     status.textContent = `Could not read session reviews: ${data.error}`;
     list.replaceChildren();
+    document.getElementById('reviewsMore').replaceChildren();
     document.getElementById('reviewsNote').textContent = '';
     return;
   }
@@ -267,7 +272,7 @@ function drawReviews(data) {
   status.textContent = reviewActionError || '';
 
   const now = Date.now();
-  const items = data.reviews.map((r) => {
+  const items = visibleRows(data.reviews, REVIEWS_LIMIT, showAllReviews).map((r) => {
     if (allDismissed(r) && !reviewExpanded.has(r.sessionId)) return collapsedReview(r, now);
     const ended = ` · ended ${reviewTime(r.endedAt ?? r.reviewedAt, now)}`;
     const head = el('div', { class: 'review-head' }, [
@@ -283,6 +288,12 @@ function drawReviews(data) {
     return el('li', { class: 'review' }, [el('div', { class: 'review-top' }, top), ...reviewBody(r)]);
   });
   list.replaceChildren(...items);
+  const more = showAllButton(data.reviews.length, REVIEWS_LIMIT, showAllReviews, () => {
+    showAllReviews = !showAllReviews;
+    renderReviews(lastReviews);
+    refocusShowAll('reviewsMore');
+  });
+  document.getElementById('reviewsMore').replaceChildren(...(more ? [more] : []));
   if (focusKey) [...list.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus({ preventScroll: true });
 
   document.getElementById('reviewsNote').textContent =
