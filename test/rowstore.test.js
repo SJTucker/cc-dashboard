@@ -23,7 +23,7 @@ function makeProjects() {
 const usageLine = (id, ts) => JSON.stringify({
   timestamp: ts,
   requestId: `req-${id}`,
-  message: { id: `msg-${id}`, model: 'claude-sonnet-4-6', usage: { input_tokens: 100, output_tokens: 50 } },
+  message: { id: `msg-${id}`, model: 'claude-sonnet-4-6', usage: { input_tokens: 100, output_tokens: 50, output_tokens_details: { thinking_tokens: 7 } } },
 });
 
 // Writes a transcript. `ageMs` sets its mtime that far in the past.
@@ -639,7 +639,7 @@ test('version 1 rows: a file on disk is read again for its command rows, and a g
   fs.utimesSync(onDisk, twoDaysAgo / 1000, twoDaysAgo / 1000);
   const gone = path.join(dir, 'gone.jsonl');
   const v1 = { ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], sessions: {}, minT: 1, maxT: 1 };
-  const goneCall = { key: 'k', t: 1, sessionId: 's2', sidechain: false, model: 'claude-sonnet-4-6', version: null, usage: { input_tokens: 100, output_tokens: 50 }, attributionSkill: 'tdd', attributionAgent: null, tools: [] };
+  const goneCall = { key: 'k', t: 1, sessionId: 's2', sidechain: false, model: 'claude-sonnet-4-6', version: null, usage: { input_tokens: 100, output_tokens: 50, output_tokens_details: { thinking_tokens: 7 } }, attributionSkill: 'tdd', attributionAgent: null, tools: [] };
   const dbFile = tmpDb();
   const seed = openStore(dbFile);
   const st = fs.statSync(onDisk);
@@ -1307,7 +1307,7 @@ test('a file written to the database is compacted in memory after the write, and
   await rows.refresh();
 
   const usage = rows.entries()[0].rows.calls[0].usage;
-  assert.deepStrictEqual(usage, { input_tokens: 100, output_tokens: 50 });
+  assert.deepStrictEqual(usage, { input_tokens: 100, output_tokens: 50, output_tokens_details: { thinking_tokens: 7 } });
   const stored = storedUsages(dbFile);
   assert.strictEqual(stored.length, 1);
   assert.ok(hasFatKeys(stored[0]));
@@ -1366,7 +1366,7 @@ test('rows loaded from the database are compacted in memory and stay full in the
   const rows = fatStore(dir, store);
   await rows.refresh();
 
-  assert.deepStrictEqual(rows.entries()[0].rows.calls[0].usage, { input_tokens: 100, output_tokens: 50 });
+  assert.deepStrictEqual(rows.entries()[0].rows.calls[0].usage, { input_tokens: 100, output_tokens: 50, output_tokens_details: { thinking_tokens: 7 } });
   assert.ok(storedUsages(dbFile).every(hasFatKeys));
   store.close();
 });
