@@ -231,10 +231,12 @@ shows no branch.
 
 ![Session reviews panel listing reviews with their suggestions and Done and Not useful buttons](docs/screenshots/session-reviews.png)
 
-Each open suggestion has a Done and a Not useful icon button, with a tooltip on
-each. A dismissed suggestion is hidden, and the review shows `N dismissed · Show`.
-Show lists each dismissed suggestion with `Marked done` or `Marked not useful` and
-an Undo icon button. Copy prompt leaves dismissed suggestions out. The panel note counts reviews that still have an
+Each open suggestion has Done, Duplicate and Not useful icon buttons, with a tooltip
+on each. Duplicate is for a suggestion that is right but already covered by a rule,
+a skill or an earlier suggestion. A dismissed suggestion is hidden, and the review
+shows `N dismissed · Show`. Show lists each dismissed suggestion with `Marked done`,
+`Marked duplicate` or `Marked not useful` and an Undo icon button. Copy prompt
+leaves dismissed suggestions out. The panel note counts reviews that still have an
 open suggestion. A review whose suggestions are all dismissed shows as one line that
 opens with Enter or Space.
 
@@ -252,9 +254,14 @@ opens with Enter or Space.
   read as they are at review time and cut to 30,000 characters. A file edited after
   the session started is marked, so a rule added later is not counted as broken.
   Haiku is told not to repeat a rule they hold, and to report a broken one as a
-  suggestion that starts `Broken rule:`. The digest has one line per typed prompt,
-  reply start, tool call, tool error, large tool result and compaction. Prompts are
-  cut to 400 characters and the digest to about 60,000 characters.
+  suggestion that starts `Broken rule:`. Then come the suggestions from every review
+  in the last 14 days, newest first, each marked open, done, not useful or duplicate,
+  cut to 12,000 characters. Haiku is told not to propose the same change again. It may
+  repeat an open or done one, starting `Recurring:`, when the session shows the same
+  problem. The
+  digest has one line per typed prompt, reply start, tool call, tool error, large tool
+  result and compaction. Prompts are cut to 400 characters and the digest to about
+  60,000 characters.
 - **Where results go.** The `reviews` and `suggestions` tables in
   `~/.claude/cc-dashboard/transcripts.db`, written by `bin/review-session`. Rows are
   never deleted. The panel lists reviews finished in the last 7 days. Review files
@@ -264,10 +271,10 @@ opens with Enter or Space.
   `bin/review-session` prints one line on stderr and exits 1, and the mod logs it.
 - **While `bin/review-session` is writing.** The server waits up to 250 ms for the
   database lock. If the lock is still held, the panel shows "The review database is
-  busy. Try again." A Done, Not useful or Undo click that meets the lock leaves the
-  suggestion as it was. Reading the list does not wait for the lock. Until one import
-  succeeds after a server start, any reviews request can meet the lock and show the
-  busy text. After that, only the three buttons can meet it.
+  busy. Try again." A Done, Duplicate, Not useful or Undo click that meets the lock
+  leaves the suggestion as it was. Reading the list does not wait for the lock. Until
+  one import succeeds after a server start, any reviews request can meet the lock and
+  show the busy text. After that, only the four buttons can meet it.
 - **Failures.** A failed review is retried after an hour while the session's
   snapshot is still there, which is 24 hours.
 - **Cost.** Haiku calls made by the mod write no transcript line, so the dashboard's
@@ -312,6 +319,14 @@ no subagents. Without the mod, no file exists and the State and Doing now column
 show "—". Subagent tool calls do not change the state of the main loop. A Bash
 command's first 60 characters are stored in the activity file and shown on the page,
 so the text can contain what you typed in that command.
+
+The mod also records the usage of each request a subagent makes, in
+`<config dir>/cc-dashboard/agent-usage/<agent id>.json`. In interactive sessions on
+Claude Code 2.1.280 and later, most subagent responses never get their final usage
+line in the transcript, so the transcript's output count is the figure from the
+start of the response. When a response has no final line, the dashboard prices it
+at the output the mod recorded. Responses recorded before the mod did this keep the
+transcript's figure.
 
 ### What the panels show
 
@@ -561,6 +576,7 @@ only. History then starts at the oldest transcript on disk. Raising
 ```
 server.js              Express app on 127.0.0.1: serves public/ and the /api routes summary, rtk, limits, changes, records, sessions/live, reviews (with dismiss and undo), refresh and prices (check, apply)
 lib/activity.js        Reads the activity files the mod writes (working or waiting), ignores stale ones, deletes those older than a day
+lib/agent-steps.js     Reads the mod's agent-usage files: the output of each subagent request, for responses whose transcript has no final usage line
 lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill and subagent, plus per-session titles, branches and edited lines
 lib/changes.js         Setup change markers: plugin installs, new models, Claude Code releases, the mod's setup changes, changes.json
 lib/config-dir.js      loadConfig: the one place the server reads the environment (CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB, PORT)
@@ -631,7 +647,7 @@ public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /a
 public/panels/models.mjs  Cost by model table, the model mix donut and the model daily charts
 public/panels/prices.mjs  The prices note in Cost by model, and the Check prices and Apply buttons; uses the /api/prices routes
 public/panels/records.mjs  The Record day card and the 7d total lines; fetches /api/records
-public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Not useful, Undo and Copy prompt; fetches /api/reviews
+public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Duplicate, Not useful, Undo and Copy prompt; fetches /api/reviews
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
 public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
 public/panels/timeline.mjs  The Session timeline: one lane per session with activity today, with its cache rebuild marks

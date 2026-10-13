@@ -15,17 +15,17 @@ const { tmpDir, freshServerDb, holdWriteLock } = helpers;
 const tmpFile = () => path.join(helpers.tmpDir(null, 'db'), 'nested', 'transcripts.db');
 const tables = (db) => db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((r) => r.name);
 
-test('SCHEMA_VERSION is 2', () => {
-  assert.strictEqual(SCHEMA_VERSION, 2);
+test('SCHEMA_VERSION is 3', () => {
+  assert.strictEqual(SCHEMA_VERSION, 3);
 });
 
-test('openDatabase creates the folder, all four tables, WAL mode and schema 2', () => {
+test('openDatabase creates the folder, all four tables, WAL mode and schema 3', () => {
   const file = tmpFile();
   const db = openDatabase(file);
   assert.deepStrictEqual(tables(db), ['files', 'meta', 'reviews', 'suggestions']);
   assert.strictEqual(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   assert.strictEqual(db.prepare('PRAGMA busy_timeout').get().timeout, 5000);
-  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '2');
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '3');
   db.close();
 });
 
@@ -43,18 +43,66 @@ test('openDatabase upgrades a v1 file in place and keeps its rows', () => {
   const db = openDatabase(file);
   assert.deepStrictEqual(tables(db), ['files', 'meta', 'reviews', 'suggestions']);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM files').get().n, 1);
-  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '2');
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '3');
   db.close();
+});
+
+test('openDatabase upgrades a v2 file to 3, keeps suggestions and dismissals, and then accepts duplicate', () => {
+  const file = tmpFile();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const v2 = new DatabaseSync(file);
+  v2.exec(`
+    CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+    INSERT INTO meta VALUES ('schema', '2');
+    CREATE TABLE suggestions (
+      session_id TEXT NOT NULL,
+      idx INTEGER NOT NULL CHECK (idx >= 0),
+      kind TEXT NOT NULL,
+      text TEXT NOT NULL,
+      dismissed_at INTEGER,
+      reason TEXT CHECK (reason IN ('done', 'not_useful')),
+      CHECK ((dismissed_at IS NULL) = (reason IS NULL)),
+      PRIMARY KEY (session_id, idx)
+    );
+    INSERT INTO suggestions VALUES ('a', 0, 'workflow', 'open one', NULL, NULL), ('a', 1, 'claude-md', 'done one', 5, 'done');
+  `);
+  v2.close();
+  // A connection open before the rebuild, like the server's, still reads every row after it.
+  const reader = new DatabaseSync(file);
+  assert.strictEqual(reader.prepare('SELECT COUNT(*) AS n FROM suggestions').get().n, 2);
+
+  const db = openDatabase(file);
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '3');
+  assert.deepStrictEqual(db.prepare('SELECT idx, text, dismissed_at, reason FROM suggestions ORDER BY idx').all().map((r) => ({ ...r })), [
+    { idx: 0, text: 'open one', dismissed_at: null, reason: null },
+    { idx: 1, text: 'done one', dismissed_at: 5, reason: 'done' },
+  ]);
+  assert.strictEqual(reader.prepare('SELECT COUNT(*) AS n FROM suggestions').get().n, 2);
+  reader.close();
+
+  db.prepare("UPDATE suggestions SET dismissed_at = 6, reason = 'duplicate' WHERE session_id = 'a' AND idx = 0").run();
+  const insert = db.prepare('INSERT INTO suggestions (session_id, idx, kind, text, dismissed_at, reason) VALUES (?, ?, ?, ?, ?, ?)');
+  assert.throws(() => insert.run('a', 0, 'workflow', 't', null, null), 'primary key kept');
+  assert.throws(() => insert.run('a', 2, 'workflow', 't', null, 'done'), 'half-dismissed row refused');
+  assert.throws(() => insert.run('a', 2, 'workflow', 't', 5, 'bored'), 'unknown reason refused');
+  db.close();
+
+  const again = openDatabase(file);
+  assert.deepStrictEqual(again.prepare('SELECT idx, reason FROM suggestions ORDER BY idx').all().map((r) => ({ ...r })), [
+    { idx: 0, reason: 'duplicate' },
+    { idx: 1, reason: 'done' },
+  ]);
+  again.close();
 });
 
 test('openDatabase throws for a newer schema and leaves the bytes unchanged', () => {
   const file = tmpFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const raw = new DatabaseSync(file);
-  raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO meta VALUES ('schema', '3');");
+  raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO meta VALUES ('schema', '4');");
   raw.close();
   const before = fs.readFileSync(file);
-  assert.throws(() => openDatabase(file), /schema 3, newer than this dashboard's 2/);
+  assert.throws(() => openDatabase(file), /schema 4, newer than this dashboard's 3/);
   assert.ok(fs.readFileSync(file).equals(before));
 });
 
@@ -73,6 +121,7 @@ test('suggestions rejects a half-dismissed row and an unknown reason', () => {
   assert.throws(() => insert.run('a', 0, 'workflow', 't', 5, 'bored'));
   insert.run('a', 0, 'workflow', 't', null, null);
   insert.run('a', 1, 'workflow', 't', 5, 'done');
+  insert.run('a', 2, 'workflow', 't', 5, 'duplicate');
   db.close();
 });
 

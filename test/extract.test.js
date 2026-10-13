@@ -478,7 +478,7 @@ test('the warning adds nothing to the extracted rows', async (t) => {
   const file = writeTranscript([untagged('hello')]);
   const rows = await extractFile(file);
   assert.deepStrictEqual(rows.prompts, []);
-  assert.strictEqual(EXTRACT_VERSION, 4);
+  assert.strictEqual(EXTRACT_VERSION, 5);
 });
 
 test('a slash command line is a command row with its name, keyed like a prompt row', async () => {
@@ -497,4 +497,59 @@ test('a slash command line is a command row with its name, keyed like a prompt r
     { id: `s1:${T1}`, t: Date.parse(T1), name: 'clear' },
   ]);
   assert.deepStrictEqual(rows.prompts.map((p) => p.id), ['u2'], 'a prompt that only quotes a command is still a prompt');
+});
+
+// One line of a subagent response. `stop` is the line's message.stop_reason; undefined leaves the key out.
+function subLine({ msg = 'm1', out = 8, stop, agentId = 'a1', key = true }) {
+  const message = { id: msg, model: 'claude-haiku-4-5', content: [], usage: { input_tokens: 2, output_tokens: out, cache_creation_input_tokens: 10, cache_read_input_tokens: 20 } };
+  if (stop !== undefined) message.stop_reason = stop;
+  return { type: 'assistant', timestamp: atMin(0), sessionId: 's1', isSidechain: true, agentId, ...(key ? { requestId: `r-${msg}` } : {}), message };
+}
+
+test('a response whose lines all have a null stop_reason is marked noFinal', async () => {
+  const [row] = await callsOf([subLine({ stop: null, out: 5 }), subLine({ stop: null, out: 8 })]);
+  assert.strictEqual(row.noFinal, true);
+  assert.strictEqual(row.usage.output_tokens, 8);
+});
+
+test('a response whose lines have no stop_reason key is marked noFinal', async () => {
+  const [row] = await callsOf([subLine({}), subLine({})]);
+  assert.strictEqual(row.noFinal, true);
+});
+
+test('a response with a final line has no noFinal key', async () => {
+  const [row] = await callsOf([subLine({ stop: null, out: 5 }), subLine({ stop: 'tool_use', out: 242 })]);
+  assert.strictEqual('noFinal' in row, false);
+  assert.strictEqual(row.usage.output_tokens, 242);
+});
+
+test('the final flag of one response does not carry over to the next', async () => {
+  const rows = await callsOf([subLine({ msg: 'm1', stop: 'end_turn' }), subLine({ msg: 'm2', stop: null })]);
+  assert.deepStrictEqual(rows.map((r) => 'noFinal' in r), [false, true]);
+});
+
+test('a call row carries the line\'s agentId when it has one', async () => {
+  const [sub] = await callsOf([subLine({ stop: 'end_turn' })]);
+  assert.strictEqual(sub.agentId, 'a1');
+  const [main] = await callsOf([subLine({ stop: 'end_turn', agentId: null })]);
+  assert.strictEqual('agentId' in main, false);
+});
+
+test('a line with no request id is counted on its own and never marked noFinal', async () => {
+  const [row] = await callsOf([subLine({ stop: null, key: false })]);
+  assert.strictEqual(row.key, null);
+  assert.strictEqual('noFinal' in row, false);
+});
+
+test('extractFile reads a .json path as a step file', async () => {
+  const dir = helpers.tmpDir(null, 'extract');
+  const file = path.join(dir, 'a9.json');
+  fs.writeFileSync(file, JSON.stringify({ agentId: 'a9', steps: [{ t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4, turnId: 't', index: 0 }] }));
+  const rows = await extractFile(file);
+  assert.strictEqual(rows.ok, true);
+  assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
+});
+
+test('EXTRACT_VERSION is 5', () => {
+  assert.strictEqual(EXTRACT_VERSION, 5);
 });

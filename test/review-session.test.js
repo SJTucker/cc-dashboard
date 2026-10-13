@@ -7,6 +7,7 @@ const { spawnSync } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 const { DatabaseSync } = require('../lib/sqlite');
+const { SCHEMA_VERSION } = require('../lib/db');
 
 const SCRIPT = path.join(__dirname, '..', 'bin', 'review-session');
 
@@ -113,11 +114,11 @@ test('a newer schema exits 1 and the file is unchanged', () => {
   const base = fixture();
   const file = path.join(base, 'cc-dashboard', 'transcripts.db');
   const raw = new DatabaseSync(file);
-  raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO meta VALUES ('schema', '3');");
+  raw.exec(`CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO meta VALUES ('schema', '${SCHEMA_VERSION + 1}');`);
   raw.close();
   const before = fs.readFileSync(file);
   const { code, err } = run(base, ['record'], JSON.stringify({ sessionId: 'abc', reply: '{"suggestions":[]}' }));
   assert.strictEqual(code, 1);
-  assert.match(err, /newer than this dashboard's 2/);
+  assert.match(err, new RegExp(`newer than this dashboard's ${SCHEMA_VERSION}`));
   assert.ok(fs.readFileSync(file).equals(before));
 });

@@ -4,7 +4,9 @@
       "projectsDir": "<corpus>",
       "dirExists": true,
       "scannedFiles": 7,
-      "unreadableFiles": 1
+      "unreadableFiles": 1,
+      "noFinalCalls": 0,
+      "noFinalCorrected": 0
     },
     "tools": [
       {
@@ -2727,7 +2729,9 @@
     "meta": {
       "dirExists": false,
       "scannedFiles": 7,
-      "unreadableFiles": 1
+      "unreadableFiles": 1,
+      "noFinalCalls": 0,
+      "noFinalCorrected": 0
     },
     "tools": [
       {
@@ -5019,7 +5023,9 @@
     "meta": {
       "dirExists": false,
       "scannedFiles": 7,
-      "unreadableFiles": 1
+      "unreadableFiles": 1,
+      "noFinalCalls": 0,
+      "noFinalCorrected": 0
     },
     "tools": [
       {
@@ -7173,7 +7179,9 @@
     "meta": {
       "dirExists": false,
       "scannedFiles": 7,
-      "unreadableFiles": 1
+      "unreadableFiles": 1,
+      "noFinalCalls": 0,
+      "noFinalCorrected": 0
     },
     "tools": [
       {

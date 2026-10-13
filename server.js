@@ -9,6 +9,7 @@ const { getProjectsDir } = require('./lib/transcript-files');
 const { localDateStr, windowStart } = require('./lib/dates');
 const { aggregate } = require('./lib/aggregate');
 const { createRowStore } = require('./lib/rowstore');
+const { getAgentUsageDir } = require('./lib/agent-steps');
 const { openStore } = require('./lib/store');
 const { createScanMemo } = require('./lib/scan-memo');
 const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
@@ -107,6 +108,8 @@ function sendBusy(res, err) {
 // createServer covers both methods, so a cross-site page cannot dismiss or undo, the same
 // protection the price POST routes have.
 const DISMISS_PATH = '/api/reviews/:sessionId/suggestions/:idx/dismiss';
+const QUOTED_REASONS = DISMISS_REASONS.map((r) => `"${r}"`);
+const REASON_ERROR = `reason must be ${QUOTED_REASONS.slice(0, -1).join(', ')} or ${QUOTED_REASONS.at(-1)}.`;
 
 // The session id and idx from the path, or null after answering 400.
 function suggestionTarget(req, res) {
@@ -139,7 +142,7 @@ function createServer(config) {
   // transcripts.db that cannot be opened through console.warn. A request that
   // arrives first opens it itself.
   function getRowStore() {
-    if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, store: openStore(storePath, serverDb.get), log: (line) => console.log(line) });
+    if (!rowStore) rowStore = createRowStore({ projectsDir: () => projectsDir, agentUsageDir: () => getAgentUsageDir(config.configDir), store: openStore(storePath, serverDb.get), log: (line) => console.log(line) });
     return rowStore;
   }
 
@@ -301,7 +304,7 @@ function createServer(config) {
     if (!target) return;
     const reason = req.body ? req.body.reason : undefined;
     if (!DISMISS_REASONS.includes(reason)) {
-      res.status(400).json({ error: `reason must be "${DISMISS_REASONS.join('" or "')}".` });
+      res.status(400).json({ error: REASON_ERROR });
       return;
     }
     changeDismissal(res, target, reason);

@@ -63,9 +63,10 @@ loads, and later starts, read only the transcripts that changed. The server crea
 ## Install the mod
 
 The mod in `mod/` records plan usage, live session state, session reviews, Claude Code
-release markers and setup change markers, and writes a handoff when Claude Code
-compacts an idle session. It also shows a dismissable band above the prompt when the
-Session or Week plan window reaches 75%. Link it into your skills folder from the clone:
+release markers and setup change markers, and writes a handoff 6 minutes before the
+1-hour prompt cache expires or when Claude Code compacts an idle session. It also
+shows a dismissable band above the prompt when the Session or Week plan window
+reaches 75%. Link it into your skills folder from the clone:
 
 ```bash
 ln -s "$PWD/mod" ~/.claude/skills/cc-dashboard
@@ -189,13 +190,14 @@ tests can avoid the one in the clone.
 | `<cfg>/skills/cc-dashboard` (a symlink to the clone's `mod/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod. The server deletes files older than a day when the page shows the Today range. |
+| `<cfg>/cc-dashboard/agent-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per subagent. Each holds the agent id and, for each model request the subagent made, its time, model, turn id, step index and four token counts. The server reads them into `transcripts.db` and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
 | `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
-| `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session` |
+| `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session`. It also holds the rows of `agent-usage/` files. |
 | `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server, when you click Apply |
-| `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, when Claude Code's idle compaction starts. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
+| `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, 6 minutes before a 1-hour prompt cache expires or when Claude Code's idle compaction starts, whichever comes first. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
 | rtk's `history.db` | `RTK_DB` | rtk |
 
 `transcripts.db` runs in SQLite WAL mode. While a process has it open,
@@ -244,27 +246,33 @@ of them.
   - **Judging releases:** the changelog entries of up to 20 versions. Nothing from
     your setup or transcripts is sent.
   - **Reviewing a session:** the rule files listed under "Files outside the repo", cut
-    to 30,000 characters, and a digest of its transcript. The digest holds the first
-    400 characters of each typed prompt and the first 200 characters of each Claude
-    reply. The digest names each tool call with its file path, URL host, skill,
-    subagent type or Bash program name. Bash arguments are not sent. The digest also
-    holds the first 200 characters of each tool error. A digest over 60,000 characters
-    keeps its first 20,000 and last 40,000.
+    to 30,000 characters, the text and state of every suggestion from reviews in the
+    last 14 days, cut to 12,000 characters, and a digest of its transcript. The
+    digest holds the first 400 characters of each typed prompt and the first 200
+    characters of each Claude reply. The digest names each tool call with its file
+    path, URL host, skill, subagent type or Bash program name. Bash arguments are not
+    sent. The digest also holds the first 200 characters of each tool error. A digest
+    over 60,000 characters keeps its first 20,000 and last 40,000.
   - **Labelling a setup change:** the file's short name and its added and removed
     lines, up to 4,096 characters. Labelling covers `CLAUDE.md`, the files it includes
     with `@path`, rules, skills, agents, and a project's `CLAUDE.md` and
     `CLAUDE.local.md`. Changes to settings files, hook scripts, the statusline script
     and rtk's config are labelled on your machine and not sent.
-- **The mod forks the session's own model** once each time Claude Code compacts an
-  idle session. Idle compaction runs in a session with a 1-hour cache that has sat
-  idle for about 54 minutes and holds at least 200,000 tokens of context. The fork
-  reads the whole conversation from the prompt cache and sends the output of
-  `git rev-parse`, `git branch`, `git log`, `git worktree list`, `git status`,
-  `git diff --stat` and `git stash list` for the session's folder, and the current
-  date. It writes no transcript line, so the dashboard's totals leave out its cost. Setting
-  `"idleCompaction": false` or `"autoCompactEnabled": false` in `settings.json`, or
-  `DISABLE_AUTO_COMPACT=1` or `DISABLE_COMPACT=1`, turns off idle compaction and
-  with it the handoff.
+- **The mod forks the session's own model** once per idle gap, to write a handoff
+  document. It does this 6 minutes before the prompt cache expires, in a session with
+  a 1-hour cache and at least 50,000 tokens of context. It also does it when Claude
+  Code compacts an idle session, which happens after about 54 idle minutes in a
+  1-hour session with at least 200,000 tokens. Whichever comes first writes the
+  handoff. The fork reads the whole conversation from the prompt cache and sends the
+  output of `git rev-parse`, `git branch`, `git log`, `git worktree list`,
+  `git status`, `git diff --stat` and `git stash list` for the session's folder, and
+  the current date. It writes no transcript line, so the dashboard's totals leave out
+  its cost. To find the cache's lifetime and expiry, the mod runs `bin/cache-state`
+  after each main-thread turn in an interactive session with at least 50,000 tokens
+  of context, which reads the session's transcript. The timer does not run in
+  sessions without a terminal (Agent SDK, `-p`). Turning off idle compaction
+  (`"idleCompaction": false`, `"autoCompactEnabled": false`, `DISABLE_AUTO_COMPACT=1`
+  or `DISABLE_COMPACT=1`) does not turn off the handoff.
 
 ## Check it works
 
