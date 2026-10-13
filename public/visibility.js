@@ -4,17 +4,23 @@
 // these names globals, and the tests load it with require().
 
 // The optional requests and the hide keys of the panels and cards each one feeds.
-// A request is skipped when every key it feeds is hidden. /api/summary and
-// /api/limits are not listed, because they are always fetched: the summary feeds
-// most of the page, and the limits banner shows on every range and has no "x".
+// A request is skipped when every key it feeds is hidden. An empty list means a
+// consumer that cannot be hidden: /api/records feeds the sticky bar's 7d lines and
+// Record day. /api/summary and /api/limits are not listed, because they are always
+// fetched.
 const REQUEST_CONSUMERS = {
   changes: ['beforeAfter'],
   rtk: ['rtkDaily', 'rtkCommands'],
   sessions: ['sessions', 'timeline'],
   reviews: ['reviews'],
-  records: ['card-record'],
+  records: [],
   prices: ['costByModel'],
 };
+
+// The requests whose panels are on each tab. The Now tab is the Today range and the
+// Analysis tab is every other range (public/ui/tabs.mjs), so the range names the tab.
+const NOW_REQUESTS = ['sessions', 'records'];
+const ANALYSIS_REQUESTS = ['changes', 'rtk', 'reviews', 'records', 'prices'];
 
 // The hidden keys saved in localStorage. Anything that is not a JSON list gives
 // an empty list, and entries that are not strings are dropped.
@@ -27,17 +33,14 @@ function parseHidden(raw) {
   }
 }
 
-// The optional requests that still have a visible panel or card. The sessions
-// request is made on Today only, where its two panels show. On Today the Total
-// cost and Total tokens cards show the 7d total lines, which also come from
-// /api/records.
+// The optional requests the open tab still needs: those whose panels are on the tab
+// and not all hidden.
 function neededRequests(hidden, range) {
-  const today = range === 'today';
+  const onTab = range === 'today' ? NOW_REQUESTS : ANALYSIS_REQUESTS;
   const needed = new Set();
-  for (const [request, keys] of Object.entries(REQUEST_CONSUMERS)) {
-    if (request === 'sessions' && !today) continue;
-    const consumers = request === 'records' && today ? [...keys, 'card-cost', 'card-tokens'] : keys;
-    if (consumers.some((key) => !hidden.has(key))) needed.add(request);
+  for (const request of onTab) {
+    const keys = REQUEST_CONSUMERS[request];
+    if (!keys.length || keys.some((key) => !hidden.has(key))) needed.add(request);
   }
   return needed;
 }

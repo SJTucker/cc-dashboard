@@ -1,6 +1,7 @@
 // Rows of panels collapse to their headings, and the Skills and Subagents lists
 // collapse to their titles.
 import { el } from '../dom.mjs';
+import { ROW_SELECTOR } from './tabs.mjs';
 
 // Runs after a row is expanded. Set by setupCollapsibleRows.
 let onExpand = () => {};
@@ -31,7 +32,7 @@ function saveCollapsedRows(keys) {
 export function setupCollapsibleRows(callbacks) {
   ({ onExpand } = callbacks);
   const collapsed = loadCollapsedRows();
-  for (const row of document.querySelectorAll('#app > .panel-row, #app > .panel')) {
+  for (const row of document.querySelectorAll(ROW_SELECTOR)) {
     const headings = [...row.querySelectorAll('.panel-head h2')];
     if (!headings.length) continue;
     const key = row.dataset.rowKey;

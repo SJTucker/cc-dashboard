@@ -72,7 +72,8 @@ html, body {
 .card-label,
 .panel-head h2,
 .model-table th,
-.range-picker button {
+.range-picker button,
+.tab-switch button {
   font-family: var(--font-label);
   font-size: var(--fs-body);
   font-weight: 600;
@@ -269,7 +270,8 @@ html, body {
 /* The range picker and Refresh, above the range's cards. */
 .tab-toolbar { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); }
 
-.range-picker {
+.range-picker,
+.tab-switch {
   display: flex;
   background: var(--surface);
   border: 1px solid var(--border);
@@ -277,7 +279,8 @@ html, body {
   overflow: hidden;
 }
 
-.range-picker button {
+.range-picker button,
+.tab-switch button {
   background: transparent;
   border: none;
   color: var(--text-secondary);
@@ -286,12 +289,15 @@ html, body {
   border-right: 1px solid var(--border);
 }
 
-.range-picker button:last-child { border-right: none; }
+.range-picker button:last-child,
+.tab-switch button:last-child { border-right: none; }
 
-.range-picker button:hover { color: var(--text-primary); }
+.range-picker button:hover,
+.tab-switch button:hover { color: var(--text-primary); }
 
-.range-picker button.active {
-  background: var(--text-primary);
+.range-picker button.active,
+.tab-switch button[aria-pressed="true"] {
+  background: var(--accent-cyan);
   color: var(--bg);
 }
 
@@ -1357,7 +1363,7 @@ html, body {
 
 /* The setup changes panel loads on its own schedule, and the two banners carry
    errors and the limits warning, so none dims with the range-dependent content. */
-main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfterPanel) { opacity: 0.5; }
+main[aria-busy="true"] .tab > :not(#beforeAfterPanel) { opacity: 0.5; }
 
 /* ---------- Plan usage ---------- */
 

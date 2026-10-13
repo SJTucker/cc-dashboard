@@ -12,7 +12,7 @@ import { spinnerNode } from './dom.mjs';
 
 import { renderAttribution } from './panels/attribution.mjs';
 import { renderCards } from './panels/cards.mjs';
-import { loadChanges, redrawChanges } from './panels/changes.mjs';
+import { ensureChanges, loadChanges, redrawChanges } from './panels/changes.mjs';
 import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits.mjs';
 import { renderModels, setupModelMixToggle } from './panels/models.mjs';
 import { loadPricesSource, setupPrices } from './panels/prices.mjs';
@@ -29,6 +29,7 @@ import { setupCollapsibleRows, setupUsageGroupToggles } from './ui/collapse.mjs'
 import { setupHiding } from './ui/hidden.mjs';
 import { setupPanelLight } from './ui/panel-light.mjs';
 import { setupRowOrder } from './ui/row-order.mjs';
+import { setupTabs, showTab, rangeForTab } from './ui/tabs.mjs';
 
 const LIVE_POLL_MS = 5000;
 // While Today is shown, runLoad runs LIVE_POLL_MS after the previous run finished
@@ -114,7 +115,7 @@ function setBusy(on) {
   }, BUSY_DELAY_MS);
 }
 
-// Today polls the whole page. Any other range polls only the sticky bar, which
+// The Now tab polls the whole tab. The Analysis tab polls only the sticky bar, which
 // shows today on every range.
 function setPolling(today) {
   if (today) {
@@ -322,20 +323,48 @@ function runLoad(options) {
   return fetchAll(options).catch(reportDrawError);
 }
 
+function syncRangeButtons() {
+  for (const b of document.querySelectorAll('#rangePicker button')) {
+    b.classList.toggle('active', b.dataset.days === String(state.analysisDays));
+  }
+}
+
+// The range picker is on the Analysis tab only, so a pick never means Today.
 document.getElementById('rangePicker').addEventListener('click', (evt) => {
   const btn = evt.target.closest('button[data-days]');
   if (!btn) return;
-  document.querySelectorAll('#rangePicker button').forEach((b) => b.classList.remove('active'));
-  btn.classList.add('active');
   const value = btn.dataset.days;
-  state.currentDays = value === 'all' || value === 'today' ? value : Number(value);
+  state.analysisDays = value === 'all' ? value : Number(value);
+  state.currentDays = state.analysisDays;
+  syncRangeButtons();
   clearSignatures(); // the bucket keys change, so force a redraw
   lastPayload = null;
-  setPolling(state.currentDays === 'today');
-  if (state.currentDays !== 'today') loadStickyToday();
   redrawChanges();
   runLoad({ busy: true });
 });
+
+// Shows a tab and loads it. Now is the Today range and polls; Analysis loads its
+// range once and polls only the sticky bar. A request that the old tab skipped and
+// the new tab needs starts here. Setup changes load once, through ensureChanges,
+// which redraws from the loaded report on later visits. The price source reloads on
+// each switch to Analysis, because the Now tab never needs prices. The load runs
+// after showTab, so every chart is drawn at its visible width.
+function enterTab(tab) {
+  const before = neededRequests(state.hiddenKeys, state.currentDays);
+  state.tab = tab;
+  state.currentDays = rangeForTab(tab, state.analysisDays);
+  showTab(tab);
+  syncRangeButtons();
+  clearSignatures();
+  resetTimeline();
+  lastPayload = null;
+  setPolling(tab === 'now');
+  const after = neededRequests(state.hiddenKeys, state.currentDays);
+  if (after.has('changes') && !before.has('changes')) ensureChanges();
+  if (after.has('prices') && !before.has('prices')) loadPricesSource();
+  if (tab === 'analysis') loadStickyToday();
+  runLoad({ busy: true });
+}
 
 // Everything the Refresh button re-fetches. Applying prices calls it too, because
 // costs are computed in the server's scan and the server has just dropped that scan.
@@ -403,8 +432,6 @@ setupPanelLight();
 setupUsageGroupToggles();
 setupModelMixToggle();
 setupPrices({ onApplied: reloadAll });
-setPolling(state.currentDays === 'today');
 refreshRecords();
-runLoad({ busy: true });
-loadChanges();
-loadPricesSource();
+// Runs enterTab once for the hash the page opened with, then on each hash change.
+setupTabs(enterTab);

@@ -30,6 +30,10 @@
         <span id="stripLimit" class="strip-item strip-limit" hidden></span>
       </div>
       <span id="loadStatus" class="load-status" role="status"></span>
+      <div class="tab-switch" id="tabSwitch" role="group" aria-label="View">
+        <button type="button" data-tab="now" aria-pressed="true">Now</button>
+        <button type="button" data-tab="analysis" aria-pressed="false">Analysis</button>
+      </div>
       <!-- Today's three numbers, on every tab and range. Not hideable. -->
       <div class="sticky-stats" id="stickyStats" role="group" aria-label="Today">
         <div class="stat">
@@ -57,310 +61,311 @@
       <div id="limitsBanner" class="status-banner limits-banner" hidden></div>
       <div id="statusBanner" class="status-banner" hidden></div>
 
-      <div class="tab-toolbar">
-        <div class="range-picker" id="rangePicker" role="group" aria-label="Date range">
-          <button data-days="today" class="active">Today</button>
-          <button data-days="7">7d</button>
-          <button data-days="30">30d</button>
-          <button data-days="90">90d</button>
-          <button data-days="all">All</button>
-        </div>
-        <button id="refreshBtn" class="refresh-btn" title="Re-scan logs">&#8635; Refresh</button>
-      </div>
-      <section class="cards" id="summaryCards">
-        <div class="card" data-hide-key="card-cost">
-          <span class="card-label">Total cost</span>
-          <span class="card-value cost" id="cardCost">&mdash;</span>
-          <span class="card-note" id="cardCostNote"></span>
-        </div>
-        <div class="card" data-hide-key="card-tokens">
-          <span class="card-label">Total tokens</span>
-          <span class="card-value" id="cardTokens">&mdash;</span>
-        </div>
-        <div class="card" id="reportedCard" data-hide-key="card-reported" hidden>
-          <span class="card-label">Claude Code reported</span>
-          <span class="card-value cost" id="cardReported">&mdash;</span>
-          <span class="card-note" id="cardReportedNote"></span>
-        </div>
-        <div class="card" data-hide-key="card-cache" title="share of eligible input served from cache">
-          <span class="card-label">Cache efficiency</span>
-          <span class="card-value" id="cardCache">&mdash;</span>
-          <span class="card-note">share of eligible input served from cache</span>
-        </div>
-        <div class="card" id="thinkingCard" data-hide-key="card-thinking">
-          <span class="card-label">Thinking share of output</span>
-          <span class="card-value" id="cardThinking">&mdash;</span>
-          <span class="card-note" id="cardThinkingNote"></span>
-        </div>
-        <div class="card" id="burnCard" data-hide-key="card-burn">
-          <span class="card-label">Cost per day</span>
-          <span class="card-value cost" id="cardBurn">&mdash;</span>
-          <span class="card-note">complete days only &mdash; today is partial</span>
-        </div>
-        <div class="card" id="projectionCard" data-hide-key="card-projection">
-          <span class="card-label">30 days at this rate</span>
-          <span class="card-value cost" id="cardProjection">&mdash;</span>
-        </div>
-        <div class="card" data-hide-key="card-tools">
-          <span class="card-label">Tool calls</span>
-          <span class="card-value" id="cardTools">&mdash;</span>
-        </div>
-      </section>
+      <div class="tab" id="tabNow">
+        <!-- Plan usage stays first: the row's key is its first heading (assignRowKeys). -->
+        <div class="panel-row even stretch">
+          <section class="panel" id="limitsPanel" data-hide-key="limits" hidden>
+            <div class="panel-head">
+              <h2>Plan usage</h2>
+              <span class="panel-note" id="limitsNote"></span>
+            </div>
+            <div id="limitsRows"></div>
+          </section>
 
-      <!-- One row on every range. Off Today, Plan usage is hidden and Where usage goes
-           takes the whole row (.panel-row:has(> [hidden]) in style.css). Plan usage
-           stays first: the row's key is its first heading (assignRowKeys). -->
-      <div class="panel-row even stretch">
-        <section class="panel" id="limitsPanel" data-hide-key="limits" hidden>
+          <section class="panel" id="attributionPanel" data-hide-key="attribution" hidden>
+            <div class="panel-head">
+              <h2>Where usage goes</h2>
+              <span class="panel-note">share of total cost</span>
+            </div>
+            <div class="usage-grid">
+              <div class="usage-group">
+                <div class="usage-group-title">Main thread vs subagents</div>
+                <div id="threadBars"></div>
+              </div>
+              <div class="usage-group">
+                <div class="usage-group-title">Context size</div>
+                <div id="contextBars"></div>
+              </div>
+              <div class="usage-group group-collapsed">
+                <div class="usage-group-title"><button type="button" class="row-toggle group-toggle" data-name="Skills" aria-expanded="false" aria-controls="skillBars" aria-label="Expand Skills">Skills</button> <span class="usage-group-note">with subagents, one call can be in both, so the two do not sum to 100%</span></div>
+                <div id="skillBars"></div>
+              </div>
+              <div class="usage-group group-collapsed">
+                <div class="usage-group-title"><button type="button" class="row-toggle group-toggle" data-name="Subagents" aria-expanded="false" aria-controls="subagentBars" aria-label="Expand Subagents">Subagents</button></div>
+                <div id="subagentBars"></div>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <section class="panel" id="timelinePanel" data-hide-key="timeline" hidden>
           <div class="panel-head">
-            <h2>Plan usage</h2>
-            <span class="panel-note" id="limitsNote"></span>
+            <h2>Session timeline</h2>
+            <span class="panel-note" id="timelineNote"></span>
           </div>
-          <div id="limitsRows"></div>
+          <div class="chart" id="timelineChart"></div>
+          <!-- The key sits under the chart: in the panel head it pushed the heading onto two lines. -->
+          <div id="timelineLegend"></div>
         </section>
 
-        <section class="panel" id="attributionPanel" data-hide-key="attribution" hidden>
+        <section class="panel" id="sessionsPanel" data-hide-key="sessions" hidden>
           <div class="panel-head">
-            <h2>Where usage goes</h2>
-            <span class="panel-note">share of total cost</span>
+            <h2>Live sessions</h2>
+            <span class="panel-note" id="sessionsNote"></span>
           </div>
-          <div class="usage-grid">
-            <div class="usage-group">
-              <div class="usage-group-title">Main thread vs subagents</div>
-              <div id="threadBars"></div>
-            </div>
-            <div class="usage-group">
-              <div class="usage-group-title">Context size</div>
-              <div id="contextBars"></div>
-            </div>
-            <div class="usage-group group-collapsed">
-              <div class="usage-group-title"><button type="button" class="row-toggle group-toggle" data-name="Skills" aria-expanded="false" aria-controls="skillBars" aria-label="Expand Skills">Skills</button> <span class="usage-group-note">with subagents, one call can be in both, so the two do not sum to 100%</span></div>
-              <div id="skillBars"></div>
-            </div>
-            <div class="usage-group group-collapsed">
-              <div class="usage-group-title"><button type="button" class="row-toggle group-toggle" data-name="Subagents" aria-expanded="false" aria-controls="subagentBars" aria-label="Expand Subagents">Subagents</button></div>
-              <div id="subagentBars"></div>
+          <div id="runningSessions" hidden>
+            <h3 class="sessions-subhead" id="runningHeading">Running now</h3>
+            <div class="table-scroll" tabindex="0" role="region" aria-labelledby="runningHeading">
+              <table class="sessions-table" aria-labelledby="runningHeading">
+                <thead>
+                  <tr>
+                    <th scope="col">Session</th>
+                    <th scope="col">State</th>
+                    <th scope="col">Doing now</th>
+                    <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. Hover a value for the session's own cost counter.">Cost today</th>
+                    <th scope="col">Last active</th>
+                  </tr>
+                </thead>
+                <tbody id="runningTable"></tbody>
+              </table>
             </div>
           </div>
-        </section>
-      </div>
-
-      <section class="panel" id="timelinePanel" data-hide-key="timeline" hidden>
-        <div class="panel-head">
-          <h2>Session timeline</h2>
-          <span class="panel-note" id="timelineNote"></span>
-        </div>
-        <div class="chart" id="timelineChart"></div>
-        <!-- The key sits under the chart: in the panel head it pushed the heading onto two lines. -->
-        <div id="timelineLegend"></div>
-      </section>
-
-      <section class="panel" id="sessionsPanel" data-hide-key="sessions" hidden>
-        <div class="panel-head">
-          <h2>Live sessions</h2>
-          <span class="panel-note" id="sessionsNote"></span>
-        </div>
-        <div id="runningSessions" hidden>
-          <h3 class="sessions-subhead" id="runningHeading">Running now</h3>
-          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="runningHeading">
-            <table class="sessions-table" aria-labelledby="runningHeading">
+          <h3 class="sessions-subhead" id="todayHeading">Today</h3>
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="todayHeading">
+            <table class="sessions-table" aria-labelledby="todayHeading">
               <thead>
                 <tr>
                   <th scope="col">Session</th>
-                  <th scope="col">State</th>
-                  <th scope="col">Doing now</th>
-                  <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. Hover a value for the session's own cost counter.">Cost today</th>
+                  <th scope="col" class="num" title="Prompts typed in this session today.">Prompts</th>
+                  <th scope="col" class="num">Length</th>
+                  <th scope="col" class="num" title="Lines added and removed by today's Edit and Write calls in this session, subagents included. Edits made through Bash are not counted.">Lines</th>
+                  <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. The bar is the share of the day's highest session cost. Hover a value for the session's own cost counter, which covers the whole session.">Cost today</th>
                   <th scope="col">Last active</th>
                 </tr>
               </thead>
-              <tbody id="runningTable"></tbody>
+              <tbody id="sessionsTable"></tbody>
             </table>
           </div>
-        </div>
-        <h3 class="sessions-subhead" id="todayHeading">Today</h3>
-        <div class="table-scroll" tabindex="0" role="region" aria-labelledby="todayHeading">
-          <table class="sessions-table" aria-labelledby="todayHeading">
-            <thead>
-              <tr>
-                <th scope="col">Session</th>
-                <th scope="col" class="num" title="Prompts typed in this session today.">Prompts</th>
-                <th scope="col" class="num">Length</th>
-                <th scope="col" class="num" title="Lines added and removed by today's Edit and Write calls in this session, subagents included. Edits made through Bash are not counted.">Lines</th>
-                <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. The bar is the share of the day's highest session cost. Hover a value for the session's own cost counter, which covers the whole session.">Cost today</th>
-                <th scope="col">Last active</th>
-              </tr>
-            </thead>
-            <tbody id="sessionsTable"></tbody>
-          </table>
-        </div>
-      </section>
-
-      <section class="panel" id="reviewsPanel" data-hide-key="reviews" hidden>
-        <div class="panel-head">
-          <h2 id="reviewsHeading">Session reviews</h2>
-          <span class="panel-note" id="reviewsNote"></span>
-        </div>
-        <p class="review-empty" id="reviewsStatus" role="status" hidden></p>
-        <div class="review-scroll" tabindex="0" role="region" aria-labelledby="reviewsHeading">
-          <ul class="reviews-list" id="reviewsList"></ul>
-        </div>
-      </section>
-
-      <div class="panel-row even">
-        <section class="panel" data-hide-key="dailyCost">
-          <div class="panel-head">
-            <h2>Daily cost</h2>
-          </div>
-          <div id="costChart" class="chart" aria-label="Bar chart of daily cost"></div>
-        </section>
-
-        <section class="panel" data-hide-key="dailyTokens">
-          <div class="panel-head">
-            <h2>Daily tokens</h2>
-          </div>
-          <div id="tokenChart" class="chart" aria-label="Bar chart of daily total tokens"></div>
         </section>
       </div>
-
-      <div class="panel-row even">
-        <section class="panel" data-hide-key="cumulativeCost">
-          <div class="panel-head">
-            <h2>Cumulative cost</h2>
+      <div class="tab" id="tabAnalysis" hidden>
+        <div class="tab-toolbar">
+          <div class="range-picker" id="rangePicker" role="group" aria-label="Date range">
+            <button data-days="7" class="active">7d</button>
+            <button data-days="30">30d</button>
+            <button data-days="90">90d</button>
+            <button data-days="all">All</button>
           </div>
-          <div id="cumulativeChart" class="chart" aria-label="Line chart of cumulative cost across the range"></div>
+          <button id="refreshBtn" class="refresh-btn" title="Re-scan logs">&#8635; Refresh</button>
+        </div>
+        <section class="cards" id="summaryCards">
+          <div class="card" data-hide-key="card-cost">
+            <span class="card-label">Total cost</span>
+            <span class="card-value cost" id="cardCost">&mdash;</span>
+            <span class="card-note" id="cardCostNote"></span>
+          </div>
+          <div class="card" data-hide-key="card-tokens">
+            <span class="card-label">Total tokens</span>
+            <span class="card-value" id="cardTokens">&mdash;</span>
+          </div>
+          <div class="card" id="reportedCard" data-hide-key="card-reported" hidden>
+            <span class="card-label">Claude Code reported</span>
+            <span class="card-value cost" id="cardReported">&mdash;</span>
+            <span class="card-note" id="cardReportedNote"></span>
+          </div>
+          <div class="card" data-hide-key="card-cache" title="share of eligible input served from cache">
+            <span class="card-label">Cache efficiency</span>
+            <span class="card-value" id="cardCache">&mdash;</span>
+            <span class="card-note">share of eligible input served from cache</span>
+          </div>
+          <div class="card" id="thinkingCard" data-hide-key="card-thinking">
+            <span class="card-label">Thinking share of output</span>
+            <span class="card-value" id="cardThinking">&mdash;</span>
+            <span class="card-note" id="cardThinkingNote"></span>
+          </div>
+          <div class="card" id="burnCard" data-hide-key="card-burn">
+            <span class="card-label">Cost per day</span>
+            <span class="card-value cost" id="cardBurn">&mdash;</span>
+            <span class="card-note">complete days only &mdash; today is partial</span>
+          </div>
+          <div class="card" id="projectionCard" data-hide-key="card-projection">
+            <span class="card-label">30 days at this rate</span>
+            <span class="card-value cost" id="cardProjection">&mdash;</span>
+          </div>
+          <div class="card" data-hide-key="card-tools">
+            <span class="card-label">Tool calls</span>
+            <span class="card-value" id="cardTools">&mdash;</span>
+          </div>
         </section>
 
-        <section class="panel" data-hide-key="tokenTypes">
+        <section class="panel" id="reviewsPanel" data-hide-key="reviews" hidden>
           <div class="panel-head">
-            <h2>Daily tokens by type · log</h2>
+            <h2 id="reviewsHeading">Session reviews</h2>
+            <span class="panel-note" id="reviewsNote"></span>
           </div>
-          <div class="chart-with-legend">
-            <div id="tokenTypeChart" class="chart" aria-label="Line chart of daily input, output, cache-write and cache-read tokens on a logarithmic scale"></div>
-            <div class="chart-side" id="tokenTypeLegend"></div>
+          <p class="review-empty" id="reviewsStatus" role="status" hidden></p>
+          <div class="review-scroll" tabindex="0" role="region" aria-labelledby="reviewsHeading">
+            <ul class="reviews-list" id="reviewsList"></ul>
+          </div>
+        </section>
+
+        <div class="panel-row even">
+          <section class="panel" data-hide-key="dailyCost">
+            <div class="panel-head">
+              <h2>Daily cost</h2>
+            </div>
+            <div id="costChart" class="chart" aria-label="Bar chart of daily cost"></div>
+          </section>
+
+          <section class="panel" data-hide-key="dailyTokens">
+            <div class="panel-head">
+              <h2>Daily tokens</h2>
+            </div>
+            <div id="tokenChart" class="chart" aria-label="Bar chart of daily total tokens"></div>
+          </section>
+        </div>
+
+        <div class="panel-row even">
+          <section class="panel" data-hide-key="cumulativeCost">
+            <div class="panel-head">
+              <h2>Cumulative cost</h2>
+            </div>
+            <div id="cumulativeChart" class="chart" aria-label="Line chart of cumulative cost across the range"></div>
+          </section>
+
+          <section class="panel" data-hide-key="tokenTypes">
+            <div class="panel-head">
+              <h2>Daily tokens by type · log</h2>
+            </div>
+            <div class="chart-with-legend">
+              <div id="tokenTypeChart" class="chart" aria-label="Line chart of daily input, output, cache-write and cache-read tokens on a logarithmic scale"></div>
+              <div class="chart-side" id="tokenTypeLegend"></div>
+            </div>
+          </section>
+        </div>
+
+        <div class="panel-row even">
+        <section class="panel" id="modelDailyPanel" data-hide-key="modelDaily" hidden>
+          <div class="panel-head">
+            <h2>Daily tokens by model</h2>
+          </div>
+          <div id="modelDailyChart" class="chart" aria-label="Stacked bar chart of daily tokens by model"></div>
+        </section>
+
+        <section class="panel" id="modelCostDailyPanel" data-hide-key="modelCostDaily" hidden>
+          <div class="panel-head">
+            <h2>Daily cost by model</h2>
+          </div>
+          <div id="modelCostDailyChart" class="chart" aria-label="Stacked bar chart of daily cost by model"></div>
+        </section>
+        </div>
+
+        <section class="panel" id="activityPanel" data-hide-key="activity" hidden>
+          <div class="panel-head">
+            <h2>When usage happens</h2>
+            <span class="panel-note">cost by weekday and hour, local time</span>
+          </div>
+          <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
+        </section>
+
+        <div class="panel-row stretch">
+          <section class="panel" data-hide-key="costByModel">
+            <div class="panel-head">
+              <h2>Cost by model</h2>
+            </div>
+            <div id="modelList" class="model-list"></div>
+            <div class="prices-foot">
+              <p id="pricesSource" class="panel-note"></p>
+              <button id="checkPricesBtn" class="refresh-btn" type="button" title="Compare these prices with Anthropic's pricing page">Check prices</button>
+            </div>
+            <div id="pricesCheck" class="prices-check" hidden></div>
+          </section>
+
+          <section class="panel" id="modelMixPanel" data-hide-key="modelMix">
+            <div class="panel-head">
+              <h2>Model mix</h2>
+              <div class="mix-measure" id="mixMeasure" role="group" aria-label="Size slices by">
+                <button type="button" data-measure="tokens" aria-pressed="true">Tokens</button>
+                <button type="button" data-measure="cost" aria-pressed="false">Cost</button>
+              </div>
+            </div>
+            <div id="modelMixChart" class="mix-donut"></div>
+          </section>
+        </div>
+
+        <section class="panel" id="toolPanel" data-hide-key="tools" hidden>
+          <div class="panel-head">
+            <h2>Tool calls</h2>
+            <span class="panel-note">pick a tool to break it down</span>
+          </div>
+          <div class="usage-grid">
+            <div class="usage-group">
+              <div class="usage-group-title">By tool</div>
+              <div id="toolAll" class="tool-all" hidden></div>
+              <div id="toolBars"></div>
+            </div>
+            <div class="usage-group">
+              <div class="usage-group-title" id="toolDetailTitle">Detail</div>
+              <div id="toolDetailBars"></div>
+              <div class="panel-note" id="toolDetailNote"></div>
+              <div class="usage-group-title tool-error-title" id="toolErrorTitle" hidden>Errors</div>
+              <div id="toolErrorCauses" class="error-causes"></div>
+              <div id="toolModelTable" class="tool-model-scroll" hidden></div>
+              <div id="toolErrorList" class="error-list"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="rtkDailyPanel" data-hide-key="rtkDaily" hidden>
+          <div class="panel-head">
+            <h2>Output rtk kept out of context</h2>
+            <span class="panel-note">estimated tokens rtk kept out of the model's context, not in cost</span>
+          </div>
+          <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk kept out of context per day"></div>
+        </section>
+
+        <section class="panel" id="rtkCommandPanel" data-hide-key="rtkCommands" hidden>
+          <div class="panel-head">
+            <h2>What rtk kept out of context</h2>
+            <span class="panel-note">tests and builds count at most 750 tokens without rtk; files and diffs count in full. Pick a command to see its calls</span>
+          </div>
+          <div class="usage-grid">
+            <div class="usage-group">
+              <div class="usage-group-title">By command</div>
+              <div id="rtkCommandBars"></div>
+            </div>
+            <div class="usage-group">
+              <div class="usage-group-title" id="rtkDetailTitle">Detail</div>
+              <div id="rtkDetailBars"></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="panel" id="beforeAfterPanel" data-hide-key="beforeAfter" hidden>
+          <div class="panel-head">
+            <h2>Setup changes &middot; before and after</h2>
+            <span class="panel-note">7 days before and after the picked change</span>
+          </div>
+          <p id="changesFileNote" class="panel-note changes-file-note" hidden></p>
+          <p id="baEmpty" class="bar-empty" hidden>No setup changes in this range.</p>
+          <div id="baBody">
+            <div id="baDailyChart" class="chart" role="group" aria-label="Context at session start: bars are the daily median, dots are sessions, with setup changes by kind above the chart"></div>
+            <div class="ba-under">
+              <div class="usage-group-title" id="baChartTitle">Context at session start: bars are the daily median, dots are sessions</div>
+              <div id="baLegend"></div>
+            </div>
+            <div class="ba-grid">
+              <div class="ba-main">
+                <table class="model-table ba-table" id="beforeAfterTable" aria-live="polite"></table>
+              </div>
+              <div class="ba-side">
+                <div id="dayList" class="day-list"></div>
+                <p id="overlapNote" class="panel-note"></p>
+              </div>
+            </div>
           </div>
         </section>
       </div>
-
-
-      <section class="panel" id="modelDailyPanel" data-hide-key="modelDaily" hidden>
-        <div class="panel-head">
-          <h2>Daily tokens by model</h2>
-        </div>
-        <div id="modelDailyChart" class="chart" aria-label="Stacked bar chart of daily tokens by model"></div>
-      </section>
-
-      <section class="panel" id="modelCostDailyPanel" data-hide-key="modelCostDaily" hidden>
-        <div class="panel-head">
-          <h2>Daily cost by model</h2>
-        </div>
-        <div id="modelCostDailyChart" class="chart" aria-label="Stacked bar chart of daily cost by model"></div>
-      </section>
-
-      <section class="panel" id="activityPanel" data-hide-key="activity" hidden>
-        <div class="panel-head">
-          <h2>When usage happens</h2>
-          <span class="panel-note">cost by weekday and hour, local time</span>
-        </div>
-        <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
-      </section>
-
-      <section class="panel" id="toolPanel" data-hide-key="tools" hidden>
-        <div class="panel-head">
-          <h2>Tool calls</h2>
-          <span class="panel-note">pick a tool to break it down</span>
-        </div>
-        <div class="usage-grid">
-          <div class="usage-group">
-            <div class="usage-group-title">By tool</div>
-            <div id="toolAll" class="tool-all" hidden></div>
-            <div id="toolBars"></div>
-          </div>
-          <div class="usage-group">
-            <div class="usage-group-title" id="toolDetailTitle">Detail</div>
-            <div id="toolDetailBars"></div>
-            <div class="panel-note" id="toolDetailNote"></div>
-            <div class="usage-group-title tool-error-title" id="toolErrorTitle" hidden>Errors</div>
-            <div id="toolErrorCauses" class="error-causes"></div>
-            <div id="toolModelTable" class="tool-model-scroll" hidden></div>
-            <div id="toolErrorList" class="error-list"></div>
-          </div>
-        </div>
-      </section>
-
-      <section class="panel" id="rtkDailyPanel" data-hide-key="rtkDaily" hidden>
-        <div class="panel-head">
-          <h2>Output rtk kept out of context</h2>
-          <span class="panel-note">estimated tokens rtk kept out of the model's context, not in cost</span>
-        </div>
-        <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk kept out of context per day"></div>
-      </section>
-
-      <section class="panel" id="rtkCommandPanel" data-hide-key="rtkCommands" hidden>
-        <div class="panel-head">
-          <h2>What rtk kept out of context</h2>
-          <span class="panel-note">tests and builds count at most 750 tokens without rtk; files and diffs count in full. Pick a command to see its calls</span>
-        </div>
-        <div class="usage-grid">
-          <div class="usage-group">
-            <div class="usage-group-title">By command</div>
-            <div id="rtkCommandBars"></div>
-          </div>
-          <div class="usage-group">
-            <div class="usage-group-title" id="rtkDetailTitle">Detail</div>
-            <div id="rtkDetailBars"></div>
-          </div>
-        </div>
-      </section>
-
-      <div class="panel-row stretch">
-        <section class="panel" data-hide-key="costByModel">
-          <div class="panel-head">
-            <h2>Cost by model</h2>
-          </div>
-          <div id="modelList" class="model-list"></div>
-          <div class="prices-foot">
-            <p id="pricesSource" class="panel-note"></p>
-            <button id="checkPricesBtn" class="refresh-btn" type="button" title="Compare these prices with Anthropic's pricing page">Check prices</button>
-          </div>
-          <div id="pricesCheck" class="prices-check" hidden></div>
-        </section>
-
-        <section class="panel" id="modelMixPanel" data-hide-key="modelMix">
-          <div class="panel-head">
-            <h2>Model mix</h2>
-            <div class="mix-measure" id="mixMeasure" role="group" aria-label="Size slices by">
-              <button type="button" data-measure="tokens" aria-pressed="true">Tokens</button>
-              <button type="button" data-measure="cost" aria-pressed="false">Cost</button>
-            </div>
-          </div>
-          <div id="modelMixChart" class="mix-donut"></div>
-        </section>
-      </div>
-
-      <section class="panel" id="beforeAfterPanel" data-hide-key="beforeAfter" hidden>
-        <div class="panel-head">
-          <h2>Setup changes &middot; before and after</h2>
-          <span class="panel-note">7 days before and after the picked change</span>
-        </div>
-        <p id="changesFileNote" class="panel-note changes-file-note" hidden></p>
-        <p id="baEmpty" class="bar-empty" hidden>No setup changes in this range.</p>
-        <div id="baBody">
-          <div id="baDailyChart" class="chart" role="group" aria-label="Context at session start: bars are the daily median, dots are sessions, with setup changes by kind above the chart"></div>
-          <div class="ba-under">
-            <div class="usage-group-title" id="baChartTitle">Context at session start: bars are the daily median, dots are sessions</div>
-            <div id="baLegend"></div>
-          </div>
-          <div class="ba-grid">
-            <div class="ba-main">
-              <table class="model-table ba-table" id="beforeAfterTable" aria-live="polite"></table>
-            </div>
-            <div class="ba-side">
-              <div id="dayList" class="day-list"></div>
-              <p id="overlapNote" class="panel-note"></p>
-            </div>
-          </div>
-        </div>
-      </section>
     </main>
 
     <footer class="footer">

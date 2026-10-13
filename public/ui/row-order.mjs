@@ -1,5 +1,6 @@
 // Rows of panels move by drag, and the order is saved.
 import { el } from '../dom.mjs';
+import { ROW_SELECTOR } from './tabs.mjs';
 
 // Each row of panels (a full-width panel or a .panel-row pair) can be moved. The
 // order is kept in localStorage as a list of row keys, so the page reopens as it
@@ -10,16 +11,20 @@ import { el } from '../dom.mjs';
 const ROW_ORDER_KEY = 'cc-dashboard:row-order';
 
 function assignRowKeys() {
-  for (const row of document.querySelectorAll('#app > .panel-row, #app > .panel')) {
+  for (const row of document.querySelectorAll(ROW_SELECTOR)) {
     const heading = row.querySelector('.panel-head h2');
     if (heading) row.dataset.rowKey = heading.textContent;
   }
 }
 
+const tabs = () => [...document.querySelectorAll('.tab')];
+const rowsOf = (tab) => [...tab.querySelectorAll(':scope > .panel-row[data-row-key], :scope > .panel[data-row-key]')];
+
 function panelRows() {
-  return [...document.querySelectorAll('#app > .panel-row[data-row-key], #app > .panel[data-row-key]')];
+  return tabs().flatMap(rowsOf);
 }
 
+// Both tabs' keys, saved as one list.
 function currentRowKeys() {
   return panelRows().map((row) => row.dataset.rowKey);
 }
@@ -41,12 +46,15 @@ function saveRowOrder(keys) {
   }
 }
 
-// Re-appends the rows to #app in the order of keys. The banners and #mainCards
-// come before every row in index.html, so they stay first.
-function applyRowOrder(keys) {
-  const app = document.getElementById('app');
-  const byKey = new Map(panelRows().map((row) => [row.dataset.rowKey, row]));
-  for (const key of keys) app.appendChild(byKey.get(key));
+// Re-appends each tab's rows in saved order. orderRowKeys drops the keys of the
+// other tab's rows, so the one saved list orders both tabs. defaults pairs each tab
+// with its keys in index.html order. The toolbar and the cards come before the
+// rows in index.html, so they stay first.
+function applyRowOrder(defaults, saved) {
+  for (const [tab, keys] of defaults) {
+    const byKey = new Map(rowsOf(tab).map((row) => [row.dataset.rowKey, row]));
+    for (const key of orderRowKeys(keys, saved)) tab.appendChild(byKey.get(key));
+  }
 }
 
 function clearDropMarks(row) {
@@ -119,14 +127,14 @@ function setupRowDrag(onDrop) {
 // Runs before setupCollapsibleRows, which reads data-row-key.
 export function setupRowOrder() {
   assignRowKeys();
-  const defaultKeys = currentRowKeys();
+  const defaults = tabs().map((tab) => [tab, rowsOf(tab).map((row) => row.dataset.rowKey)]);
   const saved = loadRowOrder();
-  applyRowOrder(orderRowKeys(defaultKeys, saved));
+  applyRowOrder(defaults, saved);
 
   const resetBtn = document.getElementById('resetLayoutBtn');
   resetBtn.hidden = saved == null;
   resetBtn.addEventListener('click', () => {
-    applyRowOrder(defaultKeys);
+    applyRowOrder(defaults, null);
     saveRowOrder(null);
     resetBtn.hidden = true;
   });

@@ -7,27 +7,52 @@ const path = require('node:path');
 
 const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
 
-// The markup from the row that holds #limitsPanel up to #timelinePanel, the panel
-// after it. Null when #limitsPanel is not inside a .panel-row.
-function planUsageRow() {
-  const start = html.lastIndexOf('<div class="panel-row', html.indexOf('id="limitsPanel"'));
-  return start === -1 ? null : html.slice(start, html.indexOf('id="timelinePanel"'));
+// A tab container's markup: from its opening tag to the next tab's, or to </main>.
+function tabMarkup(id) {
+  const start = html.indexOf(`<div class="tab" id="${id}"`);
+  assert.notEqual(start, -1, `#${id} is missing`);
+  const next = html.indexOf('<div class="tab"', start + 1);
+  return html.slice(start, next === -1 ? html.indexOf('</main>') : next);
 }
+const panelIds = (markup) => [...markup.matchAll(/<section class="panel"[^>]*?id="(\w+)"/g)].map((m) => m[1]);
+const headings = (markup) => [...markup.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1]);
 
-test('Plan usage and Where usage goes are the two panels of one even, stretched row', () => {
-  const row = planUsageRow();
-  assert.ok(row, '#limitsPanel is not inside a .panel-row');
-  assert.match(row, /^<div class="panel-row even stretch">/);
-  const ids = [...row.matchAll(/<section class="panel" id="(\w+)"/g)].map((m) => m[1]);
-  assert.deepStrictEqual(ids, ['limitsPanel', 'attributionPanel']);
-  // The row closes before #timelinePanel.
-  assert.strictEqual((row.match(/<div[\s>]/g) || []).length, (row.match(/<\/div>/g) || []).length);
+test('the Now tab holds Plan usage and Where usage goes in one row, then the timeline and Live sessions', () => {
+  const now = tabMarkup('tabNow');
+  assert.deepStrictEqual(panelIds(now), ['limitsPanel', 'attributionPanel', 'timelinePanel', 'sessionsPanel']);
+  assert.match(now, /<div class="panel-row even stretch">\s*<section class="panel" id="limitsPanel"/);
 });
 
-test('the row keeps the key Plan usage', () => {
+test('the Now tab row keeps the key Plan usage', () => {
   // assignRowKeys in public/ui/row-order.mjs keys a row by its first heading, so a
   // saved order and a saved collapsed state for Plan usage carry over to the row.
-  const row = planUsageRow();
-  assert.ok(row, '#limitsPanel is not inside a .panel-row');
-  assert.strictEqual(row.match(/<h2[^>]*>([^<]*)<\/h2>/)[1], 'Plan usage');
+  assert.equal(headings(tabMarkup('tabNow'))[0], 'Plan usage');
+});
+
+test('the Analysis tab starts with the range picker and the cards, with no Today button', () => {
+  const analysis = tabMarkup('tabAnalysis');
+  assert.ok(analysis.indexOf('id="rangePicker"') < analysis.indexOf('id="summaryCards"'));
+  assert.ok(analysis.indexOf('id="summaryCards"') < analysis.indexOf('<section class="panel"'));
+  assert.doesNotMatch(analysis, /data-days="today"/);
+  assert.match(analysis, /<button data-days="7" class="active">/);
+});
+
+test('the Analysis tab holds the analysis panels in the spec order', () => {
+  assert.deepStrictEqual(headings(tabMarkup('tabAnalysis')), [
+    'Session reviews',
+    'Daily cost', 'Daily tokens',
+    'Cumulative cost', 'Daily tokens by type · log',
+    'Daily tokens by model', 'Daily cost by model',
+    'When usage happens',
+    'Cost by model', 'Model mix',
+    'Tool calls',
+    'Output rtk kept out of context',
+    'What rtk kept out of context',
+    'Setup changes &middot; before and after',
+  ]);
+});
+
+test('the header has the tab switch, and the Analysis tab starts hidden', () => {
+  assert.match(html, /<div class="tab-switch" id="tabSwitch"/);
+  assert.match(html, /<div class="tab" id="tabAnalysis" hidden>/);
 });

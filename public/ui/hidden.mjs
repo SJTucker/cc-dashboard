@@ -61,7 +61,7 @@ function applyHidden() {
   for (const element of document.querySelectorAll('[data-hide-key]')) {
     element.toggleAttribute('data-user-hidden', state.hiddenKeys.has(element.dataset.hideKey));
   }
-  for (const row of document.querySelectorAll('#app > .panel-row')) {
+  for (const row of document.querySelectorAll('.tab > .panel-row')) {
     const panels = [...row.querySelectorAll(':scope > .panel')];
     const visible = panels.filter((panel) => !panel.hasAttribute('data-user-hidden'));
     row.toggleAttribute('data-user-hidden', visible.length === 0);
@@ -145,7 +145,7 @@ export function setupHiding(callbacks) {
   // Renderers set `hidden` on their own panels (renderLimits, renderNowPanels,
   // renderAttribution), and applyHidden does not run then. One observer per pair
   // moves the handle and toggle whenever a panel in it is hidden or shown.
-  for (const row of document.querySelectorAll('#app > .panel-row')) {
+  for (const row of document.querySelectorAll('.tab > .panel-row')) {
     const panels = [...row.querySelectorAll(':scope > .panel')];
     const observer = new MutationObserver(() => placeRowControls(row, controlsPanel(panels)));
     for (const panel of panels) observer.observe(panel, { attributes: true, attributeFilter: ['hidden'] });

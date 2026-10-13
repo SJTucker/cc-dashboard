@@ -281,3 +281,10 @@ export async function loadChanges() {
 export function redrawChanges() {
   if (changesReport) renderChanges(changesReport);
 }
+
+// On entering the Analysis tab: redraws from the loaded report, or loads it the
+// first time. The Now tab never loads it (neededRequests).
+export function ensureChanges() {
+  if (changesReport) redrawChanges();
+  else loadChanges();
+}

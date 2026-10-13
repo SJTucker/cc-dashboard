@@ -4,7 +4,6 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { parseHidden, neededRequests } = require('../public/visibility');
 
-const ALL = ['changes', 'rtk', 'sessions', 'reviews', 'records', 'prices'];
 const needed = (hidden, range) => [...neededRequests(new Set(hidden), range)].sort();
 
 test('parseHidden returns the stored list of keys', () => {
@@ -21,19 +20,18 @@ test('parseHidden drops entries that are not strings', () => {
   assert.deepStrictEqual(parseHidden('["dailyCost", 3, null, "tools"]'), ['dailyCost', 'tools']);
 });
 
-test('with nothing hidden every optional request is needed on Today', () => {
-  assert.deepStrictEqual(needed([], 'today'), [...ALL].sort());
+const NOW = ['records', 'sessions'];
+const ANALYSIS = ['changes', 'prices', 'records', 'reviews', 'rtk'];
+
+test('on Today (the Now tab) only the sessions and records requests are needed', () => {
+  assert.deepStrictEqual(needed([], 'today'), NOW);
 });
 
-test('off Today the sessions request is never needed', () => {
-  for (const range of [7, 30, 90, 'all']) {
-    assert.ok(!neededRequests(new Set(), range).has('sessions'), String(range));
-  }
+test('off Today (the Analysis tab) every request except sessions is needed', () => {
+  for (const range of [7, 30, 90, 'all']) assert.deepStrictEqual(needed([], range), ANALYSIS, String(range));
 });
 
 test('a request shared by two panels stays needed until both are hidden', () => {
-  assert.ok(neededRequests(new Set(), 'today').has('changes'));
-  assert.ok(!neededRequests(new Set(['beforeAfter']), 'today').has('changes'));
   assert.ok(neededRequests(new Set(['rtkDaily']), 7).has('rtk'));
   assert.ok(!neededRequests(new Set(['rtkDaily', 'rtkCommands']), 7).has('rtk'));
   assert.ok(neededRequests(new Set(['timeline']), 'today').has('sessions'));
@@ -43,16 +41,16 @@ test('a request shared by two panels stays needed until both are hidden', () => 
 test('a request with one panel is skipped when that panel is hidden', () => {
   assert.ok(!neededRequests(new Set(['reviews']), 30).has('reviews'));
   assert.ok(!neededRequests(new Set(['costByModel']), 30).has('prices'));
+  assert.ok(!neededRequests(new Set(['beforeAfter']), 30).has('changes'));
 });
 
-test('records is needed for the Record day card, and on Today for the 7d total lines', () => {
-  assert.ok(neededRequests(new Set(), 7).has('records'));
-  assert.ok(!neededRequests(new Set(['card-record']), 7).has('records'), 'off Today only Record day uses it');
-  assert.ok(neededRequests(new Set(['card-record']), 'today').has('records'), 'Total cost and Total tokens show the 7d lines');
-  assert.ok(neededRequests(new Set(['card-record', 'card-cost']), 'today').has('records'));
-  assert.ok(!neededRequests(new Set(['card-record', 'card-cost', 'card-tokens']), 'today').has('records'));
+test('records is needed on both tabs whatever is hidden, because the sticky bar uses it', () => {
+  const everything = ['card-record', 'card-cost', 'card-tokens', 'beforeAfter', 'rtkDaily', 'rtkCommands', 'sessions', 'timeline', 'reviews', 'costByModel'];
+  assert.ok(neededRequests(new Set(everything), 'today').has('records'));
+  assert.ok(neededRequests(new Set(everything), 30).has('records'));
 });
 
 test('keys that feed no request change nothing', () => {
-  assert.deepStrictEqual(needed(['dailyCost', 'tools', 'card-files', 'gone'], 'today'), [...ALL].sort());
+  assert.deepStrictEqual(needed(['dailyCost', 'tools', 'card-files', 'gone'], 'today'), NOW);
+  assert.deepStrictEqual(needed(['dailyCost', 'tools', 'card-files', 'gone'], 7), ANALYSIS);
 });

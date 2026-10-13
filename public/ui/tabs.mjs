@@ -31,14 +31,19 @@ export function showTab(tab) {
 
 // A tab button sets the hash, and the hash change switches the tab. So a click, a
 // typed URL and Back all go through onSwitch. onSwitch(tab) also runs once now, for
-// the hash the page opened with. A click on the tab already shown sets the same
-// hash, which fires no hashchange, so nothing reloads.
+// the hash the page opened with. A page opened with no valid hash gets "#now" through
+// replaceState, which adds no history entry and fires no hashchange. Without that,
+// the first click on Now would change the hash from "" to "#now" and load the tab a
+// second time. A click on the tab already shown sets the same hash, which fires no
+// hashchange, so nothing reloads.
 export function setupTabs(onSwitch) {
   for (const btn of document.querySelectorAll('#tabSwitch button')) {
     btn.addEventListener('click', () => {
       location.hash = btn.dataset.tab;
     });
   }
+  const tab = tabFromHash(location.hash);
+  if (location.hash !== `#${tab}`) history.replaceState(null, '', `#${tab}`);
   window.addEventListener('hashchange', () => onSwitch(tabFromHash(location.hash)));
-  onSwitch(tabFromHash(location.hash));
+  onSwitch(tab);
 }
