@@ -55,6 +55,26 @@ test('a fresh run installs, links the mod and validates it', (t) => {
   assert.ok(summary.indexOf('Summary:') < summary.indexOf('Next:'), out);
 });
 
+test('a fresh run leaves the rest of the config folder alone', (t) => {
+  const box = sandbox(t);
+  const cfg = path.join(box.home, '.claude');
+  const seeded = {
+    'settings.json': '{"theme":"dark"}\n',
+    'skills/other/SKILL.md': '# other\n',
+    'plugins/installed_plugins.json': '{"plugins":{}}\n',
+  };
+  for (const [rel, body] of Object.entries(seeded)) {
+    fs.mkdirSync(path.dirname(path.join(cfg, rel)), { recursive: true });
+    fs.writeFileSync(path.join(cfg, rel), body);
+  }
+  const { code, out } = run(box);
+  assert.strictEqual(code, 0, out);
+  for (const [rel, body] of Object.entries(seeded)) assert.strictEqual(fs.readFileSync(path.join(cfg, rel), 'utf8'), body);
+  assert.deepStrictEqual(fs.readdirSync(cfg).sort(), ['plugins', 'settings.json', 'skills']);
+  assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'skills')).sort(), ['cc-dashboard', 'other']);
+  assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'plugins')), ['installed_plugins.json']);
+});
+
 test('bin/setup is executable', () => {
   assert.doesNotThrow(() => fs.accessSync(SCRIPT, fs.constants.X_OK));
 });
@@ -144,6 +164,15 @@ test('CLAUDE_CONFIG_DIR with a leading ~ puts the link under HOME', (t) => {
   const { code, out } = run(box, { CLAUDE_CONFIG_DIR: '~/x' });
   assert.strictEqual(code, 0, out);
   assert.strictEqual(fs.readlinkSync(linkPath(box.home, path.join(box.home, 'x'))), MOD);
+});
+
+test('an absolute CLAUDE_CONFIG_DIR puts the link there and leaves ~/.claude alone', (t) => {
+  const box = sandbox(t);
+  const cfg = path.join(box.home, 'elsewhere', 'claude-config');
+  const { code, out } = run(box, { CLAUDE_CONFIG_DIR: cfg });
+  assert.strictEqual(code, 0, out);
+  assert.strictEqual(fs.readlinkSync(linkPath(box.home, cfg)), MOD);
+  assert.ok(!fs.existsSync(path.join(box.home, '.claude')), out);
 });
 
 test('an empty CLAUDE_CONFIG_DIR counts as unset', (t) => {
