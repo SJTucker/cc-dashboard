@@ -20,6 +20,6 @@ then on.
 | [What fills the context](context-fillers.md) | Open: largest tool results and repeated reads across the range; result size storage and grouping open |
 | [Cost by plugin](plugin-cost-rows.md) | Open: a Plugins list in Where usage goes from the unused `attributionPlugin` field, and MCP servers from `attributionMcpServer`; invocation counts and subagent calls open |
 | [Costliest prompts](costliest-prompts.md) | Open: rank prompts by cost with a drill-down; storing prompt text open |
-| [Thinking tokens](thinking-tokens.md) | Open: show the share of output that is thinking, from the stored `thinking_tokens` field; why some calls lack it and where it shows open |
 | [Guard: rows when a transcript loses lines](transcript-rewrites.md) | Open: the rewrite report was not reproduced on Claude Code 2.1.296; a warning when a re-read file loses stored call keys, and whether to merge rows, open |
 | [Today table: group by /clear link](today-table-clear-chains.md) | Open: `launchId` grouping misses a session resumed in a new process and then cleared; join on `clearedFrom` as well or instead open |
+| [Subagent output may be undercounted](subagent-output-undercount.md) | Open: 26,850 calls since Claude Code 2.1.280, nearly all subagent calls, carry a short usage shape with a median output of 8 tokens; whether it is the stream-start usage open |
