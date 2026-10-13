@@ -17,7 +17,6 @@ const TIMELINE_COLOR = TOKENS.accentCyan;
 const TIMELINE_LANE_HEIGHT = 22;
 const TIMELINE_BAR_HEIGHT = 10;
 const TIMELINE_AXIS_HEIGHT = 20;
-const TIMELINE_GUTTER = 200;
 const TIMELINE_RIGHT_PAD = 10;
 // A lane that a /clear started (follows in laneLayout) has its label indented by
 // FOLLOW_INDENT px with a ↳ before its glyph, which together take FOLLOW_CHARS of the
@@ -277,11 +276,15 @@ function drawLane(svg, { session: s, lane, bars, follows }, maxChars, xOf, { top
   if (column) drawRebuildCell(svg, s.rebuilds || [], column, width, mid);
 }
 
+// The label column: 22% of the panel, between 160 and 300px, which fits about 36
+// characters at 1440px. It never takes more than 40%, so a narrow panel keeps a plot.
+// The plot starts at this width, and the legend indents to match.
+export function timelineGutter(width) {
+  return Math.min(Math.round(width * 0.4), Math.max(160, Math.min(300, Math.round(width * 0.22))));
+}
+
 // Draws the lanes into container. Returns the number of lanes, of live lanes, and
 // whether the Rebuilds column was drawn.
-// The label column's width: the plot starts here, and the legend indents to match.
-const timelineGutter = (width) => Math.min(TIMELINE_GUTTER, Math.round(width * 0.4));
-
 function drawTimeline(container, sessions, width, now) {
   const starts = sessions.flatMap((s) => s.spans.map((span) => span[0]));
   const ticks = hourTicks(Math.min(...starts), now);
