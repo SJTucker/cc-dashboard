@@ -60,6 +60,14 @@ type World = {
   forkMs: number
   // The input box's text, which $.prompt.read returns.
   draft: string
+  // context.tokens in $.session.usage(). Undefined leaves it out, as before a response.
+  contextTokens: number | undefined
+  // Answers bin/cache-state. Its runs go to cacheRan. cacheMs delays the answer on the mock clock.
+  cacheState: { exitCode: number; stdout: string; stderr?: string }
+  cacheMs: number
+  // What $.session.surfaces returns, and how far clock.now runs ahead of the mock timers.
+  surfaces: string[]
+  nowOffset: number
 }
 
 const entry = (name: string): Entry => ({ name, kind: name.endsWith('.md') ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -74,6 +82,7 @@ const CONTRACT = [
   { "script": "judge-updates", "args": ["record"], "stdin": { "versions": ["2.1.290"], "reply": "[{\"version\":\"2.1.290\",\"relevant\":false}]" } },
   { "script": "review-session", "args": ["prompt"], "stdin": "" },
   { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
+  { "script": "cache-state", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl" } },
   { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
   { "script": "record-statusline", "args": [], "stdin": {
     "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "cleared_from": "prev-1", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
@@ -114,6 +123,11 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     forks: [],
     forkMs: 0,
     draft: '',
+    contextTokens: undefined,
+    cacheState: { exitCode: 0, stdout: '{}' },
+    cacheMs: 0,
+    surfaces: ['terminal'],
+    nowOffset: 0,
     ...w,
   }
   const ran: Ran[] = []
@@ -122,10 +136,19 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const statuses: (string | undefined)[] = []
   const fills: string[] = []
   const reviewRan: Ran[] = []
+  const cacheRan: Ran[] = []
   const endSawRan: number[] = []
   const listed: string[] = []
   const readLog: string[] = []
-  const clock = mock.clock(on, { now: 61_000 })
+  // nowOffset makes clock.now answer later than the mock timers' own time, as after a sleep.
+  const skewed = ((event: string, ...rest: unknown[]) => {
+    const hook = rest.pop() as (...args: unknown[]) => Promise<{ value: number }> | { value: number }
+    const wrapped = event === 'clock.now'
+      ? async (...args: unknown[]) => ({ value: (await hook(...args)).value + state.nowOffset })
+      : hook
+    return (on as (...args: unknown[]) => unknown)(event, ...rest, wrapped)
+  }) as unknown as On
+  const clock = mock.clock(skewed, { now: 61_000 })
   // The component core draws when no plugin does. A $.ui.mount needs it beneath the plugins.
   on('ui.render', () => ({ type: 'engine' as const, ref: 0 }))
   on('fs.stat', (_$, e) => {
@@ -200,10 +223,13 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     return { value: undefined }
   })
   on('session.id', () => ({ value: state.id }))
+  on('session.surfaces', () => ({ value: state.surfaces }))
   on('session.root', () => ({ value: '/work/my.demo' }))
   on('session.model', () => ({ value: state.model }))
   on('session.turns', () => ({ value: state.turns() }))
-  on('session.usage', () => ({ value: { startedAt: 1_000, context: { window: 200_000 }, rateLimits: [] } }))
+  on('session.usage', () => ({
+    value: { startedAt: 1_000, context: { window: 200_000, ...(state.contextTokens === undefined ? {} : { tokens: state.contextTokens }) }, rateLimits: [] },
+  }))
   on('session.measure', (_$, e) => ({ changed: e.changed }))
   on('session.end', async (_$, e) => {
     // Gives a script that has started a few ticks to reach process.run first.
@@ -211,7 +237,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     endSawRan.push(ran.length)
     return { sessionId: e.sessionId }
   })
-  on('process.run', (_$, e) => {
+  on('process.run', async (_$, e) => {
     if (e.argv[0] === 'git' || e.argv[0] === 'date') {
       const key = e.argv.join(' ')
       commandRan.push(key)
@@ -229,6 +255,11 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
       reviewRan.push({ argv: e.argv, stdin: parsed, timeoutMs: e.init?.timeoutMs })
       const out = state.reviews[e.argv[1] ?? ''] ?? { exitCode: 1, stdout: '', stderr: 'review-session: no answer set' }
       return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
+    }
+    if (e.argv[0]?.endsWith('/cache-state')) {
+      cacheRan.push({ argv: e.argv, stdin: e.init?.stdin === undefined ? undefined : JSON.parse(e.init.stdin), timeoutMs: e.init?.timeoutMs })
+      if (state.cacheMs > 0) await clock.sleep(state.cacheMs)
+      return { value: { stderr: '', ...state.cacheState, isStdoutTruncated: false, isStderrTruncated: false } }
     }
     if (runThrows) throw new Error('spawn failed')
     const stdin = e.init?.stdin
@@ -263,7 +294,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('tool.check', () => ({ decision: state.verdict }))
   on('agent.spawn', () => ({ model: 'claude-haiku-4-5', agentId: 'a1' }))
-  return { ran, reviewRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, commandRan, forked, statuses, fills }
+  return { ran, reviewRan, cacheRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, commandRan, forked, statuses, fills }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -806,7 +837,8 @@ const stdinShape = (stdin: unknown) => (typeof stdin === 'string' ? 'text' : Obj
 const callKey = (c: { script: string; args: readonly string[]; stdin: unknown }) => JSON.stringify([c.script, c.args, stdinShape(c.stdin)])
 
 test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) => {
-  const { ran, reviewRan, clock, state } = world(on, {
+  const { ran, reviewRan, cacheRan, clock, state } = world(on, {
+    contextTokens: 60_000,
     scripts: judging,
     reviews: reviewing(),
     replies: [{ isAnswered: true, text: VERDICT }, { isAnswered: true, text: VERDICT }, { isAnswered: true, text: '{"suggestions":[]}' }, { isAnswered: true, text: '{"suggestions":[]}' }],
@@ -814,12 +846,15 @@ test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) 
   await $.command.run(backfill)
   await $.session.start(start)
   await clock.settle()
+  // A finished turn runs bin/cache-state once the arming delay has passed.
+  await $.turn.complete(turnEnd())
+  await clock.advance(1_000)
   // Only a measure after a /clear sends cleared_from, so the one measure here follows one.
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
   state.id = 's2'
   await $.session.measure(measure([FIVE, WEEK]))
   await clock.settle()
-  const made = [...ran, ...reviewRan].map((r) =>
+  const made = [...ran, ...reviewRan, ...cacheRan].map((r) =>
     callKey({ script: r.argv[0]?.split('/').pop() ?? '', args: r.argv.slice(1), stdin: r.stdin }),
   )
   expect([...new Set(made)].sort()).toEqual(contract.map(callKey).sort())
@@ -1776,6 +1811,183 @@ test('a new ready handoff prunes stored handoffs older than 7 days and keeps new
   expect(state.store['handoff:new']).toEqual({ resume: 'y', at: 61_000 - 6 * DAY_MS })
   expect(state.store.setup).toEqual({ folders: [] })
   expect(state.store['handoff:s1']).toBeDefined()
+})
+
+const LEAD = 360_000
+const ARM = 1_000
+const EXPIRES = 61_000 + HOUR
+const FIRE = EXPIRES - LEAD
+const TRANSCRIPT = '/home/u/.claude/projects/-work-my-demo/s1.jsonl'
+const cache = (ttl: '1h' | '5m', expiresAt: number) => ({ exitCode: 0, stdout: JSON.stringify({ ttl, expiresAt }) })
+const timed = (over: Partial<World> = {}): Partial<World> => ({
+  commands: REPO,
+  forks: [DOC, DOC],
+  contextTokens: 103_224,
+  cacheState: cache('1h', EXPIRES),
+  ...over,
+})
+
+test('an idle turn over 50k tokens on a 1h cache writes a handoff 6 minutes before the cache expires', async ($, on) => {
+  const { forked, writes, statuses, cacheRan, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  expect(cacheRan.map((r) => r.stdin)).toEqual([{ transcript: TRANSCRIPT }])
+  await clock.set(FIRE - 1)
+  expect(forked).toEqual([])
+  await clock.set(FIRE)
+  expect(forked.length).toBe(1)
+  expect(writes[HANDOFF]).toBe(DOC.text)
+  expect(statuses).toEqual([undefined, READY])
+})
+
+for (const [name, over] of [
+  ['under 50k tokens', { contextTokens: 49_999 }],
+  ['with no token count', { contextTokens: undefined }],
+] as const) {
+  test(`an idle turn ${name} runs no script and arms nothing`, async ($, on) => {
+    const { forked, cacheRan, logged, clock } = world(on, timed(over))
+    await idleTurn($)
+    await clock.set(EXPIRES)
+    expect(cacheRan).toEqual([])
+    expect(forked).toEqual([])
+    expect(logged).toEqual([])
+  })
+}
+
+for (const [name, state] of [
+  ['a 5m cache', cache('5m', 61_000 + 300_000)],
+  ['an expiry already inside 6 minutes', cache('1h', 61_000 + LEAD)],
+  ['a transcript with no main call', { exitCode: 0, stdout: '{}' }],
+] as const) {
+  test(`${name} arms nothing and logs nothing`, async ($, on) => {
+    const { forked, cacheRan, logged, clock } = world(on, timed({ cacheState: state }))
+    await idleTurn($)
+    await clock.set(EXPIRES)
+    expect(cacheRan.length).toBe(1)
+    expect(forked).toEqual([])
+    expect(logged).toEqual([])
+  })
+}
+
+test('no transcript arms nothing and logs nothing', async ($, on) => {
+  const { forked, cacheRan, logged, clock } = world(on, timed({ exists: () => false }))
+  await idleTurn($)
+  await clock.set(EXPIRES)
+  expect(cacheRan).toEqual([])
+  expect(forked).toEqual([])
+  expect(logged).toEqual([])
+})
+
+for (const [name, state, reason] of [
+  ['fails', { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }, 'cache-state failed (exit 1): cache-state: boom'],
+  ['prints invalid JSON', { exitCode: 0, stdout: 'nope' }, 'cache-state printed invalid JSON'],
+] as const) {
+  test(`a cache-state that ${name} arms nothing and logs the reason`, async ($, on) => {
+    const { forked, logged, clock } = world(on, timed({ cacheState: state }))
+    await idleTurn($)
+    await clock.set(EXPIRES)
+    expect(forked).toEqual([])
+    expect(logged).toEqual([`handoff timer failed (${reason})`])
+  })
+}
+
+test('turn.start cancels the timer, and the next idle turn arms it again', async ($, on) => {
+  const later = EXPIRES + 10_000
+  const { forked, cacheRan, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  state.cacheState = cache('1h', later)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.set(FIRE)
+  expect(forked).toEqual([])
+  await $.turn.complete(turnEnd({ turnId: 't2' }))
+  await clock.advance(ARM)
+  expect(cacheRan.length).toBe(2)
+  await clock.set(later - LEAD)
+  expect(forked.length).toBe(1)
+})
+
+test('turn.start during the arming delay runs no script', async ($, on) => {
+  const { cacheRan, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM - 1)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.advance(ARM)
+  expect(cacheRan).toEqual([])
+})
+
+test('a cache-state reply that comes after turn.start arms nothing', async ($, on) => {
+  const { forked, cacheRan, state, clock } = world(on, timed({ cacheMs: 2_000 }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  expect(cacheRan.length).toBe(1)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  // The second arming finds too few tokens, so it runs no script and sets no timer.
+  state.contextTokens = 1_000
+  await $.turn.complete(turnEnd({ turnId: 't2' }))
+  await clock.advance(2_000)
+  await clock.set(EXPIRES)
+  expect(forked).toEqual([])
+})
+
+test('a timer that fires after the cache expired writes no handoff', async ($, on) => {
+  // The timer fires on schedule, but clock.now already reads past the expiry, as after a sleep.
+  const { forked, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  state.nowOffset = LEAD
+  await clock.set(FIRE)
+  expect(forked).toEqual([])
+})
+
+test('an idle turn in a session with no terminal runs no script and arms no timer', async ($, on) => {
+  const { forked, cacheRan, clock } = world(on, timed({ surfaces: [] }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  expect(cacheRan).toEqual([])
+  await clock.set(FIRE)
+  expect(forked).toEqual([])
+})
+
+test('a /clear cancels the timer', async ($, on) => {
+  const { forked, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  // forgetSession also drops the activity entry, which would stop a surviving timer at
+  // fireHandoff's state check. turn.complete recreates a waiting entry. Its second
+  // session.id call, in armHandoff, throws, so no arming replaces or cancels the timer.
+  let idCalls = 0
+  Object.defineProperty(state, 'id', {
+    get() {
+      if (++idCalls > 1) throw new Error('no id')
+      return 's1'
+    },
+  })
+  await $.turn.complete(turnEnd())
+  await clock.set(EXPIRES)
+  expect(forked).toEqual([])
+})
+
+test('the timer after an idle compaction in the same gap forks nothing more', async ($, on) => {
+  const { forked, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(forked.length).toBe(1)
+  await clock.set(EXPIRES)
+  expect(forked.length).toBe(1)
+})
+
+test('an idle compaction after the timer in the same gap forks nothing more', async ($, on) => {
+  const { forked, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.set(FIRE)
+  expect(forked.length).toBe(1)
+  await $.session.compact(compacting())
+  await clock.settle()
+  expect(forked.length).toBe(1)
 })
 
 // The plan limit band (register.ts).

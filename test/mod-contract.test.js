@@ -21,7 +21,7 @@ const CALLS = (() => {
     throw new Error(`${where} is not strict JSON: ${err.message}`);
   }
 })();
-const PRINTS_JSON = new Set(['judge-updates', 'review-session']);
+const PRINTS_JSON = new Set(['judge-updates', 'review-session', 'cache-state']);
 const PRINTS_NOTHING = new Set(['record-statusline', 'record-session-end']);
 
 const typed = (text) => JSON.stringify({ type: 'user', origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: text } });

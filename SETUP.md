@@ -63,9 +63,10 @@ loads, and later starts, read only the transcripts that changed. The server crea
 ## Install the mod
 
 The mod in `mod/` records plan usage, live session state, session reviews, Claude Code
-release markers and setup change markers, and writes a handoff when Claude Code
-compacts an idle session. It also shows a dismissable band above the prompt when the
-Session or Week plan window reaches 75%. Link it into your skills folder from the clone:
+release markers and setup change markers, and writes a handoff 6 minutes before the
+1-hour prompt cache expires or when Claude Code compacts an idle session. It also
+shows a dismissable band above the prompt when the Session or Week plan window
+reaches 75%. Link it into your skills folder from the clone:
 
 ```bash
 ln -s "$PWD/mod" ~/.claude/skills/cc-dashboard
@@ -195,7 +196,7 @@ tests can avoid the one in the clone.
 | `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
 | `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session` |
 | `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server, when you click Apply |
-| `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, when Claude Code's idle compaction starts. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
+| `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, 6 minutes before a 1-hour prompt cache expires or when Claude Code's idle compaction starts, whichever comes first. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
 | rtk's `history.db` | `RTK_DB` | rtk |
 
 `transcripts.db` runs in SQLite WAL mode. While a process has it open,
@@ -255,16 +256,21 @@ of them.
     with `@path`, rules, skills, agents, and a project's `CLAUDE.md` and
     `CLAUDE.local.md`. Changes to settings files, hook scripts, the statusline script
     and rtk's config are labelled on your machine and not sent.
-- **The mod forks the session's own model** once each time Claude Code compacts an
-  idle session. Idle compaction runs in a session with a 1-hour cache that has sat
-  idle for about 54 minutes and holds at least 200,000 tokens of context. The fork
-  reads the whole conversation from the prompt cache and sends the output of
-  `git rev-parse`, `git branch`, `git log`, `git worktree list`, `git status`,
-  `git diff --stat` and `git stash list` for the session's folder, and the current
-  date. It writes no transcript line, so the dashboard's totals leave out its cost. Setting
-  `"idleCompaction": false` or `"autoCompactEnabled": false` in `settings.json`, or
-  `DISABLE_AUTO_COMPACT=1` or `DISABLE_COMPACT=1`, turns off idle compaction and
-  with it the handoff.
+- **The mod forks the session's own model** once per idle gap, to write a handoff
+  document. It does this 6 minutes before the prompt cache expires, in a session with
+  a 1-hour cache and at least 50,000 tokens of context. It also does it when Claude
+  Code compacts an idle session, which happens after about 54 idle minutes in a
+  1-hour session with at least 200,000 tokens. Whichever comes first writes the
+  handoff. The fork reads the whole conversation from the prompt cache and sends the
+  output of `git rev-parse`, `git branch`, `git log`, `git worktree list`,
+  `git status`, `git diff --stat` and `git stash list` for the session's folder, and
+  the current date. It writes no transcript line, so the dashboard's totals leave out
+  its cost. To find the cache's lifetime and expiry, the mod runs `bin/cache-state`
+  after each main-thread turn in an interactive session with at least 50,000 tokens
+  of context, which reads the session's transcript. The timer does not run in
+  sessions without a terminal (Agent SDK, `-p`). Turning off idle compaction
+  (`"idleCompaction": false`, `"autoCompactEnabled": false`, `DISABLE_AUTO_COMPACT=1`
+  or `DISABLE_COMPACT=1`) does not turn off the handoff.
 
 ## Check it works
 
