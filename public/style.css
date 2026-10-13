@@ -89,13 +89,15 @@ html, body {
 
 /* ---------- Header ---------- */
 
+/* The sticky bar: one row with the title, the status strip, the tab switch and
+   today's three stats. A narrow screen wraps it onto more rows. */
 .topbar {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: var(--sp-4);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-5);
   margin-bottom: var(--sp-5);
-  padding: var(--sp-5) 0 var(--sp-4);
+  padding: var(--sp-2) 0;
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -105,7 +107,7 @@ html, body {
   isolation: isolate;
 }
 
-.topbar-title h1 {
+.topbar h1 {
   margin: 0;
   display: flex;
   align-items: center;
@@ -115,6 +117,7 @@ html, body {
   font-weight: 700;
   letter-spacing: var(--ls-label);
   text-transform: uppercase;
+  white-space: nowrap;
 }
 
 /* The favicon art, public/favicon.svg, beside the title. Its bright prompt sits in
@@ -126,14 +129,6 @@ html, body {
   display: block;
   position: relative;
   top: 1px;
-}
-
-.topbar-title {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2) var(--sp-5);
-  width: 100%;
 }
 
 /* A static perspective grid behind the whole sticky header, after the TRON:
@@ -177,8 +172,8 @@ html, body {
    grid lines fade out before they reach an edge. Without it, lines stopped at
    card edges, ran through the gaps between cards, and passed a few pixels from
    their tops and bottoms. */
-.topbar .card,
-.topbar .range-picker,
+.topbar .sticky-stats,
+.topbar .tab-switch,
 .topbar .refresh-btn,
 .topbar .status-strip {
   box-shadow: 0 0 0 4px var(--bg), 0 0 10px 4px color-mix(in srgb, var(--bg) 70%, transparent);
@@ -250,18 +245,29 @@ html, body {
   to { transform: scale(2.6); opacity: 0; }
 }
 
-.topbar-controls {
+.sticky-stats {
   display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-3);
-  width: 100%;
+  gap: var(--sp-5);
+  margin-left: auto;
+  padding: 0 var(--sp-2);
+  background: var(--bg);
 }
+.stat { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.stat-label {
+  font-family: var(--font-label);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  color: var(--text-tertiary);
+}
+.stat-value { font-family: var(--font-num); font-size: var(--fs-stat); font-weight: 600; }
+.stat-value.money { color: var(--money); text-shadow: var(--money-glow); }
+.stat-note { font-size: var(--fs-caption); color: var(--text-tertiary); white-space: nowrap; }
+.topbar .menu-btn { margin-left: 0; }
 
-/* Holds #summaryCards on Today (see placeSummaryCards in public/main.mjs). Its
-   flex basis makes the cards wrap onto their own line when the controls row runs
-   out of width. placeSummaryCards hides it on other ranges. */
-.header-cards { flex: 1 1 700px; }
+/* The range picker and Refresh, above the range's cards. */
+.tab-toolbar { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); }
 
 .range-picker {
   display: flex;
@@ -362,36 +368,6 @@ html, body {
   font-size: var(--fs-caption);
   color: var(--text-tertiary);
 }
-
-/* The compact form used in the header on Today: label and value only. The
-   unpriced-tokens warning, the record day's date and the two 7d total lines stay
-   visible. The other notes are hidden, and the static ones are title tooltips on
-   their cards. */
-.cards.cards-compact {
-  grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: var(--sp-2);
-  margin-bottom: 0;
-}
-
-/* Fixed column counts keep the six cards in even rows (3 + 3, then 2 + 2 + 2)
-   instead of leaving one card alone on the last row. */
-@media (max-width: 720px) {
-  .cards.cards-compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-}
-
-@media (max-width: 480px) {
-  .cards.cards-compact { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-}
-
-.cards-compact .card {
-  padding: var(--sp-1) var(--sp-3);
-  gap: 1px;
-}
-
-.cards-compact .card-value { font-size: var(--fs-title); }
-
-.cards-compact .card-note:not(#cardCostNote):not(#cardRecordDate):not(#cardCostWeek):not(#cardTokensWeek),
-.cards-compact .card-note:empty { display: none; }
 
 /* ---------- Panels ---------- */
 
@@ -698,10 +674,6 @@ html, body {
      selector alone loses to it regardless of the media query. */
   .panel-row,
   .panel-row.even { grid-template-columns: 1fr; }
-}
-
-@media (max-width: 720px) {
-  .topbar { align-items: flex-start; }
 }
 
 .mix-bar {
@@ -1589,8 +1561,9 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
    from a pseudo-element, so no renderer has to clear it: the renderers fill each
    container, and drawSummary removes the class. The cards hold "—" in index.html, so
    font-size 0 hides it while the pseudo-element sets its own size. */
-.first-load .card-value { font-size: 0; }
+.first-load .card-value, .first-load .stat-value { font-size: 0; }
 .first-load .card-value::after,
+.first-load .stat-value::after,
 .first-load #costChart:empty::after,
 .first-load #tokenChart:empty::after,
 .first-load #cumulativeChart:empty::after,

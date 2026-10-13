@@ -140,3 +140,10 @@ test('familyLabel capitalises a family key', async () => {
   assert.equal(familyLabel('other'), 'Other');
   assert.equal(familyLabel(''), '');
 });
+
+test('unpricedNote names the unpriced token count and is empty when none', async () => {
+  const { unpricedNote } = await load();
+  assert.equal(unpricedNote({ unpricedTokens: 1500 }), '1.5k tokens from unrecognized models not priced');
+  assert.equal(unpricedNote({ unpricedTokens: 0 }), '');
+  assert.equal(unpricedNote({}), '');
+});

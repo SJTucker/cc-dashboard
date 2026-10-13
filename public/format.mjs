@@ -44,6 +44,12 @@ export function thinkingNote(s) {
   return s.thinkingCost > 0 ? `${formatCost(s.thinkingCost)} at output rates · ${coverage}` : coverage;
 }
 
+// The sentence for tokens from models with no price. Used by the sticky cost's
+// tooltip and the Analysis Total cost card, so the wording lives here once.
+export function unpricedNote(s) {
+  return s.unpricedTokens ? `${formatTokens(s.unpricedTokens)} tokens from unrecognized models not priced` : '';
+}
+
 // Wall and API durations for the Live sessions panel.
 export function formatDuration(ms) {
   const s = Math.round(ms / 1000);

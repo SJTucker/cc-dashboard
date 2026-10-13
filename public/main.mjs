@@ -20,6 +20,7 @@ import { refreshRecords } from './panels/records.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
+import { renderSticky } from './panels/sticky.mjs';
 import { renderTimeline, resetTimeline } from './panels/timeline.mjs';
 import { renderTools } from './panels/tools.mjs';
 import { renderUsageCharts } from './panels/usage.mjs';
@@ -30,10 +31,11 @@ import { setupPanelLight } from './ui/panel-light.mjs';
 import { setupRowOrder } from './ui/row-order.mjs';
 
 const LIVE_POLL_MS = 5000;
-// While live, runLoad runs LIVE_POLL_MS after the previous run finished
+// While Today is shown, runLoad runs LIVE_POLL_MS after the previous run finished
 // (createPoller in public/poll.js), so a slow scan delays the next poll instead of
-// overlapping it.
+// overlapping it. On any other range only the sticky bar polls (stickyPoller).
 const livePoller = createPoller(() => runLoad(), LIVE_POLL_MS);
+const stickyPoller = createPoller(() => loadStickyToday(), LIVE_POLL_MS);
 // Signatures of the last rendered summary and the last rendered rtk response. A 5s
 // poll that redraws unconditionally would tear down the SVG under the cursor and kill
 // any open tooltip, so an unchanged response skips rendering entirely. The two are
@@ -74,18 +76,14 @@ let lastLoadedAt = null;
 // summary load, before drawSummaryPanels' unchanged-response check, so Sync moves on
 // a quiet poll too. While live, the ring pulses once per call.
 function renderStatusStrip(summary) {
-  const active = document.querySelector('#rangePicker button.active');
   const status = formatStatus({
     loadedAt: lastLoadedAt,
-    range: active ? active.textContent : '',
     sessions: summary.sessions,
     apiCalls: summary.apiCalls,
   });
   document.getElementById('stripSync').textContent = status.sync;
-  document.getElementById('stripRange').textContent = status.range;
   document.getElementById('stripSessions').textContent = status.sessions;
   document.getElementById('stripCalls').textContent = status.apiCalls;
-  if (!livePoller.running) return;
   const ring = document.querySelector('#liveDot .live-ring');
   ring.classList.remove('ping');
   void ring.offsetWidth; // restarts the animation on the next add
@@ -116,32 +114,34 @@ function setBusy(on) {
   }, BUSY_DELAY_MS);
 }
 
-function setLive(on) {
-  if (on) livePoller.start();
-  else livePoller.stop();
-  document.getElementById('liveDot').classList.toggle('is-off', !on);
-  document.querySelector('#liveDot .live-text').textContent = on ? 'Link live' : 'Paused';
-  // A live range re-scans every 5 seconds, so a manual refresh has nothing to do.
-  document.getElementById('refreshBtn').hidden = on;
+// Today polls the whole page. Any other range polls only the sticky bar, which
+// shows today on every range.
+function setPolling(today) {
+  if (today) {
+    stickyPoller.stop();
+    livePoller.start();
+  } else {
+    livePoller.stop();
+    stickyPoller.start();
+  }
 }
 
-// On Today the summary cards sit in the sticky header in a compact form, so they
-// stay in view while scrolling. Other ranges show them as full cards in the page.
-// The one #summaryCards element moves between the two slots, so every card id
-// stays unique and drawSummaryPanels fills it the same way wherever it is.
-function placeSummaryCards() {
-  const cards = document.getElementById('summaryCards');
-  const today = state.currentDays === 'today';
-  document.getElementById(today ? 'headerCards' : 'mainCards').appendChild(cards);
-  cards.classList.toggle('cards-compact', today);
-  // Hidden off Today, so the empty slot cannot wrap onto a line of its own.
-  document.getElementById('headerCards').hidden = !today;
-  // renderCards hides these two on Today too, but only once the load finishes.
-  // Hiding them here keeps the old range's values out of the header meanwhile.
-  if (today) {
-    document.getElementById('burnCard').hidden = true;
-    document.getElementById('projectionCard').hidden = true;
-  }
+// Every today summary draws the sticky bar and the status strip through here: the
+// full load on Today, the sticky poll on other ranges. Sync moves on each one.
+function drawSticky(data) {
+  if (data.error) return;
+  lastLoadedAt = Date.now();
+  renderStatusStrip(data.summary);
+  renderSticky(data);
+}
+
+// The sticky poll's run. createPoller requires a promise that never rejects, and
+// getJson never rejects (public/api.mjs). The range check drops a response that
+// lands after a switch to Today, where the full load draws the bar.
+function loadStickyToday() {
+  return getJson('/api/summary?days=today').then((data) => {
+    if (state.currentDays !== 'today') drawSticky(data);
+  });
 }
 
 // The requests fetchAll skips when every panel they feed is hidden.
@@ -268,14 +268,11 @@ function drawSummaryPanels(data) {
 }
 
 // The summary request's draw. The first one of the page's life, a failure included,
-// ends the "Loading…" lines (.first-load in style.css). Sync moves on every successful
-// load, a quiet poll included, so lastLoadedAt is set before the status strip reads it.
+// ends the "Loading…" lines (.first-load in style.css). On Today the summary is
+// today's, so it draws the sticky bar too.
 function drawSummary(data) {
   document.body.classList.remove('first-load');
-  if (!data.error) {
-    lastLoadedAt = Date.now();
-    renderStatusStrip(data.summary);
-  }
+  if (state.currentDays === 'today') drawSticky(data);
   drawSummaryPanels(data);
 }
 
@@ -332,10 +329,10 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
   btn.classList.add('active');
   const value = btn.dataset.days;
   state.currentDays = value === 'all' || value === 'today' ? value : Number(value);
-  placeSummaryCards();
   clearSignatures(); // the bucket keys change, so force a redraw
   lastPayload = null;
-  setLive(state.currentDays === 'today');
+  setPolling(state.currentDays === 'today');
+  if (state.currentDays !== 'today') loadStickyToday();
   redrawChanges();
   runLoad({ busy: true });
 });
@@ -406,8 +403,7 @@ setupPanelLight();
 setupUsageGroupToggles();
 setupModelMixToggle();
 setupPrices({ onApplied: reloadAll });
-placeSummaryCards();
-setLive(state.currentDays === 'today');
+setPolling(state.currentDays === 'today');
 refreshRecords();
 runLoad({ busy: true });
 loadChanges();

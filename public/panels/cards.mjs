@@ -1,21 +1,11 @@
-// The summary cards. The Record day card and the 7d total lines are in records.mjs.
-import { formatCost, formatTokens, formatPercent, costPerDay, thinkingShare, thinkingNote } from '../format.mjs';
+// The summary cards on the Analysis tab, for the range picked there. The sticky
+// bar's stats are in sticky.mjs.
+import { formatCost, formatTokens, formatPercent, costPerDay, thinkingShare, thinkingNote, unpricedNote } from '../format.mjs';
 import { state, shown } from '../state.mjs';
-import { renderWeekTotals, renderRecord } from './records.mjs';
 
-// The compact header card on Today has room for a short note only, so there the
-// full sentence moves to the note's tooltip.
 function renderCostCard(s) {
   document.getElementById('cardCost').textContent = formatCost(s.totalCost);
-  const unpricedNote = s.unpricedTokens
-    ? `${formatTokens(s.unpricedTokens)} tokens from unrecognized models not priced`
-    : '';
-  const costNote = document.getElementById('cardCostNote');
-  const compact = state.currentDays === 'today';
-  costNote.textContent = compact && s.unpricedTokens
-    ? `${formatTokens(s.unpricedTokens)} unpriced`
-    : unpricedNote;
-  costNote.title = compact ? unpricedNote : '';
+  document.getElementById('cardCostNote').textContent = unpricedNote(s);
 }
 
 // Claude Code's own per-session counters, shown as a separate card rather than
@@ -30,8 +20,7 @@ function renderReportedCard(s) {
     `${s.reportedSessions} of ${s.reportedSessionsOf} sessions`;
 }
 
-// Burn rate and the 30-day projection. Today has hourly buckets, where a daily
-// rate has no meaning, so both cards hide there.
+// Burn rate and the 30-day projection, from complete days only.
 function renderRateCards(daily) {
   const perDay = state.currentDays === 'today' ? null : costPerDay(daily);
   document.getElementById('burnCard').hidden = perDay == null;
@@ -42,7 +31,6 @@ function renderRateCards(daily) {
 }
 
 // The share is of the calls that report thinking, so the note says how many do.
-// On Today the compact card hides its note, and the title shows it on hover.
 function renderThinkingCard(s) {
   const note = thinkingNote(s);
   document.getElementById('cardThinking').textContent = formatPercent(thinkingShare(s));
@@ -54,12 +42,9 @@ export function renderCards(data) {
   const s = data.summary;
   if (shown('card-cost')) renderCostCard(s);
   if (shown('card-tokens')) document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
-  renderWeekTotals(s);
   if (shown('card-cache')) document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
   if (shown('card-thinking')) renderThinkingCard(s);
   renderReportedCard(s);
-  if (shown('card-files')) document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
   if (shown('card-tools')) document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');
-  if (shown('card-record')) renderRecord(data.daily);
   renderRateCards(data.daily);
 }

@@ -1,7 +1,7 @@
-// The Record day card, and the 7d total lines under Total cost and Total tokens.
+// The sticky bar's Record day, and the 7d lines under its cost and tokens.
 import { getJson } from '../api.mjs';
 import { formatCost, formatTokens, shortDate, localDateStr } from '../format.mjs';
-import { state, shown } from '../state.mjs';
+import { state } from '../state.mjs';
 import { createSequence } from '../guards.mjs';
 
 // The Record day card's all-time value. Fetched once on load and once on
@@ -44,66 +44,38 @@ export function refreshRecords() {
       recordsData = data;
       recordsDataDay = day;
     }
-    if (lastRecordDaily && shown('card-record')) renderRecord(lastRecordDaily);
+    if (lastRecordDaily) renderRecord(lastRecordDaily);
     if (lastSummary) renderWeekTotals(lastSummary);
   });
 }
 
-// On Today, a second line under Total cost and Total tokens with the rolling
-// 7 days: today's live totals plus the 6 days before it from /api/records.
-// It shows a dash until /api/records has answered, which takes a few seconds
-// on the first request after the server starts, while the row store reads the
-// transcripts. Empty on every other range.
+// The 7d line under the sticky cost and tokens: today's live totals plus the 6
+// days before it from /api/records. It shows a dash until /api/records has
+// answered, which takes a few seconds on the first request after the server starts.
+// summary is always today's (sticky.mjs).
 export function renderWeekTotals(summary) {
   lastSummary = summary;
-  // A page left open on Today past midnight refetches once, on the first poll of
-  // the new day. Refresh is hidden on Today, so nothing else would refetch.
-  if (state.currentDays === 'today' && recordsDay !== localDateStr(new Date())) refreshRecords();
-  const today = state.currentDays === 'today';
+  // A page left open past midnight refetches once, on the first poll of the new day.
+  if (recordsDay !== localDateStr(new Date())) refreshRecords();
   const recentDays = recordsDataDay === localDateStr(new Date()) ? recordsData?.recentDays ?? null : null;
-  const week = today
-    ? rollingWeek(recentDays, localDateStr(new Date()), { cost: summary.totalCost, tokens: summary.totalTokens })
-    : null;
-  const title = today ? 'today and the 6 days before it' : '';
-  const cost = document.getElementById('cardCostWeek');
-  const tokens = document.getElementById('cardTokensWeek');
-  const line = (value) => (today ? `7d total: ${week ? value : '—'}` : '');
-  cost.textContent = line(week && formatCost(week.cost));
-  tokens.textContent = line(week && formatTokens(week.tokens));
-  cost.title = title;
-  tokens.title = title;
+  const week = rollingWeek(recentDays, localDateStr(new Date()), { cost: summary.totalCost, tokens: summary.totalTokens });
+  const cost = document.getElementById('stickyCostWeek');
+  const tokens = document.getElementById('stickyTokensWeek');
+  cost.textContent = `7d ${week ? formatCost(week.cost) : '—'}`;
+  tokens.textContent = `7d ${week ? formatTokens(week.tokens) : '—'}`;
+  cost.title = 'today and the 6 days before it';
+  tokens.title = cost.title;
 }
 
-// The value and date line show the all-time record: the day with the most tokens,
-// with that day's cost. The note shows the record within the range on screen, also
-// with its cost. Today's total grows on every live poll, and the range's aggregate can
-// be newer than the all-time value that /api/records returns. So today's total or
-// the range record replaces the fetched all-time record when it has more tokens.
+// The all-time record: the day with the most tokens, with its cost. Today's total
+// grows on every poll and can pass the fetched record, so it replaces the record
+// when it has more tokens. daily is today's hourly buckets.
 export function renderRecord(daily) {
   lastRecordDaily = daily;
-
   const todayStr = localDateStr(new Date());
-  // busiestDay over today's entries alone is today's total, with its cost.
   const today = busiestDay(daily.filter((d) => d.date.slice(0, 10) === todayStr));
-  const rangeRecord = busiestDay(daily);
-
-  let shownAllTime = recordsData && recordsData.allTime;
-  if (shownAllTime) {
-    if (today && today.tokens > shownAllTime.tokens) shownAllTime = today;
-    if (rangeRecord && rangeRecord.tokens > shownAllTime.tokens) shownAllTime = rangeRecord;
-  }
-
-  document.getElementById('cardRecord').textContent = shownAllTime ? formatTokens(shownAllTime.tokens) : '—';
-  document.getElementById('cardRecordDate').textContent =
-    shownAllTime ? `${shortDate(shownAllTime.date)} · ${formatCost(shownAllTime.cost)}` : '';
-
-  // On Today the range record is today itself, and Total tokens already shows
-  // that number, so the note stays empty.
-  let note = '';
-  if (state.currentDays !== 'today' && rangeRecord) {
-    note = shownAllTime && rangeRecord.date === shownAllTime.date
-      ? 'this range holds the record'
-      : `this range: ${formatTokens(rangeRecord.tokens)} · ${formatCost(rangeRecord.cost)} · ${shortDate(rangeRecord.date)}`;
-  }
-  document.getElementById('cardRecordNote').textContent = note;
+  let record = recordsData && recordsData.allTime;
+  if (record && today && today.tokens > record.tokens) record = today;
+  document.getElementById('stickyRecord').textContent = record ? formatTokens(record.tokens) : '—';
+  document.getElementById('stickyRecordDate').textContent = record ? `${shortDate(record.date)} · ${formatCost(record.cost)}` : '';
 }
