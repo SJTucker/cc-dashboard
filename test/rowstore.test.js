@@ -1307,7 +1307,7 @@ test('a file written to the database is compacted in memory after the write, and
   await rows.refresh();
 
   const usage = rows.entries()[0].rows.calls[0].usage;
-  assert.deepStrictEqual(usage, { input_tokens: 100, output_tokens: 50 });
+  assert.deepStrictEqual(usage, { input_tokens: 100, output_tokens: 50, output_tokens_details: { thinking_tokens: 7 } });
   const stored = storedUsages(dbFile);
   assert.strictEqual(stored.length, 1);
   assert.ok(hasFatKeys(stored[0]));
@@ -1366,7 +1366,7 @@ test('rows loaded from the database are compacted in memory and stay full in the
   const rows = fatStore(dir, store);
   await rows.refresh();
 
-  assert.deepStrictEqual(rows.entries()[0].rows.calls[0].usage, { input_tokens: 100, output_tokens: 50 });
+  assert.deepStrictEqual(rows.entries()[0].rows.calls[0].usage, { input_tokens: 100, output_tokens: 50, output_tokens_details: { thinking_tokens: 7 } });
   assert.ok(storedUsages(dbFile).every(hasFatKeys));
   store.close();
 });

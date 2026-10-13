@@ -393,7 +393,7 @@ html, body {
   align-items: start;
 }
 
-.panel-row .panel { margin-bottom: 16px; }
+.panel-row .panel { margin-bottom: 16px; min-width: 0; }
 
 /* Rows whose second panel should be as tall as the first (Cost by model / Model
    mix). Each panel keeps its own bottom margin, so the bottoms still line up. */
@@ -568,6 +568,7 @@ html, body {
 /* ---------- Model list ---------- */
 
 .model-list {
+  overflow-x: auto;
   display: flex;
   flex-direction: column;
   gap: 10px;
@@ -619,6 +620,7 @@ html, body {
 
 .model-table .model-name {
   vertical-align: middle;
+  white-space: nowrap;
 }
 
 .model-table .swatch {

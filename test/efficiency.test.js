@@ -68,7 +68,7 @@ test('windowStats on an empty window returns nulls', () => {
   const w = windowStats({ starts: [], deltas: [], prompts: [], calls: [] }, T0, T0 + WEEK_MS);
   assert.deepStrictEqual(w, {
     sessions: 0, sessionStart: null, bashN: 0, bashMedian: null, bashP90: null,
-    prompts: 0, costPerPrompt: null, callsPerPrompt: null, callN: 0, cacheHit: null,
+    prompts: 0, costPerPrompt: null, callsPerPrompt: null, callN: 0, cacheHit: null, thinkingN: 0, thinkingShare: null,
   });
 });
 
@@ -107,12 +107,13 @@ test('dailySeries gives each row its value and count per local day', () => {
     costPerPrompt: [{ date: '2026-09-11', n: 1, value: 0.5 }],
     callsPerPrompt: [{ date: '2026-09-11', n: 1, value: 4 }],
     cacheHit: [{ date: '2026-09-10', n: 1, value: 0.9 }, { date: '2026-09-11', n: 1, value: 0.5 }],
+    thinkingShare: [],
   });
 });
 
 test('dailySeries on no records gives every row an empty series', () => {
   const empty = dailySeries({ starts: [], deltas: [], prompts: [], calls: [] });
-  assert.deepStrictEqual(Object.keys(empty).sort(), ['bashMedian', 'bashP90', 'cacheHit', 'callsPerPrompt', 'costPerPrompt', 'sessionStart']);
+  assert.deepStrictEqual(Object.keys(empty).sort(), ['bashMedian', 'bashP90', 'cacheHit', 'callsPerPrompt', 'costPerPrompt', 'sessionStart', 'thinkingShare']);
   for (const series of Object.values(empty)) assert.deepStrictEqual(series, []);
 });
 
@@ -206,4 +207,32 @@ test('buildReport leaves the order of the calls it was given unchanged and count
   assert.deepStrictEqual(calls.map((c) => c.t), before);
   assert.strictEqual(report.markers[0].before.callN, 1);
   assert.strictEqual(report.markers[0].after.callN, 3);
+});
+
+test('stats: thinking share is over the calls that report thinking only', () => {
+  const s = stats({
+    starts: [], deltas: [], prompts: [],
+    calls: [
+      call(T0, { output: 100, thinking: 40 }),
+      call(T0 + 1, { output: 60, thinking: 0 }),
+      call(T0 + 2, { output: 500, thinking: null }),
+      call(T0 + 3, { output: 900 }),
+    ],
+  });
+  assert.strictEqual(s.thinkingN, 2);
+  assert.strictEqual(s.thinkingShare, 0.25);
+});
+
+test('stats: no thinking share when the calls that report it have no output', () => {
+  const s = stats({ starts: [], deltas: [], prompts: [], calls: [call(T0, { output: 0, thinking: 0 })] });
+  assert.strictEqual(s.thinkingN, 1);
+  assert.strictEqual(s.thinkingShare, null);
+});
+
+test('dailySeries gives the thinking share per day with its call count', () => {
+  const series = dailySeries({
+    starts: [], deltas: [], prompts: [],
+    calls: [call(T0, { output: 100, thinking: 40 }), call(T0 + 1, { output: 60, thinking: 0 }), call(T0 + 24 * H, { output: 10 })],
+  });
+  assert.deepStrictEqual(series.thinkingShare, [{ date: '2026-09-10', n: 2, value: 0.25 }]);
 });

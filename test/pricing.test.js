@@ -302,3 +302,22 @@ test('validateRow refuses rows the cost math cannot use', () => {
   assert.match(validateRow({ ...ok, fast: { input: 10, output: 5 } }), /fast/);
   assert.match(validateRow(null), /object/);
 });
+
+const { outputRate } = require('../lib/pricing');
+
+test('outputRate is the output price per token, standard and fast', () => {
+  closeTo(outputRate({}, 'claude-opus-5') * 1e6, 25, 'Opus 5 standard output per MTok');
+  closeTo(outputRate({ speed: 'fast' }, 'claude-opus-5') * 1e6, 50, 'Opus 5 fast output per MTok');
+  closeTo(outputRate({ speed: 'fast' }, 'claude-sonnet-5'), outputRate({}, 'claude-sonnet-5'), 'Sonnet 5 has no fast mode');
+});
+
+test('outputRate is null for an unrecognised model', () => {
+  assert.strictEqual(outputRate({}, 'some-unknown-model'), null);
+});
+
+test('outputRate matches the output term of costForUsage', () => {
+  for (const [usage, model] of [[{}, 'claude-opus-5'], [{ speed: 'fast' }, 'claude-opus-5'], [{}, 'claude-haiku-4-5-20251001']]) {
+    const { cost } = costForUsage({ ...usage, output_tokens: 1_000_000 }, model);
+    closeTo(outputRate(usage, model) * 1_000_000, cost, `${model} ${usage.speed || 'standard'}`);
+  }
+});

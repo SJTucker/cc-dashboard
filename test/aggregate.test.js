@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const { aggregate } = require('../lib/aggregate');
+const { outputRate } = require('../lib/pricing');
 
 // A fixed "now" in local time, so a range's cutoff does not depend on when the suite runs.
 const NOW = new Date(2026, 9, 8, 12, 0, 0).getTime();
@@ -415,4 +416,78 @@ test('a call with only the flat cache write total counts it as 5-minute writes',
   const [rec] = run([rowSet({ calls: [call({ model: 'claude-opus-5-5', usage })] })]).efficiency.calls;
   assert.strictEqual(rec.write5m, 300);
   assert.strictEqual(rec.write1h, 0);
+});
+
+const thinkingUsage = (output, thinking, more = {}) => ({ input_tokens: 0, output_tokens: output, output_tokens_details: { thinking_tokens: thinking }, ...more });
+const close = (actual, expected, message) => assert.ok(Math.abs(actual - expected) < 1e-9, `${message}: expected ${expected}, got ${actual}`);
+
+test('thinking sums count only calls that report thinking_tokens, a 0 included', () => {
+  const entry = rowSet({
+    calls: [
+      call({ key: 'a', usage: thinkingUsage(100, 40) }),
+      call({ key: 'b', usage: thinkingUsage(60, 0) }),
+      call({ key: 'c', usage: { input_tokens: 0, output_tokens: 500 } }),
+    ],
+  });
+  const data = run([entry]);
+  const s = data.summary;
+
+  assert.strictEqual(s.thinking, 40);
+  assert.strictEqual(s.thinkingOutput, 160);
+  assert.strictEqual(s.thinkingCalls, 2);
+  assert.strictEqual(s.apiCalls, 3);
+  close(s.thinkingCost, 40 * outputRate({}, 'claude-sonnet-4-6', at(0)), 'thinking cost at the output rate');
+
+  const day = data.daily.find((d) => d.thinkingOutput > 0);
+  assert.strictEqual(day.thinking, 40);
+  assert.strictEqual(day.thinkingOutput, 160);
+  close(day.thinkingCost, s.thinkingCost, 'day thinking cost');
+
+  const model = data.models.find((m) => m.model === 'claude-sonnet-4-6');
+  assert.strictEqual(model.thinking, 40);
+  assert.strictEqual(model.thinkingOutput, 160);
+  close(model.thinkingCost, s.thinkingCost, 'model thinking cost');
+
+  assert.deepStrictEqual(data.efficiency.calls.map((c) => c.thinking), [40, 0, null]);
+});
+
+test('thinking cost uses the fast output rate for a fast call', () => {
+  const entry = rowSet({
+    calls: [
+      call({ key: 'std', model: 'claude-opus-5', usage: thinkingUsage(2_000_000, 1_000_000) }),
+      call({ key: 'fast', model: 'claude-opus-5', usage: thinkingUsage(2_000_000, 1_000_000, { speed: 'fast' }) }),
+    ],
+  });
+  close(run([entry]).summary.thinkingCost, 25 + 50, 'Opus 5: 1M thinking at $25 standard plus 1M at $50 fast');
+});
+
+test('an unpriced model adds thinking tokens but no thinking cost', () => {
+  const data = run([rowSet({ calls: [call({ model: 'some-unknown-model', usage: thinkingUsage(30, 10) })] })]);
+
+  assert.strictEqual(data.summary.thinking, 10);
+  assert.strictEqual(data.summary.thinkingCost, 0);
+  assert.strictEqual(data.models[0].thinking, 10);
+  assert.strictEqual(data.models[0].thinkingCost, 0);
+});
+
+test('a call copied into two row sets adds its thinking once', () => {
+  const copy = () => rowSet({ calls: [call({ key: 'same', usage: thinkingUsage(100, 40) })] });
+  const s = run([copy(), copy()]).summary;
+
+  assert.strictEqual(s.thinking, 40);
+  assert.strictEqual(s.thinkingCalls, 1);
+});
+
+test('a range with no calls has zero thinking sums, and empty hour slots carry the fields', () => {
+  assert.deepStrictEqual(
+    (({ thinking, thinkingOutput, thinkingCost, thinkingCalls }) => ({ thinking, thinkingOutput, thinkingCost, thinkingCalls }))(run([rowSet()]).summary),
+    { thinking: 0, thinkingOutput: 0, thinkingCost: 0, thinkingCalls: 0 },
+  );
+  const hourly = aggregate([rowSet({ calls: [call({ t: at(0, 9), usage: thinkingUsage(100, 40) })] })], { days: 'today', bucket: 'hour', now: NOW });
+  for (const slot of hourly.daily) {
+    assert.strictEqual(typeof slot.thinking, 'number', slot.date);
+    assert.strictEqual(typeof slot.thinkingOutput, 'number', slot.date);
+    assert.strictEqual(typeof slot.thinkingCost, 'number', slot.date);
+  }
+  assert.strictEqual(hourly.daily.find((d) => d.date.endsWith('T09')).thinking, 40);
 });

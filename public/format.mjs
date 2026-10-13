@@ -28,6 +28,22 @@ export function formatPercent(x) {
   return (x * 100).toFixed(1) + '%';
 }
 
+// Thinking tokens as a share of the output of the calls that report them, from
+// the sums lib/aggregate.js returns on summary and models entries. null when no
+// call reports thinking, so the page shows a dash.
+export function thinkingShare(x) {
+  return x.thinkingOutput > 0 ? x.thinking / x.thinkingOutput : null;
+}
+
+// The note under the thinking share card: the thinking cost at output rates, then
+// the share of API calls that report thinking at all. The cost is left out when it
+// is 0, which happens when every model in the range is unpriced.
+export function thinkingNote(s) {
+  if (!s.apiCalls) return '';
+  const coverage = `${Math.round((s.thinkingCalls / s.apiCalls) * 100)}% of calls report it`;
+  return s.thinkingCost > 0 ? `${formatCost(s.thinkingCost)} at output rates · ${coverage}` : coverage;
+}
+
 // Wall and API durations for the Live sessions panel.
 export function formatDuration(ms) {
   const s = Math.round(ms / 1000);

@@ -12,7 +12,9 @@ this month with last month cannot give that.
 ## What exists
 
 - Each call record in `efficiency.calls` (built by `aggregate` in
-  `lib/aggregate.js`) carries `model`, `output`, `cost` and `tools`.
+  `lib/aggregate.js`) carries `model`, `output`, `thinking`, `cost` and `tools`.
+  `thinking` is null for a call whose usage has no `thinking_tokens`, which is most
+  subagent calls since Claude Code 2.1.280.
 - Prompt records carry no model. A prompt's model has to come from its calls.
 - `lib/efficiency.js` compares windows before and after a setup change. It has no
   comparison across models.

@@ -46,7 +46,7 @@ test('loadAll drops usage keys the aggregate never reads, and leaves the stored 
   const before = JSON.stringify(rowsOf({ calls: [{ key: 'k', usage }] }));
 
   const [loaded] = store.loadAll();
-  assert.deepStrictEqual(loaded.rows.calls[0].usage, { input_tokens: 1, output_tokens: 2 });
+  assert.deepStrictEqual(loaded.rows.calls[0].usage, { input_tokens: 1, output_tokens: 2, output_tokens_details: { thinking_tokens: 3 } });
   store.close();
 
   const raw = new sqlite.DatabaseSync(file);

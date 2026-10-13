@@ -69,7 +69,7 @@ function responseA1() {
     assistant(s, at(0, 9, 4), {
       msg: 'm-a2',
       req: 'r-a2',
-      use: usage(800, 120),
+      use: usage(800, 120, { output_tokens_details: { thinking_tokens: 45 } }),
       content: [
         toolUse('toolu_a2', 'Edit', { file_path: '/repo/a.js' }),
         toolUse('toolu_a3', 'Write', { file_path: '/repo/new.txt' }),
@@ -145,7 +145,7 @@ function sessionA() {
     assistant(s, at(0, 11, 1), { use: usage(30, 3) }),
     assistant(s, at(0, 11, 2), { msg: 'm-gpt', req: 'r-gpt', model: 'gpt-4o', use: usage(400, 40) }),
     assistant(s, at(0, 11, 3), { msg: 'm-nomodel', req: 'r-nomodel', model: null, use: usage(20, 2) }),
-    assistant(s, at(0, 11, 4), { msg: 'm-big', req: 'r-big', model: OPUS, use: usage(2000, 900, { cache_read_input_tokens: 160000 }), extra: { gitBranch: 'main', version: 2.1 } }),
+    assistant(s, at(0, 11, 4), { msg: 'm-big', req: 'r-big', model: OPUS, use: usage(2000, 900, { cache_read_input_tokens: 160000, output_tokens_details: { thinking_tokens: 0 } }), extra: { gitBranch: 'main', version: 2.1 } }),
     meta(s, at(0, 11, 5), { gitBranch: 'feature/x' }),
     // Same time as the line above: the later line is the newest branch.
     meta(s, at(0, 11, 5), { gitBranch: 'feature/x2' }),

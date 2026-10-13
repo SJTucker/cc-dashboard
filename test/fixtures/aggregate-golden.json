@@ -521,6 +521,10 @@
       "totalCacheRead": 260000,
       "cacheEfficiency": 0.957819119543194,
       "unpricedTokens": 462,
+      "thinking": 45,
+      "thinkingOutput": 1020,
+      "thinkingCost": 0.000675,
+      "thinkingCalls": 2,
       "sessions": 6,
       "apiCalls": 18,
       "toolCalls": 22,
@@ -537,6 +541,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.00405,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 990
         },
@@ -551,6 +558,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -561,6 +571,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -571,6 +584,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -581,6 +597,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -591,6 +610,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -601,6 +623,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -611,6 +636,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -621,6 +649,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -631,6 +662,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -641,6 +675,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -651,6 +688,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -661,6 +701,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -671,6 +714,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -681,6 +727,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -691,6 +740,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -701,6 +753,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -711,6 +766,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -721,6 +779,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -731,6 +792,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -741,6 +805,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -751,6 +818,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -761,6 +831,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -771,6 +844,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -781,6 +857,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -791,6 +870,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -801,6 +883,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -811,6 +896,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -821,6 +909,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -831,6 +922,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -841,6 +935,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.0015300000000000001,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 374
         },
@@ -855,6 +952,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -865,6 +965,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -875,6 +978,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -885,6 +991,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -895,6 +1004,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.000585,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 143
         },
@@ -909,6 +1021,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -919,6 +1034,9 @@
         "cacheCreate": 2000,
         "cacheRead": 50000,
         "cost": 0.027075000000000002,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 52770,
           "haiku": 220
@@ -935,6 +1053,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -945,6 +1066,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.00045,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 110
         },
@@ -959,6 +1083,9 @@
         "cacheCreate": 2000,
         "cacheRead": 210000,
         "cost": 0.15165,
+        "thinking": 45,
+        "thinkingOutput": 1020,
+        "thinkingCost": 0.000675,
         "byModel": {
           "sonnet": 54893,
           "other": 440,
@@ -2157,6 +2284,9 @@
         "family": "opus",
         "cost": 0.1125,
         "tokens": 162900,
+        "thinking": 0,
+        "thinkingOutput": 900,
+        "thinkingCost": 0,
         "priced": true
       },
       {
@@ -2164,6 +2294,9 @@
         "family": "sonnet",
         "cost": 0.07209000000000002,
         "tokens": 109280,
+        "thinking": 45,
+        "thinkingOutput": 120,
+        "thinkingCost": 0.000675,
         "priced": true
       },
       {
@@ -2171,6 +2304,9 @@
         "family": "haiku",
         "cost": 0.00075,
         "tokens": 550,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "priced": true
       },
       {
@@ -2178,6 +2314,9 @@
         "family": "other",
         "cost": 0,
         "tokens": 440,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "priced": false
       }
     ],
@@ -2222,6 +2361,7 @@
           "write5m": 1500,
           "write1h": 500,
           "output": 367,
+          "thinking": null,
           "cost": 0.03213,
           "tools": [
             "Bash",
@@ -2239,6 +2379,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 120,
+          "thinking": 45,
           "cost": 0.0042,
           "tools": [
             "Edit",
@@ -2261,6 +2402,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 40,
+          "thinking": null,
           "cost": 0.0021,
           "tools": [
             "Edit",
@@ -2283,6 +2425,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 3,
+          "thinking": null,
           "cost": 0.000135,
           "tools": [
             "Bash"
@@ -2299,6 +2442,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 3,
+          "thinking": null,
           "cost": 0.000135,
           "tools": []
         },
@@ -2313,6 +2457,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 40,
+          "thinking": null,
           "cost": 0,
           "tools": []
         },
@@ -2327,6 +2472,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 2,
+          "thinking": null,
           "cost": 0,
           "tools": []
         },
@@ -2341,6 +2487,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 900,
+          "thinking": 0,
           "cost": 0.1125,
           "tools": []
         },
@@ -2355,6 +2502,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 30,
+          "thinking": null,
           "cost": 0.00045,
           "tools": []
         },
@@ -2369,6 +2517,7 @@
           "write5m": 1500,
           "write1h": 500,
           "output": 70,
+          "thinking": null,
           "cost": 0.026775,
           "tools": []
         },
@@ -2383,6 +2532,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 20,
+          "thinking": null,
           "cost": 0.0003,
           "tools": []
         },
@@ -2397,6 +2547,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 10,
+          "thinking": null,
           "cost": 0.00045,
           "tools": []
         },
@@ -2411,6 +2562,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 90,
+          "thinking": null,
           "cost": 0.00405,
           "tools": [
             "Edit"
@@ -2427,6 +2579,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 5,
+          "thinking": null,
           "cost": 0.000225,
           "tools": []
         },
@@ -2441,6 +2594,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 6,
+          "thinking": null,
           "cost": 0.00027,
           "tools": []
         },
@@ -2455,6 +2609,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 11,
+          "thinking": null,
           "cost": 0.000495,
           "tools": [
             "Bash"
@@ -2471,6 +2626,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 12,
+          "thinking": null,
           "cost": 0.00054,
           "tools": [
             "Edit"
@@ -2487,6 +2643,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 13,
+          "thinking": null,
           "cost": 0.000585,
           "tools": [
             "Bash",
@@ -3075,6 +3232,10 @@
       "totalCacheRead": 260000,
       "cacheEfficiency": 0.9610053594529662,
       "unpricedTokens": 462,
+      "thinking": 45,
+      "thinkingOutput": 1020,
+      "thinkingCost": 0.000675,
+      "thinkingCalls": 2,
       "sessions": 5,
       "apiCalls": 17,
       "toolCalls": 21,
@@ -3091,6 +3252,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.0015300000000000001,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 374
         },
@@ -3105,6 +3269,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -3115,6 +3282,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -3125,6 +3295,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -3135,6 +3308,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -3145,6 +3321,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.000585,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 143
         },
@@ -3159,6 +3338,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -3169,6 +3351,9 @@
         "cacheCreate": 2000,
         "cacheRead": 50000,
         "cost": 0.027075000000000002,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 52770,
           "haiku": 220
@@ -3185,6 +3370,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -3195,6 +3383,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.00045,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 110
         },
@@ -3209,6 +3400,9 @@
         "cacheCreate": 2000,
         "cacheRead": 210000,
         "cost": 0.15165,
+        "thinking": 45,
+        "thinkingOutput": 1020,
+        "thinkingCost": 0.000675,
         "byModel": {
           "sonnet": 54893,
           "other": 440,
@@ -4407,6 +4601,9 @@
         "family": "opus",
         "cost": 0.1125,
         "tokens": 162900,
+        "thinking": 0,
+        "thinkingOutput": 900,
+        "thinkingCost": 0,
         "priced": true
       },
       {
@@ -4414,6 +4611,9 @@
         "family": "sonnet",
         "cost": 0.06804000000000002,
         "tokens": 108290,
+        "thinking": 45,
+        "thinkingOutput": 120,
+        "thinkingCost": 0.000675,
         "priced": true
       },
       {
@@ -4421,6 +4621,9 @@
         "family": "haiku",
         "cost": 0.00075,
         "tokens": 550,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "priced": true
       },
       {
@@ -4428,6 +4631,9 @@
         "family": "other",
         "cost": 0,
         "tokens": 440,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "priced": false
       }
     ],
@@ -4472,6 +4678,7 @@
           "write5m": 1500,
           "write1h": 500,
           "output": 367,
+          "thinking": null,
           "cost": 0.03213,
           "tools": [
             "Bash",
@@ -4489,6 +4696,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 120,
+          "thinking": 45,
           "cost": 0.0042,
           "tools": [
             "Edit",
@@ -4511,6 +4719,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 40,
+          "thinking": null,
           "cost": 0.0021,
           "tools": [
             "Edit",
@@ -4533,6 +4742,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 3,
+          "thinking": null,
           "cost": 0.000135,
           "tools": [
             "Bash"
@@ -4549,6 +4759,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 3,
+          "thinking": null,
           "cost": 0.000135,
           "tools": []
         },
@@ -4563,6 +4774,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 40,
+          "thinking": null,
           "cost": 0,
           "tools": []
         },
@@ -4577,6 +4789,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 2,
+          "thinking": null,
           "cost": 0,
           "tools": []
         },
@@ -4591,6 +4804,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 900,
+          "thinking": 0,
           "cost": 0.1125,
           "tools": []
         },
@@ -4605,6 +4819,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 30,
+          "thinking": null,
           "cost": 0.00045,
           "tools": []
         },
@@ -4619,6 +4834,7 @@
           "write5m": 1500,
           "write1h": 500,
           "output": 70,
+          "thinking": null,
           "cost": 0.026775,
           "tools": []
         },
@@ -4633,6 +4849,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 20,
+          "thinking": null,
           "cost": 0.0003,
           "tools": []
         },
@@ -4647,6 +4864,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 10,
+          "thinking": null,
           "cost": 0.00045,
           "tools": []
         },
@@ -4661,6 +4879,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 5,
+          "thinking": null,
           "cost": 0.000225,
           "tools": []
         },
@@ -4675,6 +4894,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 6,
+          "thinking": null,
           "cost": 0.00027,
           "tools": []
         },
@@ -4689,6 +4909,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 11,
+          "thinking": null,
           "cost": 0.000495,
           "tools": [
             "Bash"
@@ -4705,6 +4926,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 12,
+          "thinking": null,
           "cost": 0.00054,
           "tools": [
             "Edit"
@@ -4721,6 +4943,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 13,
+          "thinking": null,
           "cost": 0.000585,
           "tools": [
             "Bash",
@@ -5296,6 +5519,10 @@
       "totalCacheRead": 260000,
       "cacheEfficiency": 0.9622145738499686,
       "unpricedTokens": 462,
+      "thinking": 45,
+      "thinkingOutput": 1020,
+      "thinkingCost": 0.000675,
+      "thinkingCalls": 2,
       "sessions": 3,
       "apiCalls": 13,
       "toolCalls": 19,
@@ -5312,6 +5539,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.000585,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 143
         },
@@ -5326,6 +5556,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -5336,6 +5569,9 @@
         "cacheCreate": 2000,
         "cacheRead": 50000,
         "cost": 0.027075000000000002,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 52770,
           "haiku": 220
@@ -5352,6 +5588,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -5362,6 +5601,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.00045,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 110
         },
@@ -5376,6 +5618,9 @@
         "cacheCreate": 2000,
         "cacheRead": 210000,
         "cost": 0.15165,
+        "thinking": 45,
+        "thinkingOutput": 1020,
+        "thinkingCost": 0.000675,
         "byModel": {
           "sonnet": 54893,
           "other": 440,
@@ -6574,6 +6819,9 @@
         "family": "opus",
         "cost": 0.1125,
         "tokens": 162900,
+        "thinking": 0,
+        "thinkingOutput": 900,
+        "thinkingCost": 0,
         "priced": true
       },
       {
@@ -6581,6 +6829,9 @@
         "family": "sonnet",
         "cost": 0.06651000000000001,
         "tokens": 107916,
+        "thinking": 45,
+        "thinkingOutput": 120,
+        "thinkingCost": 0.000675,
         "priced": true
       },
       {
@@ -6588,6 +6839,9 @@
         "family": "haiku",
         "cost": 0.00075,
         "tokens": 550,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "priced": true
       },
       {
@@ -6595,6 +6849,9 @@
         "family": "other",
         "cost": 0,
         "tokens": 440,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "priced": false
       }
     ],
@@ -6639,6 +6896,7 @@
           "write5m": 1500,
           "write1h": 500,
           "output": 367,
+          "thinking": null,
           "cost": 0.03213,
           "tools": [
             "Bash",
@@ -6656,6 +6914,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 120,
+          "thinking": 45,
           "cost": 0.0042,
           "tools": [
             "Edit",
@@ -6678,6 +6937,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 40,
+          "thinking": null,
           "cost": 0.0021,
           "tools": [
             "Edit",
@@ -6700,6 +6960,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 3,
+          "thinking": null,
           "cost": 0.000135,
           "tools": [
             "Bash"
@@ -6716,6 +6977,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 3,
+          "thinking": null,
           "cost": 0.000135,
           "tools": []
         },
@@ -6730,6 +6992,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 40,
+          "thinking": null,
           "cost": 0,
           "tools": []
         },
@@ -6744,6 +7007,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 2,
+          "thinking": null,
           "cost": 0,
           "tools": []
         },
@@ -6758,6 +7022,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 900,
+          "thinking": 0,
           "cost": 0.1125,
           "tools": []
         },
@@ -6772,6 +7037,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 30,
+          "thinking": null,
           "cost": 0.00045,
           "tools": []
         },
@@ -6786,6 +7052,7 @@
           "write5m": 1500,
           "write1h": 500,
           "output": 70,
+          "thinking": null,
           "cost": 0.026775,
           "tools": []
         },
@@ -6800,6 +7067,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 20,
+          "thinking": null,
           "cost": 0.0003,
           "tools": []
         },
@@ -6814,6 +7082,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 10,
+          "thinking": null,
           "cost": 0.00045,
           "tools": []
         },
@@ -6828,6 +7097,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 13,
+          "thinking": null,
           "cost": 0.000585,
           "tools": [
             "Bash",
@@ -7361,6 +7631,10 @@
       "totalCacheRead": 210000,
       "cacheEfficiency": 0.9673852957435047,
       "unpricedTokens": 462,
+      "thinking": 45,
+      "thinkingOutput": 1020,
+      "thinkingCost": 0.000675,
+      "thinkingCalls": 2,
       "sessions": 1,
       "apiCalls": 9,
       "toolCalls": 17,
@@ -7377,6 +7651,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7387,6 +7664,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7397,6 +7677,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7407,6 +7690,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7417,6 +7703,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7427,6 +7716,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7437,6 +7729,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7447,6 +7742,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7457,6 +7755,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7467,6 +7768,9 @@
         "cacheCreate": 2000,
         "cacheRead": 50000,
         "cost": 0.03633,
+        "thinking": 45,
+        "thinkingOutput": 120,
+        "thinkingCost": 0.000675,
         "byModel": {
           "sonnet": 54287
         },
@@ -7481,6 +7785,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0.0021,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 540
         },
@@ -7495,6 +7802,9 @@
         "cacheCreate": 0,
         "cacheRead": 160000,
         "cost": 0.11322000000000002,
+        "thinking": 0,
+        "thinkingOutput": 900,
+        "thinkingCost": 0,
         "byModel": {
           "sonnet": 66,
           "other": 440,
@@ -7515,6 +7825,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7525,6 +7838,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7535,6 +7851,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7545,6 +7864,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7555,6 +7877,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7565,6 +7890,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7575,6 +7903,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7585,6 +7916,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7595,6 +7929,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7605,6 +7942,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7615,6 +7955,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       },
@@ -7625,6 +7968,9 @@
         "cacheCreate": 0,
         "cacheRead": 0,
         "cost": 0,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "byModel": {},
         "costByModel": {}
       }
@@ -8813,6 +9159,9 @@
         "family": "opus",
         "cost": 0.1125,
         "tokens": 162900,
+        "thinking": 0,
+        "thinkingOutput": 900,
+        "thinkingCost": 0,
         "priced": true
       },
       {
@@ -8820,6 +9169,9 @@
         "family": "sonnet",
         "cost": 0.038700000000000005,
         "tokens": 54893,
+        "thinking": 45,
+        "thinkingOutput": 120,
+        "thinkingCost": 0.000675,
         "priced": true
       },
       {
@@ -8827,6 +9179,9 @@
         "family": "haiku",
         "cost": 0.00045,
         "tokens": 330,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "priced": true
       },
       {
@@ -8834,6 +9189,9 @@
         "family": "other",
         "cost": 0,
         "tokens": 440,
+        "thinking": 0,
+        "thinkingOutput": 0,
+        "thinkingCost": 0,
         "priced": false
       }
     ],
@@ -8873,6 +9231,7 @@
           "write5m": 1500,
           "write1h": 500,
           "output": 367,
+          "thinking": null,
           "cost": 0.03213,
           "tools": [
             "Bash",
@@ -8890,6 +9249,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 120,
+          "thinking": 45,
           "cost": 0.0042,
           "tools": [
             "Edit",
@@ -8912,6 +9272,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 40,
+          "thinking": null,
           "cost": 0.0021,
           "tools": [
             "Edit",
@@ -8934,6 +9295,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 3,
+          "thinking": null,
           "cost": 0.000135,
           "tools": [
             "Bash"
@@ -8950,6 +9312,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 3,
+          "thinking": null,
           "cost": 0.000135,
           "tools": []
         },
@@ -8964,6 +9327,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 40,
+          "thinking": null,
           "cost": 0,
           "tools": []
         },
@@ -8978,6 +9342,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 2,
+          "thinking": null,
           "cost": 0,
           "tools": []
         },
@@ -8992,6 +9357,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 900,
+          "thinking": 0,
           "cost": 0.1125,
           "tools": []
         },
@@ -9006,6 +9372,7 @@
           "write5m": 0,
           "write1h": 0,
           "output": 30,
+          "thinking": null,
           "cost": 0.00045,
           "tools": []
         }
