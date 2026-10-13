@@ -6,6 +6,8 @@ import { loadPanels } from './load.mjs';
 
 import { getJson } from './api.mjs';
 
+import { loadStickyData } from './sticky-poll.mjs';
+
 import { escapeHtml } from './format.mjs';
 
 import { spinnerNode } from './dom.mjs';
@@ -115,8 +117,8 @@ function setBusy(on) {
   }, BUSY_DELAY_MS);
 }
 
-// The Now tab polls the whole tab. The Analysis tab polls only the sticky bar, which
-// shows today on every range.
+// The Now tab polls the whole tab. The Analysis tab polls only the sticky bar and the
+// plan limit warning, which show today on every tab.
 function setPolling(today) {
   if (today) {
     stickyPoller.stop();
@@ -136,12 +138,15 @@ function drawSticky(data) {
   renderSticky(data);
 }
 
-// The sticky poll's run. createPoller requires a promise that never rejects, and
-// getJson never rejects (public/api.mjs). The range check drops a response that
-// lands after a switch to Today, where the full load draws the bar.
+// The sticky poll's run: today's summary for the bar, and /api/limits for the
+// warning in it. createPoller requires a promise that never rejects, and neither
+// request rejects (public/api.mjs). The range check drops a response that lands
+// after a switch to Today, where the full load draws both.
 function loadStickyToday() {
-  return getJson('/api/summary?days=today').then((data) => {
-    if (state.currentDays !== 'today') drawSticky(data);
+  return loadStickyData({ getJson, requestLimits }).then(({ summary, limits }) => {
+    if (state.currentDays === 'today') return;
+    drawSticky(summary);
+    renderLimitsBanner(limits);
   });
 }
 
