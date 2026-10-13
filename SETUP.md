@@ -266,7 +266,9 @@ of them.
   `git status`, `git diff --stat` and `git stash list` for the session's folder, and
   the current date. It writes no transcript line, so the dashboard's totals leave out
   its cost. To find the cache's lifetime and expiry, the mod runs `bin/cache-state`
-  after each turn, which reads the session's transcript. Turning off idle compaction
+  after each main-thread turn in an interactive session with at least 50,000 tokens
+  of context, which reads the session's transcript. The timer does not run in
+  sessions without a terminal (Agent SDK, `-p`). Turning off idle compaction
   (`"idleCompaction": false`, `"autoCompactEnabled": false`, `DISABLE_AUTO_COMPACT=1`
   or `DISABLE_COMPACT=1`) does not turn off the handoff.
 

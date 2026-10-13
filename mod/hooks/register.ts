@@ -682,7 +682,9 @@ function startHandoff($: EngineInterface, id: string) {
 // HANDOFF_LEAD_MS before a 1h cache expires, the point Claude Code's idle compaction
 // uses. A session's entry in handoffTimers is the arming timer, then the fire timer.
 // turn.start and forgetSession cancel it. A reload cancels every timer and empties the
-// map, so an idle gap that spans a reload gets no timer handoff.
+// map, so an idle gap that spans a reload gets no timer handoff. The timer arms only
+// in sessions with a terminal, as idle compaction does. If the machine sleeps through
+// the fire time, fireHandoff skips the fork once the cache's expiry has passed.
 const HANDOFF_MIN_TOKENS = 50_000
 const HANDOFF_LEAD_MS = 6 * 60 * 1000
 const HANDOFF_ARM_DELAY_MS = 1000
@@ -701,10 +703,15 @@ function armHandoff($: EngineInterface, id: string) {
   cancelHandoffTimer(id)
   const arming = $.clock.after(HANDOFF_ARM_DELAY_MS, () => {
     handoffWait($, id)
-      .then((wait) => {
+      .then((armed) => {
         if (handoffTimers.get(id) !== arming) return
         handoffTimers.delete(id)
-        if (wait !== null) handoffTimers.set(id, $.clock.after(wait, () => fireHandoff($, id)))
+        if (armed === null) return
+        const { wait, expiresAt } = armed
+        const fire = $.clock.after(wait, () => {
+          fireHandoff($, id, expiresAt).catch((err) => fail($, `handoff timer failed (${errorText(err)})`))
+        })
+        handoffTimers.set(id, fire)
       })
       .catch((err) => {
         if (handoffTimers.get(id) === arming) handoffTimers.delete(id)
@@ -714,10 +721,11 @@ function armHandoff($: EngineInterface, id: string) {
   handoffTimers.set(id, arming)
 }
 
-// Milliseconds until the handoff should start, or null when this idle gap gets no
-// timer: under HANDOFF_MIN_TOKENS, no transcript, not a 1h cache, or too close to the
-// expiry. A failing script throws.
-async function handoffWait($: EngineInterface, id: string): Promise<number | null> {
+// Milliseconds until the handoff should start, with the cache expiry it was computed
+// for, or null when this idle gap gets no timer: no terminal, under HANDOFF_MIN_TOKENS,
+// no transcript, not a 1h cache, or too close to the expiry. A failing script throws.
+async function handoffWait($: EngineInterface, id: string): Promise<{ wait: number; expiresAt: number } | null> {
+  if ((await $.session.surfaces()).length === 0) return null
   const tokens = (await $.session.usage()).context.tokens
   if (typeof tokens !== 'number' || tokens < HANDOFF_MIN_TOKENS) return null
   const transcript = await transcriptPath($, await $.session.root(), id)
@@ -728,13 +736,15 @@ async function handoffWait($: EngineInterface, id: string): Promise<number | nul
   }
   if (cache.ttl !== '1h' || typeof cache.expiresAt !== 'number') return null
   const wait = cache.expiresAt - HANDOFF_LEAD_MS - (await $.clock.now())
-  return wait > 0 ? wait : null
+  return wait > 0 ? { wait, expiresAt: cache.expiresAt } : null
 }
 
 // The same checks as the session.compact trigger: the session is between turns and
-// has no handoff in this idle gap.
-function fireHandoff($: EngineInterface, id: string) {
+// has no handoff in this idle gap. A fork after the cache expired would start cold, so
+// it is skipped when the clock has reached expiresAt, as after the machine slept.
+async function fireHandoff($: EngineInterface, id: string, expiresAt: number) {
   handoffTimers.delete(id)
+  if ((await $.clock.now()) >= expiresAt) return
   if (activities.get(id)?.state === 'waiting' && !handoffs.has(id)) startHandoff($, id)
 }
 

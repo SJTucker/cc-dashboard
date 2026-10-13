@@ -65,6 +65,9 @@ type World = {
   // Answers bin/cache-state. Its runs go to cacheRan. cacheMs delays the answer on the mock clock.
   cacheState: { exitCode: number; stdout: string; stderr?: string }
   cacheMs: number
+  // What $.session.surfaces returns, and how far clock.now runs ahead of the mock timers.
+  surfaces: string[]
+  nowOffset: number
 }
 
 const entry = (name: string): Entry => ({ name, kind: name.endsWith('.md') ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -123,6 +126,8 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     contextTokens: undefined,
     cacheState: { exitCode: 0, stdout: '{}' },
     cacheMs: 0,
+    surfaces: ['terminal'],
+    nowOffset: 0,
     ...w,
   }
   const ran: Ran[] = []
@@ -135,7 +140,15 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const endSawRan: number[] = []
   const listed: string[] = []
   const readLog: string[] = []
-  const clock = mock.clock(on, { now: 61_000 })
+  // nowOffset makes clock.now answer later than the mock timers' own time, as after a sleep.
+  const skewed = ((event: string, ...rest: unknown[]) => {
+    const hook = rest.pop() as (...args: unknown[]) => Promise<{ value: number }> | { value: number }
+    const wrapped = event === 'clock.now'
+      ? async (...args: unknown[]) => ({ value: (await hook(...args)).value + state.nowOffset })
+      : hook
+    return (on as (...args: unknown[]) => unknown)(event, ...rest, wrapped)
+  }) as unknown as On
+  const clock = mock.clock(skewed, { now: 61_000 })
   // The component core draws when no plugin does. A $.ui.mount needs it beneath the plugins.
   on('ui.render', () => ({ type: 'engine' as const, ref: 0 }))
   on('fs.stat', (_$, e) => {
@@ -210,6 +223,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     return { value: undefined }
   })
   on('session.id', () => ({ value: state.id }))
+  on('session.surfaces', () => ({ value: state.surfaces }))
   on('session.root', () => ({ value: '/work/my.demo' }))
   on('session.model', () => ({ value: state.model }))
   on('session.turns', () => ({ value: state.turns() }))
@@ -1913,6 +1927,25 @@ test('a cache-state reply that comes after turn.start arms nothing', async ($, o
   await $.turn.complete(turnEnd({ turnId: 't2' }))
   await clock.advance(2_000)
   await clock.set(EXPIRES)
+  expect(forked).toEqual([])
+})
+
+test('a timer that fires after the cache expired writes no handoff', async ($, on) => {
+  // The timer fires on schedule, but clock.now already reads past the expiry, as after a sleep.
+  const { forked, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  state.nowOffset = LEAD
+  await clock.set(FIRE)
+  expect(forked).toEqual([])
+})
+
+test('an idle turn in a session with no terminal runs no script and arms no timer', async ($, on) => {
+  const { forked, cacheRan, clock } = world(on, timed({ surfaces: [] }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  expect(cacheRan).toEqual([])
+  await clock.set(FIRE)
   expect(forked).toEqual([])
 })
 

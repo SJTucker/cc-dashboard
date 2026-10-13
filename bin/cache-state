@@ -5,7 +5,7 @@
 // {"transcript": "<path>"} on stdin. Prints {"ttl": "1h" | "5m", "expiresAt": <ms>}
 // for the main thread's prompt cache, from cacheOf in lib/sessions.js, so the mod
 // arms its handoff timer from the same TTL the dashboard shows. Prints {} when the
-// transcript has no main-thread call or cannot be read. Stdin that is not JSON with a
+// transcript is missing or has no main-thread call. Stdin that is not JSON with a
 // transcript path prints the reason on stderr and exits 1, and the mod logs it.
 
 const { extractFile } = require('../lib/extract');
