@@ -74,18 +74,22 @@ probe mod loaded with `claude --plugin-dir` logged these in all three probes:
   identify a response.
 - The probe mod is in the session scratchpad, not in the repo.
 
-## Possible fix
+## Built
 
-The mod records each subagent step's usage, and the dashboard joins it to call rows
-by `agentId` and the three input-side counts. This does not fix responses recorded
-before the mod change. Those can stay as they are or be
-estimated from content length.
+The mod's `turn.step` hook writes each subagent step's usage to
+`<cfg>/cc-dashboard/agent-usage/<agentId>.json`. The row store reads those files
+(`lib/agent-steps.js`), the extract marks a response with no final line `noFinal`
+and carries its `agentId`, and `record()` in `lib/aggregate.js` prices such a
+response at the recorded output when the agent and the input-side counts match.
+`meta.noFinalCalls` and `meta.noFinalCorrected` count the responses with no final
+line and the ones corrected.
 
-Reporting the transcript bug to Anthropic would fix new interactive sessions at
-the source.
+Reporting the transcript bug to Anthropic would fix new interactive sessions at the
+source.
 
 ## Open questions
 
-- Whether to estimate the 27,134 responses recorded before the fix, and how to
-  label an estimate on the page.
-- Whether the 12 main-thread responses with no final line need the same fix.
+- Whether to estimate the 27,134 responses recorded before the fix, and how to label
+  an estimate on the page.
+- Whether `noFinalCalls` without `noFinalCorrected` stays near zero in practice. A
+  step that retried inside one request matches nothing.
