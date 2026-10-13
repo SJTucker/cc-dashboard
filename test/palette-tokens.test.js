@@ -44,3 +44,20 @@ test('split bar rows are ordered by size, so the larger part gets the solid styl
   assert.deepEqual(sortSplitRows(rows).map((r) => r.name), ['big', 'small']);
   assert.equal(rows[0].name, 'small');
 });
+
+// Every font-size is a token, except 0, which .first-load uses to hide the dash.
+test('font sizes come from the type scale', () => {
+  const sizes = [...css.matchAll(/font-size:\s*([^;}]+)/g)].map((m) => m[1].trim());
+  const loose = sizes.filter((v) => v !== '0' && !/^var\(--fs-(caption|body|prose|title|stat)\)$/.test(v));
+  assert.deepStrictEqual(loose, []);
+});
+
+test('letter-spacing is the label token or 0', () => {
+  const values = [...css.matchAll(/letter-spacing:\s*([^;}]+)/g)].map((m) => m[1].trim());
+  assert.deepStrictEqual(values.filter((v) => !['var(--ls-label)', '0', 'inherit'].includes(v)), []);
+});
+
+test('media queries use the three breakpoints', () => {
+  const widths = [...css.matchAll(/@media[^{]*?(max|min)-width:\s*(\d+)px/g)].map((m) => `${m[1]}-${m[2]}`);
+  assert.deepStrictEqual(widths.filter((w) => !['max-480', 'max-720', 'min-721', 'max-900', 'min-901'].includes(w)), []);
+});

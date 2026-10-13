@@ -28,6 +28,21 @@
   --series-neutral: #6b86ad;
   --warning: #ffb000;
 
+  --fs-caption: 11px;
+  --fs-body: 12px;
+  --fs-prose: 14px;
+  --fs-title: 14px;
+  --fs-stat: 22px;
+  --ls-label: 0.12em;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --radius-s: 2px;
+  --radius-m: 6px;
+
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-data: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
   --font-num: "Oxanium", var(--font-data);
@@ -47,7 +62,7 @@ html, body {
   background: var(--bg);
   color: var(--text-primary);
   font-family: var(--font-data);
-  font-size: 13px;
+  font-size: var(--fs-body);
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
@@ -59,16 +74,16 @@ html, body {
 .model-table th,
 .range-picker button {
   font-family: var(--font-label);
-  font-size: 12px;
+  font-size: var(--fs-body);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--ls-label);
 }
 
 .page {
   max-width: 1400px;
   margin: 0 auto;
-  padding: 0 24px 64px;
+  padding: 0 var(--sp-5) var(--sp-5);
 }
 
 /* ---------- Header ---------- */
@@ -77,9 +92,9 @@ html, body {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 16px;
-  margin-bottom: 28px;
-  padding: 24px 0 16px;
+  gap: var(--sp-4);
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-5) 0 var(--sp-4);
   border-bottom: 1px solid var(--border);
   position: sticky;
   top: 0;
@@ -93,11 +108,11 @@ html, body {
   margin: 0;
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
   font-family: var(--font-num);
-  font-size: 16px;
+  font-size: var(--fs-title);
   font-weight: 700;
-  letter-spacing: 0.24em;
+  letter-spacing: var(--ls-label);
   text-transform: uppercase;
 }
 
@@ -116,7 +131,7 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px 24px;
+  gap: var(--sp-2) var(--sp-5);
   width: 100%;
 }
 
@@ -172,16 +187,16 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 18px;
-  padding: 4px 10px;
+  gap: var(--sp-1) var(--sp-4);
+  padding: var(--sp-1) var(--sp-2);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   /* Opaque, like the cards, so no grid line runs behind the strip's text. */
   background: var(--bg);
   font-family: var(--font-label);
   font-weight: 500;
-  font-size: 12px;
-  letter-spacing: 0.14em;
+  font-size: var(--fs-body);
+  letter-spacing: var(--ls-label);
   text-transform: uppercase;
   color: var(--text-secondary);
 }
@@ -189,7 +204,7 @@ html, body {
 .status-strip b {
   font-family: var(--font-num);
   font-weight: 600;
-  letter-spacing: 0.06em;
+  letter-spacing: 0;
   color: var(--text-primary);
 }
 
@@ -197,7 +212,7 @@ html, body {
    Limit or Budget label and the percents carry the meaning, not the colour. */
 .strip-limit {
   border-left: 3px solid var(--warning);
-  padding-left: 8px;
+  padding-left: var(--sp-2);
 }
 
 /* Live shows a cyan ring and "Link live". Paused shows a dim ring and "Paused".
@@ -205,7 +220,7 @@ html, body {
 .live-dot {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
+  gap: var(--sp-1);
   white-space: nowrap;
   color: var(--text-tertiary);
 }
@@ -238,7 +253,7 @@ html, body {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
+  gap: var(--sp-3);
   width: 100%;
 }
 
@@ -251,7 +266,7 @@ html, body {
   display: flex;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-s);
   overflow: hidden;
 }
 
@@ -259,7 +274,7 @@ html, body {
   background: transparent;
   border: none;
   color: var(--text-secondary);
-  padding: 7px 13px;
+  padding: var(--sp-2) var(--sp-3);
   cursor: pointer;
   border-right: 1px solid var(--border);
 }
@@ -277,13 +292,13 @@ html, body {
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  border-radius: 2px;
-  padding: 7px 14px;
-  font-size: 12px;
+  border-radius: var(--radius-s);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-body);
   font-family: var(--font-label);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.1em;
+  letter-spacing: var(--ls-label);
   cursor: pointer;
 }
 
@@ -296,10 +311,10 @@ html, body {
   background: var(--surface);
   border: 1px solid var(--border);
   border-left: 3px solid var(--warning);
-  border-radius: 8px;
-  padding: 14px 16px;
-  margin-bottom: 24px;
-  font-size: 13px;
+  border-radius: var(--radius-m);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-5);
+  font-size: var(--fs-body);
   color: var(--text-secondary);
   line-height: 1.5;
 }
@@ -311,18 +326,18 @@ html, body {
 .cards {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-  gap: 12px;
-  margin-bottom: 20px;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-4);
 }
 
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 14px 16px;
+  border-radius: var(--radius-m);
+  padding: var(--sp-3) var(--sp-4);
   display: flex;
   flex-direction: column;
-  gap: 5px;
+  gap: var(--sp-1);
   transition: border-color 0.15s ease;
 }
 
@@ -334,7 +349,7 @@ html, body {
 
 .card-value {
   font-family: var(--font-num);
-  font-size: 22px;
+  font-size: var(--fs-stat);
   font-weight: 600;
   font-variant-numeric: tabular-nums;
 }
@@ -343,7 +358,7 @@ html, body {
 .card-value.cost { color: var(--money); text-shadow: var(--money-glow); }
 
 .card-note {
-  font-size: 10px;
+  font-size: var(--fs-caption);
   color: var(--text-tertiary);
 }
 
@@ -353,13 +368,13 @@ html, body {
    their cards. */
 .cards.cards-compact {
   grid-template-columns: repeat(6, minmax(0, 1fr));
-  gap: 8px;
+  gap: var(--sp-2);
   margin-bottom: 0;
 }
 
 /* Fixed column counts keep the six cards in even rows (3 + 3, then 2 + 2 + 2)
    instead of leaving one card alone on the last row. */
-@media (max-width: 760px) {
+@media (max-width: 720px) {
   .cards.cards-compact { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 
@@ -368,11 +383,11 @@ html, body {
 }
 
 .cards-compact .card {
-  padding: 6px 12px;
+  padding: var(--sp-1) var(--sp-3);
   gap: 1px;
 }
 
-.cards-compact .card-value { font-size: 16px; }
+.cards-compact .card-value { font-size: var(--fs-title); }
 
 .cards-compact .card-note:not(#cardCostNote):not(#cardRecordDate):not(#cardCostWeek):not(#cardTokensWeek),
 .cards-compact .card-note:empty { display: none; }
@@ -383,9 +398,9 @@ html, body {
   position: relative;
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 16px 18px 14px;
-  margin-bottom: 16px;
+  border-radius: var(--radius-m);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  margin-bottom: var(--sp-4);
 }
 
 /* A panel pair: the wider chart keeps the room it needs, the narrower summary
@@ -393,11 +408,11 @@ html, body {
 .panel-row {
   display: grid;
   grid-template-columns: 3fr 2fr;
-  gap: 16px;
+  gap: var(--sp-4);
   align-items: start;
 }
 
-.panel-row .panel { margin-bottom: 16px; min-width: 0; }
+.panel-row .panel { margin-bottom: var(--sp-4); min-width: 0; }
 
 /* Rows whose second panel should be as tall as the first (Cost by model / Model
    mix). Each panel keeps its own bottom margin, so the bottoms still line up. */
@@ -428,28 +443,29 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 14px;
+  margin-bottom: var(--sp-3);
 }
 
 .panel-head h2 {
   margin: 0;
+  font-size: var(--fs-title);
   font-weight: 600;
   color: var(--accent-cyan);
 }
 
 .legend {
   display: flex;
-  gap: 14px;
-  font-size: 11px;
+  gap: var(--sp-3);
+  font-size: var(--fs-caption);
   color: var(--text-secondary);
 }
 
-.legend-item { display: inline-flex; align-items: center; gap: 6px; }
+.legend-item { display: inline-flex; align-items: center; gap: var(--sp-1); }
 
 .legend-swatch {
   width: 14px;
   height: 14px;
-  border-radius: 2px;
+  border-radius: var(--radius-s);
   display: inline-block;
   vertical-align: middle;
   border: 1px solid var(--border);
@@ -463,8 +479,8 @@ html, body {
 
 .bar-empty {
   color: var(--text-tertiary);
-  font-size: 13px;
-  padding: 32px 0;
+  font-size: var(--fs-body);
+  padding: var(--sp-5) 0;
   text-align: center;
 }
 
@@ -501,8 +517,9 @@ html, body {
 }
 
 .panel-note {
-  margin: 10px 0 0;
-  font-size: 11px;
+  margin: var(--sp-2) 0 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-prose);
   color: var(--text-tertiary);
 }
 
@@ -519,7 +536,7 @@ html, body {
   .chart svg:hover .cumulative-line { filter: url(#line-glow); }
 }
 
-.session-hex { color: var(--accent-cyan); margin-right: 6px; }
+.session-hex { color: var(--accent-cyan); margin-right: var(--sp-1); }
 
 /* The title is the row's main text. Under it, in small muted type, the project and
    git branch (contextLine in public/panels/sessions.mjs), so two sessions of one
@@ -544,13 +561,13 @@ html, body {
    row's main text and keeps the normal size. */
 .session-title ~ .session-context {
   display: block;
-  font-size: 11px;
+  font-size: var(--fs-caption);
   color: var(--text-tertiary);
 }
 
 /* In a table row, line the context up under the title, past the hex glyph. */
 .session-hex ~ .session-title ~ .session-context {
-  padding-left: calc(1ch + 6px);
+  padding-left: calc(1ch + var(--sp-1));
 }
 
 .session-branch {
@@ -564,7 +581,7 @@ html, body {
 
 .axis-label {
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   fill: var(--text-tertiary);
 }
 
@@ -574,37 +591,37 @@ html, body {
   overflow-x: auto;
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-2);
 }
 
 .model-name {
-  font-size: 13px;
+  font-size: var(--fs-body);
   color: var(--text-primary);
 }
 
 .list-empty {
   color: var(--text-tertiary);
-  font-size: 13px;
-  padding: 12px 0;
+  font-size: var(--fs-body);
+  padding: var(--sp-3) 0;
 }
 
 .model-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--fs-body);
 }
 
 .model-table th {
   text-align: left;
   font-weight: 600;
   color: var(--text-tertiary);
-  padding: 8px;
+  padding: var(--sp-2);
   border-bottom: 1px solid var(--border);
   white-space: nowrap;
 }
 
 .model-table td {
-  padding: 9px 8px;
+  padding: var(--sp-2) var(--sp-2);
   border-bottom: 1px solid var(--border);
   color: var(--text-secondary);
 }
@@ -630,18 +647,18 @@ html, body {
   display: inline-block;
   width: 12px;
   height: 12px;
-  border-radius: 2px;
+  border-radius: var(--radius-s);
   flex: none;
-  margin-right: 8px;
+  margin-right: var(--sp-2);
 }
 
 /* ---------- Footer ---------- */
 
 .footer {
-  margin-top: 28px;
+  margin-top: var(--sp-5);
   color: var(--text-tertiary);
   font-family: var(--font-ui);
-  font-size: 11.5px;
+  font-size: var(--fs-prose);
   line-height: 1.6;
 }
 
@@ -653,9 +670,9 @@ html, body {
   position: fixed;
   background: var(--surface);
   border: 1px solid var(--accent-cyan);
-  border-radius: 2px;
-  padding: 8px 10px;
-  font-size: 12px;
+  border-radius: var(--radius-s);
+  padding: var(--sp-2) var(--sp-2);
+  font-size: var(--fs-body);
   font-family: var(--font-data);
   color: var(--text-primary);
   pointer-events: none;
@@ -666,7 +683,7 @@ html, body {
 
 /* ---------- Responsive ---------- */
 
-@media (max-width: 880px) {
+@media (max-width: 900px) {
   /* .even is listed too: it is more specific than .panel-row, so the bare
      selector alone loses to it regardless of the media query. */
   .panel-row,
@@ -681,7 +698,7 @@ html, body {
   display: flex;
   width: 100%;
   height: 12px;
-  border-radius: 2px;
+  border-radius: var(--radius-s);
   overflow: hidden;
   /* A 2px surface-coloured gap between segments keeps adjacent fills separable
      for viewers who cannot distinguish the two hues. */
@@ -705,7 +722,7 @@ html, body {
 
 .heat-row-label {
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   color: var(--text-tertiary);
 }
 
@@ -718,7 +735,7 @@ html, body {
      came from min-height: 24px, which pushed 24 columns past a 390px screen. */
   width: 100%;
   min-width: 0;
-  border-radius: 2px;
+  border-radius: var(--radius-s);
   border: 1px solid var(--border);
   cursor: pointer;
 }
@@ -729,19 +746,14 @@ html, body {
   display: grid;
   grid-template-columns: 32px repeat(8, 1fr);
   gap: 2px;
-  margin-top: 6px;
+  margin-top: var(--sp-1);
   font-family: var(--font-data);
-  font-size: 10px;
+  font-size: var(--fs-caption);
   color: var(--text-tertiary);
 }
 
 .heat-hours span { grid-column: span 1; }
 .heat-hours span:first-child { grid-column-start: 2; }
-
-.panel-note {
-  font-size: 12px;
-  color: var(--text-tertiary);
-}
 
 /* The donut fills the height left under the heading, which is the height of the
    Cost by model panel beside it. The SVG stays square and the legend sits to its
@@ -756,7 +768,7 @@ html, body {
   min-height: 200px;
   display: flex;
   align-items: center;
-  gap: 8px 20px;
+  gap: var(--sp-2) var(--sp-4);
 }
 
 .mix-donut svg {
@@ -769,13 +781,13 @@ html, body {
 
 .mix-donut .legend {
   flex-direction: column;
-  gap: 8px;
+  gap: var(--sp-2);
   min-width: 0;
 }
 
 .donut-slice { stroke: var(--surface); stroke-width: 2; stroke-linejoin: round; }
-.donut-total { font-size: 22px; font-weight: 600; fill: var(--text-primary); }
-.donut-unit { font-size: 11px; fill: var(--text-tertiary); }
+.donut-total { font-size: var(--fs-stat); font-weight: 600; fill: var(--text-primary); }
+.donut-unit { font-size: var(--fs-caption); fill: var(--text-tertiary); }
 
 /* Tokens | Cost in the Model mix head: the .range-picker look at a smaller size.
    The pair sits at the right because .panel-head > h2 takes the free space
@@ -784,7 +796,7 @@ html, body {
 .mix-measure {
   display: flex;
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-s);
   overflow: hidden;
 }
 .mix-measure button {
@@ -792,13 +804,13 @@ html, body {
   border: none;
   border-right: 1px solid var(--border);
   color: var(--text-secondary);
-  padding: 3px 9px;
+  padding: var(--sp-1) var(--sp-2);
   cursor: pointer;
   font-family: var(--font-label);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--ls-label);
 }
 .mix-measure button:last-child { border-right: none; }
 .mix-measure button:hover { color: var(--text-primary); }
@@ -811,24 +823,24 @@ html, body {
 /* Stacked, the panel is no longer stretched to a neighbour: the chart area
    falls back to its 200px minimum and the legend may wrap below the donut. This
    block comes after the base .mix-donut rules so it overrides them. */
-@media (max-width: 880px) {
+@media (max-width: 900px) {
   .mix-donut { flex-wrap: wrap; justify-content: center; }
   .mix-donut svg { height: 200px; max-width: 100%; }
 }
 
 /* ---------- Attribution bars ---------- */
 
-.usage-group + .usage-group { margin-top: 18px; }
+.usage-group + .usage-group { margin-top: var(--sp-4); }
 
 /* The split bar's own legend sits under it, not in the panel head. */
-.split-legend { margin-top: 8px; }
+.split-legend { margin-top: var(--sp-2); }
 
 /* A legend beside the plot rather than under it, so this panel is exactly as tall
    as the plain chart it sits next to. The caller reverses the series so the rows
    run in the same order as the lines, cache read down to input. */
 .chart-with-legend {
   display: flex;
-  gap: 14px;
+  gap: var(--sp-3);
   align-items: flex-start;
 }
 
@@ -843,7 +855,7 @@ html, body {
 .chart-side {
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: var(--sp-2);
   flex-shrink: 0;
   max-width: 36%;
   padding-top: 2px;
@@ -851,7 +863,7 @@ html, body {
 
 .side-legend {
   flex-direction: column;
-  gap: 9px;
+  gap: var(--sp-2);
 }
 
 .side-note { margin: 0; }
@@ -861,7 +873,7 @@ html, body {
 .usage-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 20px 28px;
+  gap: var(--sp-4) var(--sp-5);
   align-items: start;
 }
 
@@ -869,8 +881,8 @@ html, body {
 
 /* Where usage goes is half the row beside Plan usage on Today, and the whole row on
    other ranges. Its two columns follow the panel's own width, not the viewport's.
-   814px is the full-width panel's content box at a 900px viewport (900 − 48 page
-   padding − 2 border − 36 panel padding), so the full-width panel switches where
+   818px is the full-width panel's content box at a 900px viewport (900 − 48 page
+   padding − 2 border − 32 panel padding), so the full-width panel switches where
    it always did with overlay scrollbars. With classic scrollbars the container is
    narrower than the viewport by the scrollbar width, about 15px, so it switches
    slightly later. At half width, two columns wrapped each legend's percentage onto
@@ -878,7 +890,7 @@ html, body {
 /* #toolPanel is a container too, so its .usage-grid stacks at the same width. */
 #attributionPanel, #toolPanel { container-type: inline-size; }
 
-@container (max-width: 814px) {
+@container (max-width: 818px) {
   .usage-grid { grid-template-columns: 1fr; }
 }
 
@@ -904,34 +916,34 @@ html, body {
   text-transform: none;
   letter-spacing: 0;
   color: var(--text-tertiary);
-  margin-left: 8px;
+  margin-left: var(--sp-2);
 }
 
 .usage-group-title {
-  font-size: 10px;
+  font-size: var(--fs-caption);
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--ls-label);
   color: var(--text-tertiary);
-  margin-bottom: 8px;
+  margin-bottom: var(--sp-2);
 }
 
 /* Live sessions panel (renderSessions in public/panels/sessions.mjs). */
 .sessions-table {
   width: 100%;
   border-collapse: collapse;
-  font-size: 12px;
+  font-size: var(--fs-body);
 }
 .sessions-table th {
-  font-size: 10px;
+  font-size: var(--fs-caption);
   font-weight: 400;
   text-transform: uppercase;
-  letter-spacing: 0.05em;
+  letter-spacing: var(--ls-label);
   color: var(--text-tertiary);
   text-align: left;
-  padding: 0 12px 8px 0;
+  padding: 0 var(--sp-3) var(--sp-2) 0;
 }
 .sessions-table td {
-  padding: 6px 12px 6px 0;
+  padding: var(--sp-1) var(--sp-3) var(--sp-1) 0;
   border-top: 1px solid var(--border);
   white-space: nowrap;
 }
@@ -941,15 +953,15 @@ html, body {
 .sessions-table .is-attention { color: var(--text-primary); font-weight: 600; }
 /* Second line of the State cell: the cache countdown (cacheLine in public/session-groups.js).
    It wraps, so on a narrow screen it does not widen the State column past its label. */
-.sessions-table .cache-line { display: block; font-size: 11px; font-weight: 400; color: var(--text-tertiary); white-space: normal; }
-.sessions-table .session-child td:first-child { padding-left: 24px; }
-.sessions-table .session-group .row-toggle { padding-right: 4px; }
+.sessions-table .cache-line { display: block; font-size: var(--fs-caption); font-weight: 400; color: var(--text-tertiary); white-space: normal; }
+.sessions-table .session-child td:first-child { padding-left: var(--sp-5); }
+.sessions-table .session-group .row-toggle { padding-right: var(--sp-1); }
 /* In a launch group row the toggle sits before the hex glyph, so the project and
    branch line starts further in to stay under the title. The 2ch + 12px matches the
    width of the `.row-toggle` glyph plus its padding in `.session-group` rows, so a
    change to that padding needs this value changed too. */
 .sessions-table .launch-group .session-hex ~ .session-title ~ .session-context {
-  padding-left: calc(2ch + 12px);
+  padding-left: calc(2ch + var(--sp-3));
 }
 
 /* A table wider than a narrow screen scrolls inside the panel, not the page. A long
@@ -962,7 +974,7 @@ html, body {
   position: sticky;
   top: 0;
   z-index: 1;
-  padding-top: 4px;
+  padding-top: var(--sp-1);
   background: var(--surface);
 }
 .sessions-table .sessions-total td {
@@ -973,16 +985,16 @@ html, body {
 }
 
 .sessions-subhead {
-  margin: 14px 0 6px;
+  margin: var(--sp-3) 0 var(--sp-1);
   font-family: var(--font-label);
-  font-size: 12px;
+  font-size: var(--fs-body);
   font-weight: 600;
   text-transform: uppercase;
-  letter-spacing: 0.12em;
+  letter-spacing: var(--ls-label);
   color: var(--text-secondary);
 }
 .panel-head + #runningSessions .sessions-subhead,
-#runningSessions[hidden] + .sessions-subhead { margin-top: 4px; }
+#runningSessions[hidden] + .sessions-subhead { margin-top: var(--sp-1); }
 
 /* The Cost today bar: one series in one colour, behind the number. */
 .sessions-table .cost-cell { position: relative; }
@@ -992,59 +1004,59 @@ html, body {
   top: 2px;
   bottom: 2px;
   background: color-mix(in srgb, var(--money-fill) 20%, transparent);
-  border-radius: 2px;
+  border-radius: var(--radius-s);
 }
 .sessions-table .cost-value { position: relative; }
 
 /* Session timeline (renderTimeline in public/panels/timeline.mjs). */
 .timeline-label {
   font-family: var(--font-data);
-  font-size: 11px;
+  font-size: var(--fs-caption);
   fill: var(--text-primary);
 }
 .timeline-label.prompt-title { font-style: italic; }
 /* The ↳ before the label of a lane that a /clear started (drawLane in public/panels/timeline.mjs). */
 .timeline-follow { fill: var(--text-tertiary); font-style: normal; }
-.timeline-rebuild-cell { font-family: var(--font-data); font-size: 11px; fill: var(--text-secondary); }
+.timeline-rebuild-cell { font-family: var(--font-data); font-size: var(--fs-caption); fill: var(--text-secondary); }
 /* The Rebuilds column heading, styled as the sessions table headings. */
-.timeline-column-head { font-family: var(--font-data); font-size: 10px; letter-spacing: 0.5px; fill: var(--text-tertiary); }
+.timeline-column-head { font-family: var(--font-data); font-size: var(--fs-caption); letter-spacing: var(--ls-label); fill: var(--text-tertiary); }
 .timeline-bar:hover { stroke: var(--text-primary); stroke-width: 1; }
 .timeline-rebuild:hover { stroke: var(--text-primary); stroke-width: 2; }
-.timeline-rebuild-count { font-size: 9px; fill: var(--text-secondary); pointer-events: none; }
+.timeline-rebuild-count { font-size: var(--fs-caption); fill: var(--text-secondary); pointer-events: none; }
 /* The list scrolls inside the panel past 48rem, as the Live sessions tables do at
    20rem. The wrapper is in index.html, so the 5 s redraw keeps its scroll position.
    A suggestion row reaches 6px past the text on each side for its hover background
    (margin: 0 -6px below). The wrapper's 6px padding holds that, so the row does
    not overflow and scroll sideways. The matching negative margin keeps the text
    lined up with the panel heading. */
-.review-scroll { overflow: auto; max-height: 48rem; margin: 0 -6px; padding: 0 6px; }
+.review-scroll { overflow: auto; max-height: 48rem; margin: 0 calc(-1 * var(--sp-1)); padding: 0 var(--sp-1); }
 .review-scroll:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
 .reviews-list { list-style: none; margin: 0; padding: 0; }
-.review { padding: 8px 0; border-top: 1px solid var(--border); }
+.review { padding: var(--sp-2) 0; border-top: 1px solid var(--border); }
 .review:first-child { border-top: none; }
-.review-top { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.review-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
 .review-top .review-head { min-width: 0; }
-.review-top .refresh-btn { padding: 4px 10px; font-size: 11px; flex: none; }
-.review-head { color: var(--text-secondary); font-size: 0.85em; }
+.review-top .refresh-btn { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-caption); flex: none; }
+.review-head { color: var(--text-secondary); font-size: var(--fs-caption); }
 .review-suggestions,
-.review-dismissed { list-style: none; margin: 4px 0 0; padding: 0; }
+.review-dismissed { list-style: none; margin: var(--sp-1) 0 0; padding: 0; }
 /* A row has three columns: the kind, the text and the actions. */
 .review-suggestions li,
 .review-dismissed li {
   display: grid;
   grid-template-columns: 13ch minmax(0, 1fr) auto;
-  gap: 12px;
+  gap: var(--sp-3);
   align-items: start;
-  padding: 3px 6px;
-  margin: 0 -6px;
-  border-radius: 2px;
+  padding: var(--sp-1) var(--sp-1);
+  margin: 0 calc(-1 * var(--sp-1));
+  border-radius: var(--radius-s);
 }
 .review-suggestions li:hover,
 .review-dismissed li:hover { background: var(--surface-raised); }
 .review-dismissed { color: var(--text-secondary); }
 .review-dismissed .review-kind { color: var(--text-secondary); }
 .review-kind { font-weight: 600; color: var(--text-primary); }
-.review-empty { margin: 4px 0 0; color: var(--text-tertiary); }
+.review-empty { margin: var(--sp-1) 0 0; color: var(--text-tertiary); }
 .review-actions { display: inline-flex; gap: 2px; }
 .review-icon {
   width: 24px;
@@ -1054,7 +1066,7 @@ html, body {
   padding: 0;
   background: none;
   border: 1px solid var(--border);
-  border-radius: 2px;
+  border-radius: var(--radius-s);
   color: var(--text-secondary);
   cursor: pointer;
 }
@@ -1067,9 +1079,9 @@ html, body {
 .review-toggle:hover { color: var(--text-primary); }
 .review-collapsed .review-toggle { display: block; width: 100%; text-decoration: none; }
 .review-dismissal { font-style: italic; }
-.review-dismissed-line { margin: 4px 0 0; color: var(--text-secondary); font-size: 0.85em; }
+.review-dismissed-line { margin: var(--sp-1) 0 0; color: var(--text-secondary); font-size: var(--fs-caption); }
 .review button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
-@media (max-width: 640px) {
+@media (max-width: 720px) {
   .review-suggestions li,
   .review-dismissed li { grid-template-columns: minmax(0, 1fr) auto; }
   .review-suggestions .review-kind,
@@ -1084,13 +1096,13 @@ html, body {
 .usage-row {
   display: grid;
   grid-template-columns: minmax(0, 280px) 1fr auto;
-  gap: 12px;
+  gap: var(--sp-3);
   align-items: center;
-  padding: 3px 0 3px 8px;
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-2);
 }
 
 .usage-name {
-  font-size: 12px;
+  font-size: var(--fs-body);
   color: var(--text-secondary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -1100,7 +1112,7 @@ html, body {
 .usage-track {
   height: 10px;
   background: var(--surface-raised);
-  border-radius: 2px;
+  border-radius: var(--radius-s);
   overflow: hidden;
 }
 
@@ -1109,13 +1121,13 @@ html, body {
   height: 100%;
   min-width: 1px;
   background: var(--series-neutral);
-  border-radius: 2px;
+  border-radius: var(--radius-s);
 }
 
 .usage-row:hover .usage-track { outline: 1px solid var(--text-tertiary); }
 
 /* Only the tool list is clickable; the cost breakdowns have nothing to drill into. */
-.usage-row.selectable { cursor: pointer; border-radius: 3px; }
+.usage-row.selectable { cursor: pointer; border-radius: var(--radius-s); }
 .usage-row.selectable:hover { background: var(--surface-raised); }
 .usage-row.selectable:focus-visible { outline: 1px solid var(--accent-cyan); outline-offset: 1px; }
 
@@ -1129,7 +1141,7 @@ html, body {
 .usage-count { min-width: 96px; }
 
 .usage-pct {
-  font-size: 12px;
+  font-size: var(--fs-body);
   text-align: right;
   color: var(--text-primary);
 }
@@ -1147,7 +1159,7 @@ html, body {
 
 /* SVG glyphs stroke with currentColor, so a pressed button can recolour its icon. */
 .changes-chart { color: var(--text-primary); }
-.changes-legend { flex-wrap: wrap; margin-top: 8px; }
+.changes-legend { flex-wrap: wrap; margin-top: var(--sp-2); }
 .marker-icon { color: inherit; flex: none; }
 .marker-glyph { fill: none; stroke: currentColor; stroke-width: 1.5; }
 .session-dot { fill: var(--text-secondary); stroke: var(--text-secondary); stroke-width: 1.2; }
@@ -1160,7 +1172,7 @@ html, body {
 .session-halo { fill: var(--bg); stroke: var(--bg); stroke-width: 4; }
 .empty-dash { stroke: var(--text-tertiary); stroke-width: 1.5; }
 .weekend-shade { fill: var(--text-primary); opacity: 0.03; pointer-events: none; }
-.median-label { font-family: var(--font-data); font-size: 10px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.median-label { font-family: var(--font-data); font-size: var(--fs-caption); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .median-label.before { fill: var(--text-primary); }
 .median-label.after { fill: var(--accent-cyan); }
 .axis-label.picked { fill: var(--accent-cyan); font-weight: 700; }
@@ -1172,31 +1184,31 @@ html, body {
 .window-median.before { stroke: var(--text-primary); stroke-dasharray: 5 3; }
 .window-median.after { stroke: var(--accent-cyan); }
 .marker-line { stroke: var(--accent-cyan); stroke-width: 1.5; }
-.lane-name { font-family: var(--font-data); font-size: 10.5px; fill: var(--text-secondary); }
+.lane-name { font-family: var(--font-data); font-size: var(--fs-caption); fill: var(--text-secondary); }
 .lane-rule { stroke: var(--border); opacity: 0.35; }
-.lane-count { font-family: var(--font-data); font-size: 9.5px; fill: var(--text-primary); pointer-events: none; }
+.lane-count { font-family: var(--font-data); font-size: var(--fs-caption); fill: var(--text-primary); pointer-events: none; }
 .lane-picked { fill: var(--accent-cyan); fill-opacity: 0.08; stroke: var(--accent-cyan); stroke-opacity: 0.6; pointer-events: none; }
 .lane-hit { fill: transparent; stroke: none; }
 .lane-cell { cursor: pointer; outline: none; }
 .lane-cell:focus-visible .lane-hit { stroke: var(--text-primary); stroke-width: 1.5; }
 .lane-cell.picked .marker-glyph { fill: var(--accent-cyan); stroke: var(--accent-cyan); }
 .window-bar.after { fill: var(--accent-cyan); }
-.plot-empty { font-family: var(--font-data); font-size: 11px; fill: var(--text-tertiary); }
+.plot-empty { font-family: var(--font-data); font-size: var(--fs-caption); fill: var(--text-tertiary); }
 
-.ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
-@media (max-width: 860px) { .ba-grid { grid-template-columns: 1fr; } }
+.ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+@media (max-width: 900px) { .ba-grid { grid-template-columns: 1fr; } }
 
 /* The legend and title start at the plot's left edge. 110px equals PLOT_LEFT in public/charts/setup-changes.mjs. */
-.ba-under { margin-left: 110px; }
-.ba-under .usage-group-title { margin: -2px 0 6px; }
-.ba-grid { margin-top: 10px; }
+.ba-under { margin-left: var(--sp-5); }
+.ba-under .usage-group-title { margin: -2px 0 var(--sp-1); }
+.ba-grid { margin-top: var(--sp-2); }
 /* The before/after table needs about 390px. Below that its column scrolls sideways instead of widening the page. */
 .ba-main { overflow-x: auto; }
 
-.day-list { max-height: 320px; overflow-y: auto; border-left: 2px solid var(--accent-cyan); padding: 2px 0 2px 12px; }
-.day-list-head { margin-bottom: 4px; }
+.day-list { max-height: 320px; overflow-y: auto; border-left: 2px solid var(--accent-cyan); padding: 2px 0 2px var(--sp-3); }
+.day-list-head { margin-bottom: var(--sp-1); }
 /* Side by side, .ba-side takes the height the table sets for the row (height: 0 plus min-height: 100%), so a busy window scrolls inside the column instead of stretching the panel. The 14em floor holds the 5em list and the 7.5em (five-line) note when the table is shorter. */
-@media (min-width: 861px) {
+@media (min-width: 901px) {
   .ba-side { display: flex; flex-direction: column; height: 0; min-height: max(100%, 14em); }
   .ba-side .day-list { flex: 0 1 auto; min-height: 5em; }
   .ba-side #overlapNote { flex: 1 1 auto; min-height: 7.5em; overflow-y: auto; }
@@ -1205,13 +1217,13 @@ html, body {
   display: flex;
   width: 100%;
   align-items: flex-start;
-  gap: 8px;
-  padding: 4px 6px;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-1);
   border: 0;
-  border-radius: 3px;
+  border-radius: var(--radius-s);
   background: none;
   font: inherit;
-  font-size: 12px;
+  font-size: var(--fs-body);
   color: var(--text-primary);
   text-align: left;
   cursor: pointer;
@@ -1222,17 +1234,17 @@ html, body {
 .day-change-time { color: var(--text-tertiary); flex: none; }
 .day-change[aria-pressed="true"] .day-change-time { color: inherit; opacity: 0.75; }
 .ba-table { width: 100%; }
-.ba-table .n { color: var(--text-tertiary); font-size: 10px; margin-left: 6px; }
+.ba-table .n { color: var(--text-tertiary); font-size: var(--fs-caption); margin-left: var(--sp-1); }
 .ba-table .dim { color: var(--text-tertiary); }
-.ba-table .down::before { content: "▼ "; font-size: 9px; }
-.ba-table .up::before { content: "▲ "; font-size: 9px; }
-.ba-table .group td { color: var(--text-tertiary); font-size: 10px; text-transform: uppercase; letter-spacing: 0.05em; }
+.ba-table .down::before { content: "▼ "; font-size: var(--fs-caption); }
+.ba-table .up::before { content: "▲ "; font-size: var(--fs-caption); }
+.ba-table .group td { color: var(--text-tertiary); font-size: var(--fs-caption); text-transform: uppercase; letter-spacing: var(--ls-label); }
 
 /* A row picks the chart beside the table. The selected row is marked by a bar on
    its left edge and a bold label, not by colour (see the README's charts note). The
    bar is an inset shadow: a border on a <tr> does not draw with separate borders. */
 .ba-table tr[data-key] { cursor: pointer; }
-.ba-table tr[data-key] td:first-child { padding-left: 10px; }
+.ba-table tr[data-key] td:first-child { padding-left: var(--sp-2); }
 .ba-table tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--text-primary); }
 .ba-row-btn {
   background: none;
@@ -1246,30 +1258,30 @@ html, body {
 .ba-table tr.selected .ba-row-btn { font-weight: 700; }
 .ba-table tr[data-key]:hover .ba-row-btn, .ba-row-btn:focus-visible { text-decoration: underline; }
 .ba-row-btn:focus-visible { outline: 1px solid var(--text-primary); outline-offset: 2px; }
-.changes-file-note { margin: 0 0 10px; }
+.changes-file-note { margin: 0 0 var(--sp-2); }
 
 /* ---------- Tool errors ---------- */
 
-.tool-error-title { margin-top: 16px; }
-.error-causes { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 10px; }
+.tool-error-title { margin-top: var(--sp-4); }
+.error-causes { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin: var(--sp-1) 0 var(--sp-2); }
 .error-cause {
   display: inline-flex;
-  gap: 6px;
-  font-size: 11px;
+  gap: var(--sp-1);
+  font-size: var(--fs-caption);
   color: var(--text-secondary);
   border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 1px 8px;
+  border-radius: var(--radius-m);
+  padding: 1px var(--sp-2);
 }
 .error-cause b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
 .error-list { display: flex; flex-direction: column; gap: 2px; }
 .error-group summary {
   display: grid;
   grid-template-columns: 3.5em minmax(0, 1fr);
-  gap: 8px;
-  padding: 3px 4px;
+  gap: var(--sp-2);
+  padding: var(--sp-1) var(--sp-1);
   cursor: pointer;
-  font-size: 12px;
+  font-size: var(--fs-body);
   list-style: none;
 }
 .error-group summary::-webkit-details-marker { display: none; }
@@ -1278,14 +1290,14 @@ html, body {
 .error-group[open] summary { background: var(--surface-raised); }
 .error-count { text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .error-message { overflow-wrap: anywhere; }
-.error-when { font-size: 10px; color: var(--text-tertiary); padding: 4px 4px 0 calc(3.5em + 12px); }
+.error-when { font-size: var(--fs-caption); color: var(--text-tertiary); padding: var(--sp-1) var(--sp-1) 0 calc(3.5em + var(--sp-3)); }
 .error-example {
-  margin: 4px 0 8px calc(3.5em + 12px);
-  padding: 8px;
+  margin: var(--sp-1) 0 var(--sp-2) calc(3.5em + var(--sp-3));
+  padding: var(--sp-2);
   background: var(--bg);
   border: 1px solid var(--border);
-  border-radius: 4px;
-  font-size: 11px;
+  border-radius: var(--radius-s);
+  font-size: var(--fs-caption);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
   max-height: 12em;
@@ -1293,8 +1305,8 @@ html, body {
 }
 /* The All tools row sits above the per-tool bars, set apart by a rule under it. */
 .tool-all {
-  padding-bottom: 6px;
-  margin-bottom: 6px;
+  padding-bottom: var(--sp-1);
+  margin-bottom: var(--sp-1);
   border-bottom: 1px solid var(--border);
 }
 
@@ -1307,7 +1319,7 @@ html, body {
    widen the page. */
 .tool-model-scroll {
   overflow-x: auto;
-  margin: 8px 0 12px;
+  margin: var(--sp-2) 0 var(--sp-3);
 }
 
 .tool-model-scroll .model-table td,
@@ -1321,8 +1333,8 @@ html, body {
 .load-status {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  font-size: 11px;
+  gap: var(--sp-1);
+  font-size: var(--fs-caption);
   color: var(--text-secondary);
 }
 .spinner {
@@ -1345,9 +1357,9 @@ html, body {
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--sp-2);
   height: 180px;
-  font-size: 12px;
+  font-size: var(--fs-body);
   color: var(--text-secondary);
 }
 
@@ -1363,11 +1375,11 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas: "name name" "track pct" "reset reset";
-  column-gap: 12px;
+  column-gap: var(--sp-3);
   row-gap: 2px;
-  padding: 4px 0 8px;
+  padding: var(--sp-1) 0 var(--sp-2);
 }
-.limit-name { grid-area: name; font-family: var(--font-label); font-weight: 600; font-size: 13px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-primary); }
+.limit-name { grid-area: name; font-family: var(--font-label); font-weight: 600; font-size: var(--fs-body); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-primary); }
 /* Plan usage meters are cells: 10px on a 12px pitch, for the track and the fill
    alike. The pitch is fixed, so the fill's cells line up with the track's cells at
    any width. Other .usage-track bars keep their solid fill. */
@@ -1393,8 +1405,8 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
   margin-left: -1px;
   background: var(--text-primary);
 }
-.limit-pct { grid-area: pct; font-family: var(--font-num); font-size: 13px; color: var(--text-primary); font-variant-numeric: tabular-nums; }
-.limit-reset { grid-area: reset; font-size: 11px; color: var(--text-tertiary); }
+.limit-pct { grid-area: pct; font-family: var(--font-num); font-size: var(--fs-body); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.limit-reset { grid-area: reset; font-size: var(--fs-caption); color: var(--text-tertiary); }
 
 /* The heading carries the warning in text, so it does not rely on the amber edge. */
 .limits-banner strong { display: block; color: var(--text-primary); }
@@ -1406,7 +1418,7 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
   color: var(--text-tertiary);
   background: none;
   border: none;
-  padding: 0 6px 0 0;
+  padding: 0 var(--sp-1) 0 0;
   cursor: pointer;
 }
 .row-toggle::before { content: '▾'; }
@@ -1422,7 +1434,7 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
 
 .row-handle {
   color: var(--text-tertiary);
-  padding: 0 8px 0 0;
+  padding: 0 var(--sp-2) 0 0;
   cursor: grab;
   user-select: none;
 }
@@ -1447,25 +1459,25 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
   text-transform: inherit;
   letter-spacing: inherit;
 }
-.group-toggle::before { margin-right: 6px; }
+.group-toggle::before { margin-right: var(--sp-1); }
 
-.panel-head .refresh-btn { padding: 4px 10px; font-size: 11px; }
+.panel-head .refresh-btn { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-caption); }
 .refresh-btn:disabled { opacity: 0.6; cursor: default; }
 
 /* The prices note and the button that checks those prices share one line under the table. */
-.prices-foot { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; margin-top: 10px; }
+.prices-foot { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-2); }
 .prices-foot .panel-note { margin: 0; }
-.prices-check { margin-top: 12px; }
-.prices-check .panel-note { margin: 4px 0 0; }
+.prices-check { margin-top: var(--sp-3); }
+.prices-check .panel-note { margin: var(--sp-1) 0 0; }
 .prices-error { color: var(--text-primary); }
 
 .prices-apply {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 8px;
-  margin-top: 10px;
-  font-size: 12px;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-body);
   color: var(--text-secondary);
 }
 
@@ -1473,10 +1485,10 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
   background: var(--surface);
   border: 1px solid var(--border);
   color: var(--text-primary);
-  border-radius: 6px;
-  padding: 4px 8px;
+  border-radius: var(--radius-m);
+  padding: var(--sp-1) var(--sp-2);
   font-family: var(--font-data);
-  font-size: 12px;
+  font-size: var(--fs-body);
   color-scheme: dark;
 }
 
@@ -1500,10 +1512,10 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
 .hide-btn {
   background: none;
   border: 0;
-  padding: 0 4px;
-  margin-left: 10px;
+  padding: 0 var(--sp-1);
+  margin-left: var(--sp-2);
   color: var(--text-tertiary);
-  font-size: 16px;
+  font-size: var(--fs-title);
   line-height: 1;
   cursor: pointer;
   opacity: 0;
@@ -1519,7 +1531,7 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
 @media (hover: none) { .hide-btn { opacity: 1; } }
 
 /* The ☰ button sits at the right end of the title row. */
-.menu-btn { margin-left: auto; padding: 4px 10px; font-size: 14px; }
+.menu-btn { margin-left: auto; padding: var(--sp-1) var(--sp-2); font-size: var(--fs-title); }
 
 /* A popover renders in the top layer, outside the header's overflow clip.
    public/ui/hidden.mjs sets top and right from the button's position each time
@@ -1529,19 +1541,19 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
   inset: auto;
   margin: 0;
   min-width: 220px;
-  padding: 6px;
+  padding: var(--sp-1);
   background: var(--surface);
   border: 1px solid var(--border);
-  border-radius: 6px;
+  border-radius: var(--radius-m);
   color: var(--text-primary);
 }
 .hidden-menu-item {
   display: block;
   width: 100%;
-  padding: 6px 10px;
+  padding: var(--sp-1) var(--sp-2);
   background: none;
   border: 0;
-  border-radius: 4px;
+  border-radius: var(--radius-s);
   color: var(--text-secondary);
   font: inherit;
   text-align: left;
@@ -1549,8 +1561,8 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
 }
 .hidden-menu-item:hover,
 .hidden-menu-item:focus-visible { background: var(--border); color: var(--text-primary); outline: none; }
-.hidden-menu-all { margin-top: 4px; border-top: 1px solid var(--border); border-radius: 0 0 4px 4px; }
-.hidden-menu-empty { margin: 6px 10px; color: var(--text-tertiary); font-size: 12px; }
+.hidden-menu-all { margin-top: var(--sp-1); border-top: 1px solid var(--border); border-radius: 0 0 var(--radius-s) var(--radius-s); }
+.hidden-menu-empty { margin: var(--sp-1) var(--sp-2); color: var(--text-tertiary); font-size: var(--fs-body); }
 
 /* Until the first summary settles, public/main.mjs leaves .first-load on <body> and the
    summary cards and the empty chart and list containers read "Loading…". The text comes
@@ -1567,5 +1579,5 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
 .first-load #modelMixChart:empty::after {
   content: 'Loading\2026';
   color: var(--text-tertiary);
-  font: 400 13px var(--font-ui);
+  font: 400 var(--fs-body) var(--font-ui);
 }
