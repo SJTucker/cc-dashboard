@@ -223,14 +223,15 @@ function note($: EngineInterface, text: string) {
 // Runs a bin/ script that prints one JSON object, and throws with the first line of
 // its stderr when it exits non-zero.
 async function callScript($: EngineInterface, name: string, args: string[], stdin: string, timeoutMs: number): Promise<unknown> {
+  const label = [name, ...args.slice(0, 1)].join(' ')
   const { exitCode, stdout, stderr } = await $.process.run([await scriptPath($, name), ...args], { stdin, timeoutMs })
-  if (exitCode !== 0) throw new Error(`${name} ${args[0]} failed (exit ${exitCode}): ${stderr.trim().split('\n')[0] ?? ''}`)
+  if (exitCode !== 0) throw new Error(`${label} failed (exit ${exitCode}): ${stderr.trim().split('\n')[0] ?? ''}`)
   // A JSON.parse error message can quote the start of its input, which here may be
   // transcript text, so the message is replaced.
   try {
     return JSON.parse(stdout)
   } catch {
-    throw new Error(`${name} ${args[0]} printed invalid JSON`)
+    throw new Error(`${label} printed invalid JSON`)
   }
 }
 
@@ -565,12 +566,15 @@ function forgetSession(id: string) {
   writing.delete(id)
   lastWritten.delete(id)
   handoffs.delete(id)
+  cancelHandoffTimer(id)
 }
 
-// Handoffs before idle compaction. Claude Code compacts an idle session once 0.9 of
-// its cache TTL has passed, in a 1h-TTL session with at least 200k tokens of context.
-// Just before that, the mod writes a handoff document from a fork of the full
-// conversation, so the user can /clear and resume from the file instead of a summary.
+// Handoffs before the prompt cache expires. The mod writes a handoff document from a
+// fork of the full conversation, so the user can /clear and resume from the file
+// instead of a summary or a cold cache. Two triggers start one. Claude Code's idle
+// compaction raises session.compact, in a 1h session with at least 200k tokens of
+// context. The mod's own timer (handoffTimers) covers 1h sessions from 50k tokens
+// up, and users who turned idle compaction off.
 // A session's entry is 'writing' while the fork runs, 'ready' once the file is
 // written, and 'failed' when the write gave up. Any entry blocks a second handoff
 // until turn.start removes it, so each idle gap gets one at most.
@@ -671,14 +675,78 @@ function startHandoff($: EngineInterface, id: string) {
   })
 }
 
+// The handoff timer. Claude Code gives the mod no cache TTL, so bin/cache-state reads
+// it from the transcript, with the rule the dashboard uses. After each main-thread
+// turn, armHandoff waits HANDOFF_ARM_DELAY_MS, so the turn.complete hook returns first
+// and the transcript holds the turn's last call. The fire timer then runs
+// HANDOFF_LEAD_MS before a 1h cache expires, the point Claude Code's idle compaction
+// uses. A session's entry in handoffTimers is the arming timer, then the fire timer.
+// turn.start and forgetSession cancel it. A reload cancels every timer and empties the
+// map, so an idle gap that spans a reload gets no timer handoff.
+const HANDOFF_MIN_TOKENS = 50_000
+const HANDOFF_LEAD_MS = 6 * 60 * 1000
+const HANDOFF_ARM_DELAY_MS = 1000
+const CACHE_STATE_TIMEOUT_MS = 5000
+const handoffTimers = new Map<string, Timer>()
+
+function cancelHandoffTimer(id: string) {
+  handoffTimers.get(id)?.cancel()
+  handoffTimers.delete(id)
+}
+
+// Arms the session's timer, replacing one an earlier turn armed. When the wait comes
+// back, the arming timer must still be the session's entry, because a turn.start or a
+// later turn.complete in the meantime makes this wait out of date.
+function armHandoff($: EngineInterface, id: string) {
+  cancelHandoffTimer(id)
+  const arming = $.clock.after(HANDOFF_ARM_DELAY_MS, () => {
+    handoffWait($, id)
+      .then((wait) => {
+        if (handoffTimers.get(id) !== arming) return
+        handoffTimers.delete(id)
+        if (wait !== null) handoffTimers.set(id, $.clock.after(wait, () => fireHandoff($, id)))
+      })
+      .catch((err) => {
+        if (handoffTimers.get(id) === arming) handoffTimers.delete(id)
+        fail($, `handoff timer failed (${errorText(err)})`)
+      })
+  })
+  handoffTimers.set(id, arming)
+}
+
+// Milliseconds until the handoff should start, or null when this idle gap gets no
+// timer: under HANDOFF_MIN_TOKENS, no transcript, not a 1h cache, or too close to the
+// expiry. A failing script throws.
+async function handoffWait($: EngineInterface, id: string): Promise<number | null> {
+  const tokens = (await $.session.usage()).context.tokens
+  if (typeof tokens !== 'number' || tokens < HANDOFF_MIN_TOKENS) return null
+  const transcript = await transcriptPath($, await $.session.root(), id)
+  if (!transcript) return null
+  const cache = (await callScript($, 'cache-state', [], JSON.stringify({ transcript }), CACHE_STATE_TIMEOUT_MS)) as {
+    ttl?: unknown
+    expiresAt?: unknown
+  }
+  if (cache.ttl !== '1h' || typeof cache.expiresAt !== 'number') return null
+  const wait = cache.expiresAt - HANDOFF_LEAD_MS - (await $.clock.now())
+  return wait > 0 ? wait : null
+}
+
+// The same checks as the session.compact trigger: the session is between turns and
+// has no handoff in this idle gap.
+function fireHandoff($: EngineInterface, id: string) {
+  handoffTimers.delete(id)
+  if (activities.get(id)?.state === 'waiting' && !handoffs.has(id)) startHandoff($, id)
+}
+
 // A prompt makes the handoff out of date, so turn.start drops it and clears the
 // status. The file stays on disk. The stored entry is deleted when the map had an
 // entry, and on the first call after a load, because an earlier load of this module
 // may have stored one that the map no longer holds. That first call also clears a
-// status that an earlier load set.
+// status that an earlier load set. It also cancels the session's handoff timer.
 async function dropHandoff($: EngineInterface) {
   try {
     const id = await $.session.id()
+    cancelHandoffTimer(id)
     const handoff = handoffs.get(id)
     handoffs.delete(id)
     if (handoff?.state === 'ready' || !statusCleared) $.ui.status()
@@ -1107,7 +1175,8 @@ export const register: Register = (on) => {
   // A turn that ends leaves the session waiting on the user, whatever the reason.
   // A subagent's turn that ends changes the subagent count. Its agentId goes into
   // endedAgents, so the count leaves it out even while $.agent.list() still reports
-  // it running, and the file is rewritten.
+  // it running, and the file is rewritten. A main-thread turn that ends arms the
+  // handoff timer.
   on('turn.complete', async ($, e, next) => {
     if (e.agentId) {
       const agentId = e.agentId
@@ -1127,6 +1196,11 @@ export const register: Register = (on) => {
       a.tool = null
       setState(a, 'waiting', now)
     })
+    try {
+      armHandoff($, await $.session.id())
+    } catch (err) {
+      fail($, `handoff timer failed (${errorName(err)})`)
+    }
     return next(e)
   })
 
