@@ -98,7 +98,7 @@ what Anthropic billed. Do not add one to the other.
 On the Now tab, a panel shows the two limits from Claude Code's `/usage` screen:
 the current session (the 5-hour window) and the current week across all models.
 The panel sits beside Where usage goes. When one of the two
-is hidden, the other panel takes the whole row. Below 880px the two panels stack,
+is hidden, the other panel takes the whole row. At 900px and narrower the two panels stack,
 Plan usage above Where usage goes.
 
 ![Plan usage panel with session, week and today bars, beside Where usage goes](docs/screenshots/plan-usage.png)
@@ -333,7 +333,7 @@ transcript's figure.
 ### What the panels show
 
 When either window reaches 75%, a warning banner at the top of the page shows on
-every range, with the percentage and the reset time.
+both tabs, with the percentage and the reset time.
 
 The panel also shows today's share of the weekly limit: the weekly percent now minus
 the weekly percent when the day started. `bin/record-statusline` keeps that
@@ -448,9 +448,10 @@ deleted take the model of the response before them.
 
 Each panel and summary card has an "x" button, shown when the pointer is over it or
 it has keyboard focus. The button hides the panel or card. The ☰ button at the top
-right lists everything hidden, and choosing an entry shows it again. The list is
-kept in the browser's localStorage under `cc-dashboard:hidden`, so it is per
-browser. Reset layout restores the panel order only and leaves hidden panels hidden.
+right lists what is hidden on the tab being shown, and choosing an entry shows it
+again. The list is kept in the browser's localStorage under `cc-dashboard:hidden`,
+so it is per browser. After you drag a row, the same menu gets a Reset layout
+entry. It restores the panel order on both tabs and leaves hidden panels hidden.
 
 A hidden panel is not drawn. A request is skipped when every panel and card it feeds
 is hidden:
@@ -628,20 +629,22 @@ public/main.mjs        Starts the page: fetches the API routes, draws every pane
 public/poll.js         Runs the 5 s live poll so one poll finishes before the next one starts
 public/reviews.js      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath
 public/session-groups.js  Groups the Today table's rows by claude launch, then ended sessions by project, and the running-session and activity labels
-public/state.mjs       The selected range and the hidden panels, shared by the modules
+public/state.mjs       The tab, the Analysis range and the hidden panels, shared by the modules
 public/stats.js        median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
+public/sticky-poll.mjs  What the sticky poll fetches: today's summary and the plan limits
 public/style.css       All styling, including the @font-face rules for public/fonts/
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
 public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, the signed y axis for charts with negative values, and the Setup changes y axis with a 0 label and headroom
 public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
-public/charts/legend.mjs  legendRow and its icons: the one legend pattern, each icon drawn like its mark
 public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and rtk commands
 public/charts/heatmap.mjs  drawActivityHeatmap: cost by weekday and hour
+public/charts/legend.mjs  legendRow and its icons: the one legend pattern, each icon drawn like its mark
 public/charts/line.mjs The four token types on a log-axis line chart, and the token legend
 public/charts/palette.mjs  Series colours and textures, and the SVG pattern definitions
 public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, window bar, daily metric chart with session dots, and its legend
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar, and drawShareBar, the share bar the Models panel also uses
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
+public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by style.css, with their SIL OFL licence files
 public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists with invocation counts
 public/panels/cards.mjs  The Analysis tab's summary cards: total cost, tokens, cache, thinking share, tool calls, burn rate, projection and Claude Code's reported cost
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
@@ -649,18 +652,17 @@ public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /a
 public/panels/models.mjs  The Models panel (share bar and table) and the model daily charts
 public/panels/prices.mjs  The prices note in the Models panel, and the Check prices and Apply buttons; uses the /api/prices routes
 public/panels/records.mjs  Fetches /api/records for the sticky bar's 7d lines and Record day
-public/panels/sticky.mjs  The sticky bar's Cost today, Tokens today and Record day
 public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Duplicate, Not useful, Undo and Copy prompt; fetches /api/reviews
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
 public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
+public/panels/sticky.mjs  The sticky bar's Cost today, Tokens today and Record day
 public/panels/timeline.mjs  The Session timeline: one lane per session with activity today, with its cache rebuild marks
 public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown, its errors and an error table per model
 public/panels/usage.mjs  Daily cost, daily tokens, cumulative cost, token types and the weekday and hour heatmap
 public/ui/collapse.mjs Collapsible rows of panels, and the collapsible Skills and Subagents lists
-public/ui/show-all.mjs  Show all for long lists, in place of inner scrolling
-public/ui/tabs.mjs     The Now and Analysis tabs and the URL hash that picks one
 public/ui/hidden.mjs   Hides a panel or card with its x button, shows it again from the header menu, and keeps a row's handle and toggle on a panel that shows
 public/ui/panel-light.mjs  Lights the border of the panel under the pointer
 public/ui/row-order.mjs  Drag to reorder rows of panels; the order is saved in localStorage
-public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by style.css, with their SIL OFL licence files
+public/ui/show-all.mjs  Show all for long lists, in place of inner scrolling
+public/ui/tabs.mjs     The Now and Analysis tabs and the URL hash that picks one
 ```
