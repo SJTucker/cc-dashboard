@@ -1247,10 +1247,11 @@ export const register: Register = (on) => {
   })
 
   // Records the usage of each subagent model request for the dashboard (steps.ts).
-  // The stream passes through unchanged. A turn.step hook that throws or overruns its
-  // budget makes the engine send the request again, so the recording after the
-  // stream catches everything and only queues the write. The handler replays what
-  // the hook's own next(e) settled to, so nothing beneath runs twice.
+  // The stream passes through unchanged. For a turn.step hook with no handler, a
+  // throw or a budget overrun makes the engine run next(e) again, which sends a new
+  // model request. So the recording after the stream catches everything and only
+  // queues the write. This hook's .catch handler replays what its own next(e)
+  // settled to, so no request is sent twice.
   on('turn.step', async function* ($, e, next) {
     const stream = next(e)
     for await (const chunk of stream) yield chunk

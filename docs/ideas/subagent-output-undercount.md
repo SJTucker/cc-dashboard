@@ -93,3 +93,8 @@ source.
   an estimate on the page.
 - Whether `noFinalCalls` without `noFinalCorrected` stays near zero in practice. A
   step that retried inside one request matches nothing.
+- An agent continued in a new `claude` process more than a day after its last step
+  loses its earlier corrections. The server has deleted its step file by then, and the
+  reloaded mod holds no steps for it, so it writes a file with only the new steps. The
+  row store replaces the stored row set with that file's rows. Merging `agentSteps` by
+  `stepKey` in `load()` in `lib/rowstore.js` would keep them.
