@@ -4,7 +4,7 @@ import { formatCost, formatTokens, shortDate, localDateStr } from '../format.mjs
 import { state } from '../state.mjs';
 import { createSequence } from '../guards.mjs';
 
-// The Record day card's all-time value. Fetched once on load and once on
+// The sticky bar's Record day, the all-time value. Fetched once on load and once on
 // Refresh, not on the 5s live poll or a range switch: /api/records reads the
 // all-time and 7-day aggregates, so polling it on every tick would buy nothing. A
 // failure, including a 500 whose body is { error }, resolves to null. Optional,
@@ -13,7 +13,7 @@ function requestRecords() {
   return getJson('/api/records', { optional: true });
 }
 
-// Kept so /api/records resolving after the first render can redraw the card
+// Kept so /api/records resolving after the first render can redraw Record day
 // with the same daily data the last summary produced.
 let lastRecordDaily = null;
 let lastSummary = null;
@@ -28,10 +28,10 @@ let recordsDataDay = null;
 // later Refresh.
 const recordsLoads = createSequence();
 
-// renderWeekTotals calls this on Today whenever recordsDay is not today's date.
-// The early return below leaves recordsDay unset on purpose: while every consumer
-// of /api/records is hidden nothing is fetched, and the next renderWeekTotals
-// after one shows again tries once more.
+// renderWeekTotals calls this, on both tabs, whenever recordsDay is not today's date.
+// The sticky bar is the only consumer of /api/records and cannot be hidden, so
+// neededRequests always includes it. The check stays as the one place that decides
+// what the page fetches.
 export function refreshRecords() {
   if (!neededRequests(state.hiddenKeys, state.currentDays).has('records')) return;
   const day = localDateStr(new Date());
@@ -39,7 +39,7 @@ export function refreshRecords() {
   const isLatest = recordsLoads.next();
   requestRecords().then((data) => {
     if (!isLatest()) return;
-    // A failed request keeps the last good records, so the card keeps its value.
+    // A failed request keeps the last good records, so Record day keeps its value.
     if (data) {
       recordsData = data;
       recordsDataDay = day;

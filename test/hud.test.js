@@ -6,9 +6,8 @@ const { formatStatus, shareMeter, dailyWarning, limitStripText } =require('../pu
 
 test('formatStatus shows the load time as 24-hour local HH:MM:SS and counts with separators', () => {
   const loadedAt = new Date(2026, 8, 30, 10, 24, 21).getTime();
-  assert.deepStrictEqual(formatStatus({ loadedAt, range: 'Today', sessions: 97, apiCalls: 43693 }), {
+  assert.deepStrictEqual(formatStatus({ loadedAt, sessions: 97, apiCalls: 43693 }), {
     sync: '10:24:21',
-    range: 'Today',
     sessions: '97',
     apiCalls: '43,693',
   });
@@ -16,13 +15,12 @@ test('formatStatus shows the load time as 24-hour local HH:MM:SS and counts with
 
 test('formatStatus pads a time just after midnight', () => {
   const loadedAt = new Date(2026, 8, 30, 0, 5, 9).getTime();
-  assert.strictEqual(formatStatus({ loadedAt, range: '7d', sessions: 0, apiCalls: 0 }).sync, '00:05:09');
+  assert.strictEqual(formatStatus({ loadedAt, sessions: 0, apiCalls: 0 }).sync, '00:05:09');
 });
 
 test('formatStatus shows a dash for anything not known yet', () => {
-  assert.deepStrictEqual(formatStatus({ loadedAt: null, range: '', sessions: undefined, apiCalls: undefined }), {
+  assert.deepStrictEqual(formatStatus({ loadedAt: null, sessions: undefined, apiCalls: undefined }), {
     sync: '—',
-    range: '—',
     sessions: '—',
     apiCalls: '—',
   });

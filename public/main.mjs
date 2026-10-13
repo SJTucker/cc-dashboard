@@ -119,8 +119,8 @@ function setBusy(on) {
 
 // The Now tab polls the whole tab. The Analysis tab polls only the sticky bar and the
 // plan limit warning, which show today on every tab.
-function setPolling(today) {
-  if (today) {
+function setPolling(onNow) {
+  if (onNow) {
     stickyPoller.stop();
     livePoller.start();
   } else {

@@ -1,4 +1,4 @@
-// The prices note in Cost by model, Check prices, and Apply.
+// The prices note in the Models panel, Check prices, and Apply.
 import { el } from '../dom.mjs';
 import { localDateStr } from '../format.mjs';
 import { state } from '../state.mjs';

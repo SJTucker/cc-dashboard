@@ -216,24 +216,22 @@ html, body {
   padding-left: var(--sp-2);
 }
 
-/* Live shows a cyan ring and "Link live". Paused shows a dim ring and "Paused".
-   The words carry the state, so it does not rely on colour. */
+/* A cyan ring and "Link live". The words carry the state, so it does not rely on
+   colour. */
 .live-dot {
   display: inline-flex;
   align-items: center;
   gap: var(--sp-1);
   white-space: nowrap;
-  color: var(--text-tertiary);
+  color: var(--text-primary);
 }
-.live-dot:not(.is-off) { color: var(--text-primary); }
 .live-ring {
   position: relative;
   width: 10px;
   height: 10px;
   border-radius: 50%;
-  border: 2px solid var(--text-tertiary);
+  border: 2px solid var(--accent-cyan);
 }
-.live-dot:not(.is-off) .live-ring { border-color: var(--accent-cyan); }
 .live-ring::after {
   content: '';
   position: absolute;

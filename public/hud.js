@@ -4,13 +4,11 @@
 // functions globals, and the tests load it with require().
 
 // The status strip's display strings. loadedAt is the time of the last successful
-// summary load, shown as 24-hour local time. range is the active range button's
-// label. A value not known yet shows as a dash.
-function formatStatus({ loadedAt, range, sessions, apiCalls }) {
+// summary load, shown as 24-hour local time. A value not known yet shows as a dash.
+function formatStatus({ loadedAt, sessions, apiCalls }) {
   const count = (n) => (typeof n === 'number' ? n.toLocaleString('en-US') : '—');
   return {
     sync: typeof loadedAt === 'number' ? new Date(loadedAt).toLocaleTimeString('en-GB', { hour12: false }) : '—',
-    range: range || '—',
     sessions: count(sessions),
     apiCalls: count(apiCalls),
   };
