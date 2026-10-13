@@ -167,14 +167,23 @@
             <span class="card-value cost" id="cardCost">&mdash;</span>
             <span class="card-note" id="cardCostNote"></span>
           </div>
-          <div class="card" data-hide-key="card-tokens">
-            <span class="card-label">Total tokens</span>
-            <span class="card-value" id="cardTokens">&mdash;</span>
+          <div class="card" id="burnCard" data-hide-key="card-burn">
+            <span class="card-label">Cost per day</span>
+            <span class="card-value cost" id="cardBurn">&mdash;</span>
+            <span class="card-note">complete days only &mdash; today is partial</span>
+          </div>
+          <div class="card" id="projectionCard" data-hide-key="card-projection">
+            <span class="card-label">30 days at this rate</span>
+            <span class="card-value cost" id="cardProjection">&mdash;</span>
           </div>
           <div class="card" id="reportedCard" data-hide-key="card-reported" hidden>
             <span class="card-label">Claude Code reported</span>
             <span class="card-value cost" id="cardReported">&mdash;</span>
             <span class="card-note" id="cardReportedNote"></span>
+          </div>
+          <div class="card" data-hide-key="card-tokens">
+            <span class="card-label">Total tokens</span>
+            <span class="card-value" id="cardTokens">&mdash;</span>
           </div>
           <div class="card" data-hide-key="card-cache" title="share of eligible input served from cache">
             <span class="card-label">Cache efficiency</span>
@@ -185,15 +194,6 @@
             <span class="card-label">Thinking share of output</span>
             <span class="card-value" id="cardThinking">&mdash;</span>
             <span class="card-note" id="cardThinkingNote"></span>
-          </div>
-          <div class="card" id="burnCard" data-hide-key="card-burn">
-            <span class="card-label">Cost per day</span>
-            <span class="card-value cost" id="cardBurn">&mdash;</span>
-            <span class="card-note">complete days only &mdash; today is partial</span>
-          </div>
-          <div class="card" id="projectionCard" data-hide-key="card-projection">
-            <span class="card-label">30 days at this rate</span>
-            <span class="card-value cost" id="cardProjection">&mdash;</span>
           </div>
           <div class="card" data-hide-key="card-tools">
             <span class="card-label">Tool calls</span>

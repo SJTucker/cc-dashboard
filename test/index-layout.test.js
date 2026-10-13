@@ -37,6 +37,12 @@ test('the Analysis tab starts with the range picker and the cards, with no Today
   assert.match(analysis, /<button data-days="7" class="active">/);
 });
 
+test('the Analysis cards list the money cards, then the usage cards', () => {
+  const cards = tabMarkup('tabAnalysis');
+  const keys = [...cards.matchAll(/<div class="card"[^>]*data-hide-key="(card-[a-z]+)"/g)].map((m) => m[1]);
+  assert.deepEqual(keys, ['card-cost', 'card-burn', 'card-projection', 'card-reported', 'card-tokens', 'card-cache', 'card-thinking', 'card-tools']);
+});
+
 test('the Analysis tab holds the analysis panels in the spec order', () => {
   assert.deepStrictEqual(headings(tabMarkup('tabAnalysis')), [
     'Session reviews',

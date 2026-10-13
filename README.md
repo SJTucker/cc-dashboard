@@ -646,7 +646,7 @@ public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar, 
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
 public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by style.css, with their SIL OFL licence files
 public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists with invocation counts
-public/panels/cards.mjs  The Analysis tab's summary cards: total cost, tokens, cache, thinking share, tool calls, burn rate, projection and Claude Code's reported cost
+public/panels/cards.mjs  The Analysis tab's summary cards: two rows of cards: money (total cost, cost per day, 30-day projection, Claude Code's reported cost) over usage (tokens, cache, thinking share, tool calls)
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
 public/panels/models.mjs  The Models panel (share bar and table) and the model daily charts

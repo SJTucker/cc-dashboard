@@ -345,6 +345,22 @@ html, body {
   margin-bottom: var(--sp-4);
 }
 
+/* From 721px the cards sit in two rows of four, grouped by job: money on row 1,
+   usage on row 2. Rows are set by hide key so a hidden card (display: none via
+   [hidden]) leaves its slot empty and the other cards keep their rows. Below
+   721px the cards flow in the markup order, which is the same money-then-usage order. */
+@media (min-width: 721px) {
+  .cards { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .cards > [data-hide-key="card-cost"],
+  .cards > [data-hide-key="card-burn"],
+  .cards > [data-hide-key="card-projection"],
+  .cards > [data-hide-key="card-reported"] { grid-row: 1; }
+  .cards > [data-hide-key="card-tokens"],
+  .cards > [data-hide-key="card-cache"],
+  .cards > [data-hide-key="card-thinking"],
+  .cards > [data-hide-key="card-tools"] { grid-row: 2; }
+}
+
 .card {
   background: var(--surface);
   border: 1px solid var(--border);
