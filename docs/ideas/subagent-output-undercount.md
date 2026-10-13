@@ -1,36 +1,91 @@
-# Subagent output may be undercounted
+# Subagent output is undercounted
 
-Check whether subagent calls since Claude Code 2.1.280 record the usage from the
-start of the response stream instead of the final usage. If they do, every panel
-undercounts subagent output and cost. Found on 2026-10-13 while building the
-thinking share.
+In interactive sessions on Claude Code 2.1.280 and later, the last transcript line
+of most subagent responses carries the usage from the start of the response stream.
+Its `output_tokens` is a few tokens, and the final usage is never written. Every
+panel undercounts subagent output and cost. Found on 2026-10-13 while building the
+thinking share, and confirmed the same day.
+
+## How a response is written
+
+Claude Code writes one transcript line per content block of a response. Every
+line repeats the response's `message.id`, `requestId` and `usage`.
+
+- Lines written while the response streams have `stop_reason: null` and the
+  stream-start usage: the final input-side counts, and an `output_tokens` of a few
+  tokens. Their `usage` has no `output_tokens_details`, `iterations` or `speed`.
+- The line for the last block should carry the final usage, with `stop_reason` set
+  and the full `usage` shape.
+- In an affected response, every line has `stop_reason: null`. No other line in
+  any transcript holds that response's final usage.
+
+`addCall` in `lib/extract.js` keeps the line with the most `output_tokens`, so a
+response that has its final line is counted correctly.
 
 ## What was measured
 
-Over the deduped calls in `transcripts.db` on 2026-10-13, Claude Code 2.1.280 and
-later:
+Over every transcript on this machine on 2026-10-13, Claude Code 2.1.280 and later:
 
-- 26,850 calls have a `usage` object with only `input_tokens`,
-  `cache_creation_input_tokens`, `cache_read_input_tokens`, `cache_creation`,
-  `output_tokens`, `service_tier` and `inference_geo`. They have no
-  `output_tokens_details`, `iterations` or `speed`. 26,838 of them are subagent
-  (sidechain) calls.
-- Their `output_tokens` has a median of 8 and a p90 of 20, and sums to 293k tokens.
-  Calls with the full usage shape have a median of 373.
-- Before 2.1.280 a few hundred calls had the short shape.
+- 27,134 subagent responses, from 2026-09-22 to 2026-10-13, have no final line.
+  4,281 subagent responses wrote stream-start lines and then a final line, and are
+  counted correctly. 12 main-thread responses have no final line.
+- The responses with no final line record 0.3M output tokens ($4). Their visible
+  text and tool input alone come to about 6.5M tokens at 4 characters per token
+  ($88). At the main thread's 1.7 characters per recorded output token, which
+  includes thinking, they come to about 15.2M tokens ($208). The dashboard's 30-day
+  total was about $3,150.
+- Example: a response that called Bash with 336 characters of input records 5
+  output tokens. A response whose `SubagentHandback` input is 2,408 characters
+  records 25.
+- They span every model (Sonnet 5.5 13,178, Opus 5.5 7,637, Sonnet 5 4,445,
+  Haiku 4.5 1,049, others under 500) and every subagent type
+  (`general-purpose` 28,028, `Explore` 1,970, `fork` 123, `Plan` 22).
+- The `requestShape` in an agent's `.meta.json` does not decide it. Background
+  agents lack the final line on 26,800 of 32,672 responses, and foreground agents
+  on 377 of 441.
 
-## What exists
+## Interactive sessions only
 
-- `addCall` in `lib/extract.js` keeps the line with the most `output_tokens` for a
-  response, so a later line with the final usage would win if one were written.
-- The thinking share leaves these calls out, and the Thinking share card shows what
-  share of calls it covers.
+Probes on 2026-10-13, Claude Code 2.1.296, Haiku:
+
+- `claude -p` with a foreground subagent, and `claude -p` with a background
+  subagent: every subagent response got its final line.
+- An interactive session (driven with `expect`) with a background subagent: the
+  last response, a `SubagentHandback` call, has no final line. The transcript
+  records 24 output tokens. The real figure was 163.
+
+## The mod can see the real usage
+
+A mod `turn.step` hook fires for every model request, the main thread's and each
+subagent's (`e.agentId`). `await next(e)` resolves to the whole response, with
+`stopReason` and `usage` (`input_tokens`, `output_tokens`,
+`cache_read_input_tokens`, `cache_creation_input_tokens`, `model`). A throwaway
+probe mod loaded with `claude --plugin-dir` logged these in all three probes:
+
+- Where the transcript has a final line, the `turn.step` output matches it exactly
+  (154, 105, 56, 242).
+- Where it does not, `turn.step` has the real output (163 against the
+  transcript's 24).
+- `TurnStepResult` carries no message id or request id. The streamed `tool` chunks
+  carry each call's `tool_use_id`, but a step that only writes text has none.
+- The input-side counts (`input_tokens`, `cache_creation_input_tokens`,
+  `cache_read_input_tokens`) are final at stream start. They are identical in the
+  stream-start lines, the final line and `turn.step`. With the `agentId`, they
+  identify a response.
+- The probe mod is in the session scratchpad, not in the repo.
+
+## Possible fix
+
+The mod records each subagent step's usage, and the dashboard joins it to call rows
+by `agentId` and the three input-side counts. This does not fix responses recorded
+before the mod change. Those can stay as they are or be
+estimated from content length.
+
+Reporting the transcript bug to Anthropic would fix new interactive sessions at
+the source.
 
 ## Open questions
 
-- Whether the subagent transcript holds a later line for the same response with
-  the final usage, under a different `requestId` or message id.
-- Whether the short usage shape comes from one subagent path (for example
-  background agents or forks) or from all of them.
-- If output is undercounted, whether the true figure can be recovered from the
-  transcript, or only noted on the page.
+- Whether to estimate the 27,134 responses recorded before the fix, and how to
+  label an estimate on the page.
+- Whether the 12 main-thread responses with no final line need the same fix.
