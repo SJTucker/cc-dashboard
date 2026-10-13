@@ -1,5 +1,5 @@
 // The Session reviews panel: suggestions from reviews of ended sessions, with
-// Done, Not useful, Undo and Copy prompt. The three row actions are icon buttons
+// Done, Duplicate, Not useful, Undo and Copy prompt. The four row actions are icon buttons
 // with tooltips.
 import { getJson } from '../api.mjs';
 import { el, svgEl, withTooltip, withFocusTooltip } from '../dom.mjs';
@@ -73,6 +73,7 @@ const ICONS = {
   check: [{ d: 'M20 6 9 17l-5-5' }],
   x: [{ d: 'M18 6 6 18' }, { d: 'm6 6 12 12' }],
   undo: [{ d: 'M9 14 4 9l5-5' }, { d: 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11' }],
+  copy: [{ d: 'M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z' }, { d: 'M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2' }],
 };
 
 // The tooltip text is fixed, so it needs no escaping. A <br> breaks a long line,
@@ -90,6 +91,7 @@ function iconButton(icon, focusKey, ariaLabel, tip, onClick) {
 }
 
 const TIP_DONE = reviewTip('Done', 'I acted on this. Moves it to the dismissed list.');
+const TIP_DUPLICATE = reviewTip('Duplicate', 'Useful, but a rule, skill or earlier suggestion already covers it.');
 const TIP_NOT_USEFUL = reviewTip('Not useful', 'Hide it and record that Haiku got it wrong.');
 const TIP_UNDO = reviewTip('Undo', 'Put this suggestion back in the open list.');
 
@@ -194,6 +196,7 @@ function openList(review) {
     el('span', { text: s.text }),
     el('span', { class: 'review-actions' }, [
       iconButton('check', `done:${review.sessionId}:${s.idx}`, `Mark done: ${suggestionName(s)}`, TIP_DONE, () => changeSuggestion(review, s, 'done')),
+      iconButton('copy', `duplicate:${review.sessionId}:${s.idx}`, `Dismiss as duplicate: ${suggestionName(s)}`, TIP_DUPLICATE, () => changeSuggestion(review, s, 'duplicate')),
       iconButton('x', `notuseful:${review.sessionId}:${s.idx}`, `Dismiss as not useful: ${suggestionName(s)}`, TIP_NOT_USEFUL, () => changeSuggestion(review, s, 'not_useful')),
     ]),
   ])));

@@ -231,10 +231,12 @@ shows no branch.
 
 ![Session reviews panel listing reviews with their suggestions and Done and Not useful buttons](docs/screenshots/session-reviews.png)
 
-Each open suggestion has a Done and a Not useful icon button, with a tooltip on
-each. A dismissed suggestion is hidden, and the review shows `N dismissed · Show`.
-Show lists each dismissed suggestion with `Marked done` or `Marked not useful` and
-an Undo icon button. Copy prompt leaves dismissed suggestions out. The panel note counts reviews that still have an
+Each open suggestion has Done, Duplicate and Not useful icon buttons, with a tooltip
+on each. Duplicate is for a suggestion that is right but already covered by a rule,
+a skill or an earlier suggestion. A dismissed suggestion is hidden, and the review
+shows `N dismissed · Show`. Show lists each dismissed suggestion with `Marked done`,
+`Marked duplicate` or `Marked not useful` and an Undo icon button. Copy prompt
+leaves dismissed suggestions out. The panel note counts reviews that still have an
 open suggestion. A review whose suggestions are all dismissed shows as one line that
 opens with Enter or Space.
 
@@ -264,10 +266,10 @@ opens with Enter or Space.
   `bin/review-session` prints one line on stderr and exits 1, and the mod logs it.
 - **While `bin/review-session` is writing.** The server waits up to 250 ms for the
   database lock. If the lock is still held, the panel shows "The review database is
-  busy. Try again." A Done, Not useful or Undo click that meets the lock leaves the
-  suggestion as it was. Reading the list does not wait for the lock. Until one import
-  succeeds after a server start, any reviews request can meet the lock and show the
-  busy text. After that, only the three buttons can meet it.
+  busy. Try again." A Done, Duplicate, Not useful or Undo click that meets the lock
+  leaves the suggestion as it was. Reading the list does not wait for the lock. Until
+  one import succeeds after a server start, any reviews request can meet the lock and
+  show the busy text. After that, only the four buttons can meet it.
 - **Failures.** A failed review is retried after an hour while the session's
   snapshot is still there, which is 24 hours.
 - **Cost.** Haiku calls made by the mod write no transcript line, so the dashboard's
@@ -631,7 +633,7 @@ public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /a
 public/panels/models.mjs  Cost by model table, the model mix donut and the model daily charts
 public/panels/prices.mjs  The prices note in Cost by model, and the Check prices and Apply buttons; uses the /api/prices routes
 public/panels/records.mjs  The Record day card and the 7d total lines; fetches /api/records
-public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Not useful, Undo and Copy prompt; fetches /api/reviews
+public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Duplicate, Not useful, Undo and Copy prompt; fetches /api/reviews
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
 public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
 public/panels/timeline.mjs  The Session timeline: one lane per session with activity today, with its cache rebuild marks
