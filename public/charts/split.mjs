@@ -1,7 +1,7 @@
 // Two shares of one whole as a single split bar.
 import { el, showTooltip, hideTooltip } from '../dom.mjs';
 import { formatCost, escapeHtml } from '../format.mjs';
-import { textureCss } from './palette.mjs';
+import { textureCss, TOKENS } from './palette.mjs';
 
 // Two shares of one whole, drawn as a single split bar. Main-thread vs subagent
 // and over- vs under-threshold context are both partitions of total cost, so the
@@ -9,13 +9,18 @@ import { textureCss } from './palette.mjs';
 // subagent lists (drawHBars) are not partitions - one call can appear in both - so
 // they keep the separate-bar form.
 //
-// Validated with the dataviz skill's validate_palette.js against the panel
-// surface: CVD deltaE 27.3 (protan). Texture and the direct labels carry identity;
-// colour is secondary, as everywhere else here.
+// Both shares in the one non-money series colour. Texture tells them apart: the
+// larger part solid, the smaller part diagonal. The direct labels carry identity too.
 const SPLIT_STYLE = [
-  { color: '#c98500', texture: 'solid' },
-  { color: '#9085e9', texture: 'diag' },
+  { color: TOKENS.seriesNeutral, texture: 'solid' },
+  { color: TOKENS.seriesNeutral, texture: 'diag' },
 ];
+
+// Styles follow size, not list position: the rows sorted by cost, largest first,
+// so the larger part is the solid one whichever order the caller passes.
+export function sortSplitRows(rows) {
+  return [...rows].sort((a, b) => b.cost - a.cost);
+}
 
 export function drawSplitBar(container, rows) {
   container.innerHTML = '';
@@ -28,7 +33,7 @@ export function drawSplitBar(container, rows) {
   const bar = el('div', { class: 'mix-bar' });
   const legend = el('div', { class: 'legend split-legend' });
 
-  rows.forEach((row, i) => {
+  sortSplitRows(rows).forEach((row, i) => {
     const pct = (row.cost / total) * 100;
     const style = SPLIT_STYLE[i % SPLIT_STYLE.length];
     const seg = el('div', {

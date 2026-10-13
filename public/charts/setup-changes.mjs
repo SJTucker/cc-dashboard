@@ -3,7 +3,7 @@
 import { el, svgEl, hideTooltip, chartWidth, withTooltip, withFocusTooltip } from '../dom.mjs';
 import { formatTokens, shortDate, localDateStr, escapeHtml } from '../format.mjs';
 import { drawPlotAxis } from './axes.mjs';
-import { appendPatternDefs, fillFor, textureCss } from './palette.mjs';
+import { appendPatternDefs, fillFor, textureCss, TOKENS } from './palette.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const WEEK_MS = 7 * DAY_MS;
@@ -168,9 +168,8 @@ function markerWindow(marker, row, domain) {
   return { t: marker.t, before: before && before[row.key], after: after && after[row.key] };
 }
 
-// The before-window bars and the legend swatch use this ink. It equals --text-secondary
-// in style.css. A pattern's paint cannot be a CSS variable, so the hex is repeated here.
-const BEFORE_INK = '#7f93b8';
+// The before-window bars and the legend swatch use --text-secondary. A pattern's paint cannot be a CSS variable, so it comes from TOKENS.
+const BEFORE_INK = TOKENS.textSecondary;
 const PATTERN_SCOPE = 'ba';
 
 // Where the plot starts: the left gutter holds each lane's glyph and name, and the
@@ -470,7 +469,7 @@ export function drawMetricLegend(legend, row, report, domain) {
   const rule = (cls) => el('span', { class: `legend-line ${cls}` });
   const rows = [el('div', { class: 'legend changes-legend' }, [
     legendItem(box(textureCss('diag', BEFORE_INK)), '7 days before'),
-    legendItem(box('var(--accent-cost)'), '7 days after'),
+    legendItem(box('var(--accent-cyan)'), '7 days after'),
     legendItem(box('var(--border)'), 'outside the windows'),
     legendItem(rule('median-before-swatch'), 'before median'),
     legendItem(rule('median-after-swatch'), 'after median'),

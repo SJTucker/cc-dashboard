@@ -1,7 +1,7 @@
 // The Session timeline: one lane per session with activity today.
 import { svgEl, withTooltip, hideTooltip, chartWidth } from '../dom.mjs';
 import { formatCost, formatTokens, formatDuration, escapeHtml } from '../format.mjs';
-import { appendPatternDefs, fillFor, TOKEN_SERIES } from '../charts/palette.mjs';
+import { appendPatternDefs, fillFor, TOKEN_SERIES, TOKENS } from '../charts/palette.mjs';
 import { state } from '../state.mjs';
 import { LIVE_WINDOW_MS } from '../constants.mjs';
 
@@ -11,8 +11,8 @@ import { LIVE_WINDOW_MS } from '../constants.mjs';
 // arrowhead at now. Every other session's bars carry the diagonal texture. The
 // key in the p.panel-note under the chart (public/index.html) says so in words,
 // so the two kinds never depend on colour. An SVG pattern needs a literal colour,
-// so TIMELINE_COLOR repeats --accent-cyan from public/style.css.
-const TIMELINE_COLOR = '#3fe0ff';
+// so TIMELINE_COLOR is TOKENS.accentCyan.
+const TIMELINE_COLOR = TOKENS.accentCyan;
 const TIMELINE_LANE_HEIGHT = 22;
 const TIMELINE_BAR_HEIGHT = 10;
 const TIMELINE_AXIS_HEIGHT = 20;
@@ -45,7 +45,7 @@ const HEAD_CHAR_PX = 6.5;
 // with --surface and outlined in that colour, so it reads as hollow on a bar. The
 // key under the chart says so in words, so the two never depend on colour.
 const REBUILD_COLOR = TOKEN_SERIES.find((s) => s.key === 'cacheCreate').color;
-const REBUILD_SURFACE = '#0b1222'; // --surface in public/style.css
+const REBUILD_SURFACE = TOKENS.surface;
 const REBUILD_SIZE = 8;
 const REBUILD_TOOLTIP_ITEMS = 5;
 

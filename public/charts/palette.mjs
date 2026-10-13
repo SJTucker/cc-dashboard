@@ -15,16 +15,29 @@ export const TOKEN_SERIES = [
 ];
 
 // Validated with the dataviz skill's validate_palette.js against this dashboard's
-// panel surface (#171d27, dark): every check passes, worst adjacent CVD ΔE 16.0
-// (deutan). No red/green pair appears - the user is red-green colourblind. Texture
-// is the primary identity channel here; colour is the secondary one.
+// panel surface (#0b1222, dark): every check passes, worst adjacent CVD ΔE 16.0
+// (deutan). Mythos is light slate: the green it had sat 11.6 ΔE from --money-fill,
+// and a green series beside green money read as money. Texture is the primary
+// identity channel here; colour is the secondary one.
 const MODEL_STYLE = {
   opus: { color: '#d55181', texture: 'dots' },
   sonnet: { color: '#9085e9', texture: 'solid' },
   haiku: { color: '#c98500', texture: 'diag' },
   fable: { color: '#3987e5', texture: 'diag-rev' },
-  mythos: { color: '#199e70', texture: 'cross' },
+  mythos: { color: '#c9d1e0', texture: 'cross' },
   other: { color: '#5c6779', texture: 'solid' },
+};
+
+// CSS tokens a chart needs as a literal colour: an SVG <pattern>'s paint cannot
+// read a custom property. Each equals the token of the same kebab-case name in
+// public/style.css (test/palette-tokens.test.js checks them).
+export const TOKENS = {
+  surface: '#0b1222',
+  textSecondary: '#7f93b8',
+  accentCyan: '#3fe0ff',
+  money: '#2bff88',
+  moneyFill: '#2bc46f',
+  seriesNeutral: '#6b86ad',
 };
 
 // The payload carries the family key on every models[] entry and uses it for the

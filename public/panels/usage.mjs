@@ -15,9 +15,8 @@ function drawDailyTokens(daily) {
     tokens: d.input + d.output + d.cacheCreate + d.cacheRead,
   }));
   drawBarChart(document.getElementById('tokenChart'), dailyTokens, {
-    // Cache reads are ~97% of every total, so this borrows their colour rather
-    // than adding a sixth hue to a palette validated as a set.
-    color: '#9085e9',
+    // One series that is not money, so the slate series colour.
+    color: 'var(--series-neutral)',
     valueKey: 'tokens',
     tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatTokens(d.tokens)} tokens`,
   });
@@ -26,7 +25,7 @@ function drawDailyTokens(daily) {
 export function renderUsageCharts(data) {
   if (shown('dailyCost')) {
     drawBarChart(document.getElementById('costChart'), data.daily, {
-      color: 'var(--accent-cost)',
+      color: 'var(--money-fill)',
       valueKey: 'cost',
       tooltipFn: (d) => `<b>${fullDate(d.date)}</b><br>${formatCost(d.cost)}`,
     });

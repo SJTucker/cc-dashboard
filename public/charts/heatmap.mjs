@@ -4,10 +4,6 @@ import { formatCost, formatTokens } from '../format.mjs';
 
 const WEEKDAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-// --accent-cost as RGB, so cell intensity can be expressed as an alpha without
-// color-mix. Keep in sync with --accent-cost in public/style.css.
-const HEAT_RGB = '255, 176, 0';
-
 // One hue varying only in opacity. Magnitude is carried by lightness alone,
 // which is why this needs no texture channel the way the categorical charts do.
 export function drawActivityHeatmap(container, activity) {
@@ -30,7 +26,7 @@ export function drawActivityHeatmap(container, activity) {
         // Floor the alpha at 0.12 so the cheapest non-zero hour is still
         // visible rather than indistinguishable from an idle one.
         const alpha = 0.12 + 0.88 * (c.cost / max);
-        cell.style.background = `rgba(${HEAT_RGB}, ${alpha})`;
+        cell.style.background = `color-mix(in srgb, var(--money-fill) ${Math.round(alpha * 100)}%, transparent)`;
       }
       cell.addEventListener('mousemove', (evt) =>
         showTooltip(

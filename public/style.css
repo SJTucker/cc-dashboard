@@ -10,18 +10,23 @@
   --bg: #05070d;
   --surface: #0b1222;
   --surface-raised: #111b30;
+  --surface-hover: #16223a;
   --border: #1b2a44;
   --text-primary: #d8f6ff;
   --text-secondary: #7f93b8;
   --text-tertiary: #72829e;
 
-  --accent-cost: #ffb000;
-  --accent-dim: rgba(255, 176, 0, 0.2);
-  /* Structure and state: panel titles, the active range, the live ring, the Plan
-     usage meters. Cost keeps --accent-cost. */
+  /* Each colour has one job. Money: cost values and lines (--money) and cost bars
+     and cells (--money-fill). Cyan: live, selected and interactive. Slate: a
+     single-series chart that is not money. Amber: warnings only (the limits
+     banner and strip, a setup changes file error). public/charts/palette.mjs
+     repeats the hex values that SVG patterns need (TOKENS). */
+  --money: #2bff88;
+  --money-fill: #2bc46f;
+  --money-glow: 0 0 6px color-mix(in srgb, var(--money) 45%, transparent);
   --accent-cyan: #3fe0ff;
-
-  --surface-hover: #16223a;
+  --series-neutral: #6b86ad;
+  --warning: #ffb000;
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-data: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
@@ -130,8 +135,8 @@ html, body {
   z-index: -1;
   pointer-events: none;
   background:
-    linear-gradient(rgba(63, 224, 255, 0.35) 1px, transparent 1px) 0 0 / 48px 24px,
-    linear-gradient(90deg, rgba(63, 224, 255, 0.35) 1px, transparent 1px) 0 0 / 48px 24px;
+    linear-gradient(color-mix(in srgb, var(--accent-cyan) 35%, transparent) 1px, transparent 1px) 0 0 / 48px 24px,
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-cyan) 35%, transparent) 1px, transparent 1px) 0 0 / 48px 24px;
   transform: perspective(300px) rotateX(62deg);
   transform-origin: 50% 0;
   mask: linear-gradient(#000 30%, transparent 95%);
@@ -160,7 +165,7 @@ html, body {
 .topbar .range-picker,
 .topbar .refresh-btn,
 .topbar .status-strip {
-  box-shadow: 0 0 0 4px var(--bg), 0 0 10px 4px rgba(5, 7, 13, 0.7);
+  box-shadow: 0 0 0 4px var(--bg), 0 0 10px 4px color-mix(in srgb, var(--bg) 70%, transparent);
 }
 
 .status-strip {
@@ -191,7 +196,7 @@ html, body {
 /* The short plan limit warning. The amber left edge matches .status-banner; the
    Limit or Budget label and the percents carry the meaning, not the colour. */
 .strip-limit {
-  border-left: 3px solid var(--accent-cost);
+  border-left: 3px solid var(--warning);
   padding-left: 8px;
 }
 
@@ -290,7 +295,7 @@ html, body {
 .status-banner {
   background: var(--surface);
   border: 1px solid var(--border);
-  border-left: 3px solid var(--accent-cost);
+  border-left: 3px solid var(--warning);
   border-radius: 8px;
   padding: 14px 16px;
   margin-bottom: 24px;
@@ -321,7 +326,7 @@ html, body {
   transition: border-color 0.15s ease;
 }
 
-.card:hover { border-color: var(--accent-dim); }
+.card:hover { border-color: color-mix(in srgb, var(--accent-cyan) 30%, transparent); }
 
 .card-label {
   color: var(--text-tertiary);
@@ -334,9 +339,8 @@ html, body {
   font-variant-numeric: tabular-nums;
 }
 
-/* Dollar figures carry the accent so money separates from counts without
-   reading the label. */
-.card-value.cost { color: var(--accent-cost); }
+/* Money carries --money and its glow, so dollars separate from counts without reading the label. */
+.card-value.cost { color: var(--money); text-shadow: var(--money-glow); }
 
 .card-note {
   font-size: 10px;
@@ -470,7 +474,6 @@ html, body {
 .gridline {
   stroke: var(--border);
   stroke-width: 1;
-  stroke-dasharray: 2 3;
   opacity: 0.55;
 }
 
@@ -504,7 +507,7 @@ html, body {
 }
 
 .cumulative-line {
-  stroke: var(--accent-cost);
+  stroke: var(--money);
   stroke-width: 2;
   stroke-linejoin: round;
   stroke-linecap: round;
@@ -609,7 +612,7 @@ html, body {
 .model-table tbody tr { transition: background 0.1s ease; }
 .model-table tbody tr:hover { background: var(--surface-hover); }
 
-.model-table .cost-cell { color: var(--accent-cost); }
+.model-table .cost-cell { color: var(--money); text-shadow: var(--money-glow); }
 
 .model-table tr:last-child td { border-bottom: none; }
 
@@ -658,7 +661,7 @@ html, body {
   pointer-events: none;
   z-index: 20;
   white-space: nowrap;
-  box-shadow: 0 0 12px rgba(63, 224, 255, 0.15);
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-cyan) 15%, transparent);
 }
 
 /* ---------- Responsive ---------- */
@@ -677,8 +680,8 @@ html, body {
 .mix-bar {
   display: flex;
   width: 100%;
-  height: 28px;
-  border-radius: 6px;
+  height: 12px;
+  border-radius: 2px;
   overflow: hidden;
   /* A 2px surface-coloured gap between segments keeps adjacent fills separable
      for viewers who cannot distinguish the two hues. */
@@ -800,7 +803,7 @@ html, body {
 .mix-measure button:last-child { border-right: none; }
 .mix-measure button:hover { color: var(--text-primary); }
 .mix-measure button[aria-pressed="true"] { background: var(--text-primary); color: var(--bg); }
-.mix-measure button:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: -2px; }
+.mix-measure button:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: -2px; }
 /* A click on the donut switches it too (setupModelMixToggle). user-select: none
    stops a double click from selecting the centre text. */
 .mix-donut svg { cursor: pointer; user-select: none; }
@@ -933,7 +936,7 @@ html, body {
   white-space: nowrap;
 }
 .sessions-table .num { text-align: right; font-variant-numeric: tabular-nums; }
-.sessions-table .cost { color: var(--accent-cost); }
+.sessions-table .cost { color: var(--money); text-shadow: var(--money-glow); }
 .sessions-table .is-live { color: var(--text-primary); }
 .sessions-table .is-attention { color: var(--text-primary); font-weight: 600; }
 /* Second line of the State cell: the cache countdown (cacheLine in public/session-groups.js).
@@ -988,7 +991,7 @@ html, body {
   left: 0;
   top: 2px;
   bottom: 2px;
-  background: var(--accent-dim);
+  background: color-mix(in srgb, var(--money-fill) 20%, transparent);
   border-radius: 2px;
 }
 .sessions-table .cost-value { position: relative; }
@@ -1105,7 +1108,7 @@ html, body {
   display: block;
   height: 100%;
   min-width: 1px;
-  background: var(--accent-cost);
+  background: var(--series-neutral);
   border-radius: 2px;
 }
 
@@ -1114,12 +1117,12 @@ html, body {
 /* Only the tool list is clickable; the cost breakdowns have nothing to drill into. */
 .usage-row.selectable { cursor: pointer; border-radius: 3px; }
 .usage-row.selectable:hover { background: var(--surface-raised); }
-.usage-row.selectable:focus-visible { outline: 1px solid var(--accent-cost); outline-offset: 1px; }
+.usage-row.selectable:focus-visible { outline: 1px solid var(--accent-cyan); outline-offset: 1px; }
 
 /* Bold text and the left bar mark the selected row without relying on colour. The
    bar is the one .ba-table tr.selected uses. */
 .usage-row.selected .usage-name { color: var(--text-primary); font-weight: 700; }
-.usage-row.selected .usage-track > i { background: var(--accent-cost); }
+.usage-row.selected .usage-track > i { background: var(--accent-cyan); }
 .usage-row.selected { background: var(--surface-raised); box-shadow: inset 3px 0 0 var(--text-primary); }
 
 /* Counts run wider than the "99.9%" the cost rows show. */
@@ -1152,32 +1155,32 @@ html, body {
 
 .day-bar.outside { fill: var(--border); }
 .day-bar.before { stroke: var(--text-secondary); stroke-width: 1; }
-.day-bar.after { fill: var(--accent-cost); }
+.day-bar.after { fill: var(--accent-cyan); }
 .day-bar.dimmed { opacity: 0.5; }
 .session-halo { fill: var(--bg); stroke: var(--bg); stroke-width: 4; }
 .empty-dash { stroke: var(--text-tertiary); stroke-width: 1.5; }
 .weekend-shade { fill: var(--text-primary); opacity: 0.03; pointer-events: none; }
 .median-label { font-family: var(--font-data); font-size: 10px; paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
 .median-label.before { fill: var(--text-primary); }
-.median-label.after { fill: var(--accent-cost); }
-.axis-label.picked { fill: var(--accent-cost); font-weight: 700; }
+.median-label.after { fill: var(--accent-cyan); }
+.axis-label.picked { fill: var(--accent-cyan); font-weight: 700; }
 .median-before-swatch { height: 0; border-top: 2px dashed var(--text-primary); }
-.median-after-swatch { height: 0; border-top: 2px solid var(--accent-cost); }
+.median-after-swatch { height: 0; border-top: 2px solid var(--accent-cyan); }
 .window-before { fill: var(--text-primary); opacity: 0.04; }
-.window-after { fill: var(--accent-cost); opacity: 0.08; }
+.window-after { fill: var(--accent-cyan); opacity: 0.08; }
 .window-median { stroke-width: 2; }
 .window-median.before { stroke: var(--text-primary); stroke-dasharray: 5 3; }
-.window-median.after { stroke: var(--accent-cost); }
-.marker-line { stroke: var(--accent-cost); stroke-width: 1.5; }
+.window-median.after { stroke: var(--accent-cyan); }
+.marker-line { stroke: var(--accent-cyan); stroke-width: 1.5; }
 .lane-name { font-family: var(--font-data); font-size: 10.5px; fill: var(--text-secondary); }
 .lane-rule { stroke: var(--border); opacity: 0.35; }
 .lane-count { font-family: var(--font-data); font-size: 9.5px; fill: var(--text-primary); pointer-events: none; }
-.lane-picked { fill: var(--accent-cost); fill-opacity: 0.08; stroke: var(--accent-cost); stroke-opacity: 0.6; pointer-events: none; }
+.lane-picked { fill: var(--accent-cyan); fill-opacity: 0.08; stroke: var(--accent-cyan); stroke-opacity: 0.6; pointer-events: none; }
 .lane-hit { fill: transparent; stroke: none; }
 .lane-cell { cursor: pointer; outline: none; }
 .lane-cell:focus-visible .lane-hit { stroke: var(--text-primary); stroke-width: 1.5; }
-.lane-cell.picked .marker-glyph { fill: var(--accent-cost); stroke: var(--accent-cost); }
-.window-bar.after { fill: var(--accent-cost); }
+.lane-cell.picked .marker-glyph { fill: var(--accent-cyan); stroke: var(--accent-cyan); }
+.window-bar.after { fill: var(--accent-cyan); }
 .plot-empty { font-family: var(--font-data); font-size: 11px; fill: var(--text-tertiary); }
 
 .ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 18px; align-items: start; }
@@ -1190,7 +1193,7 @@ html, body {
 /* The before/after table needs about 390px. Below that its column scrolls sideways instead of widening the page. */
 .ba-main { overflow-x: auto; }
 
-.day-list { max-height: 320px; overflow-y: auto; border-left: 2px solid var(--accent-cost); padding: 2px 0 2px 12px; }
+.day-list { max-height: 320px; overflow-y: auto; border-left: 2px solid var(--accent-cyan); padding: 2px 0 2px 12px; }
 .day-list-head { margin-bottom: 4px; }
 /* Side by side, .ba-side takes the height the table sets for the row (height: 0 plus min-height: 100%), so a busy window scrolls inside the column instead of stretching the panel. The 14em floor holds the 5em list and the 7.5em (five-line) note when the table is shorter. */
 @media (min-width: 861px) {
@@ -1214,7 +1217,7 @@ html, body {
   cursor: pointer;
 }
 .day-change:hover { background: var(--surface-hover); }
-.day-change[aria-pressed="true"], .day-change[aria-pressed="true"]:hover { background: var(--accent-cost); color: var(--bg); font-weight: 700; }
+.day-change[aria-pressed="true"], .day-change[aria-pressed="true"]:hover { background: var(--accent-cyan); color: var(--bg); font-weight: 700; }
 .day-change:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
 .day-change-time { color: var(--text-tertiary); flex: none; }
 .day-change[aria-pressed="true"] .day-change-time { color: inherit; opacity: 0.75; }
@@ -1271,7 +1274,7 @@ html, body {
 }
 .error-group summary::-webkit-details-marker { display: none; }
 .error-group summary:hover { background: var(--surface-hover); }
-.error-group summary:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 1px; }
+.error-group summary:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 1px; }
 .error-group[open] summary { background: var(--surface-raised); }
 .error-count { text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
 .error-message { overflow-wrap: anywhere; }
@@ -1311,7 +1314,7 @@ html, body {
 .tool-model-scroll .model-table th {
   white-space: nowrap;
 }
-.changes-error { color: var(--accent-cost); }
+.changes-error { color: var(--warning); }
 
 /* ---------- Loading ---------- */
 
@@ -1327,7 +1330,7 @@ html, body {
   height: 12px;
   flex: none;
   border: 2px solid var(--border);
-  border-top-color: var(--accent-cost);
+  border-top-color: var(--accent-cyan);
   border-radius: 50%;
   animation: spin 0.8s linear infinite;
 }
@@ -1409,7 +1412,7 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
 .row-toggle::before { content: '▾'; }
 .row-toggle[aria-expanded="false"]::before { content: '▸'; }
 .row-toggle:hover { color: var(--text-primary); }
-.row-toggle:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 2px; }
+.row-toggle:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
 
 /* A collapsed row keeps only its headings. */
 .panel.row-collapsed > :not(.panel-head),
@@ -1511,7 +1514,7 @@ main[aria-busy="true"] > :not(#statusBanner):not(#limitsBanner):not(#beforeAfter
 .card:hover > .hide-btn,
 .card:focus-within > .hide-btn { opacity: 1; }
 .hide-btn:hover { color: var(--text-primary); }
-.hide-btn:focus-visible { outline: 2px solid var(--accent-cost); outline-offset: 2px; }
+.hide-btn:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
 /* A touch screen has no hover, so the buttons always show there. */
 @media (hover: none) { .hide-btn { opacity: 1; } }
 

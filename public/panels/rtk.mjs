@@ -80,9 +80,8 @@ export function renderRtk(rtk) {
   dailyPanel.hidden = !hasDaily;
   if (hasDaily && shown('rtkDaily')) {
     drawBarChart(document.getElementById('rtkDailyChart'), rtk.daily, {
-      // Single series, so no legend and no new hue: this borrows the token palette's
-      // blue the way the daily-tokens chart borrows cache-read purple.
-      color: '#3987e5',
+      // Single series that is not money: no legend, and the slate series colour.
+      color: 'var(--series-neutral)',
       valueKey: 'keptOut',
       tooltipFn: (d) =>
         `<b>${fullDate(d.date)}</b><br>${figureLines(d)}`
