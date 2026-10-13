@@ -25,3 +25,4 @@ then on.
 | [Session timeline: live sessions above a divider](timeline-live-section.md) | Open: live lanes on top and the rest below a divider; the buffer that stops lanes jumping, /clear chains that span both sections, and which live rule to use open |
 | [Subagent output is undercounted](subagent-output-undercount.md) | Open: the mod records subagent steps and the dashboard corrects new responses; estimating the 27,134 earlier responses open |
 | [Plan limit band below the prompt](limit-band-below-prompt.md) | Open: no mod render slot sits between the prompt and the status line; a `bin/limit-line` in the statusline script is the likely route; dismissing and shared band logic open |
+| [README screenshots after the design pass](readme-screenshots-after-design-pass.md) | Open: every screenshot predates the tabs, the sticky bar and the new legends; which to retake and how to scrub them open |

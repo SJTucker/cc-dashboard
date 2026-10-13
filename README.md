@@ -12,7 +12,9 @@ only when you click Check prices. The optional Claude Code mod in `mod/` also fe
 Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
 does and doesn't do" below.
 
-![The Today range: summary cards, Plan usage, Where usage goes and Session timeline](docs/screenshots/overview.png)
+The page has two tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline and Live sessions. The Analysis tab shows 7d, 30d, 90d and All, picked with the range picker. The URL hash `#now` or `#analysis` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on both tabs. Cost today and Tokens today each add a 7d total.
+
+![The Now tab: Plan usage, Where usage goes and Session timeline](docs/screenshots/overview.png)
 
 Session titles, project names, branches and review text in the screenshots are placeholders.
 
@@ -45,9 +47,9 @@ cache write and cache read:
 
 ![Daily cost, Daily tokens, Cumulative cost and Daily tokens by type charts over 30 days](docs/screenshots/usage-charts.png)
 
-Cost by model, with tokens, share, dollars per million tokens and the thinking share of output, beside the model mix:
+The Models panel shows a share bar of each model's tokens or cost (the Tokens and Cost buttons in its head pick the measure), with the model table below it: tokens, share, dollars per million tokens and the thinking share of output. Under every chart a legend row shows each series with an icon drawn like its mark. A long list shows its first rows and a Show all button in place, so no panel scrolls inside the page.
 
-![Cost by model table and Model mix donut chart](docs/screenshots/models.png)
+![Models panel with share bar and table](docs/screenshots/models.png)
 
 When usage happens, as cost by weekday and hour in local time:
 
@@ -93,9 +95,9 @@ what Anthropic billed. Do not add one to the other.
 
 ## Plan usage
 
-On the Today range, a panel shows the two limits from Claude Code's `/usage` screen:
+On the Now tab, a panel shows the two limits from Claude Code's `/usage` screen:
 the current session (the 5-hour window) and the current week across all models.
-The panel sits beside Where usage goes. On the other ranges, or when one of the two
+The panel sits beside Where usage goes. When one of the two
 is hidden, the other panel takes the whole row. Below 880px the two panels stack,
 Plan usage above Where usage goes.
 
@@ -394,7 +396,7 @@ the row's arrow to list the sessions one by one. Live and idle open sessions kee
 their own rows unless they belong to a launch group.
 
 The Session timeline panel, above Live sessions, shows the same sessions by time on
-the Today range. Each session has one lane, ordered by when it started working
+the Now tab. Each session has one lane, ordered by when it started working
 today. A session that `/clear` started sits directly under the session it replaced,
 with `↳` before its title and a curve from the old session's last bar to its first
 bar. This needs the mod, which records which session each `/clear` ended.
@@ -457,18 +459,18 @@ is hidden:
 - `/api/rtk`: both rtk panels
 - `/api/sessions/live`: Live sessions and Session timeline
 - `/api/reviews`: Session reviews
-- `/api/records`: the Record day card, plus on Today the Total cost and Total tokens cards
-- `/api/prices`: Cost by model
+- `/api/records`: the 7d lines under Cost today and Tokens today in the sticky bar, and Record day. The sticky bar cannot be hidden, so this request always runs
+- `/api/prices`: the Models panel
 
 `/api/summary` and `/api/limits` are always requested.
 
-The Record day card's all-time value is the busiest day in the All range. It is
+The sticky bar's Record day value is the busiest day in the All range. It is
 computed from the stored rows on each request, so no separate cache file exists.
 
 ## Setup changes
 
 One panel at the bottom shows whether a change to your setup moved the numbers. It
-follows the range picker. Today and 7d show the last 14 days, 30d and 90d their own
+follows the Analysis tab's range picker. 7d shows the last 14 days, 30d and 90d their own
 span, and All shows everything. The before/after table always uses the full 7-day
 windows, so its numbers do not change with the range.
 
@@ -519,8 +521,8 @@ days either side, the panel lists it, and the numbers cover both.
 
 Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default). The
 dashboard stores the usage rows of each transcript last modified before today's local
-midnight in `~/.claude/cc-dashboard/transcripts.db`. The All range, the Record day
-card and these before/after windows keep the history of every transcript the
+midnight in `~/.claude/cc-dashboard/transcripts.db`. The All range, the sticky bar's Record day
+and these before/after windows keep the history of every transcript the
 dashboard stored before Claude Code deleted it. A transcript deleted on the day it was
 written is never stored. History starts at the first stored transcript. A
 before/after needs history on both sides of a change, so a change less than 7 days
@@ -538,7 +540,7 @@ only. History then starts at the oldest transcript on disk. Raising
   `rate-limits.json` and the `cc-dashboard/` folder in your Claude config folder.
   [Files outside the repo](SETUP.md#files-outside-the-repo) in SETUP.md lists each
   file, what writes it, and what deletes old files.
-- **One network request from the server, on demand.** The Cost by model panel has
+- **One network request from the server, on demand.** The Models panel has
   a Check prices button. Clicking it makes the server fetch
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's
   pricing page as markdown. Nothing fetches on page load, on a timer, or at
@@ -611,7 +613,7 @@ bin/review-session     Lists ended sessions to review and records Haiku's sugges
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
 public/apple-touch-icon.png  Home-screen icon, linked from index.html
-public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, donut slices, mixEntries (the Model mix donut's entries per measure) and the Session timeline's hour ticks, cache rebuild marks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
+public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, mixEntries (the Models panel's share bar entries per measure) and the Session timeline's hour ticks, cache rebuild marks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
 public/constants.mjs   Numbers the page shares with the server; test/front-end-constants.test.js keeps them equal
 public/dom.mjs         Element builders (el, svgEl) and the tooltip
 public/favicon.ico     Tab icon, linked from index.html
@@ -632,21 +634,22 @@ public/style.css       All styling, including the @font-face rules for public/fo
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
 public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, the signed y axis for charts with negative values, and the Setup changes y axis with a 0 label and headroom
 public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
-public/charts/donut.mjs  drawModelMix: each model's share of tokens or of cost as a donut with its legend; flipDonut turns the donut between the two views
+public/charts/legend.mjs  legendRow and its icons: the one legend pattern, each icon drawn like its mark
 public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and rtk commands
 public/charts/heatmap.mjs  drawActivityHeatmap: cost by weekday and hour
 public/charts/line.mjs The four token types on a log-axis line chart, and the token legend
 public/charts/palette.mjs  Series colours and textures, and the SVG pattern definitions
 public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, window bar, daily metric chart with session dots, and its legend
-public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar
+public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar, and drawShareBar, the share bar the Models panel also uses
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
 public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists with invocation counts
-public/panels/cards.mjs  The summary cards: total cost, tokens, cache, thinking share, files, tool calls, burn rate, projection and Claude Code's reported cost
+public/panels/cards.mjs  The Analysis tab's summary cards: total cost, tokens, cache, thinking share, tool calls, burn rate, projection and Claude Code's reported cost
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
-public/panels/models.mjs  Cost by model table, the model mix donut and the model daily charts
-public/panels/prices.mjs  The prices note in Cost by model, and the Check prices and Apply buttons; uses the /api/prices routes
-public/panels/records.mjs  The Record day card and the 7d total lines; fetches /api/records
+public/panels/models.mjs  The Models panel (share bar and table) and the model daily charts
+public/panels/prices.mjs  The prices note in the Models panel, and the Check prices and Apply buttons; uses the /api/prices routes
+public/panels/records.mjs  Fetches /api/records for the sticky bar's 7d lines and Record day
+public/panels/sticky.mjs  The sticky bar's Cost today, Tokens today and Record day
 public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Duplicate, Not useful, Undo and Copy prompt; fetches /api/reviews
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
 public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
@@ -654,6 +657,8 @@ public/panels/timeline.mjs  The Session timeline: one lane per session with acti
 public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown, its errors and an error table per model
 public/panels/usage.mjs  Daily cost, daily tokens, cumulative cost, token types and the weekday and hour heatmap
 public/ui/collapse.mjs Collapsible rows of panels, and the collapsible Skills and Subagents lists
+public/ui/show-all.mjs  Show all for long lists, in place of inner scrolling
+public/ui/tabs.mjs     The Now and Analysis tabs and the URL hash that picks one
 public/ui/hidden.mjs   Hides a panel or card with its x button, shows it again from the header menu, and keeps a row's handle and toggle on a panel that shows
 public/ui/panel-light.mjs  Lights the border of the panel under the pointer
 public/ui/row-order.mjs  Drag to reorder rows of panels; the order is saved in localStorage
