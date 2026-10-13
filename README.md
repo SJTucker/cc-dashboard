@@ -256,8 +256,9 @@ opens with Enter or Space.
   Haiku is told not to repeat a rule they hold, and to report a broken one as a
   suggestion that starts `Broken rule:`. Then come the suggestions from every review
   in the last 14 days, newest first, each marked open, done, not useful or duplicate,
-  cut to 12,000 characters. Haiku is told not to make one of them again. It may repeat
-  an open one, starting `Recurring:`, when the session shows the same problem. The
+  cut to 12,000 characters. Haiku is told not to propose the same change again. It may
+  repeat an open or done one, starting `Recurring:`, when the session shows the same
+  problem. The
   digest has one line per typed prompt, reply start, tool call, tool error, large tool
   result and compaction. Prompts are cut to 400 characters and the digest to about
   60,000 characters.

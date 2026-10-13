@@ -147,6 +147,12 @@ test('SYSTEM explains the earlier suggestions section', () => {
   assert.match(review.SYSTEM, /Recurring:/);
 });
 
+test('SYSTEM limits an earlier suggestion to the same change, and lets a done one recur', () => {
+  assert.match(review.SYSTEM, /proposes the same change/);
+  assert.doesNotMatch(review.SYSTEM, /suggestions like it/);
+  assert.match(review.SYSTEM, /behind an open or done suggestion/);
+});
+
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 const NOW = Date.UTC(2026, 9, 6, 12);
