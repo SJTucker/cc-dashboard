@@ -49,6 +49,17 @@ test('prompt hands back the ended session and record stores the answer', () => {
   assert.deepStrictEqual(run(base, ['prompt']).out, { reviews: [] });
 });
 
+test('prompt sends the global CLAUDE.md ahead of the digest', () => {
+  const base = fixture();
+  fs.writeFileSync(path.join(base, 'CLAUDE.md'), 'Commits carry no trailer.');
+  const prompted = run(base, ['prompt']);
+  assert.strictEqual(prompted.code, 0);
+  assert.strictEqual(
+    prompted.out.reviews[0].prompt,
+    `RULES THE USER ALREADY HAS\n=== ${path.join(base, 'CLAUDE.md')} ===\nCommits carry no trailer.\n\nSESSION DIGEST\nUSER: one\nUSER: two\nUSER: three`,
+  );
+});
+
 test('record exits 1 with the reason on bad stdin', () => {
   const { code, out, err } = run(fixture(), ['record'], 'nope');
   assert.strictEqual(code, 1);

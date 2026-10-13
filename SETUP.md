@@ -218,6 +218,15 @@ The mod also reads these files to record setup changes. It writes none of them.
   ignores `RTK_DB`.
 - each session's project `CLAUDE.md`, `CLAUDE.local.md` and `.claude/settings.json`
 
+`bin/review-session` reads these files for each session it reviews. It writes none
+of them.
+
+- `<cfg>/CLAUDE.md` and the files it includes with an `@path` line
+- `CLAUDE.md` and `CLAUDE.local.md` in the session's start folder and in each
+  folder above it. The start folder is the `cwd` on the first transcript line that
+  has one.
+- `<cfg>/projects/<folder>/memory/MEMORY.md`, next to the session's transcript
+
 ## Network and model use
 
 - **The server** makes one request, and only when you click Check prices. It fetches
@@ -231,12 +240,13 @@ The mod also reads these files to record setup changes. It writes none of them.
   run in interactive sessions only. Each call sends this:
   - **Judging releases:** the changelog entries of up to 20 versions. Nothing from
     your setup or transcripts is sent.
-  - **Reviewing a session:** a digest of its transcript. The digest holds the first
+  - **Reviewing a session:** the rule files listed under "Files outside the repo", cut
+    to 30,000 characters, and a digest of its transcript. The digest holds the first
     400 characters of each typed prompt and the first 200 characters of each Claude
     reply. The digest names each tool call with its file path, URL host, skill,
     subagent type or Bash program name. Bash arguments are not sent. The digest also
-    holds the first 200 characters of each tool error. A digest over 60,000 characters keeps its first
-    20,000 and last 40,000.
+    holds the first 200 characters of each tool error. A digest over 60,000 characters
+    keeps its first 20,000 and last 40,000.
   - **Labelling a setup change:** the file's short name and its added and removed
     lines, up to 4,096 characters. Labelling covers `CLAUDE.md`, the files it includes
     with `@path`, rules, skills, agents, and a project's `CLAUDE.md` and

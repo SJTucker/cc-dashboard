@@ -217,9 +217,15 @@ opens with Enter or Space.
   Agent SDK runs do not start reviews.
 - **What is reviewed.** Sessions with an `endedAt` in their snapshot and 3 or more
   typed prompts. Each review pass, at a session start or a `/clear`, reviews at most 3 sessions.
-- **What Haiku sees.** A digest of the transcript, one line per typed prompt, reply
-  start, tool call, tool error, large tool result and compaction. Prompts are cut to
-  400 characters and the digest to about 60,000 characters.
+- **What Haiku sees.** The rule files Claude had in the session, then a digest of
+  the transcript. The rule files are `<cfg>/CLAUDE.md` and the files it includes
+  with an `@path` line, each `CLAUDE.md` and `CLAUDE.local.md` from the session's
+  start folder up to `/`, and the project's memory index,
+  `<cfg>/projects/<folder>/memory/MEMORY.md`. They are cut to 30,000 characters.
+  Haiku is told not to repeat a rule they hold, and to report a broken one as a
+  suggestion that starts `Broken rule:`. The digest has one line per typed prompt,
+  reply start, tool call, tool error, large tool result and compaction. Prompts are
+  cut to 400 characters and the digest to about 60,000 characters.
 - **Where results go.** The `reviews` and `suggestions` tables in
   `~/.claude/cc-dashboard/transcripts.db`, written by `bin/review-session`. Rows are
   never deleted. The panel lists reviews finished in the last 7 days. Review files
