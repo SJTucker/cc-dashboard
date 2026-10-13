@@ -1903,21 +1903,35 @@ test('turn.start during the arming delay runs no script', async ($, on) => {
 })
 
 test('a cache-state reply that comes after turn.start arms nothing', async ($, on) => {
-  const { forked, cacheRan, clock } = world(on, timed({ cacheMs: 2_000 }))
+  const { forked, cacheRan, state, clock } = world(on, timed({ cacheMs: 2_000 }))
   await idleTurn($)
   await clock.advance(ARM)
   expect(cacheRan.length).toBe(1)
   await $.turn.start({ text: 'more', turnId: 't2' })
+  // The second arming finds too few tokens, so it runs no script and sets no timer.
+  state.contextTokens = 1_000
+  await $.turn.complete(turnEnd({ turnId: 't2' }))
   await clock.advance(2_000)
   await clock.set(EXPIRES)
   expect(forked).toEqual([])
 })
 
 test('a /clear cancels the timer', async ($, on) => {
-  const { forked, clock } = world(on, timed())
+  const { forked, state, clock } = world(on, timed())
   await idleTurn($)
   await clock.advance(ARM)
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  // forgetSession also drops the activity entry, which would stop a surviving timer at
+  // fireHandoff's state check. turn.complete recreates a waiting entry. Its second
+  // session.id call, in armHandoff, throws, so no arming replaces or cancels the timer.
+  let idCalls = 0
+  Object.defineProperty(state, 'id', {
+    get() {
+      if (++idCalls > 1) throw new Error('no id')
+      return 's1'
+    },
+  })
+  await $.turn.complete(turnEnd())
   await clock.set(EXPIRES)
   expect(forked).toEqual([])
 })
