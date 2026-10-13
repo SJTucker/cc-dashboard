@@ -1,5 +1,5 @@
 // The summary cards. The Record day card and the 7d total lines are in records.mjs.
-import { formatCost, formatTokens, formatPercent, costPerDay } from '../format.mjs';
+import { formatCost, formatTokens, formatPercent, costPerDay, thinkingShare, thinkingNote } from '../format.mjs';
 import { state, shown } from '../state.mjs';
 import { renderWeekTotals, renderRecord } from './records.mjs';
 
@@ -41,12 +41,22 @@ function renderRateCards(daily) {
   if (shown('card-projection')) document.getElementById('cardProjection').textContent = formatCost(perDay * 30);
 }
 
+// The share is of the calls that report thinking, so the note says how many do.
+// On Today the compact card hides its note, and the title shows it on hover.
+function renderThinkingCard(s) {
+  const note = thinkingNote(s);
+  document.getElementById('cardThinking').textContent = formatPercent(thinkingShare(s));
+  document.getElementById('cardThinkingNote').textContent = note;
+  document.getElementById('thinkingCard').title = note;
+}
+
 export function renderCards(data) {
   const s = data.summary;
   if (shown('card-cost')) renderCostCard(s);
   if (shown('card-tokens')) document.getElementById('cardTokens').textContent = formatTokens(s.totalTokens);
   renderWeekTotals(s);
   if (shown('card-cache')) document.getElementById('cardCache').textContent = formatPercent(s.cacheEfficiency);
+  if (shown('card-thinking')) renderThinkingCard(s);
   renderReportedCard(s);
   if (shown('card-files')) document.getElementById('cardFiles').textContent = data.meta.scannedFiles;
   if (shown('card-tools')) document.getElementById('cardTools').textContent = s.toolCalls.toLocaleString('en-US');

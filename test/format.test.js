@@ -108,3 +108,18 @@ test('formatTokens keeps the unit for negative values', async () => {
   assert.equal(formatTokens(-2_500_000), '-2.50M');
   assert.equal(axisTokens(-5000), '-5k');
 });
+
+test('thinkingShare divides thinking by the output of the calls that report it', async () => {
+  const { thinkingShare } = await load();
+  assert.equal(thinkingShare({ thinking: 40, thinkingOutput: 160 }), 0.25);
+  assert.equal(thinkingShare({ thinking: 0, thinkingOutput: 0 }), null);
+  assert.equal(thinkingShare({}), null);
+});
+
+test('thinkingNote gives the thinking cost and the share of calls that report it', async () => {
+  const { thinkingNote } = await load();
+  assert.equal(thinkingNote({ thinkingCost: 412.5, thinkingCalls: 58, apiCalls: 100 }), '$412.50 at output rates · 58% of calls report it');
+  assert.equal(thinkingNote({ thinkingCost: 0, thinkingCalls: 3, apiCalls: 4 }), '75% of calls report it');
+  assert.equal(thinkingNote({ thinkingCost: 0, thinkingCalls: 0, apiCalls: 9 }), '0% of calls report it');
+  assert.equal(thinkingNote({ thinkingCost: 0, thinkingCalls: 0, apiCalls: 0 }), '');
+});

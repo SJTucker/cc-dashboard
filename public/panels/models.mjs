@@ -1,6 +1,6 @@
 // Cost by model, the model mix donut, and the model daily charts.
 import { el } from '../dom.mjs';
-import { formatCost, formatTokens, escapeHtml } from '../format.mjs';
+import { formatCost, formatTokens, formatPercent, thinkingShare, escapeHtml } from '../format.mjs';
 import { state, shown } from '../state.mjs';
 import { segmentTexture } from '../charts/palette.mjs';
 import { drawModelMix, flipDonut } from '../charts/donut.mjs';
@@ -30,13 +30,14 @@ function drawModelList(container, models) {
         <td class="num cost-cell">${unpriced ? 'unpriced' : formatCost(m.cost)}</td>
         <td class="num">${unpriced ? '&mdash;' : share.toFixed(1) + '%'}</td>
         <td class="num">${unpriced ? '&mdash;' : formatCost(perMillion)}</td>
+        <td class="num">${formatPercent(thinkingShare(m))}</td>
       </tr>`;
     })
     .join('');
 
   container.innerHTML = `<table class="model-table">
     <thead><tr>
-      <th>Model</th><th class="num">Tokens</th><th class="num">Cost</th><th class="num">Share</th><th class="num">$/MTok</th>
+      <th>Model</th><th class="num">Tokens</th><th class="num">Cost</th><th class="num">Share</th><th class="num">$/MTok</th><th class="num">Thinking</th>
     </tr></thead>
     <tbody>${rows}</tbody>
   </table>`;

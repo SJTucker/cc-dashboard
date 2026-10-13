@@ -45,7 +45,7 @@ cache write and cache read:
 
 ![Daily cost, Daily tokens, Cumulative cost and Daily tokens by type charts over 30 days](docs/screenshots/usage-charts.png)
 
-Cost by model, with tokens, share and dollars per million tokens, beside the model mix:
+Cost by model, with tokens, share, dollars per million tokens and the thinking share of output, beside the model mix:
 
 ![Cost by model table and Model mix donut chart](docs/screenshots/models.png)
 
@@ -625,7 +625,7 @@ public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, windo
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
 public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists with invocation counts
-public/panels/cards.mjs  The summary cards: total cost, tokens, cache, files, tool calls, burn rate, projection and Claude Code's reported cost
+public/panels/cards.mjs  The summary cards: total cost, tokens, cache, thinking share, files, tool calls, burn rate, projection and Claude Code's reported cost
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
 public/panels/models.mjs  Cost by model table, the model mix donut and the model daily charts
