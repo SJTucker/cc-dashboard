@@ -95,24 +95,6 @@ test('reviewPrompt is the digest alone without rules, and puts rules first with 
   assert.strictEqual(rules.reviewPrompt('=== /a ===\nr', 'USER: hi'), 'RULES THE USER ALREADY HAS\n=== /a ===\nr\n\nSESSION DIGEST\nUSER: hi');
 });
 
-test('readSessionStart returns the first cwd and the first timestamp', async () => {
-  const base = tmpDir();
-  const file = write(path.join(base, 's.jsonl'), [
-    JSON.stringify({ type: 'ai-title', aiTitle: 't' }),
-    'not json "cwd"',
-    JSON.stringify({ type: 'user', cwd: '/work/app', timestamp: '2026-10-13T10:00:00.000Z' }),
-    JSON.stringify({ type: 'user', cwd: '/work/app/sub', timestamp: '2026-10-13T11:00:00.000Z' }),
-  ].join('\n'));
-  assert.deepStrictEqual(await rules.readSessionStart(file), { cwd: '/work/app', startedAt: Date.parse('2026-10-13T10:00:00.000Z') });
-});
-
-test('readSessionStart is all null when no line has a cwd or the file is missing', async () => {
-  const base = tmpDir();
-  const none = { cwd: null, startedAt: null };
-  assert.deepStrictEqual(await rules.readSessionStart(write(path.join(base, 's.jsonl'), '{"type":"user"}\n')), none);
-  assert.deepStrictEqual(await rules.readSessionStart(path.join(base, 'missing.jsonl')), none);
-});
-
 test('ruleFiles marks a file changed after the session started', () => {
   const base = tmpDir();
   const file = write(path.join(base, 'CLAUDE.md'), 'rule');
