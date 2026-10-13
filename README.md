@@ -12,6 +12,10 @@ only when you click Check prices. The optional Claude Code mod in `mod/` also fe
 Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
 does and doesn't do" below.
 
+![The Today range: summary cards, Plan usage, Where usage goes and Session timeline](docs/screenshots/overview.png)
+
+Session titles, project names, branches and review text in the screenshots are placeholders.
+
 ## Run it
 
 [SETUP.md](SETUP.md) has the requirements, the install steps for the server and the
@@ -34,11 +38,28 @@ it stopped, as soon as it listens. When no database is available (see the Setup
 changes section), nothing is stored and it reads every transcript, on worker threads
 when there are many.
 
+## Charts
+
+Daily cost, daily tokens, cumulative cost, and daily tokens split into input, output,
+cache write and cache read:
+
+![Daily cost, Daily tokens, Cumulative cost and Daily tokens by type charts over 30 days](docs/screenshots/usage-charts.png)
+
+Cost by model, with tokens, share and dollars per million tokens, beside the model mix:
+
+![Cost by model table and Model mix donut chart](docs/screenshots/models.png)
+
+When usage happens, as cost by weekday and hour in local time:
+
+![Weekday-by-hour heatmap of cost](docs/screenshots/heatmap.png)
+
 ## rtk savings (optional)
 
 If you use `rtk` to filter command output before it reaches Claude, two extra panels
 appear: how many tokens rtk kept out of the model's context per day, and which
 commands it kept the most out of.
+
+![Output rtk kept out of context per day, and What rtk kept out of context by command](docs/screenshots/rtk.png)
 
 rtk logs the raw and filtered size of every command. The raw size overstates what
 rtk saved. Claude Code never puts a large Bash output into context in full, and the
@@ -77,6 +98,9 @@ the current session (the 5-hour window) and the current week across all models.
 The panel sits beside Where usage goes. On the other ranges, or when one of the two
 is hidden, the other panel takes the whole row. Below 880px the two panels stack,
 Plan usage above Where usage goes.
+
+![Plan usage panel with session, week and today bars, beside Where usage goes](docs/screenshots/plan-usage.png)
+
 The dashboard reads two possible sources and shows whichever was updated more
 recently. It makes no network request of its own.
 
@@ -204,6 +228,8 @@ transcript and lists Haiku's suggestions, so you can paste it into a stronger mo
 to check them. A review made before the transcript path was saved gets the path
 found by session id, and has no title. A review made before branches were saved
 shows no branch.
+
+![Session reviews panel listing reviews with their suggestions and Done and Not useful buttons](docs/screenshots/session-reviews.png)
 
 Each open suggestion has a Done and a Not useful icon button, with a tooltip on
 each. A dismissed suggestion is hidden, and the review shows `N dismissed · Show`.
@@ -339,6 +365,8 @@ Today is that session's share of the day's highest single-session Cost today. Pr
 counts the prompts typed in the session today. The Total row sums Prompts, Lines and
 Cost today.
 
+![Live sessions panel with the Running now and Today tables](docs/screenshots/live-sessions.png)
+
 The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
 any other end, such as quitting or `/resume`. It reads this from
 `bin/record-session-end`, which the mod runs when a session ends. Without the mod, a
@@ -373,6 +401,8 @@ thread, and a hollow one a subagent. Rebuilds closer than 8px join into one diam
 with a count. Writes under 20,000 tokens are left out, and so is the first call after a `/compact`.
 The panel note adds the day's rebuild count and total premium.
 
+![Session timeline panel with one lane per session and a cache rebuild marker](docs/screenshots/timeline.png)
+
 The Where usage goes panel shows where total cost went: main thread against
 subagents, calls over against under 150k of context, and the Skills and Subagents
 lists, which are collapsed until you open them. Each list row shows how many times
@@ -394,6 +424,8 @@ non-zero. Not counted is every other error, which comes from the environment the
 model ran in. Hover it for the count per cause. A model with fewer than 20 calls
 shows "–" for both rates. Tool calls stored from transcripts Claude Code has since
 deleted take the model of the response before them.
+
+![Tool calls panel with calls per tool, Bash commands, error causes and the model table](docs/screenshots/tool-calls.png)
 
 ### Hiding panels
 
@@ -424,6 +456,8 @@ One panel at the bottom shows whether a change to your setup moved the numbers. 
 follows the range picker. Today and 7d show the last 14 days, 30d and 90d their own
 span, and All shows everything. The before/after table always uses the full 7-day
 windows, so its numbers do not change with the range.
+
+![Setup changes panel with change lanes, the session-start context chart and the before and after table](docs/screenshots/setup-changes.png)
 
 - **Lanes.** One row for each kind of change in the range, on the same time axis as
   the chart: Claude Code releases, CLAUDE.md, skills, plugins, hooks, config, rtk,
