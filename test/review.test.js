@@ -303,6 +303,24 @@ test('pendingReviews puts the session rule files ahead of the digest', async () 
   ].join('\n'));
 });
 
+test('pendingReviews reads each transcript file once', async () => {
+  const { review, db, sessionsDir, projects } = fixture();
+  writeSnapshot(sessionsDir, { sessionId: 'big', project: 'demo', endedAt: NOW - 1 });
+  writeSessionTranscript(projects, 'big', 3);
+  const opened = [];
+  const original = fs.createReadStream;
+  fs.createReadStream = (file, ...rest) => {
+    opened.push(String(file));
+    return original.call(fs, file, ...rest);
+  };
+  try {
+    await review.pendingReviews({ db, sessionsDir, projects, now: NOW });
+  } finally {
+    fs.createReadStream = original;
+  }
+  assert.strictEqual(opened.filter((f) => f.endsWith('big.jsonl')).length, 1);
+});
+
 test('pendingReviews skips a session that ended more than 7 days ago', async () => {
   const { review, db, sessionsDir, projects } = fixture();
   writeSnapshot(sessionsDir, { sessionId: 'stale', project: 'demo', endedAt: NOW - 8 * DAY });
@@ -389,23 +407,42 @@ test('readReviews returns the saved title and transcript, and finds the transcri
   assert.deepStrictEqual([byId.older.title, byId.older.transcript], [null, path.join(projects, '-work-demo', 'older.jsonl')]);
 });
 
-test('readTitleAndBranch returns the last non-empty ai-title and the last branch, or nulls', async () => {
+test('readTranscript returns the digest with the last title and branch and the first cwd and timestamp', async () => {
   const { review, base } = fixture();
   const file = path.join(base, 't.jsonl');
   const lines = [
     { type: 'ai-title', aiTitle: 'First' },
-    { ...typed('hi'), gitBranch: 'main' },
+    { ...typed('hi'), gitBranch: 'main', cwd: '/work/app', timestamp: '2026-10-13T10:00:00.000Z' },
     { type: 'ai-title', aiTitle: '  Second  ' },
-    { ...typed('more'), gitBranch: 'feat/x' },
+    { ...typed('more'), gitBranch: 'feat/x', cwd: '/work/app/sub', timestamp: '2026-10-13T11:00:00.000Z' },
     { ...typed('again'), gitBranch: '' },
+    { type: 'assistant', isSidechain: true, gitBranch: 'side', message: { content: [] } },
     { type: 'ai-title', aiTitle: '   ' },
     { type: 'ai-title', aiTitle: 4 },
   ];
-  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\nnot json "ai-title" "gitBranch"\n');
-  assert.deepStrictEqual(await review.readTitleAndBranch(file), { title: 'Second', branch: 'feat/x' });
-  fs.writeFileSync(file, JSON.stringify(typed('hi')));
-  assert.deepStrictEqual(await review.readTitleAndBranch(file), { title: null, branch: null });
-  assert.deepStrictEqual(await review.readTitleAndBranch(path.join(base, 'missing.jsonl')), { title: null, branch: null });
+  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\nnot json "ai-title" "gitBranch" "cwd"\n5\n');
+  assert.deepStrictEqual(await review.readTranscript(file), {
+    prompts: 3,
+    text: 'USER: hi\nUSER: more\nUSER: again',
+    title: 'Second',
+    branch: 'side',
+    cwd: '/work/app',
+    startedAt: Date.parse('2026-10-13T10:00:00.000Z'),
+  });
+});
+
+test('readTranscript has null facts when no line carries them', async () => {
+  const { review, base } = fixture();
+  const file = path.join(base, 't.jsonl');
+  fs.writeFileSync(file, JSON.stringify(typed('hi')) + '\n');
+  assert.deepStrictEqual(await review.readTranscript(file), {
+    prompts: 1, text: 'USER: hi', title: null, branch: null, cwd: null, startedAt: null,
+  });
+});
+
+test('readTranscript returns null for a missing file', async () => {
+  const { review, base } = fixture();
+  assert.strictEqual(await review.readTranscript(path.join(base, 'missing.jsonl')), null);
 });
 
 test('pendingReviews saves the transcript path and title in the claim, and finishReview keeps them', async () => {
