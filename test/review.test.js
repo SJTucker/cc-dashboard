@@ -473,10 +473,18 @@ test('setDismissal dismisses, overwrites, undoes, and reports a suggestion that 
   assert.deepStrictEqual(suggestionsOf(db, 'b').map((s) => s.reason), [null]);
 });
 
-test('setDismissal rejects a reason outside done and not_useful', () => {
+test('setDismissal rejects a reason outside DISMISS_REASONS', () => {
   const { review, db } = fixture();
   seed(review, db, 'a', {}, [{ kind: 'workflow', text: 'x' }]);
   assert.throws(() => review.setDismissal(db, 'a', 0, 'bored', NOW), /reason/);
+});
+
+test('setDismissal stores duplicate as a reason', () => {
+  const { review, db } = fixture();
+  seed(review, db, 'a', {}, [{ kind: 'workflow', text: 'x' }]);
+  assert.deepStrictEqual(review.DISMISS_REASONS, ['done', 'not_useful', 'duplicate']);
+  assert.strictEqual(review.setDismissal(db, 'a', 0, 'duplicate', NOW), true);
+  assert.deepStrictEqual(suggestionsOf(db, 'a').map((s) => [s.dismissed_at, s.reason]), [[NOW, 'duplicate']]);
 });
 
 test('a dismissal survives readReviews and a later finishReview of another session', () => {
