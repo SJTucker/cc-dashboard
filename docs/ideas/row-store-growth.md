@@ -31,7 +31,7 @@ Same machine, a copy of the real database over 44.5 days: 2,022 transcripts on d
 | All memo heap | 10.1 MB | 10.1 MB |
 | Stat pass (directory walk plus `statSync`) | 6.8 ms + 3.5 ms | 6.8 ms + 3.1 ms |
 
-Compaction (`lib/compact-rows.js`) replaces each call's raw `usage` object with the six fields `lib/aggregate.js` and `lib/pricing.js` read, and shares one string instance per repeated session id, model, version and tool name. `loadAll()` in `lib/store.js` and `persist()` in `lib/rowstore.js` apply it to rows in memory. The database keeps the full `usage` object, because it is the only copy once Claude Code deletes a transcript and because `output_tokens_details.thinking_tokens` is data no panel reads yet (`thinking-tokens.md`). `lib/extract.js` is unchanged and `EXTRACT_VERSION` did not change.
+Compaction (`lib/compact-rows.js`) replaces each call's raw `usage` object with the seven fields `lib/aggregate.js` and `lib/pricing.js` read, and shares one string instance per repeated session id, model, version and tool name. `loadAll()` in `lib/store.js` and `persist()` in `lib/rowstore.js` apply it to rows in memory. The database keeps the full `usage` object, because it is the only copy once Claude Code deletes a transcript. `lib/extract.js` is unchanged and `EXTRACT_VERSION` did not change.
 
 ## Second trigger: the stat pass on each refresh
 
