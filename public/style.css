@@ -456,19 +456,27 @@ html, body {
 
 .legend {
   display: flex;
-  gap: var(--sp-3);
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-2);
   font-size: var(--fs-caption);
-  color: var(--text-secondary);
 }
 
 .legend-item { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.legend-label { color: var(--text-secondary); }
+.legend-value { color: var(--text-tertiary); }
+.legend-glyph { flex: none; overflow: visible; }
+
+/* An icon made of two parts, such as the timeline's hexagon and bar sample. */
+.legend-pair { display: inline-flex; align-items: center; gap: 2px; }
 
 .legend-swatch {
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border-radius: var(--radius-s);
   display: inline-block;
-  vertical-align: middle;
+  flex: none;
   border: 1px solid var(--border);
 }
 
