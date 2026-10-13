@@ -19,6 +19,18 @@ export function rangeForTab(tab, analysisDays) {
   return tab === 'now' ? 'today' : analysisDays;
 }
 
+// The panels each tab draws from the summary (drawSummaryPanels in main.mjs). The
+// other tab's panels are hidden, so drawing them would put the wrong range's
+// numbers in them and size their charts at the 200px fallback width.
+const SUMMARY_PANELS = {
+  now: ['attribution'],
+  analysis: ['cards', 'usage', 'models', 'tools'],
+};
+
+export function summaryPanelsFor(tab) {
+  return SUMMARY_PANELS[tab] ?? SUMMARY_PANELS.now;
+}
+
 const CONTAINER_IDS = { now: 'tabNow', analysis: 'tabAnalysis' };
 
 // Shows the tab's container, hides the other, and presses the tab's button.

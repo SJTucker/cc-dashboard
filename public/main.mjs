@@ -31,7 +31,7 @@ import { setupCollapsibleRows, setupUsageGroupToggles } from './ui/collapse.mjs'
 import { setupHiding } from './ui/hidden.mjs';
 import { setupPanelLight } from './ui/panel-light.mjs';
 import { setupRowOrder } from './ui/row-order.mjs';
-import { setupTabs, showTab, rangeForTab } from './ui/tabs.mjs';
+import { setupTabs, showTab, rangeForTab, summaryPanelsFor } from './ui/tabs.mjs';
 
 const LIVE_POLL_MS = 5000;
 // While Today is shown, runLoad runs LIVE_POLL_MS after the previous run finished
@@ -249,8 +249,8 @@ function renderMetaBanner(meta) {
   }
 }
 
-// Draws everything the summary feeds: the banner, cards, charts, models, attribution
-// and tools. lastSummarySignature is set on the last line, after every renderer has
+// Draws everything the summary feeds on the tab shown: the banner, then the cards,
+// charts, models and tools on Analysis, or Where usage goes on Now. lastSummarySignature is set on the last line, after every renderer has
 // run. A renderer that throws therefore leaves the previous signature, and
 // reportDrawError clears that one. The panel draw guards keep no key for a draw that
 // threw, so those panels need no clearing.
@@ -265,11 +265,12 @@ function drawSummaryPanels(data) {
   const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models]);
   if (signature === lastSummarySignature) return;
   renderMetaBanner(data.meta);
-  renderCards(data);
-  renderUsageCharts(data);
-  renderModels(data);
-  renderAttribution(data);
-  if (shown('tools')) renderTools(data.tools || [], data.toolTotals);
+  const panels = summaryPanelsFor(state.tab);
+  if (panels.includes('cards')) renderCards(data);
+  if (panels.includes('usage')) renderUsageCharts(data);
+  if (panels.includes('models')) renderModels(data);
+  if (panels.includes('attribution')) renderAttribution(data);
+  if (panels.includes('tools') && shown('tools')) renderTools(data.tools || [], data.toolTotals);
   lastSummarySignature = signature;
 }
 

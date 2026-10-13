@@ -23,3 +23,10 @@ test('rangeForTab: Now is always Today, Analysis keeps its own range', async () 
   assert.equal(rangeForTab('analysis', 30), 30);
   assert.equal(rangeForTab('analysis', 'all'), 'all');
 });
+
+test('summaryPanelsFor: each tab draws only its own summary panels', async () => {
+  const { summaryPanelsFor } = await load();
+  assert.deepEqual(summaryPanelsFor('now'), ['attribution']);
+  assert.deepEqual(summaryPanelsFor('analysis'), ['cards', 'usage', 'models', 'tools']);
+  assert.deepEqual(summaryPanelsFor('nope'), ['attribution']);
+});
