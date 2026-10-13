@@ -1467,3 +1467,18 @@ test('with no store, an old step file is kept', async () => {
   await refresh();
   assert.strictEqual(fs.existsSync(file), true);
 });
+
+test('a subagent response with no final line is priced at the output in its step file', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  const ts = new Date().toISOString();
+  const usage = { input_tokens: 2, output_tokens: 8, cache_creation_input_tokens: 10, cache_read_input_tokens: 20 };
+  const line = JSON.stringify({ type: 'assistant', timestamp: ts, sessionId: 's1', isSidechain: true, agentId: 'a1', requestId: 'req-1', message: { id: 'msg-1', model: 'claude-sonnet-4-6', stop_reason: null, usage, content: [] } });
+  fs.writeFileSync(path.join(dir, 'agent-a1.jsonl'), `${line}\n${line}\n`);
+  writeSteps(stepsDir, 'a1', [{ ...STEP, input: 2, cacheWrite: 10, cacheRead: 20, output: 300 }]);
+  const { rows, refresh } = harness(dir, { agentUsageDir: stepsDir });
+  await refresh();
+  const data = aggregate(rows.entries().map((e) => e.rows), { days: null });
+  assert.strictEqual(data.summary.totalOutput, 300);
+  assert.deepStrictEqual([data.meta.noFinalCalls, data.meta.noFinalCorrected], [1, 1]);
+});
