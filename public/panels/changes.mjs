@@ -34,7 +34,7 @@ const BA_ROWS = [
   { name: 'Cost per prompt, median', key: 'costPerPrompt', n: 'prompts', unit: 'prompts', unitOne: 'prompt', fmt: formatCost, axis: axisCost, title: 'Median cost per prompt, per day' },
   { name: 'API calls per prompt, median', key: 'callsPerPrompt', n: 'prompts', unit: 'prompts', unitOne: 'prompt', fmt: axisCount, axis: axisCount, title: 'Median API calls per prompt, per day' },
   { name: 'Cache hit rate', key: 'cacheHit', n: 'callN', unit: 'API calls', unitOne: 'API call', fmt: formatPercent, axis: axisPercent, points: true, title: 'Cache hit rate, per day' },
-  { name: 'Thinking share of output', key: 'thinkingShare', n: 'thinkingN', unit: 'API calls', unitOne: 'API call', fmt: formatPercent, axis: axisPercent, points: true, title: 'Thinking share of output, per day' },
+  { name: 'Thinking share of output', key: 'thinkingShare', n: 'thinkingN', unit: 'calls that report thinking', unitOne: 'call that reports thinking', fmt: formatPercent, axis: axisPercent, points: true, title: 'Thinking share of output, per day' },
 ];
 const RTK_ROWS = [
   { name: 'Tokens reaching context per command', key: 'reachedPerCommand', n: 'commands', unit: 'commands', unitOne: 'command', fmt: tokensCell, axis: axisTokens, rtk: true, title: 'Tokens per rtk command that reached context, per day' },
