@@ -1,0 +1,113 @@
+'use strict';
+
+const test = require('node:test');
+const helpers = require('./helpers');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+
+const rules = require('../lib/review-rules');
+
+const tmpDir = () => helpers.tmpDir(null, 'review-rules');
+const write = (file, text) => {
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text);
+  return file;
+};
+const names = (files) => files.map((f) => f.file);
+
+test('includedPaths reads @path lines relative to the file, with ~ and $HOME expanded', () => {
+  const text = 'intro\n@RTK.md\n  @./sub/a.md  \n@~/x.md\n@$HOME/y.md\n@/abs/z.md\nnot @inline.md\n@RTK.md\n';
+  assert.deepStrictEqual(rules.includedPaths(text, '/cfg', '/home/u'), [
+    '/cfg/RTK.md', '/cfg/sub/a.md', '/home/u/x.md', '/home/u/y.md', '/abs/z.md',
+  ]);
+});
+
+test('ruleFiles reads the global CLAUDE.md, its includes, the project files outermost first, then the memory index', () => {
+  const base = tmpDir();
+  const cfg = path.join(base, 'cfg');
+  write(path.join(cfg, 'CLAUDE.md'), 'global\n@RTK.md\n');
+  write(path.join(cfg, 'RTK.md'), 'rtk rules');
+  write(path.join(base, 'code', 'CLAUDE.md'), 'parent rules');
+  write(path.join(base, 'code', 'app', 'CLAUDE.md'), 'app rules');
+  write(path.join(base, 'code', 'app', 'CLAUDE.local.md'), 'local rules');
+  const memory = write(path.join(cfg, 'projects', '-code-app', 'memory', 'MEMORY.md'), '- [A](a.md) — a fact');
+  const files = rules.ruleFiles({ configDir: cfg, cwd: path.join(base, 'code', 'app'), memoryIndex: memory, home: base });
+  assert.deepStrictEqual(names(files), [
+    path.join(cfg, 'CLAUDE.md'),
+    path.join(cfg, 'RTK.md'),
+    path.join(base, 'code', 'CLAUDE.md'),
+    path.join(base, 'code', 'app', 'CLAUDE.md'),
+    path.join(base, 'code', 'app', 'CLAUDE.local.md'),
+    memory,
+  ]);
+  assert.strictEqual(files[1].text, 'rtk rules');
+});
+
+test('ruleFiles skips missing files and folders', () => {
+  const base = tmpDir();
+  const cfg = path.join(base, 'cfg');
+  write(path.join(cfg, 'CLAUDE.md'), '@missing.md\n@dir\n');
+  fs.mkdirSync(path.join(cfg, 'dir'));
+  const files = rules.ruleFiles({ configDir: cfg, cwd: path.join(base, 'gone'), memoryIndex: path.join(base, 'no', 'MEMORY.md'), home: base });
+  assert.deepStrictEqual(names(files), [path.join(cfg, 'CLAUDE.md')]);
+});
+
+test('ruleFiles reads each file once through a cycle', () => {
+  const base = tmpDir();
+  write(path.join(base, 'CLAUDE.md'), '@b.md\n');
+  write(path.join(base, 'b.md'), '@CLAUDE.md\n');
+  assert.deepStrictEqual(names(rules.ruleFiles({ configDir: base, home: base })), [path.join(base, 'CLAUDE.md'), path.join(base, 'b.md')]);
+});
+
+test('ruleFiles lists the global file once when the session ran inside the config dir', () => {
+  const base = tmpDir();
+  write(path.join(base, 'CLAUDE.md'), 'global');
+  const files = rules.ruleFiles({ configDir: base, cwd: base, home: base });
+  assert.deepStrictEqual(names(files), [path.join(base, 'CLAUDE.md')]);
+});
+
+test('ruleFiles skips an empty file', () => {
+  const base = tmpDir();
+  write(path.join(base, 'CLAUDE.md'), '  \n');
+  assert.deepStrictEqual(rules.ruleFiles({ configDir: base, home: base }), []);
+});
+
+test('ruleFiles with nothing to read returns an empty list', () => {
+  assert.deepStrictEqual(rules.ruleFiles({}), []);
+});
+
+test('rulesText puts each file under its path', () => {
+  assert.strictEqual(rules.rulesText([]), '');
+  assert.strictEqual(
+    rules.rulesText([{ file: '/a/CLAUDE.md', text: 'one\n' }, { file: '/b.md', text: 'two' }]),
+    '=== /a/CLAUDE.md ===\none\n\n=== /b.md ===\ntwo',
+  );
+});
+
+test('rulesText cuts at the limit and says how much', () => {
+  const text = rules.rulesText([{ file: '/a', text: 'x'.repeat(100) }], 50);
+  assert.strictEqual(text, `${'=== /a ===\n' + 'x'.repeat(39)}\n[... 61 characters cut ...]`);
+});
+
+test('reviewPrompt is the digest alone without rules, and puts rules first with them', () => {
+  assert.strictEqual(rules.reviewPrompt('', 'USER: hi'), 'USER: hi');
+  assert.strictEqual(rules.reviewPrompt('=== /a ===\nr', 'USER: hi'), 'RULES THE USER ALREADY HAS\n=== /a ===\nr\n\nSESSION DIGEST\nUSER: hi');
+});
+
+test('readLaunchDir returns the first cwd', async () => {
+  const base = tmpDir();
+  const file = write(path.join(base, 's.jsonl'), [
+    JSON.stringify({ type: 'ai-title', aiTitle: 't' }),
+    'not json "cwd"',
+    JSON.stringify({ type: 'user', cwd: '/work/app' }),
+    JSON.stringify({ type: 'user', cwd: '/work/app/sub' }),
+  ].join('\n'));
+  assert.strictEqual(await rules.readLaunchDir(file), '/work/app');
+});
+
+test('readLaunchDir is null when no line has a cwd or the file is missing', async () => {
+  const base = tmpDir();
+  assert.strictEqual(await rules.readLaunchDir(write(path.join(base, 's.jsonl'), '{"type":"user"}\n')), null);
+  assert.strictEqual(await rules.readLaunchDir(path.join(base, 'missing.jsonl')), null);
+});
