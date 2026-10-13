@@ -133,6 +133,14 @@ test('the system prompt names every kind and allows an empty list', () => {
   assert.ok(review.SYSTEM.includes('{"suggestions": []}'));
 });
 
+test('SYSTEM explains the rules section and asks for broken rules', () => {
+  assert.match(review.SYSTEM, /RULES THE USER ALREADY HAS/);
+  assert.match(review.SYSTEM, /already state/);
+  assert.match(review.SYSTEM, /Broken rule:/);
+  assert.match(review.SYSTEM, /hook that enforces/);
+  assert.match(review.SYSTEM, /changed after the session started/);
+});
+
 const HOUR = 60 * 60 * 1000;
 const DAY = 24 * HOUR;
 const NOW = Date.UTC(2026, 9, 6, 12);
@@ -262,6 +270,37 @@ test('pendingReviews returns sessions with 3 or more prompts and records the res
   assert.deepStrictEqual([rowOf(db, 'lost').status, rowOf(db, 'lost').skip_reason], ['skipped', 'no transcript']);
   assert.strictEqual(rowOf(db, 'running'), undefined);
   assert.deepStrictEqual(await review.pendingReviews({ db, sessionsDir, projects, now: NOW }), []);
+});
+
+test('pendingReviews puts the session rule files ahead of the digest', async () => {
+  const { review, base, db, sessionsDir, projects } = fixture();
+  const cfg = path.join(base, 'cfg');
+  fs.mkdirSync(cfg, { recursive: true });
+  fs.writeFileSync(path.join(cfg, 'CLAUDE.md'), 'Never push without asking.');
+  const app = path.join(base, 'app');
+  fs.mkdirSync(app, { recursive: true });
+  fs.writeFileSync(path.join(app, 'CLAUDE.md'), 'Run npm test.');
+  const folder = path.join(projects, '-work-demo');
+  fs.mkdirSync(path.join(folder, 'memory'), { recursive: true });
+  fs.writeFileSync(path.join(folder, 'memory', 'MEMORY.md'), '- [Floor](floor.md) — Node 22.13');
+  writeSnapshot(sessionsDir, { sessionId: 'big', project: 'demo', endedAt: NOW - 1 });
+  writeTranscript(folder, [{ ...typed('prompt 0'), cwd: app }, typed('prompt 1'), typed('prompt 2')], 'big.jsonl');
+
+  const [only] = await review.pendingReviews({ db, sessionsDir, projects, configDir: cfg, now: NOW });
+  assert.strictEqual(only.prompt, [
+    'RULES THE USER ALREADY HAS',
+    `=== ${path.join(cfg, 'CLAUDE.md')} ===`,
+    'Never push without asking.',
+    '',
+    `=== ${path.join(app, 'CLAUDE.md')} ===`,
+    'Run npm test.',
+    '',
+    `=== ${path.join(folder, 'memory', 'MEMORY.md')} ===`,
+    '- [Floor](floor.md) — Node 22.13',
+    '',
+    'SESSION DIGEST',
+    'USER: prompt 0\nUSER: prompt 1\nUSER: prompt 2',
+  ].join('\n'));
 });
 
 test('pendingReviews skips a session that ended more than 7 days ago', async () => {

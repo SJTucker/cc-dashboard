@@ -38,7 +38,7 @@ if (command !== 'prompt' && command !== 'record') {
   }
   if (db) {
     const work =
-      command === 'prompt' ? pendingReviews({ db, sessionsDir: getSessionsDir(configDir), projects: getProjectsDir(configDir) }).then((reviews) => ({ reviews }))
+      command === 'prompt' ? pendingReviews({ db, sessionsDir: getSessionsDir(configDir), projects: getProjectsDir(configDir), configDir }).then((reviews) => ({ reviews }))
       : readStdin().then((input) => recordReview(db, JSON.parse(input)));
     work.then(
       (out) => process.stdout.write(JSON.stringify(out) + '\n'),
