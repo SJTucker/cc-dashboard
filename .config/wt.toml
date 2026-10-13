@@ -1,0 +1,8 @@
+# Worktrunk project configuration for cc-dashboard.
+#
+# A worktree made with `wt switch --create` gets its own node_modules before
+# the command returns. Worktrees share ~/.claude/cc-dashboard with the main
+# checkout, so a second server needs its own PORT on the command line.
+
+[[pre-start]]
+npm = "npm install --no-audit --no-fund"

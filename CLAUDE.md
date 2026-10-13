@@ -20,3 +20,15 @@ same change whenever that change does any of these:
 
 Check the environment variable table and the files table in `SETUP.md` against the
 code, not against the README.
+
+## Worktrees
+
+Create a worktree with worktrunk, based on local `main`:
+
+```bash
+wt switch --create <branch> --base main --no-cd
+```
+
+Local `main` is often ahead of `origin/main`. A worktree based on `origin/main`
+leaves out the unpushed commits. `EnterWorktree` bases on `origin/main` by
+default and turns on the isolation guard, so don't use it here.
