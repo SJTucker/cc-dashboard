@@ -36,7 +36,10 @@
         "version": "2.1.280",
         "usage": {
           "input_tokens": 800,
-          "output_tokens": 120
+          "output_tokens": 120,
+          "output_tokens_details": {
+            "thinking_tokens": 45
+          }
         },
         "attributionSkill": null,
         "attributionAgent": null,
@@ -145,7 +148,10 @@
         "usage": {
           "input_tokens": 2000,
           "output_tokens": 900,
-          "cache_read_input_tokens": 160000
+          "cache_read_input_tokens": 160000,
+          "output_tokens_details": {
+            "thinking_tokens": 0
+          }
         },
         "attributionSkill": null,
         "attributionAgent": null,
@@ -432,7 +438,10 @@
         "version": "2.1.280",
         "usage": {
           "input_tokens": 800,
-          "output_tokens": 120
+          "output_tokens": 120,
+          "output_tokens_details": {
+            "thinking_tokens": 45
+          }
         },
         "attributionSkill": null,
         "attributionAgent": null,
