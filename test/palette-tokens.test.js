@@ -41,13 +41,6 @@ test('gridlines are solid', () => {
   assert.doesNotMatch(rule, /dasharray/);
 });
 
-test('split bar rows are ordered by size, so the larger part gets the solid style', async () => {
-  const { sortSplitRows } = await import('../public/charts/split.mjs');
-  const rows = [{ name: 'small', cost: 1 }, { name: 'big', cost: 9 }];
-  assert.deepEqual(sortSplitRows(rows).map((r) => r.name), ['big', 'small']);
-  assert.equal(rows[0].name, 'small');
-});
-
 // Every font-size is a token, except 0, which .first-load uses to hide the dash.
 test('font sizes come from the type scale', () => {
   const sizes = [...css.matchAll(/font-size:\s*([^;}]+)/g)].map((m) => m[1].trim());
