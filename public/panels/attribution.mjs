@@ -15,7 +15,7 @@ function shareOfTotal(row, totalCost) {
 // lib/aggregate.js: Skill tool calls and slash commands for a skill, Agent tool calls
 // for a subagent type.
 export function usageValue(row, totalCost) {
-  return `${row.invocations.toLocaleString('en-US')}× · ${shareOfTotal(row, totalCost)}`;
+  return `${(row.invocations ?? 0).toLocaleString('en-US')}× · ${shareOfTotal(row, totalCost)}`;
 }
 
 function invokedLine(n) {

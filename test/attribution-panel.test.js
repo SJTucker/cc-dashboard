@@ -23,3 +23,8 @@ test('usageTooltip names the row, its cost and share, and how often it was invok
   assert.match(usageTooltip({ name: 'x', cost: 1, invocations: 1200 }, 100), /<br>Invoked 1,200 times in this range$/);
   assert.match(usageTooltip({ name: 'x', cost: 1, invocations: 0 }, 100), /<br>Not invoked in this range$/);
 });
+
+test('a row with no invocations field reads as 0 invocations and does not throw', async () => {
+  const { usageValue } = await load();
+  assert.strictEqual(usageValue({ name: 'tdd', cost: 1 }, 100), '0× · 1.0%');
+});

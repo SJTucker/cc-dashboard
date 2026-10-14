@@ -139,3 +139,8 @@ test('unpricedNote names the unpriced token count and is empty when none', async
   assert.equal(unpricedNote({ unpricedTokens: 0 }), '');
   assert.equal(unpricedNote({}), '');
 });
+
+test('thinkingNote gives 0% when the server sends no thinkingCalls', async () => {
+  const { thinkingNote } = await load();
+  assert.equal(thinkingNote({ apiCalls: 10, thinkingCost: 0 }), '0% of calls report it');
+});
