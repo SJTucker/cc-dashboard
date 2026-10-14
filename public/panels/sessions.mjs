@@ -1,9 +1,9 @@
-// The Live sessions panel: today's sessions and the Running now table.
+// The Live sessions panel: today's sessions in one table with a Running now band and an Earlier today band.
 import { getJson } from '../api.mjs';
 import { el } from '../dom.mjs';
 import { formatCost, formatDuration, formatAgo } from '../format.mjs';
 import { state } from '../state.mjs';
-import { groupSessions, costShare, runningSessions, activityLabel, cacheLine, doingNow } from '../session-groups.mjs';
+import { groupSessions, itemCost, costShare, splitBands, costSplit, activityLabel, cacheLine, doingNow } from '../session-groups.mjs';
 import { createDrawGuard } from '../guards.mjs';
 import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
 
@@ -37,11 +37,35 @@ let lastLiveSessions = null;
 // Each group row's toggle button by key. renderSessions replaces the tbody, so it
 // uses this map to move keyboard focus to the new button for the same group.
 let sessionToggles = new Map();
-// The Today table shows SESSIONS_LIMIT top-level rows until Show all. A group counts
-// once and its expanded child rows do not count. Kept for the page's lifetime, like
-// expandedGroups.
+// The Earlier today band shows SESSIONS_LIMIT top-level rows until Show all. A group
+// counts once and its expanded child rows do not count. Running now rows are never
+// limited. Kept for the page's lifetime, like expandedGroups.
 const SESSIONS_LIMIT = 10;
 let showAllSessions = false;
+
+// The collapsed bands, by key ('running' or 'earlier'), kept in localStorage so the
+// page reopens as it was left. Storage can throw (a private window, blocked site
+// data), and then both bands start open.
+const COLLAPSED_BANDS_KEY = 'cc-dashboard:collapsed-session-bands';
+
+function loadCollapsedBands() {
+  try {
+    const keys = JSON.parse(localStorage.getItem(COLLAPSED_BANDS_KEY));
+    return new Set(Array.isArray(keys) ? keys : []);
+  } catch {
+    return new Set();
+  }
+}
+
+function saveCollapsedBands(keys) {
+  try {
+    localStorage.setItem(COLLAPSED_BANDS_KEY, JSON.stringify([...keys]));
+  } catch {
+    // Not saved. The band still toggles for this page view.
+  }
+}
+
+const collapsedBands = loadCollapsedBands();
 
 // Runs on every settled sessions response and on every redraw, like renderLimits, and rebuilds when the payload,
 // the expanded groups or the clock minute changed. The minute is there because
@@ -53,8 +77,8 @@ export function renderSessions(live) {
   panel.hidden = !live || !live.sessions.length || state.currentDays !== 'today';
   if (panel.hidden) return;
   lastLiveSessions = live;
-  // expandedGroups is in the key, so a group toggle's own call redraws.
-  sessionsGuard.draw([live, [...expandedGroups], showAllSessions], () => drawSessions(live));
+  // expandedGroups and collapsedBands are in the key, so a toggle's own call redraws.
+  sessionsGuard.draw([live, [...expandedGroups], showAllSessions, [...collapsedBands]], () => drawSessions(live));
 }
 
 function drawSessions(live) {
@@ -76,35 +100,65 @@ function drawSessions(live) {
     contextLine(s),
   ];
   const sessionCell = (s) => el('td', {}, titleParts(s, s.live));
-  // The number is text. The bar behind it is one series in one colour, its width the
-  // row's share of the day's highest cost (costShare), so it needs no texture. The
-  // tooltip carries the whole-session counter, which includes earlier days.
-  const costCell = (usd, title, share) => {
+  // The number is text. The bars behind it are one series in one colour, their widths
+  // the row's shares of the day's highest cost (costShare). The solid bar is the
+  // row's newest session. The striped bar after it is the group's earlier sessions,
+  // so texture, not colour, tells the two apart. The tooltip carries the
+  // whole-session counter, which includes earlier days.
+  const costCell = (usd, title, newest, earlier = 0) => {
     const td = el('td', { class: 'num cost cost-cell', title });
-    if (share !== null) {
+    const w1 = Math.round(costShare(newest, maxCost) * 100);
+    const w2 = Math.round(costShare(earlier, maxCost) * 100);
+    if (w1 > 0 || w2 === 0) {
       const bar = el('span', { class: 'cost-bar', 'aria-hidden': 'true' });
-      bar.style.width = `${Math.round(share * 100)}%`;
+      bar.style.width = `${w1}%`;
+      td.appendChild(bar);
+    }
+    if (w2 > 0) {
+      const bar = el('span', { class: 'cost-bar cost-bar-earlier', 'aria-hidden': 'true' });
+      bar.style.left = w1 > 0 ? `calc(${w1}% + 2px)` : '0';
+      bar.style.width = w1 > 0 ? `calc(${w2}% - 2px)` : `${w2}%`;
       td.appendChild(bar);
     }
     td.appendChild(el('span', { class: 'cost-value', text: formatCost(usd) }));
     return td;
   };
+  // The State cell of a running session: its state and what it is doing, then a
+  // waiting session's cache countdown (cacheLine) on a second line. The payload
+  // changes once a minute, and the poll redraws it. State and Doing now come from
+  // the mod's activity files (lib/activity.js) and show "—" without the mod. Every
+  // other row has an empty cell.
+  const stateCell = (s) => {
+    if (!s) return el('td');
+    const label = activityLabel(s.activity);
+    const doing = doingNow(s.activity);
+    const cache = cacheLine(s.cache, formatCost);
+    const text = label ? label.text + (doing ? ` · ${doing}` : '') : '—';
+    return el('td', label?.attention ? { class: 'is-attention' } : {}, [
+      el('span', { text }),
+      ...(cache ? [el('span', { class: 'cache-line', text: cache })] : []),
+    ]);
+  };
 
   const items = groupSessions(live.sessions);
-  const maxCost = Math.max(0, ...live.sessions.map((s) => s.costTodayUsd));
+  // The highest row cost, so a group's two bars together never pass the cell's width.
+  const maxCost = Math.max(0, ...items.map(itemCost));
 
-  const sessionRow = (s, cls) => el('tr', cls ? { class: cls } : {}, [
+  // running is the session whose state the State cell shows, or null.
+  const sessionRow = (s, cls, running = null) => el('tr', cls ? { class: cls } : {}, [
     sessionCell(s),
+    stateCell(running),
     cell(String(s.prompts), 'num'),
     cell(formatDuration(s.durationMs), 'num'),
     cell(lines(s.linesAdded, s.linesRemoved), 'num'),
-    costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, costShare(s.costTodayUsd, maxCost)),
+    costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, s.costTodayUsd),
+    // A waiting session can be past its live window, so only live rows get is-live.
     cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
   ]);
   // A project group shows the project name. A launch group (sessions of one claude
   // process, split by /clear) reads like its newest session's row with a toggle in
   // front, and says live when one of its sessions is.
-  const groupRow = (g) => {
+  const groupRow = (g, running) => {
     const launch = g.kind === 'launch';
     const name = launch ? g.head.title || g.project || '—' : g.project || '—';
     const open = expandedGroups.has(g.key);
@@ -133,30 +187,81 @@ function drawSessions(live) {
         el('span', { class: 'session-hex', 'aria-hidden': 'true', text: '⬡' }),
         document.createTextNode(name),
       ]);
+    const split = costSplit(g);
     return el('tr', { class: launch ? 'session-group launch-group' : 'session-group' }, [
       first,
+      stateCell(running),
       cell(String(g.prompts), 'num'),
       cell(formatDuration(g.durationMs), 'num'),
       cell(lines(g.linesAdded, g.linesRemoved), 'num'),
-      costCell(g.costTodayUsd, `Session totals since they started: ${formatCost(g.costUsd)}`, costShare(g.costTodayUsd, maxCost)),
+      costCell(
+        g.costTodayUsd,
+        `Newest session today: ${formatCost(split.newest)} · earlier sessions today: ${formatCost(split.earlier)} · session totals since they started: ${formatCost(g.costUsd)}`,
+        split.newest,
+        split.earlier,
+      ),
       cell(formatAgo(g.lastActiveAt, now) + (live ? ' · live' : '') + counts, live ? 'is-live' : ''),
     ]);
   };
-  const rows = [];
-  for (const item of items) {
-    if (item.type === 'session') {
-      rows.push([sessionRow(item.session)]);
-      continue;
-    }
-    const group = [groupRow(item)];
+  // The rows of one item: its row, then its sessions when it is an expanded group.
+  // running is the item's running session, or null.
+  const itemRows = (item, running) => {
+    if (item.type === 'session') return [sessionRow(item.session, '', running)];
+    const group = [groupRow(item, running)];
     if (expandedGroups.has(item.key)) {
-      for (const s of item.sessions) group.push(sessionRow(s, 'session-child'));
+      for (const s of item.sessions) group.push(sessionRow(s, 'session-child', s === running ? s : null));
     }
-    rows.push(group);
+    return group;
+  };
+  // A band header: a toggle, the band's name and a count that stays when it is
+  // collapsed. Its toggle is in `toggles`, so focus survives the redraw.
+  const bandRow = (key, name, count) => {
+    const open = !collapsedBands.has(key);
+    const toggle = el('button', {
+      type: 'button',
+      class: 'row-toggle',
+      'aria-expanded': String(open),
+      'aria-label': `${open ? 'Collapse' : 'Expand'} ${name}`,
+    });
+    toggle.addEventListener('click', () => {
+      if (collapsedBands.has(key)) collapsedBands.delete(key);
+      else collapsedBands.add(key);
+      saveCollapsedBands(collapsedBands);
+      renderSessions(lastLiveSessions);
+    });
+    toggles.set(`band:${key}`, toggle);
+    return el('tr', { class: 'session-band' }, [
+      el('td', { colspan: '7' }, [toggle, document.createTextNode(name), el('span', { class: 'count', text: count })]),
+    ]);
+  };
+
+  const bands = splitBands(items);
+  const body = [];
+  if (bands.running.length) {
+    const waiting = bands.running.filter((r) => r.session.activity?.state === 'waiting').length;
+    body.push(bandRow('running', 'Running now', `${bands.running.length}${waiting ? ` · ${waiting} waiting on you` : ''}`));
+    if (!collapsedBands.has('running')) {
+      for (const { item, session } of bands.running) body.push(...itemRows(item, session));
+    }
+  }
+  let more = null;
+  if (bands.earlier.length) {
+    const cost = bands.earlier.reduce((sum, item) => sum + itemCost(item), 0);
+    body.push(bandRow('earlier', 'Earlier today', `${bands.earlier.length} · ${formatCost(cost)}`));
+    if (!collapsedBands.has('earlier')) {
+      const rows = bands.earlier.map((item) => itemRows(item, null));
+      body.push(...visibleRows(rows, SESSIONS_LIMIT, showAllSessions).flat());
+      more = showAllButton(rows.length, SESSIONS_LIMIT, showAllSessions, () => {
+        showAllSessions = !showAllSessions;
+        renderSessions(lastLiveSessions);
+        refocusShowAll('sessionsMore');
+      });
+    }
   }
   const t = live.total;
   const totalRow = el('tr', { class: 'sessions-total' }, [
     cell('Total'),
+    cell(''),
     cell(String(live.sessions.reduce((sum, s) => sum + s.prompts, 0)), 'num'),
     // Concurrent sessions overlap, so wall durations do not add up.
     cell('—', 'num'),
@@ -164,40 +269,10 @@ function drawSessions(live) {
     el('td', { class: 'num cost', text: formatCost(t.costTodayUsd) }),
     cell(''),
   ]);
-  document.getElementById('sessionsTable').replaceChildren(...visibleRows(rows, SESSIONS_LIMIT, showAllSessions).flat(), totalRow);
-  const more = showAllButton(rows.length, SESSIONS_LIMIT, showAllSessions, () => {
-    showAllSessions = !showAllSessions;
-    renderSessions(lastLiveSessions);
-    refocusShowAll('sessionsMore');
-  });
+  document.getElementById('sessionsTable').replaceChildren(...body, totalRow);
   keepShowAllFocus('sessionsMore', () => document.getElementById('sessionsMore').replaceChildren(...(more ? [more] : [])));
   sessionToggles = toggles;
   if (focused) toggles.get(focused[0])?.focus({ preventScroll: true });
-
-  // Running now: live sessions and sessions waiting on you, in a fixed order. State
-  // and Doing now come from the mod's activity files (lib/activity.js) and show "—"
-  // without the mod.
-  const running = runningSessions(live.sessions);
-  document.getElementById('runningSessions').hidden = !running.length;
-  document.getElementById('runningTable').replaceChildren(...running.map((s) => {
-    const label = activityLabel(s.activity);
-    // A waiting session's cache countdown (cacheLine) goes under its state. The
-    // payload changes once a minute, and the poll redraws it.
-    const cache = cacheLine(s.cache, formatCost);
-    const stateCell = el('td', label?.attention ? { class: 'is-attention' } : {}, [
-      el('span', { text: label ? label.text : '—' }),
-      ...(cache ? [el('span', { class: 'cache-line', text: cache })] : []),
-    ]);
-    return el('tr', {}, [
-      sessionCell(s),
-      // Waiting uses the brighter text colour as well as its glyph.
-      stateCell,
-      cell(doingNow(s.activity) ?? '—'),
-      costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, null),
-      // A waiting session can be past its live window, so only live rows get is-live.
-      cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
-    ]);
-  }));
 
   const liveCount = live.sessions.filter((s) => s.live).length;
   const endedCount = live.sessions.filter((s) => s.ended).length;

@@ -674,7 +674,7 @@ test('buildLiveSessions drops stale working activity but keeps waiting', () => {
 });
 
 test('buildLiveSessions keeps waiting activity on a session that is no longer live', () => {
-  // runningSessions (Task 3.6) lists a session waiting on you even after it stops
+  // splitBands puts a session waiting on you in Running now even after it stops
   // being live, so the API must keep its activity. This pins what the API sends.
   const old = snapshot({ lastActiveAt: NOW - 3 * 60 * 60 * 1000 });
   const map = new Map([['s1', activityEntry({ state: 'waiting', tool: null, subagents: 0, updatedAt: NOW - 3 * 60 * 60 * 1000 })]]);

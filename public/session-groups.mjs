@@ -1,6 +1,6 @@
 const GROUP_SUMS = ['costUsd', 'costTodayUsd', 'durationMs', 'linesAdded', 'linesRemoved', 'tokens', 'prompts'];
 
-// Cost today of a row of the Today table: a plain session or a group.
+// Cost today of a row of the Live sessions table: a plain session or a group.
 function itemCost(item) {
   return item.type === 'group' ? item.costTodayUsd : item.session.costTodayUsd;
 }
@@ -22,7 +22,7 @@ function groupFields(sessions) {
 }
 
 // Turns the sessions of /api/sessions/live (newest lastActiveAt first) into the rows
-// of the Today table.
+// of the Live sessions table.
 // - Sessions with the same launchId came from one claude process (the mod's
 //   statuslineInput). Two or more of them collapse into a launch group, live and open
 //   ones included, so a /clear's new session sits with the one it replaced. head is
@@ -81,24 +81,47 @@ function costShare(value, max) {
   return Math.min(1, Math.max(0, value / max));
 }
 
-// The rows of the Running now table: live sessions and sessions waiting on the user, earliest first span start first,
-// so the order does not change while they run. A session with no span today goes
-// last. Equal starts fall back to the newest lastActiveAt.
-function runningSessions(sessions) {
+// Splits the items of groupSessions into the two bands of the Live sessions table.
+// running is { item, session } for every item that holds a live session or one
+// waiting on the user, where session is that running session (the item's newest
+// running one). It is ordered by the session's first span start, so rows do not
+// move while they run. A session with no span today goes last, and equal starts
+// fall back to the newest lastActiveAt. earlier is every other item, in the order
+// it came in.
+function splitBands(items) {
   const start = (s) => (s.spans?.length ? s.spans[0][0] : Infinity);
-  return sessions
-    // A session waiting on the user stays listed after its 10 minute live window,
-    // because that is when it most needs the user. Ended sessions have no activity.
-    .filter((s) => s.live || s.activity?.state === 'waiting')
-    .sort((a, b) => {
-      const sa = start(a);
-      const sb = start(b);
-      if (sa === sb) return b.lastActiveAt - a.lastActiveAt;
-      return sa < sb ? -1 : 1;
-    });
+  // A session waiting on the user stays running after its 10 minute live window,
+  // because that is when it most needs the user. Ended sessions have no activity.
+  const isRunning = (s) => s.live || s.activity?.state === 'waiting';
+  const byStart = (a, b) => {
+    const sa = start(a);
+    const sb = start(b);
+    if (sa === sb) return b.lastActiveAt - a.lastActiveAt;
+    return sa < sb ? -1 : 1;
+  };
+  const running = [];
+  const earlier = [];
+  for (const item of items) {
+    const held = item.type === 'group' ? item.sessions : [item.session];
+    const [session] = held.filter(isRunning).sort(byStart);
+    if (session) running.push({ item, session });
+    else earlier.push(item);
+  }
+  running.sort((a, b) => byStart(a.session, b.session));
+  return { running, earlier };
 }
 
-// State column of the Running now table. Each state has a glyph and words, so the
+// Cost today of a row as { newest, earlier }: the newest session's share (a group's
+// head, or the whole cost of a plain session) and the sum of the group's other
+// sessions. Their sum is itemCost(item).
+function costSplit(item) {
+  if (item.type !== 'group') return { newest: item.session.costTodayUsd, earlier: 0 };
+  const head = item.head ?? item.sessions[0];
+  const earlier = item.sessions.filter((s) => s !== head).reduce((sum, s) => sum + s.costTodayUsd, 0);
+  return { newest: head.costTodayUsd, earlier };
+}
+
+// State column of a running row. Each state has a glyph and words, so the
 // states do not depend on colour. attention marks the state that needs the user.
 const ACTIVITY_STATES = {
   working: { glyph: '▶', label: 'working', attention: false },
@@ -124,7 +147,7 @@ function cacheLine(cache, formatUsd) {
   return cost ? `${left} · ${cost} to rebuild after` : left;
 }
 
-// Doing now column: the running tool's name, then the subagent count. Null when
+// Second part of the State cell: the running tool's name, then the subagent count. Null when
 // nothing is running. The tool's detail is left out: a long Bash command widened the
 // column and moved the table on every 5 s poll.
 function doingNow(activity) {
@@ -135,4 +158,4 @@ function doingNow(activity) {
   return parts.length ? parts.join(' · ') : null;
 }
 
-export { groupSessions, itemCost, costShare, runningSessions, activityLabel, cacheLine, doingNow };
+export { groupSessions, itemCost, costShare, splitBands, costSplit, activityLabel, cacheLine, doingNow };
