@@ -10,26 +10,14 @@ import { legendRow, swatchIcon } from './legend.mjs';
 // subagent lists (drawHBars) are not partitions - one call can appear in both - so
 // they keep the separate-bar form.
 //
-// Both shares in cyan, the colour of the Plan usage meters beside them. Texture
-// tells them apart: the larger part solid, the smaller part diagonal. The direct
-// labels carry identity too. A row can carry its own style ({ color, texture }),
-// which replaces the rank-based one, so a bar whose parts have a fixed meaning keeps
-// the same look whichever part is larger.
+// Both shares in cyan, the colour of the Plan usage meters beside them. The first
+// row is solid on the left and the second is dim cyan diagonal on the right, in
+// that fixed order, so each part keeps its place and look whichever is larger. The
+// direct labels carry identity too.
 const SPLIT_STYLE = [
   { color: TOKENS.accentCyan, texture: 'solid' },
-  { color: TOKENS.accentCyan, texture: 'diag' },
+  { color: TOKENS.accentCyanDim, texture: 'diag' },
 ];
-
-// Styles follow size, not list position: the rows sorted by cost, largest first,
-// so the larger part is the solid one whichever order the caller passes.
-export function sortSplitRows(rows) {
-  return [...rows].sort((a, b) => b.cost - a.cost);
-}
-
-// The row's own style when it has one, else the style for its rank.
-export function splitStyle(row, rank) {
-  return row.style ?? SPLIT_STYLE[rank % SPLIT_STYLE.length];
-}
 
 // Shares of one whole as a single bar, with its legend under it. items is
 // [{ name, value, texture, color, tooltip }], drawn in the order given. extra holds
@@ -56,16 +44,16 @@ export function drawShareBar(container, items, { empty, extra = [] }) {
   container.append(bar, legend);
 }
 
-// Main thread against subagents, or over against under the context threshold: two
-// parts of total cost. rows is [{ name, cost, style? }]. Sorted by cost so the larger part
-// is the solid one unless a row sets its style, and the legend follows the bar's order.
+// Subagents against the main thread, or under against over the context threshold:
+// two parts of total cost. rows is [{ name, cost }], drawn in the order given, and
+// the legend follows the bar's order.
 export function drawSplitBar(container, rows) {
   const total = rows.reduce((sum, r) => sum + r.cost, 0);
   const share = (cost) => (total > 0 ? ((cost / total) * 100).toFixed(1) : '0.0');
-  drawShareBar(container, sortSplitRows(rows).map((row, i) => ({
+  drawShareBar(container, rows.map((row, i) => ({
     name: row.name,
     value: row.cost,
-    ...splitStyle(row, i),
+    ...SPLIT_STYLE[i],
     tooltip: `<b>${escapeHtml(row.name)}</b><br>${formatCost(row.cost)} &middot; ${share(row.cost)}% of total`,
   })), { empty: 'Nothing attributed in this range.' });
 }

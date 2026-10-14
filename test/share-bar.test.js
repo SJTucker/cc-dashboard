@@ -36,16 +36,16 @@ test('drawShareBar appends extra legend items after the shares', async () => {
   assert.equal(container.children[1].children[1].textContent, 'mysteryunpriced');
 });
 
-test('drawSplitBar keeps a row\'s own style and ranks the rest', async () => {
+test('drawSplitBar draws the first row solid on the left and the second dim on the right, whatever their size', async () => {
   const { drawSplitBar } = await import('../public/charts/split.mjs');
-  const { TOKENS } = await import('../public/charts/palette.mjs');
-  const container = document.createElement('div');
-  drawSplitBar(container, [
-    { name: 'Over', cost: 9, style: { color: TOKENS.accentCyanDim, texture: 'solid' } },
-    { name: 'Under', cost: 1, style: { color: TOKENS.accentCyan, texture: 'solid' } },
-  ]);
-  const [bar, legend] = container.children;
-  // Over is larger and first, yet keeps the dim colour that rank 0 would not give it.
-  assert.ok(bar.children[0].getAttribute('style').includes('257991'));
-  assert.ok(legend.children[0].children[0].getAttribute('style').includes('257991'));
+  for (const [under, over] of [[1, 9], [9, 1]]) {
+    const container = document.createElement('div');
+    drawSplitBar(container, [{ name: 'Under', cost: under }, { name: 'Over', cost: over }]);
+    const [bar, legend] = container.children;
+    assert.deepEqual([...legend.children].map((item) => item.children[1].textContent.startsWith('Under')), [true, false]);
+    // Solid accent cyan (#3fe0ff) first, dim cyan (#257991) stripes second, on the bar and in the legend.
+    assert.match(bar.children[0].getAttribute('style'), /background:\s*(#3fe0ff|rgb\(63, 224, 255\))\s*;?/i);
+    assert.match(bar.children[1].getAttribute('style'), /repeating-linear-gradient.*(257991|37, 121, 145)/i);
+    assert.match(legend.children[1].children[0].getAttribute('style'), /257991|37, 121, 145/i);
+  }
 });
