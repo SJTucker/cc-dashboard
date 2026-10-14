@@ -167,3 +167,49 @@ export function commandPaths(settingsText: string, home: string) {
   const statusline = isObject(settings.statusLine) ? scriptOf(settings.statusLine.command, home) : null
   return { hooks: hookScripts(settings.hooks, home), statusline }
 }
+
+// prose files get a Haiku label, settings files a key diff, scripts their name, rtk
+// files their first added line.
+export type Mode = 'prose' | 'settings' | 'script' | 'rtk'
+// `folder` decides whether a file with no snapshot is new (its folder was checked
+// before) or seen for the first time (no marker).
+export type Watched = { path: string; kind: Kind; name: string; folder: string; mode: Mode }
+// `checked` holds, per folder, the time of the last check that covered it.
+export type SetupState = { folders: string[]; mtimes: Record<string, number | null>; checked: Record<string, number> }
+
+export const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p
+
+export const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+// A file in skills/, agents/ or rules/, from its path. Used for the folder listings
+// and for paths the index holds that a listing no longer returns, so a deleted
+// skill folder is still checked and found removed.
+export function folderFile(dir: string, path: string): Watched | null {
+  const skill = new RegExp(`^${escapeRegExp(dir)}/skills/([^/]+)/SKILL\\.md$`).exec(path)
+  if (skill?.[1]) return { path, kind: 'skill', name: `skill ${skill[1]}`, folder: `${dir}/skills`, mode: 'prose' }
+  const agent = new RegExp(`^${escapeRegExp(dir)}/agents/([^/]+)\\.md$`).exec(path)
+  if (agent?.[1]) return { path, kind: 'skill', name: `agent ${agent[1]}`, folder: `${dir}/agents`, mode: 'prose' }
+  if (path.startsWith(`${dir}/rules/`) && path.endsWith('.md')) {
+    return { path, kind: 'claude-md', name: `rules/${path.slice(dir.length + 7)}`, folder: `${dir}/rules`, mode: 'prose' }
+  }
+  return null
+}
+
+export function readSetupState(saved: unknown): SetupState {
+  const s = (typeof saved === 'object' && saved !== null ? saved : {}) as Partial<SetupState>
+  const folders = Array.isArray(s.folders) ? s.folders.filter((f): f is string => typeof f === 'string') : []
+  // A copy: checkSetup changes it, and the stored value must change only through store.set.
+  const mtimes = typeof s.mtimes === 'object' && s.mtimes !== null ? { ...s.mtimes } : {}
+  const checked: Record<string, number> = {}
+  if (typeof s.checked === 'object' && s.checked !== null) {
+    for (const [k, v] of Object.entries(s.checked)) if (typeof v === 'number') checked[k] = v
+  }
+  return { folders, mtimes, checked }
+}
+
+// The text of a session's changes file: what an earlier run of the same session id
+// wrote, when that is an array, then the new entries.
+export function changesFileText(earlier: unknown, entries: SetupEntry[]) {
+  const kept = Array.isArray(earlier) ? earlier : []
+  return `${JSON.stringify([...kept, ...entries], null, 2)}\n`
+}

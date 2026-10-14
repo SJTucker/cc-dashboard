@@ -148,3 +148,16 @@ export function handoffDocument(text: string): string | null {
   const doc = (at > 0 ? text.slice(at) : text).trim()
   return doc ? `${doc}\n` : null
 }
+
+// The expiry time of a 1h prompt cache, from the output of bin/cache-state. Null for
+// any other TTL or a missing or non-numeric expiresAt.
+export function hourCacheExpiry(cache: { ttl?: unknown; expiresAt?: unknown }): number | null {
+  return cache.ttl === '1h' && typeof cache.expiresAt === 'number' ? cache.expiresAt : null
+}
+
+// Milliseconds from now until the handoff timer should fire, leadMs before the cache
+// expires. Null when that moment has passed.
+export function handoffWaitMs(expiresAt: number, now: number, leadMs: number): number | null {
+  const wait = expiresAt - leadMs - now
+  return wait > 0 ? wait : null
+}

@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { cleanLabel, commandPaths, fallbackLabel, includedPaths, lineDiff, settingsChanges, snapshotName } from './setup'
+import { baseName, changesFileText, cleanLabel, commandPaths, escapeRegExp, fallbackLabel, folderFile, includedPaths, lineDiff, readSetupState, settingsChanges, snapshotName } from './setup'
 
 test('snapshotName is stable per path and differs between paths', async () => {
   expect(snapshotName('/h/.claude/CLAUDE.md')).toBe(snapshotName('/h/.claude/CLAUDE.md'))
@@ -90,4 +90,53 @@ test('commandPaths takes the first word of each hook and the statusline when it 
     statusline: '/h/.claude/statusline.sh',
   })
   expect(commandPaths('{', '/h')).toEqual({ hooks: [], statusline: null })
+})
+
+test('baseName is the last path segment, or the path when it has none', async () => {
+  expect(baseName('/h/.claude/hooks/a.sh')).toBe('a.sh')
+  expect(baseName('/h/dir/')).toBe('dir')
+  expect(baseName('/')).toBe('/')
+})
+
+test('escapeRegExp escapes every regular expression metacharacter', async () => {
+  expect(escapeRegExp('a.b*c+d?(e)[f]{g}|h^i$j\\k')).toBe('a\\.b\\*c\\+d\\?\\(e\\)\\[f\\]\\{g\\}\\|h\\^i\\$j\\\\k')
+  expect(new RegExp(`^${escapeRegExp('/h/.claude')}$`).test('/h/.claude')).toBe(true)
+  expect(new RegExp(`^${escapeRegExp('/h/.claude')}$`).test('/h/xclaude')).toBe(false)
+})
+
+test('folderFile classifies skills, agents and rules under a config dir', async () => {
+  const dir = '/h/.claude'
+  expect(folderFile(dir, `${dir}/skills/cx/SKILL.md`)).toEqual({
+    path: `${dir}/skills/cx/SKILL.md`, kind: 'skill', name: 'skill cx', folder: `${dir}/skills`, mode: 'prose',
+  })
+  expect(folderFile(dir, `${dir}/agents/rev.md`)).toMatchObject({ kind: 'skill', name: 'agent rev', folder: `${dir}/agents` })
+  expect(folderFile(dir, `${dir}/rules/a/b.md`)).toMatchObject({ kind: 'claude-md', name: 'rules/a/b.md', folder: `${dir}/rules` })
+})
+
+test('folderFile returns null for other paths, and does not treat the dir as a pattern', async () => {
+  expect(folderFile('/h/.claude', '/h/.claude/skills/cx/notes.md')).toBeNull()
+  expect(folderFile('/h/.claude', '/h/.claude/rules/a.txt')).toBeNull()
+  expect(folderFile('/h/.claude', '/hx.claude/skills/cx/SKILL.md')).toBeNull()
+})
+
+test('readSetupState keeps the valid parts of a saved value and copies mtimes', async () => {
+  const saved = { folders: ['a', 3, 'b'], mtimes: { '/x': 5, '/y': null }, checked: { a: 1, b: 'no' } }
+  const state = readSetupState(saved)
+  expect(state).toEqual({ folders: ['a', 'b'], mtimes: { '/x': 5, '/y': null }, checked: { a: 1 } })
+  expect(state.mtimes).not.toBe(saved.mtimes)
+})
+
+test('readSetupState of nothing usable is an empty state', async () => {
+  const empty = { folders: [], mtimes: {}, checked: {} }
+  expect(readSetupState(undefined)).toEqual(empty)
+  expect(readSetupState('x')).toEqual(empty)
+  expect(readSetupState({ folders: 'a', mtimes: null, checked: null })).toEqual(empty)
+})
+
+test('changesFileText appends new entries to an earlier array and ignores anything else', async () => {
+  const entry = { t: 1, kind: 'skill' as const, name: 'n', label: 'l', file: '/f' }
+  const older = { ...entry, t: 0 }
+  expect(JSON.parse(changesFileText([older], [entry]))).toEqual([older, entry])
+  expect(JSON.parse(changesFileText({ not: 'an array' }, [entry]))).toEqual([entry])
+  expect(changesFileText([], [entry]).endsWith(']\n')).toBe(true)
 })

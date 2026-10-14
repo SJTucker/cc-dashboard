@@ -1,10 +1,16 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
-import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, settingsChanges, snapshotName } from './setup'
-import type { Kind, SetupEntry, Snapshot } from './setup'
+import { baseName, changesFileText, commandPaths, fallbackLabel, cleanLabel, folderFile, includedPaths, lineDiff, readSetupState, settingsChanges, snapshotName } from './setup'
+import type { Kind, SetupEntry, SetupState, Snapshot, Watched } from './setup'
+import { projectFolder, rateLimitsInput, statuslineRecord } from './statusline'
+import type { Frozen } from './statusline'
+import { newestTool, setState, toolDetail, toolsOf } from './activity'
+import type { Activity, ToolRun } from './activity'
+import { backfillText, errorName, errorText, versionSpan } from './text'
+import type { Judged } from './text'
 import { parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep } from './steps'
-import { REPO_STEPS, handoffDocument, planHandoff, resumePrompt } from './handoff'
+import { REPO_STEPS, handoffDocument, handoffWaitMs, hourCacheExpiry, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
@@ -45,9 +51,6 @@ const RECORD_TIMEOUT_MS = 10_000
 const REVIEW_PROMPT_TIMEOUT_MS = 60_000
 const MODEL_TIMEOUT_MS = 60_000
 const RETRY_MS = 60 * 60 * 1000
-
-type Frozen<T> = { readonly [K in keyof T]: T[K] }
-type Window = { used_percentage: number; resets_at?: number }
 
 // `claude plugin validate` refuses a function that takes $ unless it is declared at
 // the top of the file, so these flags are module variables. A reload starts them
@@ -133,7 +136,7 @@ async function transcriptPath($: EngineInterface, root: string, id: string) {
   const dir = await configDir($)
   if (!dir) return null
   const projects = `${dir}/projects`
-  const folder = root.replace(/[^a-zA-Z0-9]/g, '-')
+  const folder = projectFolder(root)
   const built = `${projects}/${folder}/${id}.jsonl`
   let found: string | null = (await $.fs.exists(built)) ? built : null
   if (!found) {
@@ -149,36 +152,6 @@ async function transcriptPath($: EngineInterface, root: string, id: string) {
   }
   if (found) transcripts.set(id, found)
   return found
-}
-
-// $.session.model() returns the model id, and the statusline sent a display name,
-// which the Live sessions panel shows: claude-opus-5-5[1m] is "Opus 5.5 (1M
-// context)" and claude-haiku-4-5-20251001 is "Haiku 4.5". Any other form is sent
-// as it is.
-function displayName(id: string) {
-  const match = /^claude-([a-z]+)-(\d+(?:-\d{1,2})*)(?:-\d{8})?(\[1m\])?$/.exec(id)
-  if (!match) return id
-  const [, family = '', version = '', oneMillion] = match
-  const name = `${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.replace(/-/g, '.')}`
-  return oneMillion ? `${name} (1M context)` : name
-}
-
-// The statusline sends resets_at as epoch seconds, and lib/limits.js reads it that
-// way. session.measure sends an ISO timestamp.
-function toWindow(limit: Frozen<SessionRateLimit>): Window {
-  const ms = limit.resetsAt === undefined ? Number.NaN : Date.parse(limit.resetsAt)
-  return Number.isNaN(ms)
-    ? { used_percentage: limit.percentUsed }
-    : { used_percentage: limit.percentUsed, resets_at: Math.floor(ms / 1000) }
-}
-
-// Only the two windows the statusline JSON has. A gateway's spend_limit is left out.
-function rateLimitsInput(limits: readonly Frozen<SessionRateLimit>[]): Record<string, Window> | undefined {
-  const out: Record<string, Window> = {}
-  for (const limit of limits) {
-    if (limit.kind === 'five_hour' || limit.kind === 'seven_day') out[limit.kind] = toWindow(limit)
-  }
-  return Object.keys(out).length ? out : undefined
 }
 
 // The JSON a statusLine command receives, cut to the fields bin/record-statusline
@@ -203,27 +176,13 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
   // assignment; two overlapping first measures then cannot each assign an id.
   const now = await $.clock.now()
   launchId ??= `${now.toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-  const input: Record<string, unknown> = {
-    session_id: id,
-    launch_id: launchId,
-    transcript_path: transcript,
-    workspace: { project_dir: root },
-    model: { display_name: displayName(await $.session.model()) },
-  }
-  if (clearedFrom && clearedFrom !== id) input.cleared_from = clearedFrom
-  if (e.cost) {
-    const { startedAt } = await $.session.usage()
-    input.cost = { total_cost_usd: e.cost.usd, total_duration_ms: Math.max(0, (await $.clock.now()) - startedAt) }
-  }
-  if (rateLimits) input.rate_limits = rateLimits
-  return input
+  const modelId = await $.session.model()
+  const cost = e.cost ? { usd: e.cost.usd, startedAt: (await $.session.usage()).startedAt, now: await $.clock.now() } : undefined
+  return statuslineRecord({ id, launchId, transcript, root, modelId, clearedFrom, cost, rateLimits })
 }
 
 type Batch = { versions: string[]; system: string; prompt: string }
-type Judged = { asked: number; recorded: number; relevant: number; failed: string[] }
 type Review = { sessionId: string; system: string; prompt: string }
-
-const errorName = (err: unknown) => (err instanceof Error ? err.name : 'error')
 
 // Every update failure is logged. They happen at most once per Claude Code release,
 // so the once-only rule in fail() would hide the one that matters.
@@ -245,9 +204,6 @@ async function callScript($: EngineInterface, name: string, args: string[], stdi
     throw new Error(`${label} printed invalid JSON`)
   }
 }
-
-const versionSpan = (versions: string[]) =>
-  versions.length > 1 ? `${versions[0]}–${versions[versions.length - 1]}` : (versions[0] ?? '')
 
 // Asks Haiku about one batch and records the answer, adding any failure to `judged`.
 async function judgeBatch($: EngineInterface, batch: Batch, judged: Judged) {
@@ -312,8 +268,6 @@ async function judgeUpdates($: EngineInterface, current?: string): Promise<Judge
   for (const batch of batches) await judgeBatch($, batch, judged)
   return judged
 }
-
-const errorText = (err: unknown) => (err instanceof Error ? err.message : 'error')
 
 // Asks Haiku to review one ended session and has bin/review-session record the
 // answer. A call with no answer is recorded as failed, so the session is tried
@@ -401,12 +355,6 @@ async function checkVersion($: EngineInterface) {
   for (const failure of judged.failed) note($, failure)
 }
 
-function backfillText(judged: Judged) {
-  if (!judged.asked && !judged.failed.length) return 'No Claude Code version needs a verdict.'
-  const counts = `Judged ${judged.recorded} of ${judged.asked} versions, ${judged.relevant} relevant.`
-  return judged.failed.length ? `${counts} Failed: ${judged.failed.join('; ')}` : counts
-}
-
 // What the Live sessions panel shows as State and Doing now. One state object per
 // session lives in memory and is written to <config dir>/cc-dashboard/activity/
 // <session id>.json when it changes, at most every ACTIVITY_WRITE_MS. Only the main
@@ -416,19 +364,8 @@ function backfillText(judged: Judged) {
 // In auto mode the classifier settles an ask with no event, so ask alone does not
 // mean a dialog opened.
 const ACTIVITY_WRITE_MS = 250
-const DETAIL_MAX = 60
 // The same characters as SESSION_ID_PATTERN in lib/session-id.js, because the id becomes a file name. The mod cannot require lib/, so test/session-id.test.js checks the two match.
 const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/
-
-type ToolRun = { name: string; detail: string; startedAt: number }
-type Activity = {
-  sessionId: string
-  state: 'working' | 'waiting'
-  since: number
-  tool: ToolRun | null
-  subagents: number
-  updatedAt: number
-}
 
 const activities = new Map<string, Activity>()
 // Main-loop tools that have started and not returned, by session id and tool_use_id,
@@ -451,40 +388,6 @@ const writing = new Map<string, Promise<void>>()
 const agentSteps = new Map<string, AgentStep[]>()
 const stepWrites = new Map<string, Promise<void>>()
 const lastWritten = new Map<string, string>()
-
-function toolsOf(id: string) {
-  let tools = runningTools.get(id)
-  if (!tools) {
-    tools = new Map()
-    runningTools.set(id, tools)
-  }
-  return tools
-}
-
-const newestTool = (tools: Map<string, ToolRun>) => [...tools.values()].pop() ?? null
-
-// A new activity starts as working. Only a main-loop event creates one: turn.start,
-// a main-loop tool.call, or turn.complete, which sets waiting at once. After a reload
-// mid-turn, the first of these is a tool call, and the turn is running. Subagent
-// events and agent.spawn create none, because the main loop may be waiting.
-function setState(a: Activity, state: Activity['state'], now: number) {
-  if (a.state === state) return
-  a.state = state
-  a.since = now
-}
-
-// The command cut to DETAIL_MAX characters for Bash, the file's name for Read, Edit
-// and Write, and nothing for any other tool. Whitespace runs become one space, so a
-// multi-line command stays on one line.
-function toolDetail(tool: string, args: Record<string, unknown>) {
-  if (tool === 'Bash') {
-    return typeof args.command === 'string' ? args.command.replace(/\s+/g, ' ').trim().slice(0, DETAIL_MAX) : ''
-  }
-  if (tool === 'Read' || tool === 'Edit' || tool === 'Write') {
-    return typeof args.file_path === 'string' ? (args.file_path.split(/[\\/]/).pop() ?? '') : ''
-  }
-  return ''
-}
 
 // An agent counts while it is pending, running or waiting: all three are work that
 // has not ended. idle is a teammate between turns, and completed, failed and killed
@@ -789,9 +692,10 @@ async function handoffWait($: EngineInterface, id: string): Promise<{ wait: numb
     ttl?: unknown
     expiresAt?: unknown
   }
-  if (cache.ttl !== '1h' || typeof cache.expiresAt !== 'number') return null
-  const wait = cache.expiresAt - HANDOFF_LEAD_MS - (await $.clock.now())
-  return wait > 0 ? { wait, expiresAt: cache.expiresAt } : null
+  const expiresAt = hourCacheExpiry(cache)
+  if (expiresAt === null) return null
+  const wait = handoffWaitMs(expiresAt, await $.clock.now(), HANDOFF_LEAD_MS)
+  return wait === null ? null : { wait, expiresAt }
 }
 
 // The same checks as the session.compact trigger: the session is between turns and
@@ -861,34 +765,8 @@ const LABEL_SYSTEM =
   "that says what the edit changes, in lower case, without the file name and without quotes. Examples: don't commit docs; " +
   'use cx for complexity; run playwright-cli before claiming a UI works.'
 
-// prose files get a Haiku label, settings files a key diff, scripts their name, rtk
-// files their first added line.
-type Mode = 'prose' | 'settings' | 'script' | 'rtk'
-// `folder` decides whether a file with no snapshot is new (its folder was checked
-// before) or seen for the first time (no marker).
-type Watched = { path: string; kind: Kind; name: string; folder: string; mode: Mode }
-// `checked` holds, per folder, the time of the last check that covered it.
-type SetupState = { folders: string[]; mtimes: Record<string, number | null>; checked: Record<string, number> }
 type Change = { w: Watched; t: number; before: string | null; after: string | null }
 type Checked = { path: string; mtime: number | null; snapshot?: Snapshot; change?: Change }
-
-const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p
-
-// A file in skills/, agents/ or rules/, from its path. Used for the folder listings
-// and for paths the index holds that a listing no longer returns, so a deleted
-// skill folder is still checked and found removed.
-function folderFile(dir: string, path: string): Watched | null {
-  const skill = new RegExp(`^${escapeRegExp(dir)}/skills/([^/]+)/SKILL\\.md$`).exec(path)
-  if (skill?.[1]) return { path, kind: 'skill', name: `skill ${skill[1]}`, folder: `${dir}/skills`, mode: 'prose' }
-  const agent = new RegExp(`^${escapeRegExp(dir)}/agents/([^/]+)\\.md$`).exec(path)
-  if (agent?.[1]) return { path, kind: 'skill', name: `agent ${agent[1]}`, folder: `${dir}/agents`, mode: 'prose' }
-  if (path.startsWith(`${dir}/rules/`) && path.endsWith('.md')) {
-    return { path, kind: 'claude-md', name: `rules/${path.slice(dir.length + 7)}`, folder: `${dir}/rules`, mode: 'prose' }
-  }
-  return null
-}
-
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 async function ruleFiles($: EngineInterface, folder: string, depth: number): Promise<string[]> {
   const out: string[] = []
@@ -1023,18 +901,6 @@ async function entriesFor($: EngineInterface, c: Change): Promise<SetupEntry[]> 
   return [{ ...base, kind: c.w.kind, label }]
 }
 
-function readSetupState(saved: unknown): SetupState {
-  const s = (typeof saved === 'object' && saved !== null ? saved : {}) as Partial<SetupState>
-  const folders = Array.isArray(s.folders) ? s.folders.filter((f): f is string => typeof f === 'string') : []
-  // A copy: checkSetup changes it, and the stored value must change only through store.set.
-  const mtimes = typeof s.mtimes === 'object' && s.mtimes !== null ? { ...s.mtimes } : {}
-  const checked: Record<string, number> = {}
-  if (typeof s.checked === 'object' && s.checked !== null) {
-    for (const [k, v] of Object.entries(s.checked)) if (typeof v === 'number') checked[k] = v
-  }
-  return { folders, mtimes, checked }
-}
-
 // The marker file is written first, then the snapshots, then the index. A failed
 // marker write throws before the rest, so the next session finds the change again.
 async function checkSetup($: EngineInterface) {
@@ -1057,8 +923,7 @@ async function checkSetup($: EngineInterface) {
     const file = `${dir}/cc-dashboard/changes/${id}.json`
     // A resumed session starts again with the same id: keep what it wrote before.
     const earlier = await $.fs.read(file).then((text) => JSON.parse(String(text)) as unknown, () => [])
-    const kept = Array.isArray(earlier) ? earlier : []
-    await $.fs.write(file, `${JSON.stringify([...kept, ...entries], null, 2)}\n`)
+    await $.fs.write(file, changesFileText(earlier, entries))
   }
   for (const c of checked) {
     if (c.snapshot) await $.fs.write(`${dir}/cc-dashboard/setup/${snapshotName(c.path)}`, JSON.stringify(c.snapshot))
@@ -1263,7 +1128,7 @@ export const register: Register = (on) => {
       return result
     }
     await track($, (a, now) => {
-      toolsOf(a.sessionId).clear()
+      toolsOf(runningTools, a.sessionId).clear()
       a.tool = null
       setState(a, 'waiting', now)
     })
@@ -1327,14 +1192,14 @@ export const register: Register = (on) => {
     const args = e as unknown as Record<string, unknown>
     await track($, (a, now) => {
       const run = { name: e.tool, detail: toolDetail(e.tool, args), startedAt: now }
-      toolsOf(a.sessionId).set(id, run)
+      toolsOf(runningTools, a.sessionId).set(id, run)
       a.tool = run
     })
     try {
       return await next(e)
     } finally {
       await track($, (a) => {
-        const tools = toolsOf(a.sessionId)
+        const tools = toolsOf(runningTools, a.sessionId)
         tools.delete(id)
         a.tool = newestTool(tools)
       })
