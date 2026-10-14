@@ -5,7 +5,7 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { toolDetail } = require('../lib/extract');
+const { toolDetail } = require('../lib/transcript-lines');
 
 const review = require('../lib/review');
 const reviewDb = require('../lib/review-db');
