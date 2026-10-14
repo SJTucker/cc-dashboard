@@ -81,21 +81,29 @@ const FIVE: SessionRateLimit = { kind: 'five_hour', percentUsed: 23.5, resetsAt:
 const WEEK: SessionRateLimit = { kind: 'seven_day', percentUsed: 41, resetsAt: '2026-10-05T09:30:00.000Z' }
 
 // contract:begin
-const CONTRACT = [
-  { "script": "judge-updates", "args": ["prompt", "--current", "2.1.290"], "stdin": "## 2.1.290\n- Compaction keeps fewer tool results" },
-  { "script": "judge-updates", "args": ["prompt"], "stdin": "## 2.1.290\n- Compaction keeps fewer tool results" },
-  { "script": "judge-updates", "args": ["record"], "stdin": { "versions": ["2.1.290"], "reply": "[{\"version\":\"2.1.290\",\"relevant\":false}]" } },
-  { "script": "review-session", "args": ["prompt"], "stdin": "" },
-  { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
-  { "script": "cache-state", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl" } },
-  { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
-  { "script": "record-statusline", "args": [], "stdin": {
-    "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "cleared_from": "prev-1", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
-    "model": { "display_name": "Opus 5.5 (1M context)" }, "cost": { "total_cost_usd": 0.42, "total_duration_ms": 60000 },
-    "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 }, "seven_day": { "used_percentage": 41, "resets_at": 1791192600 } } } },
-]
+const CONTRACT = {
+  "calls": [
+    { "script": "judge-updates", "args": ["prompt", "--current", "2.1.290"], "stdin": "## 2.1.290\n- Compaction keeps fewer tool results" },
+    { "script": "judge-updates", "args": ["prompt"], "stdin": "## 2.1.290\n- Compaction keeps fewer tool results" },
+    { "script": "judge-updates", "args": ["record"], "stdin": { "versions": ["2.1.290"], "reply": "[{\"version\":\"2.1.290\",\"relevant\":false}]" } },
+    { "script": "review-session", "args": ["prompt"], "stdin": "" },
+    { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
+    { "script": "cache-state", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl" } },
+    { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
+    { "script": "record-statusline", "args": [], "stdin": {
+      "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "cleared_from": "prev-1", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
+      "model": { "display_name": "Opus 5.5 (1M context)" }, "cost": { "total_cost_usd": 0.42, "total_duration_ms": 60000 },
+      "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 }, "seven_day": { "used_percentage": 41, "resets_at": 1791192600 } } } }
+  ],
+  "activity": { "sessionId": "s1", "state": "working", "tool": null, "subagents": 0, "since": 61000, "updatedAt": 61000 },
+  "agentUsage": { "agentId": "a1", "steps": [
+    { "t": 61000, "model": "claude-haiku-4-5", "input": 2, "cacheWrite": 3649, "cacheRead": 33650, "output": 163, "turnId": "t1", "index": 1 } ] },
+  "changes": [
+    { "t": 2000, "kind": "claude-md", "name": "CLAUDE.md", "label": "add rule b", "file": "/home/u/.claude/CLAUDE.md" } ]
+}
+
 // contract:end
-const contract = CONTRACT
+const contract = CONTRACT.calls
 
 const STEP_USAGE = { input_tokens: 2, output_tokens: 163, cache_read_input_tokens: 33650, cache_creation_input_tokens: 3649, model: 'claude-haiku-4-5' }
 const STEP_CHUNKS = [{ kind: 'text', index: 0, text: 'hi' }, { kind: 'stop', stopReason: 'end_turn', usage: STEP_USAGE }]
@@ -956,6 +964,13 @@ test('turn.start records the session as working', async ($, on) => {
   expect(ran).toEqual([])
 })
 
+test('the activity file body equals the sample in CONTRACT', async ($, on) => {
+  const { writes, clock } = world(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await clock.settle()
+  expect(activityOf(writes)).toEqual(CONTRACT.activity)
+})
+
 for (const reason of ['answer', 'aborted', 'error'] as const) {
   test(`turn.complete with reason ${reason} records waiting`, async ($, on) => {
     const { writes, clock } = world(on)
@@ -1305,6 +1320,17 @@ test('the first setup check stores snapshots and writes no marker', async ($, on
   expect(setup.mtimes[CLAUDE_MD]).toBe(1000)
   expect(setup.folders).toContain(CFG)
   expect(setup.folders).toContain('/work/my.demo')
+})
+
+test('the changes file body equals the sample in CONTRACT', async ($, on) => {
+  const { writes, clock } = world(on, {
+    files: { ...judged, [CLAUDE_MD]: 'a\nb', [snap(CLAUDE_MD)]: snapText(CLAUDE_MD, 1000, 'a') },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+    replies: [{ isAnswered: true, text: 'add rule b' }],
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? 'null')).toEqual(CONTRACT.changes)
 })
 
 test('an edited CLAUDE.md gets a Haiku label dated to its mtime', async ($, on) => {
@@ -2223,6 +2249,13 @@ test('a subagent step passes through unchanged and is written to the agent usage
   expect(file.agentId).toBe('a1')
   expect(file.steps.length).toBe(1)
   expect(file.steps[0]).toMatchObject({ model: 'claude-haiku-4-5', input: 2, cacheWrite: 3649, cacheRead: 33650, output: 163, turnId: 't1', index: 1 })
+})
+
+test('the agent usage file body equals the sample in CONTRACT', async ($, on) => {
+  const { writes, clock } = world(on)
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(JSON.parse(writes[AGENT_FILE] ?? 'null')).toEqual(CONTRACT.agentUsage)
 })
 
 test('a main-thread step, or one with no usage, writes nothing', async ($, on) => {
