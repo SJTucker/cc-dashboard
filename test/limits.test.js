@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const { getRateLimitsPath, recordRateLimits, readLimits, readDailyShare } = require('../lib/limits');
+const { getRateLimitsPath, recordRateLimits, readLimits, readDailyShare, readUsageFetchedAt } = require('../lib/limits');
 
 const NOW = Date.parse('2026-09-28T17:55:00Z');
 const FETCHED = NOW - 3 * 60 * 1000;
@@ -472,4 +472,141 @@ test('readLimits warns once per path for a claude.json that does not parse, and 
   readLimits({ claudeJson, rateLimits, now: NOW });
   readLimits({ claudeJson, rateLimits, now: NOW });
   assert.strictEqual(warn.mock.callCount(), 1);
+});
+
+// The entries of the cache's limits list, as Claude Code wrote them on 2026-10-14.
+const limitEntry = (kind, percent, resets_at, scope = null) => ({
+  kind, group: kind === 'session' ? 'session' : 'weekly', percent, severity: 'normal', resets_at, scope, is_active: false,
+});
+const scopedEntry = (display_name, percent, resets_at) =>
+  limitEntry('weekly_scoped', percent, resets_at, { model: { id: null, display_name }, surface: null });
+const extraUsage = (over = {}) => ({
+  is_enabled: true, monthly_limit: 20000, used_credits: 4117, utilization: 20.585,
+  currency: 'USD', decimal_places: 2, disabled_reason: null, ...over,
+});
+const WEEK_RESET = '2026-10-04T10:00:00.149361+00:00';
+const CREDITS = { usedMinor: 4117, limitMinor: 20000, currency: 'USD', decimalPlaces: 2 };
+// Local midnight on the first of the month after NOW (2026-09-28).
+const CREDITS_RESET = new Date(2026, 9, 1).getTime();
+
+test('readLimits adds each scoped week and then usage credits after the plan windows', () => {
+  const claudeJson = writeClaudeJson(withCache({
+    five_hour: usageWindow(25, '2026-09-28T22:20:00.233620+00:00'),
+    seven_day: usageWindow(76, WEEK_RESET),
+    limits: [
+      limitEntry('session', 25, '2026-09-28T22:20:00.233620+00:00'),
+      limitEntry('weekly_all', 76, WEEK_RESET),
+      scopedEntry('Fable', 58, WEEK_RESET),
+    ],
+    extra_usage: extraUsage(),
+  }));
+  const result = readLimits({ claudeJson, rateLimits: missingFile('rate-limits.json'), now: NOW });
+  assert.deepStrictEqual(result.limits.map((l) => l.key), ['five_hour', 'seven_day', 'weekly_scoped:Fable', 'credits']);
+  assert.deepStrictEqual(result.limits[2], {
+    key: 'weekly_scoped:Fable', label: 'Current week (Fable)', percent: 58, resetsAt: Date.parse(WEEK_RESET),
+  });
+  assert.deepStrictEqual(result.limits[3], {
+    key: 'credits', label: 'Usage credits', percent: (4117 / 20000) * 100, resetsAt: CREDITS_RESET, credits: CREDITS,
+  });
+  assert.strictEqual(result.source, 'usage-cache');
+  assert.strictEqual(JSON.stringify(result).includes('someone@example.com'), false);
+});
+
+test('readLimits skips a scoped entry with no model name or no percent, and one past its reset', () => {
+  const claudeJson = writeClaudeJson(withCache({
+    five_hour: usageWindow(25, null),
+    limits: [
+      limitEntry('weekly_scoped', 40, WEEK_RESET, { model: { id: null, display_name: '' }, surface: null }),
+      limitEntry('weekly_scoped', 40, WEEK_RESET, null),
+      scopedEntry('Opus', null, WEEK_RESET),
+      scopedEntry('Sonnet', 30, '2026-09-28T17:00:00Z'),
+      scopedEntry('Fable', 58, null),
+      null,
+    ],
+  }));
+  const result = readLimits({ claudeJson, rateLimits: missingFile('rate-limits.json'), now: NOW });
+  assert.deepStrictEqual(result.limits.map((l) => l.key), ['five_hour', 'weekly_scoped:Fable']);
+  assert.strictEqual(result.limits[1].resetsAt, null);
+});
+
+test('readLimits leaves out credits that are off, have no cap, or have no amount', () => {
+  const cases = [
+    null,
+    extraUsage({ is_enabled: false }),
+    extraUsage({ monthly_limit: 0 }),
+    extraUsage({ monthly_limit: null }),
+    extraUsage({ used_credits: '4117' }),
+  ];
+  for (const extra_usage of cases) {
+    const claudeJson = writeClaudeJson(withCache({ five_hour: usageWindow(25, null), extra_usage }));
+    const result = readLimits({ claudeJson, rateLimits: missingFile('rate-limits.json'), now: NOW });
+    assert.deepStrictEqual(result.limits.map((l) => l.key), ['five_hour'], JSON.stringify(extra_usage));
+  }
+});
+
+test('readLimits ignores a limits field that is not a list', () => {
+  for (const limits of [null, {}, 'Fable', 3]) {
+    const claudeJson = writeClaudeJson(withCache({ five_hour: usageWindow(25, null), limits }));
+    const result = readLimits({ claudeJson, rateLimits: missingFile('rate-limits.json'), now: NOW });
+    assert.deepStrictEqual(result.limits.map((l) => l.key), ['five_hour'], JSON.stringify(limits));
+  }
+});
+
+test('the credits row falls back to USD and two decimal places for odd currency fields', () => {
+  const claudeJson = writeClaudeJson(withCache({ extra_usage: extraUsage({ currency: 'dollars', decimal_places: 9 }) }));
+  const result = readLimits({ claudeJson, rateLimits: missingFile('rate-limits.json'), now: NOW });
+  assert.deepStrictEqual(result.limits[0].credits, CREDITS);
+});
+
+test('the credits row resets on the first of next month, across a year end', () => {
+  const now = new Date(2026, 11, 15, 12).getTime();
+  const claudeJson = writeClaudeJson(withCache({ extra_usage: extraUsage() }, now - 60 * 1000));
+  const result = readLimits({ claudeJson, rateLimits: missingFile('rate-limits.json'), now });
+  assert.strictEqual(result.limits[0].resetsAt, new Date(2027, 0, 1).getTime());
+});
+
+test('readLimits returns the cache-only rows when no plan window is left', () => {
+  const claudeJson = writeClaudeJson(withCache({
+    five_hour: usageWindow(25, '2026-09-28T17:00:00Z'),
+    limits: [scopedEntry('Fable', 58, WEEK_RESET)],
+  }));
+  assert.deepStrictEqual(readLimits({ claudeJson, rateLimits: missingFile('rate-limits.json'), now: NOW }), {
+    fetchedAt: FETCHED,
+    limits: [{ key: 'weekly_scoped:Fable', label: 'Current week (Fable)', percent: 58, resetsAt: Date.parse(WEEK_RESET) }],
+    source: 'usage-cache',
+  });
+});
+
+test('readLimits keeps the cache-only rows when the statusline source is newer, and marks an old cache', () => {
+  const statuslineAt = NOW - 60 * 1000;
+  const rateLimits = writeRateLimits({
+    fetchedAtMs: statuslineAt,
+    rate_limits: { five_hour: { used_percentage: 30, resets_at: Math.floor(NOW / 1000) + 3600 } },
+  });
+  const cache = (fetchedAt) => writeClaudeJson(withCache({
+    five_hour: usageWindow(25, null),
+    limits: [scopedEntry('Fable', 58, WEEK_RESET)],
+    extra_usage: extraUsage(),
+  }, fetchedAt));
+
+  const old = readLimits({ claudeJson: cache(NOW - 30 * 60 * 1000), rateLimits, now: NOW });
+  assert.strictEqual(old.source, 'statusline');
+  assert.strictEqual(old.fetchedAt, statuslineAt);
+  assert.deepStrictEqual(old.limits.map((l) => [l.key, l.asOf]), [
+    ['five_hour', undefined],
+    ['weekly_scoped:Fable', NOW - 30 * 60 * 1000],
+    ['credits', NOW - 30 * 60 * 1000],
+  ]);
+  assert.strictEqual(old.limits[0].percent, 30);
+
+  // A cache under 5 minutes older than the statusline reading carries no asOf.
+  const recent = readLimits({ claudeJson: cache(NOW - 4 * 60 * 1000), rateLimits, now: NOW });
+  assert.deepStrictEqual(recent.limits.map((l) => Object.hasOwn(l, 'asOf')), [false, false, false]);
+});
+
+test('readUsageFetchedAt returns the cache time, or null with no usable cache', () => {
+  assert.strictEqual(readUsageFetchedAt(writeClaudeJson(withCache({}, 1234))), 1234);
+  assert.strictEqual(readUsageFetchedAt(missingFile('.claude.json')), null);
+  assert.strictEqual(readUsageFetchedAt(writeClaudeJson('{not json')), null);
+  assert.strictEqual(readUsageFetchedAt(writeClaudeJson({ cachedUsageUtilization: { fetchedAtMs: 'x' } })), null);
 });
