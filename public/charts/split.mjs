@@ -10,11 +10,12 @@ import { legendRow, swatchIcon } from './legend.mjs';
 // subagent lists (drawHBars) are not partitions - one call can appear in both - so
 // they keep the separate-bar form.
 //
-// Both shares in the one non-money series colour. Texture tells them apart: the
-// larger part solid, the smaller part diagonal. The direct labels carry identity too.
+// Both shares in cyan, the colour of the Plan usage meters beside them. Texture
+// tells them apart: the larger part solid, the smaller part diagonal. The direct
+// labels carry identity too.
 const SPLIT_STYLE = [
-  { color: TOKENS.seriesNeutral, texture: 'solid' },
-  { color: TOKENS.seriesNeutral, texture: 'diag' },
+  { color: TOKENS.accentCyan, texture: 'solid' },
+  { color: TOKENS.accentCyan, texture: 'diag' },
 ];
 
 // Styles follow size, not list position: the rows sorted by cost, largest first,

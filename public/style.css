@@ -899,6 +899,17 @@ html, body {
   color: var(--text-tertiary);
   margin-bottom: var(--sp-2);
 }
+/* Where usage goes sits beside Plan usage, so its section titles and bars match
+   the Plan usage meters: .limit-name's label style and cyan fills. */
+#attributionPanel .usage-group-title {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: var(--fs-body);
+  color: var(--text-primary);
+}
+#attributionPanel .usage-track > i { background: var(--accent-cyan); }
+#attributionPanel .group-toggle { color: var(--text-primary); }
+#attributionPanel .usage-group-note { font-family: var(--font-data); font-size: var(--fs-caption); }
 
 /* Live sessions panel (renderSessions in public/panels/sessions.mjs). */
 .sessions-table {
