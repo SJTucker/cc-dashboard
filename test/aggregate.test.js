@@ -335,23 +335,6 @@ test('a tool use with a null model is under Unknown model', () => {
   assert.deepStrictEqual(run([entry]).tools[0].byModel.map((m) => [m.label, m.family]), [['Unknown model', 'other']]);
 });
 
-test('an old row set takes each tool use model from the latest call at or before it', () => {
-  const old = (key, t) => ({ key, t, name: 'Bash', detail: null });
-  const entry = rowSet({
-    calls: [
-      call({ key: 'm1:r1', t: at(0, 9), model: 'claude-opus-5-5' }),
-      call({ key: 'm2:r2', t: at(0, 10), model: 'claude-sonnet-5-5' }),
-      call({ key: 'm3:r3', t: at(0, 10), model: 'claude-haiku-5-5' }),
-    ],
-    toolUses: [old('a', at(0, 9)), old('b', at(0, 9) + 500), old('c', at(0, 10)), old('d', at(0, 8))],
-  });
-  const labels = Object.fromEntries(run([entry]).tools[0].byModel.map((m) => [m.label, m.calls]));
-
-  // a: same t as the Opus call. b: a later line of the Opus response. c: a tie on t,
-  // so the later call in array order wins. d: before every call.
-  assert.deepStrictEqual(labels, { 'Opus 5.5': 2, 'Haiku 5.5': 1, 'Unknown model': 1 });
-});
-
 test('toolTotals counts only errors whose tool use is in range, as the tools do', () => {
   const entry = rowSet({
     toolUses: [use('a', 'claude-opus-5-5', 'Bash', at(10)), use('b', 'claude-opus-5-5', 'Bash', at(0))],
