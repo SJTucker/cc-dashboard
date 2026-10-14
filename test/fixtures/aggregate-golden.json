@@ -2692,6 +2692,9 @@
         "<corpus>/d.jsonl": "No session id",
         "sess-f": "Titles only"
       },
+      "recapBySession": {
+        "sess-a": "Goal was the golden corpus. Next: commit."
+      },
       "branchesBySession": {
         "sess-a": [
           "main",
@@ -4986,6 +4989,9 @@
         "<corpus>/d.jsonl": "No session id",
         "sess-f": "Titles only"
       },
+      "recapBySession": {
+        "sess-a": "Goal was the golden corpus. Next: commit."
+      },
       "branchesBySession": {
         "sess-a": [
           "main",
@@ -7141,6 +7147,9 @@
         "sess-c": "Old session",
         "<corpus>/d.jsonl": "No session id",
         "sess-f": "Titles only"
+      },
+      "recapBySession": {
+        "sess-a": "Goal was the golden corpus. Next: commit."
       },
       "branchesBySession": {
         "sess-a": [
@@ -9407,6 +9416,9 @@
         "sess-c": "Old session",
         "<corpus>/d.jsonl": "No session id",
         "sess-f": "Titles only"
+      },
+      "recapBySession": {
+        "sess-a": "Goal was the golden corpus. Next: commit."
       },
       "branchesBySession": {
         "sess-a": [

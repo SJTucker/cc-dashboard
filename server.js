@@ -317,6 +317,7 @@ function createServer(config) {
         branchesBySession: efficiency.branchesBySession,
         branchBySession: efficiency.branchBySession,
         firstPromptBySession: efficiency.firstPromptBySession,
+        recapBySession: efficiency.recapBySession,
         cacheCallsOf: transcriptCalls,
       }));
     } catch (err) {

@@ -35,3 +35,17 @@ test('drawShareBar appends extra legend items after the shares', async () => {
   });
   assert.equal(container.children[1].children[1].textContent, 'mysteryunpriced');
 });
+
+test('drawSplitBar keeps a row\'s own style and ranks the rest', async () => {
+  const { drawSplitBar } = await import('../public/charts/split.mjs');
+  const { TOKENS } = await import('../public/charts/palette.mjs');
+  const container = document.createElement('div');
+  drawSplitBar(container, [
+    { name: 'Over', cost: 9, style: { color: TOKENS.accentCyanDim, texture: 'solid' } },
+    { name: 'Under', cost: 1, style: { color: TOKENS.accentCyan, texture: 'solid' } },
+  ]);
+  const [bar, legend] = container.children;
+  // Over is larger and first, yet keeps the dim colour that rank 0 would not give it.
+  assert.ok(bar.children[0].getAttribute('style').includes('257991'));
+  assert.ok(legend.children[0].children[0].getAttribute('style').includes('257991'));
+});

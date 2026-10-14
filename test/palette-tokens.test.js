@@ -18,6 +18,7 @@ test('palette TOKENS equal the custom properties in public/css', async () => {
     surface: 'surface',
     textSecondary: 'text-secondary',
     accentCyan: 'accent-cyan',
+    accentCyanDim: 'accent-cyan-dim',
     money: 'money',
     moneyFill: 'money-fill',
     seriesNeutral: 'series-neutral',
@@ -59,9 +60,9 @@ test('letter-spacing is the label token or 0', () => {
   assert.deepStrictEqual(values.filter((v) => !['var(--ls-label)', '0', 'inherit'].includes(v)), []);
 });
 
-test('media queries use the three breakpoints', () => {
+test('media queries use the known breakpoints', () => {
   const widths = [...css.matchAll(/@media[^{]*?(max|min)-width:\s*(\d+)px/g)].map((m) => `${m[1]}-${m[2]}`);
-  assert.deepStrictEqual(widths.filter((w) => !['max-480', 'max-720', 'min-721', 'max-900', 'min-901'].includes(w)), []);
+  assert.deepStrictEqual(widths.filter((w) => !['max-480', 'max-720', 'min-721', 'max-900', 'min-901', 'max-1240'].includes(w)), []);
 });
 
 // .ba-under lines the legend up with the plot, so its margin is the plot's left pad in px.

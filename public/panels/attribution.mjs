@@ -3,6 +3,7 @@
 import { formatCost, axisTokens, escapeHtml } from '../format.mjs';
 import { shown } from '../state.mjs';
 import { drawSplitBar } from '../charts/split.mjs';
+import { TOKENS } from '../charts/palette.mjs';
 import { drawHBars } from '../charts/hbars.mjs';
 
 // A skill or subagent row's share of total cost, such as "4.3%".
@@ -54,8 +55,8 @@ export function renderAttribution(data) {
     { name: 'Subagents', cost: data.threads.subagent },
   ];
   const contextRows = [
-    { name: `Over ${axisTokens(data.contextThreshold)} context`, cost: data.context.over },
-    { name: `Under ${axisTokens(data.contextThreshold)} context`, cost: data.context.under },
+    { name: `Over ${axisTokens(data.contextThreshold)} context`, cost: data.context.over, style: { color: TOKENS.accentCyanDim, texture: 'diag' } },
+    { name: `Under ${axisTokens(data.contextThreshold)} context`, cost: data.context.under, style: { color: TOKENS.accentCyan, texture: 'solid' } },
   ];
   drawSplitBar(document.getElementById('threadBars'), threadRows);
   drawSplitBar(document.getElementById('contextBars'), contextRows);

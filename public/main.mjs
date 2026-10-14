@@ -19,7 +19,7 @@ import { renderAttribution } from './panels/attribution.mjs';
 import { renderCards } from './panels/cards.mjs';
 import { ensureChanges, loadChanges, redrawChanges } from './panels/changes.mjs';
 import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits.mjs';
-import { renderModels, setupModelMixToggle } from './panels/models.mjs';
+import { renderModelDailyCharts, renderModelsPanel, setupModelMixToggle } from './panels/models.mjs';
 import { loadPricesSource, setupPrices } from './panels/prices.mjs';
 import { refreshRecords } from './panels/records.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
@@ -276,8 +276,9 @@ function renderMetaBanner(meta) {
 }
 
 // Draws everything the summary feeds on the tab shown: the banner, then the cards,
-// charts, models and tools on Analysis, or Where usage goes on Now. lastSummarySignature is set on the last line, after every renderer has
-// run. A renderer that throws therefore leaves the previous signature, and
+// charts, daily-by-model charts and tools on Analysis, or Where usage goes and
+// Models on Now. lastSummarySignature is set on the last line, after every renderer
+// has run. A renderer that throws therefore leaves the previous signature, and
 // reportDrawError clears that one. The panel draw guards keep no key for a draw that
 // threw, so those panels need no clearing.
 function drawSummaryPanels(data) {
@@ -294,7 +295,8 @@ function drawSummaryPanels(data) {
   const panels = summaryPanelsFor(state.tab);
   if (panels.includes('cards')) renderCards(data);
   if (panels.includes('usage')) renderUsageCharts(data);
-  if (panels.includes('models')) renderModels(data);
+  if (panels.includes('models')) renderModelsPanel(data);
+  if (panels.includes('modelDaily')) renderModelDailyCharts(data);
   if (panels.includes('attribution')) renderAttribution(data);
   if (panels.includes('tools') && shown('tools')) renderTools(data.tools || [], data.toolTotals);
   lastSummarySignature = signature;
@@ -379,10 +381,13 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
 // range once and polls only the sticky bar. A request that the old tab skipped and
 // the new tab needs starts here. Setup changes load once, through ensureChanges,
 // which redraws from the loaded report on later visits. The price source reloads on
-// each switch to Analysis, because the Now tab never needs prices. The load runs
-// after showTab, so every chart is drawn at its visible width.
+// each switch to Now, because the Analysis tab never needs prices. The load runs
+// after showTab, so every chart is drawn at its visible width. The first call has
+// no old tab: state starts on Now's range, which would hide Now's own requests.
+let tabEntered = false;
 function enterTab(tab) {
-  const before = neededRequests(state.hiddenKeys, state.currentDays);
+  const before = tabEntered ? neededRequests(state.hiddenKeys, state.currentDays) : new Set();
+  tabEntered = true;
   state.tab = tab;
   state.currentDays = rangeForTab(tab, state.analysisDays);
   showTab(tab);

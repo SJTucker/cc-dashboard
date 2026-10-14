@@ -11,7 +11,7 @@ Two dependencies, no telemetry, no CDN. The server makes one kind of outbound re
 Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
 does and doesn't do" below.
 
-The page has two tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline and Live sessions. The Analysis tab shows 7d, 30d, 90d and All, picked with the range picker. The URL hash `#now` or `#analysis` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on both tabs. Cost today and Tokens today each add a 7d total.
+The page has two tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline, Live sessions and Models. The Analysis tab shows 7d, 30d, 90d and All, picked with the range picker. The URL hash `#now` or `#analysis` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on both tabs. Cost today and Tokens today each add a 7d total.
 
 ![The Now tab: Plan usage, Where usage goes and Session timeline](docs/screenshots/overview.png)
 
@@ -46,7 +46,7 @@ cache write and cache read:
 
 ![Daily cost, Daily tokens, Cumulative cost and Daily tokens by type charts over 30 days](docs/screenshots/usage-charts.png)
 
-The Models panel shows a share bar of each model's tokens or cost (the Tokens and Cost buttons in its head pick the measure), with the model table below it: tokens, share, dollars per million tokens and the thinking share of output. Under every chart a legend row shows each series with an icon drawn like its mark. A long list shows its first rows and a Show all button in place, so no panel scrolls inside the page.
+The Models panel, at the bottom of the Now tab, shows today's share bar of each model's tokens or cost (the Tokens and Cost buttons in its head pick the measure), with the model table below it: tokens, share, dollars per million tokens and the thinking share of output. Under every chart a legend row shows each series with an icon drawn like its mark. A long list shows its first rows and a Show all button in place, so no panel scrolls inside the page.
 
 ![Models panel with share bar and table](docs/screenshots/models.png)
 
@@ -364,7 +364,7 @@ waiting on you, however long ago it last wrote. Its columns are Session, State, 
 now, Cost today and Last active. The Session column shows the session's title, with
 its project and git branch on a line under it. The title is Claude Code's last
 `ai-title` line. A session without one shows the first prompt typed in it, in dimmer
-italic type. Hover the branch for its full name and, when the session switched
+italic type. Hover the title to read it in full, followed by Claude Code's last away recap for the session when there is one (the `away_summary` line it writes when you return to an idle session; the Session timeline's bar tooltip shows it too, cut to 4 lines). `transcripts.db` stores that recap text. Hover the branch for its full name and, when the session switched
 branch, every branch it used. Prompts, Length and Lines are only in Today. Running
 now is ordered by the start of each session's first span today (`runningSessions` in
 `public/session-groups.mjs`), so rows do not move while they run. State shows ▶

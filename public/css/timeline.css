@@ -17,3 +17,16 @@
 .timeline-rebuild-count { font-size: var(--fs-caption); fill: var(--text-secondary); pointer-events: none; }
 
 .timeline-follow-key { color: var(--text-tertiary); }
+
+/* Claude Code's away recap in a timeline bar's tooltip (timelineTooltip in public/panels/timeline.mjs). The tooltip is nowrap, so the recap wraps itself and stops at 4 lines. */
+.tooltip-recap {
+  max-width: 36ch;
+  margin-top: var(--sp-2);
+  white-space: normal;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  line-clamp: 4;
+  overflow: hidden;
+  color: var(--text-secondary);
+}

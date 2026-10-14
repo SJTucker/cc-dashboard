@@ -9,7 +9,6 @@ then on.
 
 | Idea | Status |
 |---|---|
-| [Better session titles](better-session-titles.md) | Open: branch line and first-prompt fallback shipped; decide around 2026-10-14 whether a model-written title is still needed |
 | [Subagent permission prompts](subagent-permission-prompts.md) | Parked 2026-10-11: sessions here run in `auto`, where no dialog opens; findings on reading a subagent's mode at spawn recorded |
 | [Row store growth](row-store-growth.md) | Open: compaction cut loaded rows from 61 MB to 37 MB over 44 days; the thresholds that start a per-call column store (All aggregate above 500 ms, row heap above 400 MB, stat pass above 100 ms) are recorded, and nothing else is built yet |
 | [Same-week model comparison](same-week-model-comparison.md) | Open: compare two models used in one week; minimum calls, mixed-model prompts and where it shows open |
@@ -27,8 +26,6 @@ then on.
 | [Plan limit band below the prompt](limit-band-below-prompt.md) | Open: no mod render slot sits between the prompt and the status line; a `bin/limit-line` in the statusline script is the likely route; dismissing and shared band logic open |
 | [README screenshots after the design pass](readme-screenshots-after-design-pass.md) | Open: every screenshot predates the tabs, the sticky bar and the new legends; which to retake and how to scrub them open |
 | [Fable weekly limit and usage credits](fable-limit-and-usage-credits.md) | Open: both rows are already in the `/usage` cache Claude Code keeps in `.claude.json`; freshness through the mod, the credits reset date and which scoped weeks to show open |
-| [Hide the status strip when narrow](hide-status-strip-when-narrow.md) | Open: hide `#statusStrip` below a window width; the width, keeping the plan limit warning and Link live visible open |
 | [Subagent status line in Doing now](subagent-status-in-doing-now.md) | Open: show each subagent's status text instead of "1 subagent"; `meta.json` has the spawn description, and whether the live status line is readable anywhere is open |
-| [Models panel on the Now tab](models-panel-on-now-tab.md) | Open: show `#modelsPanel` at the bottom of the Now tab; its range there, and whether it moves or shows on both tabs, open |
-| [Cache efficiency bar](cache-efficiency-bar.md) | Open: a cache bar in Where usage goes, and a dimmer striped "Over 150k" segment; whether the cache bar splits tokens or cost, and its segments, open |
+| [Cache efficiency bar](cache-efficiency-bar.md) | Open: a cache bar in Where usage goes; whether the cache bar splits tokens or cost, and its segments, open |
 | [Record day confetti](record-day-confetti.md) | Open: confetti when today becomes the record day; what triggers it, once per day, and reduced motion open |

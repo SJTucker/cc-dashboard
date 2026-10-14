@@ -22,14 +22,14 @@ test('parseHidden drops entries that are not strings', () => {
   assert.deepStrictEqual(parseHidden('["dailyCost", 3, null, "tools"]'), ['dailyCost', 'tools']);
 });
 
-const NOW = ['records', 'sessions'];
-const ANALYSIS = ['changes', 'prices', 'records', 'reviews', 'rtk'];
+const NOW = ['prices', 'records', 'sessions'];
+const ANALYSIS = ['changes', 'records', 'reviews', 'rtk'];
 
-test('on Today (the Now tab) only the sessions and records requests are needed', () => {
+test('on Today (the Now tab) only the sessions, records and prices requests are needed', () => {
   assert.deepStrictEqual(needed([], 'today'), NOW);
 });
 
-test('off Today (the Analysis tab) every request except sessions is needed', () => {
+test('off Today (the Analysis tab) every request except sessions and prices is needed', () => {
   for (const range of [7, 30, 90, 'all']) assert.deepStrictEqual(needed([], range), ANALYSIS, String(range));
 });
 
@@ -42,7 +42,7 @@ test('a request shared by two panels stays needed until both are hidden', () => 
 
 test('a request with one panel is skipped when that panel is hidden', () => {
   assert.ok(!neededRequests(new Set(['reviews']), 30).has('reviews'));
-  assert.ok(!neededRequests(new Set(['costByModel']), 30).has('prices'));
+  assert.ok(!neededRequests(new Set(['costByModel']), 'today').has('prices'));
   assert.ok(!neededRequests(new Set(['beforeAfter']), 30).has('changes'));
 });
 

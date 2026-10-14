@@ -354,6 +354,11 @@ test('buildLiveSessions lists each session\'s cache rebuilds, oldest first', () 
   assert.deepStrictEqual(sessions.map((s) => s.rebuilds.length).sort(), [0, 2]);
 });
 
+test('buildLiveSessions puts the session recap on each row, null without one', () => {
+  const { sessions } = buildLiveSessions([snapshot({ sessionId: 'a' }), snapshot({ sessionId: 'b' })], [], NOW, {}, {}, [], new Map(), { recapBySession: { a: 'Goal was X.' } });
+  assert.deepStrictEqual(sessions.map((s) => s.recap), ['Goal was X.', null]);
+});
+
 test('buildLiveSessions sends each row\'s sessionId and clearedFrom', () => {
   const snaps = [
     snapshot({ sessionId: 'old' }),

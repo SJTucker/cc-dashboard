@@ -127,6 +127,8 @@ function sessionA() {
     { type: 'ai-title', sessionId: s, aiTitle: 'First title' },
     { type: 'ai-title', sessionId: s, aiTitle: '   ' },
     { type: 'ai-title', sessionId: s, aiTitle: 7 },
+    { type: 'system', subtype: 'away_summary', sessionId: s, content: 'Earlier recap. (disable recaps in /config)' },
+    { type: 'system', subtype: 'away_summary', sessionId: s, content: 3 },
     { type: 'system', subtype: 'compact_boundary', sessionId: s, timestamp: at(0, 10, 3) },
     { type: 'user', sessionId: s, timestamp: at(0, 10, 3), isCompactSummary: true, message: { role: 'user', content: 'Summary of the conversation so far.' } },
     typed(s, 'second prompt, queued', at(0, 10, 4), { promptSource: 'queued', ...ON_MAIN }),
@@ -164,6 +166,8 @@ function sessionA() {
     },
     { type: 'cost-state', sessionId: s, totalCostUSD: 2.25 },
     { type: 'ai-title', sessionId: s, aiTitle: '  Final title  ' },
+    { type: 'system', subtype: 'away_summary', sessionId: s, content: 'Goal was the golden corpus. Next: commit. (disable recaps in /config)' },
+    { type: 'system', subtype: 'away_summary', sessionId: s, content: '   ' },
     '{"broken',
     '   ',
   ];

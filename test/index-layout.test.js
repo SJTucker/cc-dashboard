@@ -17,9 +17,9 @@ function tabMarkup(id) {
 const panelIds = (markup) => [...markup.matchAll(/<section class="panel"[^>]*?id="(\w+)"/g)].map((m) => m[1]);
 const headings = (markup) => [...markup.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1]);
 
-test('the Now tab holds Plan usage and Where usage goes in one row, then the timeline and Live sessions', () => {
+test('the Now tab holds Plan usage and Where usage goes in one row, then the timeline, Live sessions and Models', () => {
   const now = tabMarkup('tabNow');
-  assert.deepStrictEqual(panelIds(now), ['limitsPanel', 'attributionPanel', 'timelinePanel', 'sessionsPanel']);
+  assert.deepStrictEqual(panelIds(now), ['limitsPanel', 'attributionPanel', 'timelinePanel', 'sessionsPanel', 'modelsPanel']);
   assert.match(now, /<div class="panel-row even stretch">\s*<section class="panel" id="limitsPanel"/);
 });
 
@@ -50,7 +50,6 @@ test('the Analysis tab holds the analysis panels in the spec order', () => {
     'Cumulative cost', 'Daily tokens by type · log',
     'Daily tokens by model', 'Daily cost by model',
     'When usage happens',
-    'Models',
     'Tool calls',
     'Output rtk kept out of context',
     'What rtk kept out of context',
@@ -63,8 +62,9 @@ test('the header has the tab switch, and the Analysis tab starts hidden', () => 
   assert.match(html, /<div class="tab" id="tabAnalysis" hidden>/);
 });
 
-test('Models is one panel that keeps the Cost by model hide key, and the donut is gone', () => {
+test('Models is one panel on the Now tab, last, that keeps the Cost by model hide key, and the donut is gone', () => {
   assert.match(html, /<section class="panel" id="modelsPanel" data-hide-key="costByModel">/);
+  assert.ok(panelIds(tabMarkup('tabNow')).at(-1) === 'modelsPanel');
   assert.doesNotMatch(html, /modelMixPanel|modelMixChart/);
   assert.match(html, /<div class="mix-measure" id="mixMeasure"/);
 });

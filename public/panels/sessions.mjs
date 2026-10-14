@@ -9,6 +9,12 @@ import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '..
 
 const sessionsGuard = createDrawGuard();
 
+// The native tooltip of a session title: the title, then Claude Code's away recap
+// after a blank line when the session has one.
+export function titleTooltip(s) {
+  return s.recap ? `${s.title}\n\n${s.recap}` : s.title;
+}
+
 // Today's sessions from the statusline snapshots (see lib/sessions.js). Optional,
 // like requestLimits.
 export function requestSessions() {
@@ -65,7 +71,7 @@ function drawSessions(live) {
     ...lead,
     el('span', { class: 'session-hex', 'aria-hidden': 'true', text: live ? '⬢' : '⬡' }),
     ...(s.title
-      ? [el('span', { class: s.titleSource === 'prompt' ? 'session-title from-prompt' : 'session-title', title: s.title, text: s.title })]
+      ? [el('span', { class: s.titleSource === 'prompt' ? 'session-title from-prompt' : 'session-title', title: titleTooltip(s), text: s.title })]
       : []),
     contextLine(s),
   ];
