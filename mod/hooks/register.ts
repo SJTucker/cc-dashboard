@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
-import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, settingsChanges, snapshotName } from './setup'
-import type { Kind, SetupEntry, Snapshot } from './setup'
+import { baseName, changesFileText, commandPaths, fallbackLabel, cleanLabel, folderFile, includedPaths, lineDiff, readSetupState, settingsChanges, snapshotName } from './setup'
+import type { Kind, SetupEntry, SetupState, Snapshot, Watched } from './setup'
 import { projectFolder, rateLimitsInput, statuslineRecord } from './statusline'
 import type { Frozen } from './statusline'
 import { newestTool, setState, toolDetail, toolsOf } from './activity'
@@ -776,34 +776,8 @@ const LABEL_SYSTEM =
   "that says what the edit changes, in lower case, without the file name and without quotes. Examples: don't commit docs; " +
   'use cx for complexity; run playwright-cli before claiming a UI works.'
 
-// prose files get a Haiku label, settings files a key diff, scripts their name, rtk
-// files their first added line.
-type Mode = 'prose' | 'settings' | 'script' | 'rtk'
-// `folder` decides whether a file with no snapshot is new (its folder was checked
-// before) or seen for the first time (no marker).
-type Watched = { path: string; kind: Kind; name: string; folder: string; mode: Mode }
-// `checked` holds, per folder, the time of the last check that covered it.
-type SetupState = { folders: string[]; mtimes: Record<string, number | null>; checked: Record<string, number> }
 type Change = { w: Watched; t: number; before: string | null; after: string | null }
 type Checked = { path: string; mtime: number | null; snapshot?: Snapshot; change?: Change }
-
-const baseName = (p: string) => p.split('/').filter(Boolean).pop() ?? p
-
-// A file in skills/, agents/ or rules/, from its path. Used for the folder listings
-// and for paths the index holds that a listing no longer returns, so a deleted
-// skill folder is still checked and found removed.
-function folderFile(dir: string, path: string): Watched | null {
-  const skill = new RegExp(`^${escapeRegExp(dir)}/skills/([^/]+)/SKILL\\.md$`).exec(path)
-  if (skill?.[1]) return { path, kind: 'skill', name: `skill ${skill[1]}`, folder: `${dir}/skills`, mode: 'prose' }
-  const agent = new RegExp(`^${escapeRegExp(dir)}/agents/([^/]+)\\.md$`).exec(path)
-  if (agent?.[1]) return { path, kind: 'skill', name: `agent ${agent[1]}`, folder: `${dir}/agents`, mode: 'prose' }
-  if (path.startsWith(`${dir}/rules/`) && path.endsWith('.md')) {
-    return { path, kind: 'claude-md', name: `rules/${path.slice(dir.length + 7)}`, folder: `${dir}/rules`, mode: 'prose' }
-  }
-  return null
-}
-
-const escapeRegExp = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
 async function ruleFiles($: EngineInterface, folder: string, depth: number): Promise<string[]> {
   const out: string[] = []
@@ -938,18 +912,6 @@ async function entriesFor($: EngineInterface, c: Change): Promise<SetupEntry[]> 
   return [{ ...base, kind: c.w.kind, label }]
 }
 
-function readSetupState(saved: unknown): SetupState {
-  const s = (typeof saved === 'object' && saved !== null ? saved : {}) as Partial<SetupState>
-  const folders = Array.isArray(s.folders) ? s.folders.filter((f): f is string => typeof f === 'string') : []
-  // A copy: checkSetup changes it, and the stored value must change only through store.set.
-  const mtimes = typeof s.mtimes === 'object' && s.mtimes !== null ? { ...s.mtimes } : {}
-  const checked: Record<string, number> = {}
-  if (typeof s.checked === 'object' && s.checked !== null) {
-    for (const [k, v] of Object.entries(s.checked)) if (typeof v === 'number') checked[k] = v
-  }
-  return { folders, mtimes, checked }
-}
-
 // The marker file is written first, then the snapshots, then the index. A failed
 // marker write throws before the rest, so the next session finds the change again.
 async function checkSetup($: EngineInterface) {
@@ -972,8 +934,7 @@ async function checkSetup($: EngineInterface) {
     const file = `${dir}/cc-dashboard/changes/${id}.json`
     // A resumed session starts again with the same id: keep what it wrote before.
     const earlier = await $.fs.read(file).then((text) => JSON.parse(String(text)) as unknown, () => [])
-    const kept = Array.isArray(earlier) ? earlier : []
-    await $.fs.write(file, `${JSON.stringify([...kept, ...entries], null, 2)}\n`)
+    await $.fs.write(file, changesFileText(earlier, entries))
   }
   for (const c of checked) {
     if (c.snapshot) await $.fs.write(`${dir}/cc-dashboard/setup/${snapshotName(c.path)}`, JSON.stringify(c.snapshot))
