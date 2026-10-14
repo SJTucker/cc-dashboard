@@ -3,8 +3,8 @@
 const test = require('node:test');
 const { before } = require('node:test');
 const assert = require('node:assert');
-let formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts;
-before(async () => { ({ formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts } = await import('../public/hud.mjs')); });
+let formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText;
+before(async () => { ({ formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText } = await import('../public/hud.mjs')); });
 
 test('formatStatus shows the load time as 24-hour local HH:MM:SS and counts with separators', () => {
   const loadedAt = new Date(2026, 8, 30, 10, 24, 21).getTime();
@@ -112,4 +112,26 @@ test('limitsBannerParts changes when a window resets or a new day starts', () =>
 
 test('limitsBannerParts is empty when nothing warns', () => {
   assert.deepStrictEqual(limitsBannerParts([], null, '2026-10-14'), []);
+});
+
+const FABLE = { key: 'weekly_scoped:Fable', label: 'Current week (Fable)', percent: 90 };
+const CREDITS_ROW = {
+  key: 'credits', label: 'Usage credits', percent: 95,
+  credits: { usedMinor: 19000, limitMinor: 20000, currency: 'USD', decimalPlaces: 2 },
+};
+
+test('planWindows keeps only the session and weekly windows, in order', () => {
+  assert.deepStrictEqual(planWindows([SESSION, FABLE, WEEK, CREDITS_ROW]), [SESSION, WEEK]);
+  assert.deepStrictEqual(planWindows([FABLE, CREDITS_ROW]), []);
+});
+
+test('a scoped week or credits row at 90% adds no banner part and no strip text', () => {
+  const high = planWindows([FABLE, CREDITS_ROW]);
+  assert.deepStrictEqual(limitsBannerParts(high, null, '2026-10-14'), []);
+  assert.strictEqual(limitStripText(high, null), null);
+});
+
+test('creditsText shows the spend and the cap in the account currency', () => {
+  assert.strictEqual(creditsText({ usedMinor: 4117, limitMinor: 20000, currency: 'USD', decimalPlaces: 2 }), '$41.17 of $200.00 spent');
+  assert.strictEqual(creditsText({ usedMinor: 4117, limitMinor: 20000, currency: 'JPY', decimalPlaces: 0 }), '¥4,117 of ¥20,000 spent');
 });

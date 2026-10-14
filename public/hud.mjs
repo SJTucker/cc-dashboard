@@ -43,6 +43,22 @@ function dailyWarning(today) {
 // WINDOWS (lib/limits.js). An unknown key shows the window's own label.
 const LIMIT_SHORT_NAMES = { five_hour: 'Session', seven_day: 'Week' };
 
+// The rows the limits banner and the status strip warn about: the session and
+// weekly windows. A scoped week and usage credits show in the Plan usage panel only.
+function planWindows(rows) {
+  return rows.filter((row) => Object.hasOwn(LIMIT_SHORT_NAMES, row.key));
+}
+
+// The usage credits row's text, such as "$41.17 of $200.00 spent". Amounts arrive in
+// minor units with the currency's decimal places (lib/limits.js creditsRow).
+function creditsText({ usedMinor, limitMinor, currency, decimalPlaces }) {
+  const money = new Intl.NumberFormat('en-US', {
+    style: 'currency', currency, minimumFractionDigits: decimalPlaces, maximumFractionDigits: decimalPlaces,
+  });
+  const scale = 10 ** decimalPlaces;
+  return `${money.format(usedMinor / scale)} of ${money.format(limitMinor / scale)} spent`;
+}
+
 // The one-line form of #limitsBanner for the sticky status strip. `high` is
 // the windows at or past the warn percent and `dayHigh` is dailyWarning's result.
 // The label is Limit when a window is high and Budget when only today's budget is.
@@ -65,4 +81,4 @@ function limitsBannerParts(high, dayHigh, date) {
   return parts;
 }
 
-export { formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts };
+export { formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText };
