@@ -1045,7 +1045,7 @@
         },
         "costByModel": {
           "sonnet": 0.026775,
-          "haiku": 0.0003
+          "haiku": 0.00030000000000000003
         }
       },
       {
@@ -1374,7 +1374,7 @@
         "hour": 14,
         "calls": 1,
         "tokens": 220,
-        "cost": 0.0003
+        "cost": 0.00030000000000000003
       },
       {
         "weekday": 1,
@@ -2349,6 +2349,13 @@
       "over": 0.1125,
       "under": 0.07284000000000002
     },
+    "cacheCost": {
+      "cacheRead": 0.11,
+      "cacheWrite": 0.01725,
+      "input": 0.024090000000000004,
+      "output": 0.033999999999999996,
+      "saved": 0.99
+    },
     "contextThreshold": 150000,
     "efficiency": {
       "calls": [
@@ -2535,7 +2542,7 @@
           "write1h": 0,
           "output": 20,
           "thinking": null,
-          "cost": 0.0003,
+          "cost": 0.00030000000000000003,
           "tools": []
         },
         {
@@ -3367,7 +3374,7 @@
         },
         "costByModel": {
           "sonnet": 0.026775,
-          "haiku": 0.0003
+          "haiku": 0.00030000000000000003
         }
       },
       {
@@ -3696,7 +3703,7 @@
         "hour": 14,
         "calls": 1,
         "tokens": 220,
-        "cost": 0.0003
+        "cost": 0.00030000000000000003
       },
       {
         "weekday": 1,
@@ -4671,6 +4678,13 @@
       "over": 0.1125,
       "under": 0.06879000000000002
     },
+    "cacheCost": {
+      "cacheRead": 0.11,
+      "cacheWrite": 0.01725,
+      "input": 0.021390000000000003,
+      "output": 0.03265,
+      "saved": 0.99
+    },
     "contextThreshold": 150000,
     "efficiency": {
       "calls": [
@@ -4857,7 +4871,7 @@
           "write1h": 0,
           "output": 20,
           "thinking": null,
-          "cost": 0.0003,
+          "cost": 0.00030000000000000003,
           "tools": []
         },
         {
@@ -5590,7 +5604,7 @@
         },
         "costByModel": {
           "sonnet": 0.026775,
-          "haiku": 0.0003
+          "haiku": 0.00030000000000000003
         }
       },
       {
@@ -5919,7 +5933,7 @@
         "hour": 14,
         "calls": 1,
         "tokens": 220,
-        "cost": 0.0003
+        "cost": 0.00030000000000000003
       },
       {
         "weekday": 1,
@@ -6894,6 +6908,13 @@
       "over": 0.1125,
       "under": 0.06726000000000001
     },
+    "cacheCost": {
+      "cacheRead": 0.11,
+      "cacheWrite": 0.01725,
+      "input": 0.020370000000000003,
+      "output": 0.03214,
+      "saved": 0.99
+    },
     "contextThreshold": 150000,
     "efficiency": {
       "calls": [
@@ -7080,7 +7101,7 @@
           "write1h": 0,
           "output": 20,
           "thinking": null,
-          "cost": 0.0003,
+          "cost": 0.00030000000000000003,
           "tools": []
         },
         {
@@ -9233,6 +9254,13 @@
     "context": {
       "over": 0.1125,
       "under": 0.039150000000000004
+    },
+    "cacheCost": {
+      "cacheRead": 0.095,
+      "cacheWrite": 0.008625,
+      "input": 0.01738,
+      "output": 0.030645000000000002,
+      "saved": 0.855
     },
     "contextThreshold": 150000,
     "efficiency": {

@@ -425,14 +425,19 @@ The panel note adds the day's rebuild count and total premium.
 ![Session timeline panel with one lane per session and a cache rebuild marker](docs/screenshots/timeline.png)
 
 The Where usage goes panel shows where total cost went: main thread against
-subagents, calls over against under 150k of context, and the Skills and Subagents
-lists, which are collapsed until you open them. Each list row shows how many times
+subagents, calls over against under 150k of context, a Cache bar, and the Skills
+and Subagents lists, which are collapsed until you open them. Each list row shows how many times
 the skill or subagent type was invoked in the range, then its share of total cost,
 as in `21× · 4.3%`. A skill counts its Skill tool calls and the times you typed it as
 a slash command. A subagent type counts the Agent tool calls that started it. A skill
 or subagent started before the range whose calls continue into it shows `0×`. Usage stored from
 transcripts Claude Code has since deleted counts no slash commands, because the
 dashboard did not record them before this version.
+
+The Cache bar splits total cost into cache reads, cache writes, uncached input and
+output, always in that order. The four parts add up to the total cost. The note
+beside its title gives what cache reads saved: what they would cost at the full
+input rate, minus what they cost.
 
 The Tool calls panel lists calls per tool, with the error rate beside each tool that
 had errors. Pick a tool, or "All tools" above the list, to see its breakdown, its
@@ -658,7 +663,7 @@ public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar, 
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
 public/css/            All styling, one file per panel (base.css first, then header, cards, charts, model-list, activity, attribution, sessions, timeline, reviews, setup-changes, tool-errors, plan-usage and controls). public/index.html loads them in that order, and the order decides which rule wins between two rules of equal specificity. base.css holds the custom properties and the @font-face rules for public/fonts/
 public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by css/base.css, with their SIL OFL licence files
-public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists with invocation counts
+public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, the cache split of cost, skill and subagent lists with invocation counts
 public/panels/cards.mjs  The Analysis tab's summary cards: two rows of cards: money (total cost, cost per day, 30-day projection, Claude Code's reported cost) over usage (tokens, cache, thinking share, tool calls)
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits

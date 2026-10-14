@@ -528,3 +528,16 @@ test('scannedFiles and unreadableFiles count transcripts only, not step files', 
   assert.strictEqual(data.meta.scannedFiles, 1);
   assert.strictEqual(data.meta.unreadableFiles, 0);
 });
+
+test('cacheCost parts sum to totalCost over main, subagent and unpriced calls', () => {
+  const u = (extra) => ({ input_tokens: 1000, output_tokens: 500, cache_read_input_tokens: 40000, cache_creation_input_tokens: 2000, ...extra });
+  const out = run([rowSet({ calls: [
+    call({ key: 'a', usage: u() }),
+    call({ key: 'b', sidechain: true, usage: u({ output_tokens: 900 }) }),
+    call({ key: 'c', model: 'mystery-model', usage: u() }),
+    call({ key: 'd', model: 'claude-opus-5', usage: u({ speed: 'fast' }) }),
+  ] })]);
+  const { cacheRead, cacheWrite, input, output, saved } = out.cacheCost;
+  assert.ok(cacheRead > 0 && cacheWrite > 0 && input > 0 && output > 0 && saved > 0);
+  close(cacheRead + cacheWrite + input + output, out.summary.totalCost, 'cacheCost sums to totalCost');
+});
