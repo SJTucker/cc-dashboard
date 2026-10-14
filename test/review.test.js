@@ -143,7 +143,7 @@ test('SYSTEM explains the rules section and asks for broken rules', () => {
 
 test('SYSTEM explains the earlier suggestions section', () => {
   assert.match(review.SYSTEM, /EARLIER SUGGESTIONS/);
-  assert.match(review.SYSTEM, /open, done, not useful or duplicate/);
+  assert.match(review.SYSTEM, /open, done, not useful, duplicate or expired/);
   assert.match(review.SYSTEM, /Recurring:/);
 });
 
@@ -178,6 +178,17 @@ const rowOf = (db, id) => {
   const row = db.prepare('SELECT * FROM reviews WHERE session_id = ?').get(id);
   return row ? { ...row } : row; // node:sqlite rows have a null prototype
 };
+
+// The detail lines of EXPLAIN QUERY PLAN for sql, with every placeholder unbound.
+const queryPlan = (db, sql) => db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all().map((r) => r.detail);
+
+// A plan whose cost does not grow with the suggestions table: no full SCAN except
+// of suggestions_open, which holds open rows only, and no sort into a temp B-tree.
+function assertBounded(db, sql) {
+  const plan = queryPlan(db, sql);
+  const bad = plan.filter((d) => (/^SCAN /.test(d) && !d.includes('USING INDEX suggestions_open')) || d.includes('TEMP B-TREE'));
+  assert.deepStrictEqual(bad, [], plan.join('\n'));
+}
 const suggestionsOf = (db, id) => db.prepare('SELECT idx, kind, text, dismissed_at, reason FROM suggestions WHERE session_id = ? ORDER BY idx').all(id).map((r) => ({ ...r }));
 
 function writeSessionTranscript(projects, id, promptCount) {
@@ -550,4 +561,35 @@ test('a dismissal survives readReviews and a later finishReview of another sessi
   review.setDismissal(db, 'a', 0, 'done', NOW);
   seed(review, db, 'b', {}, [{ kind: 'workflow', text: 'y' }]);
   assert.strictEqual(review.readReviews(db, projects, NOW).find((r) => r.sessionId === 'a').suggestions[0].reason, 'done');
+});
+
+test('expireSuggestions closes open suggestions on reviews finished over 14 days ago, and nothing else', () => {
+  const { review, db } = fixture();
+  seed(review, db, 'old', {}, [{ kind: 'workflow', text: 'stale' }, { kind: 'workflow', text: 'acted on' }], NOW - 15 * DAY);
+  review.setDismissal(db, 'old', 1, 'done', NOW - 14 * DAY - HOUR);
+  seed(review, db, 'edge', {}, [{ kind: 'workflow', text: 'exactly 14 days' }], NOW - 14 * DAY);
+  seed(review, db, 'new', {}, [{ kind: 'workflow', text: 'fresh' }], NOW - DAY);
+  assert.strictEqual(review.expireSuggestions(db, NOW), 1);
+  assert.deepStrictEqual(db.prepare('SELECT session_id, idx, reason, dismissed_at FROM suggestions ORDER BY session_id, idx').all().map((r) => ({ ...r })), [
+    { session_id: 'edge', idx: 0, reason: null, dismissed_at: null },
+    { session_id: 'new', idx: 0, reason: null, dismissed_at: null },
+    { session_id: 'old', idx: 0, reason: 'expired', dismissed_at: NOW },
+    { session_id: 'old', idx: 1, reason: 'done', dismissed_at: NOW - 14 * DAY - HOUR },
+  ]);
+  assert.strictEqual(review.expireSuggestions(db, NOW), 0);
+});
+
+test('the expiry starts from suggestions_open and looks each review up by key', () => {
+  const { review, db } = fixture();
+  assertBounded(db, review.QUERIES.expire);
+  assert.ok(queryPlan(db, review.QUERIES.expire).some((d) => d.includes('suggestions_open')));
+});
+
+test('earlierSuggestions labels an expired suggestion and SYSTEM names the state', () => {
+  const { review, db } = fixture();
+  seed(review, db, 'a', {}, [{ kind: 'workflow', text: 'x' }], NOW - DAY);
+  db.prepare("UPDATE suggestions SET reason = 'expired', dismissed_at = ? WHERE session_id = 'a'").run(NOW);
+  assert.strictEqual(review.earlierSuggestions(db, NOW), '- [expired] workflow: x');
+  assert.match(review.SYSTEM, /duplicate or expired/);
+  assert.strictEqual(review.EXPIRE_MS, 14 * DAY);
 });
