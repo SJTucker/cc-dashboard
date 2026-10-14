@@ -369,6 +369,15 @@ function createServer(config) {
     res.json(result.source);
   });
 
+  // Express 4 answers a body-parser error (malformed JSON, body over the limit)
+  // with an HTML page. The routes under /api send JSON, so this answers the same
+  // way. Routes that send their own error JSON never reach it. Static files keep
+  // Express's default handler.
+  app.use('/api', (err, req, res, next) => {
+    if (res.headersSent) return next(err);
+    res.status(err.status || 500).json({ error: err.message });
+  });
+
   const server = http.createServer(app);
   server.on('close', () => serverDb.close());
   // Starts the first read of the transcripts without a request. The listen callback

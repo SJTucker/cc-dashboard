@@ -1029,3 +1029,13 @@ test('the dismiss routes answer 503 within 1000 ms under the review lock, reads 
   assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' })).status, 200);
   assert.deepStrictEqual(await suggestionState(base, 'sess-a'), ['done', null]);
 });
+
+test('a malformed JSON body on the dismiss and apply routes answers JSON 400, not an HTML page', async (t) => {
+  const { url: base } = await startServer(t);
+  for (const url of [dismissUrl(base, 'sess-a', 0), `${base}/api/prices/apply`]) {
+    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json' });
+    assert.strictEqual(res.status, 400, url);
+    assert.match(res.headers.get('content-type'), /application\/json/, url);
+    assert.strictEqual(typeof (await res.json()).error, 'string', url);
+  }
+});
