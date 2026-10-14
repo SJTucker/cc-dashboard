@@ -1023,6 +1023,46 @@ test('a file at the death cap with no earlier good entry does not move generatio
   assert.strictEqual(rows.generation, before, 'a skipped file changes nothing');
 });
 
+test('a file with a death count is never read on the main thread, even when the pool never starts', async (t) => {
+  const { failedRows, withPool } = require('../lib/extract-pool');
+  t.mock.method(console, 'warn', () => {});
+  const { dir } = makeProjects();
+  const held = writeFile(dir, 'b', ['2'], 3 * HOUR_MS);
+  const fresh = writeFile(dir, 'a', ['1'], 2 * HOUR_MS);
+  const mainReads = [];
+  const extract = (f) => { mainReads.push(f); return extractFile(f); };
+  const workerFile = path.join(__dirname, 'fixtures', 'die-after-first-worker.js');
+  const limits = { files: 99, bytes: 0 };
+  let openPool = (size, fn) => withPool(1, fn, { workerFile });
+  const clock = { now: Date.now() };
+  const rows = createRowStore({ projectsDir: () => dir, now: () => clock.now, extract, openPool: (size, fn) => openPool(size, fn), poolLimits: limits });
+  const refresh = async () => {
+    clock.now += REFRESH_SHARE_MS + 1;
+    await rows.refresh();
+  };
+  const entry = (file) => rows.entries().find((e) => e.path === file);
+  // Run 1 reads both files on the main thread. Make both out of date, then let a worker die on `held`.
+  await refresh();
+  mainReads.length = 0;
+  bump(fresh);
+  bump(held);
+  limits.files = 0;
+  await refresh(); // `fresh` read by the worker, `held` killed it: count 1
+  assert.deepStrictEqual(mainReads, []);
+
+  // The pool never starts and fails the file: this is a second death, not a main-thread read.
+  openPool = (size, fn) => fn({ extract: () => Promise.resolve(failedRows()), started: Promise.resolve(false) });
+  await refresh();
+  assert.ok(!mainReads.includes(held), 'the file with a count stays off the main thread');
+  assert.ok(entry(held).rows.ok, 'its earlier good rows stay');
+
+  // One more death reaches the cap, and a cap-level file is skipped without any read.
+  await refresh();
+  const warnings = console.warn.mock.calls.filter((c) => /stopped a worker 3 times/.test(c.arguments[0]));
+  assert.strictEqual(warnings.length, 1, 'the count went 1, 2, 3');
+  assert.ok(!mainReads.includes(held));
+});
+
 test('a file that changes after a worker death loses its death count', async (t) => {
   const limits = { files: 0, bytes: 0 };
   const { held, fresh, mainReads, refresh, byPath } = dyingWorkerStore(t, limits);
