@@ -55,6 +55,8 @@ async function loadPage(redraw, focusNew) {
     view.next = body.next;
     view.loaded = true;
     if (focusNew && body.reviews.length) view.focusKey = `closed-review:${body.reviews[0].sessionId}`;
+    // The last page has no Show more button, so focus on it moves to Hide closed.
+    else if (!focusNew && !body.next && view.shown) view.focusKey = 'closed-hide';
   }
   version++;
   redraw();
@@ -124,6 +126,7 @@ export function drawClosed({ closedCount, now, onChange, redraw }) {
   if (closedCount == null || (!closedCount && !view.shown)) {
     toggleBox.replaceChildren();
     section.hidden = true;
+    view.focusKey = null;
     return null;
   }
   const toggleButton = controlButton(view.shown ? 'Hide closed ▴' : `Show closed (${closedCount}) ▾`, 'closed-toggle', () => toggle(redraw));
@@ -131,7 +134,11 @@ export function drawClosed({ closedCount, now, onChange, redraw }) {
   toggleButton.setAttribute('aria-controls', 'reviewsClosed');
   toggleBox.replaceChildren(toggleButton);
   section.hidden = !view.shown;
-  if (!view.shown) return takeFocusKey();
+  if (!view.shown) {
+    // A page that arrives after Hide asks for a review heading, which is not drawn.
+    const hiddenKey = takeFocusKey();
+    return hiddenKey?.startsWith('closed-review:') ? null : hiddenKey;
+  }
 
   document.getElementById('reviewsClosedList').replaceChildren(...view.reviews.map((r) => closedItem(r, now, onChange)));
   const status = document.getElementById('reviewsClosedStatus');

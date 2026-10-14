@@ -135,6 +135,7 @@ test('openDatabase upgrades a v3 file to 4, keeps rows and reasons, accepts expi
   assert.throws(() => insert.run('a', 2, 'workflow', 't', 5, 'bored'), 'unknown reason refused');
   const indexNames = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((r) => r.name);
   assert.ok(indexNames.includes('suggestions_open'), indexNames.join(', '));
+  assert.match(db.prepare("SELECT sql FROM sqlite_master WHERE name = 'suggestions_open'").get().sql, /WHERE reason IS NULL/);
   assert.ok(indexNames.includes('reviews_reviewed_at_id'), indexNames.join(', '));
   assert.ok(!indexNames.includes('reviews_reviewed_at'), indexNames.join(', '));
   db.close();

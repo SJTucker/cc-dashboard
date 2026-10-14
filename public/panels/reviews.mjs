@@ -29,9 +29,20 @@ export function requestReviews(days) {
 
 // The payload main.mjs last passed in, and the reviews on screen. Dismiss and undo
 // replace lastReviews and redraw without a request. renderPayload in main.mjs passes
-// the loaded payload again on a resize, and the identity check keeps local changes.
-let loadedData = null;
+// a loaded payload again on a resize, and the set below keeps local changes.
 let lastReviews = null;
+// Every object lastReviews has held. renderReviews gets a payload from before a local
+// change as often as a new one (reviewsSince can return an older object, and the
+// payload main.mjs stores can lag), so it replaces lastReviews only with an object
+// outside this set. A server response is always a new object.
+const heldReviews = new WeakSet();
+function holdReviews(reviews) {
+  lastReviews = reviews;
+  if (reviews && typeof reviews === 'object') heldReviews.add(reviews);
+}
+// Keys (`sessionId:idx`) of dismiss and undo requests in flight. A second click on
+// the same suggestion is ignored until the first request settles.
+const changesInFlight = new Set();
 // Counts local dismiss and undo actions (see reviewsSince).
 let reviewMutations = 0;
 // Session id -> "Copied" or "Copy failed" while it shows, for the label's 2 s.
@@ -70,18 +81,26 @@ async function copyReviewPrompt(id, prompt) {
 // puts the answer into both lists and redraws. closedCount moves by one when a
 // suggestion opens or closes. A failure leaves both lists as they were and shows why.
 async function changeSuggestion(review, suggestion, reason, focusKey) {
-  const answer = await sendDismissal(review, suggestion, reason);
-  if (answer.error) {
+  const key = `${review.sessionId}:${suggestion.idx}`;
+  if (changesInFlight.has(key)) return;
+  changesInFlight.add(key);
+  const days = reviewsDays;
+  const answer = await sendDismissal(review, suggestion, reason).finally(() => changesInFlight.delete(key));
+  if (reviewsDays !== days) {
+    // The range changed while the request ran. The server has the change, and the new
+    // range's data was read after it or does not hold this review, so merging would
+    // count it twice or count a review outside the range.
+  } else if (answer.error) {
     reviewActionError = `Could not ${reason ? 'dismiss' : 'reopen'} "${suggestionName(suggestion)}": ${answer.error}`;
   } else {
     reviewActionError = null;
     const changed = { ...suggestion, dismissedAt: answer.dismissedAt, reason: answer.reason };
     const delta = (changed.reason ? 1 : 0) - (suggestion.reason ? 1 : 0);
-    lastReviews = {
+    holdReviews({
       ...lastReviews,
       reviews: upsertSuggestion(lastReviews.reviews, review, changed, { order: byEnd, insert: !changed.reason }),
       closedCount: lastReviews.closedCount + delta,
-    };
+    });
     updateClosed(review, changed);
     reviewMutations++;
     reviewFocusKey = focusKey;
@@ -130,10 +149,7 @@ function openItem(r, now) {
 // redraw. Shown on the Analysis tab only. Hidden when the request failed or the
 // range has no open and no closed suggestion. A server error shows its text.
 export function renderReviews(data) {
-  if (data !== loadedData) {
-    loadedData = data;
-    lastReviews = data;
-  }
+  if (!data || data.error || !heldReviews.has(data)) holdReviews(data);
   redraw();
 }
 
