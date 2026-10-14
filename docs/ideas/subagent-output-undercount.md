@@ -84,6 +84,19 @@ response at the recorded output when the agent and the input-side counts match.
 `meta.noFinalCalls` and `meta.noFinalCorrected` count the responses with no final
 line and the ones corrected.
 
+Verified live on 2026-10-13, after the merge:
+
+- Real sessions wrote step files once the mod folder hot-reloaded, so
+  `await stream.result` works in the engine.
+- All 36 recorded steps, from 7 subagents, matched a response with no final line.
+  Output for those responses went from 549 tokens in the transcripts to 17,544
+  recorded. The 7 responses with no final line and no step ran before the hook
+  loaded in their sessions.
+- In probe session `e3f5eeea`, a Haiku subagent's three responses with a final line
+  recorded the same output as their steps (155, 92, 89). Its last response had no
+  final line: 3 output tokens in the transcript, 208 recorded. The dashboard uses
+  208.
+
 Reporting the transcript bug to Anthropic would fix new interactive sessions at the
 source.
 
