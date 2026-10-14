@@ -615,7 +615,7 @@ bin/review-session     Lists ended sessions to review and records Haiku's sugges
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
 public/apple-touch-icon.png  Home-screen icon, linked from index.html
-public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, mixEntries (the Models panel's share bar entries per measure) and the Session timeline's hour ticks, cache rebuild marks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
+public/chart-geometry.mjs  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, mixEntries (the Models panel's share bar entries per measure) and the Session timeline's hour ticks, cache rebuild marks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
 public/constants.mjs   Numbers the page shares with the server; test/front-end-constants.test.js keeps them equal
 public/dom.mjs         Element builders (el, svgEl) and the tooltip
 public/favicon.ico     Tab icon, linked from index.html
@@ -623,7 +623,7 @@ public/favicon.svg     Tab icon and the header logo
 public/format.mjs      Text formatting for costs, token counts, durations, dates and model names
 public/guards.mjs      Request sequence numbers and per-panel redraw guards
 public/hud.mjs         Display helpers for the header status strip and the Plan usage Today meter
-public/index.html      Page shell: the panels' markup, the plain scripts, then main.mjs as a module
+public/index.html      Page shell: the panels' markup, then main.mjs as a module
 public/layout.mjs      orderRowKeys: the saved panel row order merged with the default order in index.html
 public/load.mjs        loadPanels: draws each panel when its own request settles, with no DOM access
 public/main.mjs        Starts the page: fetches the API routes, draws every panel, runs the 5 s live poll and the range picker

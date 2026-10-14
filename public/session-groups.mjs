@@ -114,8 +114,8 @@ function activityLabel(activity) {
 // Second line of the State cell for a session waiting on the user: how long its
 // prompt cache lasts and what the next reply pays to rebuild it. `cache` is the
 // session's cache field from lib/sessions.js, and a negative minutesLeft means it
-// expired. `formatUsd` is formatCost from format.mjs, passed in because this file is
-// a plain script and cannot import it. Null without a cache.
+// expired. `formatUsd` is formatCost from format.mjs, passed in so this file
+// does not import format.mjs. Null without a cache.
 function cacheLine(cache, formatUsd) {
   if (!cache) return null;
   const cost = cache.rebuildUsd == null ? null : formatUsd(cache.rebuildUsd);

@@ -9,6 +9,7 @@ import {
   WEEK_MS, markerDate, markerIcon, timeDomain, drawMetricChart, drawMetricLegend,
 } from '../charts/setup-changes.mjs';
 import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
+import { rangeDomain, afterDaysSoFar, markerKey, markersInDomain, resolvePicked } from '../chart-geometry.mjs';
 import { neededRequests } from '../visibility.mjs';
 
 // Days of history the setup charts show for each range picker value. Today and 7d

@@ -13,7 +13,7 @@ followed by `/clear`.
   a `/clear` ended to start it (`recordSession` and `buildLiveSessions` in
   `lib/sessions.js`).
 - The Session timeline already follows `clearedFrom` (`clearParents` and `laneLayout`
-  in `public/chart-geometry.js`).
+  in `public/chart-geometry.mjs`).
 
 ## Open questions
 

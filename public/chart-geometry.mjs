@@ -1,8 +1,3 @@
-'use strict';
-
-// Loaded two ways: index.html loads it as a script before main.mjs, which makes these
-// functions globals, and the tests load it with require().
-
 // Draw every how-many-th x-axis label. Labels stay at least minGap pixels apart,
 // and a chart never shows more than 12. "00:00" in the axis font is about 30px
 // wide, so 44px leaves a visible space between neighbouring labels.
@@ -299,8 +294,4 @@ function rebuildTotals(rebuilds) {
   return { count: list.length, premium: priced.length ? priced.reduce((sum, r) => sum + r.premium, 0) : null };
 }
 
-if (typeof module === 'object') module.exports = {
-  rebuildTotals, linkPath,
-  labelStep, barSlots, axisScale, tooltipPosition, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain,
-  markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
-};
+export { rebuildTotals, linkPath, localMidnight, labelStep, barSlots, axisScale, tooltipPosition, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain, markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays };

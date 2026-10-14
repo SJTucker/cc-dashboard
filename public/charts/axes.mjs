@@ -1,12 +1,13 @@
 // The chart size and the y axis every bar and line chart shares.
 import { svgEl } from '../dom.mjs';
+import { axisScale } from '../chart-geometry.mjs';
 
 export const CHART_HEIGHT = 180;
 export const CHART_PAD_LEFT = 46;
 export const CHART_PAD_BOTTOM = 20;
 
 // Rounds the top of the scale up to the next 1/2/5 x 10^n tick (axisScale in
-// public/chart-geometry.js) and lists the gridlines from the first step up to
+// public/chart-geometry.mjs) and lists the gridlines from the first step up to
 // that top, each with its y in the plot. The point is reading a value off the
 // chart without hovering, so the ticks have to be round numbers, which means the
 // scale top follows from the tick step rather than from the data max. The max is

@@ -4,6 +4,7 @@ import { formatTokens, shortDate, fullDate, axisTokens } from '../format.mjs';
 import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM } from './axes.mjs';
 import { TOKEN_SERIES } from './palette.mjs';
 import { legendRow, lineIcon } from './legend.mjs';
+import { labelStep } from '../chart-geometry.mjs';
 
 // Daily tokens for all four types in one plot. The four span six orders of
 // magnitude on a typical range - 78 input tokens against 452M cache reads - which

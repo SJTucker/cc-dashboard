@@ -4,6 +4,7 @@ import { formatCost, formatTokens, shortDate, fullDate, axisCost, axisTokens, fa
 import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawYAxis } from './axes.mjs';
 import { legendRow, swatchIcon } from './legend.mjs';
 import { appendPatternDefs, fillFor, modelColor, modelTexture } from './palette.mjs';
+import { barSlots, labelStep } from '../chart-geometry.mjs';
 
 // Stacked bars, one segment per model family. Series order is fixed across
 // buckets so a model keeps its vertical position and its colour from day to day.

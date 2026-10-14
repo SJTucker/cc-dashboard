@@ -3,9 +3,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
-// index.html loads chart-geometry.js as a classic script, which makes axisScale a
-// global that axes.mjs reads. The test sets the same global.
-globalThis.axisScale = require('../public/chart-geometry.js').axisScale;
 const load = () => import('../public/charts/axes.mjs');
 
 test('yTicks places one tick per step from the first step up to the top', async () => {

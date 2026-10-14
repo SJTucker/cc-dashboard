@@ -3,9 +3,6 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
-// bar.mjs imports axes.mjs, which reads the axisScale global that index.html sets.
-globalThis.axisScale = require('../public/chart-geometry.js').axisScale;
-
 test('barRect places positive bars above zeroY, negative bars below it, on a signed scale', async () => {
   const { barRect } = await import('../public/charts/bar.mjs');
   const { signedTicks } = await import('../public/charts/axes.mjs');

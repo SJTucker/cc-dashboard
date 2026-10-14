@@ -7,7 +7,7 @@ jump back and forth. Asked for on 2026-10-13.
 
 ## What exists
 
-- `laneLayout` in `public/chart-geometry.js` orders lanes by first span start
+- `laneLayout` in `public/chart-geometry.mjs` orders lanes by first span start
   (`byStart`). A session started by `/clear` sits directly under the session it
   cleared (`clearParents`), drawn with ↳ and a curve.
 - A session is live when it has not ended and its last call is within

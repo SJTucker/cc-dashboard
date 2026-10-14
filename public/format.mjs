@@ -119,7 +119,7 @@ export function axisTokens(n) {
 
 // A compact cost for the y axis: formatCost's grouped "$1,200.00" is wider than
 // the axis gutter. Gridline values are round by construction but not whole:
-// axisScale (public/chart-geometry.js) picks a step of 0.5 whenever the max lands
+// axisScale (public/chart-geometry.mjs) picks a step of 0.5 whenever the max lands
 // in (0.80, 2.00], so dropping the cents labelled the $1.50 line "$2" and left
 // two ticks reading the same number.
 export function axisCost(usd) {

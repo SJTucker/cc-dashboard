@@ -4,12 +4,10 @@
 process.env.TZ = 'America/New_York';
 
 const test = require('node:test');
+const { before } = require('node:test');
 const assert = require('node:assert');
-const {
-  labelStep, barSlots, axisScale, tooltipPosition, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain,
-  markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays,
-  rebuildTotals, linkPath,
-} = require('../public/chart-geometry');
+let labelStep, barSlots, axisScale, tooltipPosition, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain, markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays, rebuildTotals, linkPath;
+before(async () => { ({ labelStep, barSlots, axisScale, tooltipPosition, mixEntries, hourTicks, laneLayout, rebuildMarks, rangeDomain, markerKey, markersInDomain, laneKinds, laneCells, pickInCell, resolvePicked, afterDaysSoFar, dateLabelStep, domainDays, rebuildTotals, linkPath } = await import('../public/chart-geometry.mjs')); });
 
 test('labelStep keeps at most 12 labels on a wide chart', () => {
   assert.strictEqual(labelStep(24, 800), 2);

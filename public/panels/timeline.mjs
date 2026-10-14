@@ -1,5 +1,6 @@
 // The Session timeline: one lane per session with activity today.
 import { el, svgEl, withTooltip, hideTooltip, chartWidth } from '../dom.mjs';
+import { rebuildTotals, rebuildMarks, labelStep, linkPath, hourTicks, laneLayout } from '../chart-geometry.mjs';
 import { formatCost, formatTokens, formatDuration, escapeHtml } from '../format.mjs';
 import { appendPatternDefs, fillFor, TOKEN_SERIES, TOKENS } from '../charts/palette.mjs';
 import { legendRow, swatchIcon, glyphIcon } from '../charts/legend.mjs';
@@ -7,7 +8,7 @@ import { state } from '../state.mjs';
 import { LIVE_WINDOW_MS } from '../constants.mjs';
 
 // One lane per session that has activity today (laneLayout in
-// public/chart-geometry.js), with a bar per span. A live session's bars are solid
+// public/chart-geometry.mjs), with a bar per span. A live session's bars are solid
 // and, when its last call was within LIVE_WINDOW_MS, its last bar ends in an
 // arrowhead at now. Every other session's bars carry the diagonal texture. The
 // legend under the chart (timelineLegend) names both,
@@ -39,7 +40,7 @@ const REBUILD_COLUMN_MIN_PLOT = 160;
 const DATA_CHAR_PX = 6.6;
 const HEAD_CHAR_PX = 6.5;
 
-// Prompt-cache rebuild marks (rebuildMarks in public/chart-geometry.js). A mark is a
+// Prompt-cache rebuild marks (rebuildMarks in public/chart-geometry.mjs). A mark is a
 // diamond on the lane's bar line. A main-thread rebuild is filled with the Cache
 // write series colour and outlined in --surface. A subagent's rebuild is filled
 // with --surface and outlined in that colour, so it reads as hollow on a bar. The
@@ -215,7 +216,7 @@ function drawRebuildCell(svg, rebuilds, column, width, mid) {
 const laneMid = (top, lane) => top + lane * TIMELINE_LANE_HEIGHT + TIMELINE_LANE_HEIGHT / 2;
 
 // The curve from the end of the replaced session's last bar to the start of this
-// lane's first bar (linkPath in public/chart-geometry.js), with a dot at each end.
+// lane's first bar (linkPath in public/chart-geometry.mjs), with a dot at each end.
 // drawTimeline draws every link before the lanes, so bars sit on top of the curves.
 function drawLink(svg, { lane, bars, follows }, top) {
   const last = follows.bars[follows.bars.length - 1];

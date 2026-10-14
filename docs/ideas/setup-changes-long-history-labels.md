@@ -5,7 +5,7 @@ range holds many days. Found in the whole-branch review on 2026-10-10.
 
 ## What happens
 
-- `dateLabelStep` in `public/chart-geometry.js` has two steps, `day` and `monday`.
+- `dateLabelStep` in `public/chart-geometry.mjs` has two steps, `day` and `monday`.
   Monday labels collide below about 2.3px per day. That is about 85 days in the 194px
   plot at a 400px viewport, and about 250 days at 800px.
 - Weekly lane cells place the count text at `cx + 7` in `laneCellNode`
