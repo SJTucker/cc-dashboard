@@ -16,7 +16,6 @@ Source files over 450 lines:
 
 | File | Lines | Commits since 2026-09-01 |
 |---|---|---|
-| `public/css/base.css` (largest of the 14 files `public/style.css` was split into on 2026-10-13) | 305 | 1 (`public/style.css` had 113) |
 | `mod/hooks/register.ts` | 1,240 | 40 |
 | `lib/aggregate.js` | 564 | 14 |
 | `lib/extract.js` | 476 | 14 |
@@ -28,9 +27,12 @@ Test files over 450 lines: `mod/hooks/register.test.ts` (1,944),
 `test/chart-geometry.test.js` (490), `test/review.test.js` (488),
 `test/limits.test.js` (463), `test/rtk.test.js` (462).
 
-The most edited files since 2026-09-01 are `public/app.js` (119 commits, since split
-up and removed), `README.md` (100), `public/style.css` (92), `public/index.html` (84),
-`test/api.test.js` (52) and `server.js` (51).
+`public/style.css` (113 commits) was split into 14 files under `public/css/` on
+2026-10-13. The largest of them, `public/css/base.css`, has 305 lines.
+
+The most edited files since 2026-09-01 are `public/app.js` (121 commits, since split
+up and removed), `README.md` (121), `public/style.css` (113, since split up),
+`public/index.html` (101), `test/api.test.js` (58) and `server.js` (57).
 
 ## Constraints
 
