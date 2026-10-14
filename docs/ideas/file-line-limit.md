@@ -39,6 +39,12 @@ up and removed), `README.md` (100), `public/style.css` (92), `public/index.html`
   a matcher. Every function that takes `$`, and every hook, stays in `register.ts`.
   Pure helpers can move out, as `handoff.ts`, `limits.ts` and `setup.ts` already
   have. See the mod engine facts recorded for Claude Code 2.1.296.
+- **`register.ts` stays near 1,240 lines.** The pure helpers are moved out into
+  `statusline.ts`, `activity.ts`, `text.ts`, `setup.ts` and `handoff.ts`, which took
+  `register.ts` from 1,375 to 1,240 lines on 2026-10-13. What remains takes `$`, is a
+  hook, or reads the per-session maps (`forgetSession`), so
+  the engine constraint keeps the file above about 1,150 lines. A limit, if enforced,
+  needs an allowlist entry for `mod/hooks/register.ts`.
 - `register.test.ts` holds the contract block that `test/mod-contract.test.js` reads
   between `// contract:begin` and `// contract:end`. A split must keep that block in
   one file, or the contract test must learn the new path.

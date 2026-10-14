@@ -6,6 +6,8 @@ import { projectFolder, rateLimitsInput, statuslineRecord } from './statusline'
 import type { Frozen } from './statusline'
 import { newestTool, setState, toolDetail, toolsOf } from './activity'
 import type { Activity, ToolRun } from './activity'
+import { backfillText, errorName, errorText, versionSpan } from './text'
+import type { Judged } from './text'
 import { parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep } from './steps'
 import { REPO_STEPS, handoffDocument, handoffWaitMs, hourCacheExpiry, planHandoff, resumePrompt } from './handoff'
@@ -180,10 +182,7 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
 }
 
 type Batch = { versions: string[]; system: string; prompt: string }
-type Judged = { asked: number; recorded: number; relevant: number; failed: string[] }
 type Review = { sessionId: string; system: string; prompt: string }
-
-const errorName = (err: unknown) => (err instanceof Error ? err.name : 'error')
 
 // Every update failure is logged. They happen at most once per Claude Code release,
 // so the once-only rule in fail() would hide the one that matters.
@@ -205,9 +204,6 @@ async function callScript($: EngineInterface, name: string, args: string[], stdi
     throw new Error(`${label} printed invalid JSON`)
   }
 }
-
-const versionSpan = (versions: string[]) =>
-  versions.length > 1 ? `${versions[0]}–${versions[versions.length - 1]}` : (versions[0] ?? '')
 
 // Asks Haiku about one batch and records the answer, adding any failure to `judged`.
 async function judgeBatch($: EngineInterface, batch: Batch, judged: Judged) {
@@ -272,8 +268,6 @@ async function judgeUpdates($: EngineInterface, current?: string): Promise<Judge
   for (const batch of batches) await judgeBatch($, batch, judged)
   return judged
 }
-
-const errorText = (err: unknown) => (err instanceof Error ? err.message : 'error')
 
 // Asks Haiku to review one ended session and has bin/review-session record the
 // answer. A call with no answer is recorded as failed, so the session is tried
@@ -359,12 +353,6 @@ async function checkVersion($: EngineInterface) {
   await $.store.set('updateCheck', { version: base, at: now })
   const judged = await judgeUpdates($, base)
   for (const failure of judged.failed) note($, failure)
-}
-
-function backfillText(judged: Judged) {
-  if (!judged.asked && !judged.failed.length) return 'No Claude Code version needs a verdict.'
-  const counts = `Judged ${judged.recorded} of ${judged.asked} versions, ${judged.relevant} relevant.`
-  return judged.failed.length ? `${counts} Failed: ${judged.failed.join('; ')}` : counts
 }
 
 // What the Live sessions panel shows as State and Doing now. One state object per
