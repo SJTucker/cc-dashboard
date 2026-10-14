@@ -3,71 +3,70 @@
 const test = require('node:test');
 const { before } = require('node:test');
 const assert = require('node:assert');
-let reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText;
-before(async () => { ({ reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText } = await import('../public/reviews.mjs')); });
+let h;
+before(async () => { h = await import('../public/reviews.mjs'); });
 
-test('reviewPrompt names the transcript and lists each suggestion', () => {
-  const review = { transcript: '/h/p/a.jsonl', suggestions: [{ kind: 'workflow', text: 'Plan first.' }, { kind: 'token-waste', text: 'Read once.' }] };
+const open = (idx, text = `s${idx}`) => ({ idx, kind: 'workflow', text, dismissedAt: null, reason: null });
+const closed = (idx, reason, text = `s${idx}`) => ({ idx, kind: 'workflow', text, dismissedAt: 1, reason });
+const review = (sessionId, reviewedAt, suggestions, endedAt = reviewedAt) => ({ sessionId, reviewedAt, endedAt, transcript: `/t/${sessionId}.jsonl`, suggestions });
+
+test('reviewPrompt names the transcript and lists the open suggestions only', () => {
   assert.strictEqual(
-    reviewPrompt(review),
-    'Review the Claude Code session transcript at /h/p/a.jsonl. A Haiku review of it suggested:\n- Plan first.\n- Read once.\nWhich of these are right, which are wrong, and what did it miss?',
+    h.reviewPrompt(review('a', 1, [open(0, 'Plan first.'), closed(1, 'done', 'Gone.'), open(2, 'Read once.')])),
+    'Review the Claude Code session transcript at /t/a.jsonl. A Haiku review of it suggested:\n- Plan first.\n- Read once.\nWhich of these are right, which are wrong, and what did it miss?',
   );
 });
 
-test('reviewPrompt returns null without a transcript', () => {
-  assert.strictEqual(reviewPrompt({ transcript: null, suggestions: [] }), null);
+test('reviewPrompt returns null without a transcript or without an open suggestion', () => {
+  assert.strictEqual(h.reviewPrompt({ ...review('a', 1, [open(0)]), transcript: null }), null);
+  assert.strictEqual(h.reviewPrompt(review('a', 1, [closed(0, 'done')])), null);
 });
 
-test('reviewPrompt words a review with no suggestions or a failed review', () => {
-  const ask = 'What would you suggest, and why might Haiku have missed it?';
-  assert.strictEqual(
-    reviewPrompt({ transcript: '/h/a.jsonl', status: 'done', suggestions: [] }),
-    `Review the Claude Code session transcript at /h/a.jsonl. A Haiku review of it made no suggestions.\n${ask}`,
-  );
-  assert.strictEqual(
-    reviewPrompt({ transcript: '/h/a.jsonl', status: 'failed', suggestions: [] }),
-    `Review the Claude Code session transcript at /h/a.jsonl. A Haiku review of it failed.\n${ask}`,
-  );
+test('dismissalText and reasonLabel word every reason, expired included', () => {
+  assert.deepStrictEqual(['done', 'duplicate', 'not_useful', 'expired'].map((r) => h.dismissalText({ reason: r })), ['Marked done', 'Marked duplicate', 'Marked not useful', 'Expired']);
+  assert.deepStrictEqual(['done', 'duplicate', 'not_useful', 'expired'].map((r) => h.reasonLabel({ reason: r })), ['Done', 'Duplicate', 'Not useful', 'Expired']);
 });
 
-const sug = (idx, text, reason = null) => ({ idx, kind: 'workflow', text, dismissedAt: reason ? 5 : null, reason });
-
-test('openSuggestions and dismissedSuggestions split on dismissedAt, and a suggestion without the field is open', () => {
-  const review = { suggestions: [sug(0, 'a'), sug(1, 'b', 'done'), { kind: 'workflow', text: 'c' }] };
-  assert.deepStrictEqual(openSuggestions(review).map((s) => s.text), ['a', 'c']);
-  assert.deepStrictEqual(dismissedSuggestions(review).map((s) => s.text), ['b']);
+test('rangePhrase and rangeShort name each range', () => {
+  assert.deepStrictEqual(['7', '30', '90', 'all'].map(h.rangePhrase), ['in the last 7 days', 'in the last 30 days', 'in the last 90 days', 'in all time']);
+  assert.deepStrictEqual(['7', '30', '90', 'all'].map(h.rangeShort), ['7d', '30d', '90d', 'All']);
 });
 
-test('allDismissed is false for no suggestions and for a mix, true only when none is open', () => {
-  assert.strictEqual(allDismissed({ suggestions: [] }), false);
-  assert.strictEqual(allDismissed({ suggestions: [sug(0, 'a'), sug(1, 'b', 'done')] }), false);
-  assert.strictEqual(allDismissed({ suggestions: [sug(0, 'a', 'done'), sug(1, 'b', 'not_useful')] }), true);
+test('countWithOpen counts reviews that still have an open suggestion', () => {
+  assert.strictEqual(h.countWithOpen([review('a', 1, [open(0)]), review('b', 1, [closed(0, 'done')])]), 1);
 });
 
-test('countWithOpen counts reviews with at least one open suggestion', () => {
-  const reviews = [
-    { suggestions: [sug(0, 'a')] },
-    { suggestions: [sug(0, 'a', 'done'), sug(1, 'b')] },
-    { suggestions: [sug(0, 'a', 'done')] },
-    { suggestions: [] },
-  ];
-  assert.strictEqual(countWithOpen(reviews), 2);
+test('byCursor orders newest reviewedAt first, then session id descending in byte order', () => {
+  const sorted = [review('a', 5, []), review('B', 5, []), review('c', 9, [])].sort(h.byCursor).map((r) => r.sessionId);
+  assert.deepStrictEqual(sorted, ['c', 'a', 'B']);
 });
 
-test('dismissalText says the reason in words', () => {
-  assert.strictEqual(dismissalText(sug(0, 'a', 'done')), 'Marked done');
-  assert.strictEqual(dismissalText(sug(0, 'a', 'not_useful')), 'Marked not useful');
-  assert.strictEqual(dismissalText(sug(0, 'a', 'duplicate')), 'Marked duplicate');
+test('upsertSuggestion replaces a suggestion in place by idx', () => {
+  const list = [review('a', 5, [open(0), open(1)])];
+  const out = h.upsertSuggestion(list, list[0], closed(1, 'done'), { order: h.byEnd, insert: false });
+  assert.deepStrictEqual(out[0].suggestions, [open(0), closed(1, 'done')]);
+  assert.deepStrictEqual(list[0].suggestions, [open(0), open(1)], 'the input list is unchanged');
 });
 
-test('reviewPrompt leaves out dismissed suggestions', () => {
-  const review = { transcript: '/h/a.jsonl', status: 'done', suggestions: [sug(0, 'Keep me'), sug(1, 'Drop me', 'not_useful'), sug(2, 'Me too')] };
-  assert.strictEqual(
-    reviewPrompt(review),
-    'Review the Claude Code session transcript at /h/a.jsonl. A Haiku review of it suggested:\n- Keep me\n- Me too\nWhich of these are right, which are wrong, and what did it miss?',
-  );
+test('upsertSuggestion adds a suggestion to an entry that lacks it only when insert is set', () => {
+  // A mixed review: its open half is in the open list. A closed suggestion relabelled
+  // in the closed list must not appear in the open list's entry.
+  const list = [review('a', 5, [open(0)])];
+  assert.strictEqual(h.upsertSuggestion(list, list[0], closed(1, 'done'), { order: h.byEnd, insert: false }), list);
+  assert.deepStrictEqual(h.upsertSuggestion(list, list[0], open(1), { order: h.byEnd, insert: true })[0].suggestions, [open(0), open(1)]);
 });
 
-test('reviewPrompt returns null when every suggestion is dismissed', () => {
-  assert.strictEqual(reviewPrompt({ transcript: '/h/a.jsonl', status: 'done', suggestions: [sug(0, 'a', 'done')] }), null);
+test('upsertSuggestion adds a missing review in order only when insert is set', () => {
+  const list = [review('new', 9, [closed(0, 'done')]), review('old', 1, [closed(0, 'done')])];
+  const mid = review('mid', 5, [open(0), open(1)]);
+  assert.strictEqual(h.upsertSuggestion(list, mid, open(1), { order: h.byCursor, insert: false }), list);
+  const out = h.upsertSuggestion(list, mid, closed(1, 'duplicate'), { order: h.byCursor, insert: true });
+  assert.deepStrictEqual(out.map((r) => [r.sessionId, r.suggestions.map((s) => s.idx)]), [['new', [0]], ['mid', [1]], ['old', [0]]]);
+});
+
+test('upsertSuggestion leaves a review past the last loaded one for its own page while more pages remain', () => {
+  const list = [review('new', 9, [closed(0, 'done')])];
+  const older = review('older', 1, [open(0)]);
+  assert.strictEqual(h.upsertSuggestion(list, older, closed(0, 'done'), { order: h.byCursor, insert: true, hasMore: true }), list);
+  assert.deepStrictEqual(h.upsertSuggestion(list, older, closed(0, 'done'), { order: h.byCursor, insert: true, hasMore: false }).map((r) => r.sessionId), ['new', 'older']);
 });
