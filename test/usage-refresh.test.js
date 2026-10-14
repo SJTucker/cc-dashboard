@@ -7,7 +7,7 @@ const path = require('path');
 const { EventEmitter } = require('events');
 const helpers = require('./helpers');
 const {
-  createUsageRefresher, getUsageRefreshDir, ARGS, INTERVAL_MS, FRESH_MS, TIMEOUT_MS,
+  createUsageRefresher, getUsageRefreshDir, ARGS, INTERVAL_MS, FRESH_MS, TIMEOUT_MS, KILL_GRACE_MS,
 } = require('../lib/usage-refresh');
 
 const MINUTE = 60 * 1000;
@@ -194,4 +194,23 @@ test('stop kills a running child without a log line, and nothing starts after it
   assert.strictEqual(h.refresher.seen(), false);
   assert.strictEqual(h.refresher.refreshNow(), false);
   assert.strictEqual(h.calls.length, 1);
+});
+
+test('a child that ignores SIGTERM is logged at the timeout, killed with SIGKILL, and does not block later runs', () => {
+  const h = harness();
+  h.refresher.seen();
+  const proc = h.last();
+  const signals = [];
+  proc.kill = (signal) => { signals.push(signal || 'SIGTERM'); return true; };
+  h.timers[0].fn();
+  assert.strictEqual(h.logs.length, 1);
+  assert.match(h.logs[0], /took over 90 s/);
+  assert.strictEqual(h.timers[1].ms, KILL_GRACE_MS);
+  h.timers[1].fn();
+  assert.deepStrictEqual(signals, ['SIGTERM', 'SIGKILL']);
+  assert.strictEqual(h.refresher.running(), false);
+  proc.emit('exit', null, 'SIGKILL');
+  assert.strictEqual(h.logs.length, 1);
+  h.advance(INTERVAL_MS);
+  assert.strictEqual(h.refresher.seen(), true);
 });
