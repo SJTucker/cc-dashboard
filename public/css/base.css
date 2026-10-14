@@ -1,0 +1,305 @@
+/* ---------- Base ---------- */
+
+/* Oxanium, Saira Condensed and JetBrains Mono are SIL OFL fonts, served from
+   public/fonts/ with their licences beside them. Oxanium and JetBrains Mono are
+   variable fonts, so one file covers every weight. */
+@font-face { font-family: 'Oxanium'; src: url('/fonts/Oxanium.woff2') format('woff2'); font-weight: 200 800; font-display: swap; }
+@font-face { font-family: 'Saira Condensed'; src: url('/fonts/SairaCondensed-500.woff2') format('woff2'); font-weight: 500; font-display: swap; }
+@font-face { font-family: 'Saira Condensed'; src: url('/fonts/SairaCondensed-600.woff2') format('woff2'); font-weight: 600; font-display: swap; }
+@font-face { font-family: 'JetBrains Mono'; src: url('/fonts/JetBrainsMono.woff2') format('woff2'); font-weight: 100 800; font-display: swap; }
+
+:root {
+  --bg: #05070d;
+  --surface: #0b1222;
+  --surface-raised: #111b30;
+  --surface-hover: #16223a;
+  --border: #1b2a44;
+  --text-primary: #d8f6ff;
+  --text-secondary: #7f93b8;
+  --text-tertiary: #72829e;
+
+  /* Each colour has one job. Money: cost values and lines (--money) and cost bars
+     and cells (--money-fill). Cyan: live, selected and interactive. Slate: a
+     single-series chart that is not money. Amber: warnings only (the limits
+     banner and strip, a setup changes file error). public/charts/palette.mjs
+     repeats the hex values that SVG patterns need (TOKENS). */
+  --money: #2bff88;
+  --money-fill: #2bc46f;
+  --money-glow: 0 0 6px color-mix(in srgb, var(--money) 45%, transparent);
+  --accent-cyan: #3fe0ff;
+  --series-neutral: #6b86ad;
+  --warning: #ffb000;
+
+  --fs-caption: 11px;
+  --fs-body: 12px;
+  --fs-prose: 14px;
+  --fs-title: 14px;
+  --fs-stat: 22px;
+  --ls-label: 0.12em;
+
+  --sp-1: 4px;
+  --sp-2: 8px;
+  --sp-3: 12px;
+  --sp-4: 16px;
+  --sp-5: 24px;
+  --radius-s: 2px;
+  --radius-m: 6px;
+
+  --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --font-data: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  --font-num: "Oxanium", var(--font-data);
+  --font-label: "Saira Condensed", "Arial Narrow", sans-serif;
+}
+
+* { box-sizing: border-box; }
+
+/* The hidden attribute is a user-agent rule, so any component that sets its own
+   display beats it - .card did, which left the two rate cards on screen showing
+   the previous range's numbers. !important is what makes hidden mean hidden. */
+[hidden] { display: none !important; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-data);
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Every small label on the page - card labels, panel titles, column headers -
+   uses one treatment so they read as one tier below the numbers they caption. */
+.card-label,
+.panel-head h2,
+.model-table th,
+.range-picker button,
+.tab-switch button {
+  font-family: var(--font-label);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+}
+
+.page {
+  max-width: 1400px;
+  margin: 0 auto;
+  /* 64px of page-end space, deliberately off the spacing scale. */
+  padding: 0 var(--sp-5) 64px;
+}
+
+/* ---------- Panels ---------- */
+
+.panel {
+  position: relative;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: var(--sp-4) var(--sp-4) var(--sp-3);
+  margin-bottom: var(--sp-4);
+}
+
+/* A panel pair: the wider chart keeps the room it needs, the narrower summary
+   sits beside it instead of below an empty half-row. */
+.panel-row {
+  display: grid;
+  grid-template-columns: 3fr 2fr;
+  gap: var(--sp-4);
+  align-items: start;
+}
+
+.panel-row .panel { margin-bottom: var(--sp-4); min-width: 0; }
+
+/* Rows whose second panel should be as tall as the first. Each panel keeps its own
+   bottom margin, so the bottoms still line up. */
+.panel-row.stretch { align-items: stretch; }
+
+/* The pointer light: a 160px cyan gradient at --x/--y, masked to the 1px border.
+   setupPanelLight in public/ui/panel-light.mjs sets --x/--y and adds .lit to the
+   panel under the pointer. */
+.panel::before {
+  content: '';
+  position: absolute;
+  inset: -1px;
+  padding: 1px;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  background: radial-gradient(160px circle at var(--x, -200px) var(--y, -200px), var(--accent-cyan), transparent 70%);
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+}
+.panel.lit::before { opacity: 1; }
+
+/* Two charts of the same shape get equal halves; a chart paired with a summary
+   keeps the 3fr/2fr default above. */
+.panel-row.even { grid-template-columns: 1fr 1fr; }
+
+@media (max-width: 900px) {
+  /* .even is listed too: it is more specific than .panel-row, so the bare
+     selector alone loses to it regardless of the media query. */
+  .panel-row,
+  .panel-row.even { grid-template-columns: 1fr; }
+}
+
+/* A panel or card the user hid (see public/ui/hidden.mjs). This is a separate
+   attribute from `hidden`, which renderers set from the data, so a renderer
+   showing its panel cannot undo the user's choice. */
+[data-user-hidden] { display: none !important; }
+
+/* The panel left in a pair takes the whole row, whether the user hid the other one
+   or its renderer did (Plan usage is hidden off Today, Where usage goes when the
+   range has no cost). */
+.panel-row:has(> [data-user-hidden], > [hidden]) { grid-template-columns: 1fr; }
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--sp-3);
+  margin-bottom: var(--sp-3);
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-size: var(--fs-title);
+  font-weight: 600;
+  color: var(--accent-cyan);
+}
+
+/* The "x" follows the panel note and any heading button, all pushed right. */
+.panel-head > h2 { margin-right: auto; }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-caption);
+}
+
+.legend-item { display: inline-flex; align-items: center; gap: var(--sp-1); }
+.legend-label { color: var(--text-secondary); }
+.legend-value { color: var(--text-tertiary); }
+.legend-glyph { flex: none; overflow: visible; }
+
+/* An icon made of two parts, such as the timeline's hexagon and bar sample. */
+.legend-pair { display: inline-flex; align-items: center; gap: 2px; }
+
+.legend-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-s);
+  display: inline-block;
+  flex: none;
+  border: 1px solid var(--border);
+}
+
+.panel-note {
+  margin: var(--sp-2) 0 0;
+  font-family: var(--font-ui);
+  font-size: var(--fs-prose);
+  color: var(--text-tertiary);
+}
+
+/* Right side of a panel head: short meta text, then any toggle, the row controls
+   and the "x". Longer explanations are a .panel-note under the head. */
+.panel-meta {
+  font-size: var(--fs-body);
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+.panel-head + .panel-note { margin: calc(-1 * var(--sp-2)) 0 var(--sp-3); }
+
+/* A table wider than a narrow screen scrolls sideways inside the panel, not the page. */
+.table-scroll { overflow-x: auto; }
+.table-scroll:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+
+.show-all-box:empty { display: none; }
+.show-all {
+  margin-top: var(--sp-2);
+  padding: var(--sp-1) 0;
+  background: none;
+  border: 0;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.show-all:hover { color: var(--text-primary); }
+.show-all:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+
+/* ---------- Footer ---------- */
+
+.footer {
+  margin-top: var(--sp-5);
+  color: var(--text-tertiary);
+  font-family: var(--font-ui);
+  font-size: var(--fs-prose);
+  line-height: 1.6;
+}
+
+.footer code { font-family: var(--font-data); }
+
+/* ---------- Tooltip ---------- */
+
+.tooltip {
+  position: fixed;
+  background: var(--surface);
+  border: 1px solid var(--accent-cyan);
+  border-radius: var(--radius-s);
+  padding: var(--sp-2) var(--sp-2);
+  font-size: var(--fs-body);
+  font-family: var(--font-data);
+  color: var(--text-primary);
+  pointer-events: none;
+  z-index: 20;
+  white-space: nowrap;
+  box-shadow: 0 0 12px color-mix(in srgb, var(--accent-cyan) 15%, transparent);
+}
+
+/* ---------- Loading ---------- */
+
+/* Until the first summary settles, public/main.mjs leaves .first-load on <body> and the
+   summary cards and the empty chart and list containers read "Loading…". The text comes
+   from a pseudo-element, so no renderer has to clear it: the renderers fill each
+   container, and drawSummary removes the class. The cards hold "—" in index.html, so
+   font-size 0 hides it while the pseudo-element sets its own size. */
+.first-load .card-value, .first-load .stat-value { font-size: 0; }
+.first-load .card-value::after,
+.first-load .stat-value::after,
+.first-load #costChart:empty::after,
+.first-load #tokenChart:empty::after,
+.first-load #cumulativeChart:empty::after,
+.first-load #tokenTypeChart:empty::after,
+.first-load #modelList:empty::after {
+  content: 'Loading\2026';
+  color: var(--text-tertiary);
+  font: 400 var(--fs-body) var(--font-ui);
+}
+
+.spinner {
+  width: 12px;
+  height: 12px;
+  flex: none;
+  border: 2px solid var(--border);
+  border-top-color: var(--accent-cyan);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+}
+
+/* The setup changes panel loads on its own schedule, and the two banners carry
+   errors and the limits warning, so none dims with the range-dependent content. */
+main[aria-busy="true"] .tab > :not(#beforeAfterPanel) { opacity: 0.5; }

@@ -1,0 +1,65 @@
+/* ---------- Tool errors ---------- */
+
+.tool-error-title { margin-top: var(--sp-4); }
+.error-causes { display: flex; flex-wrap: wrap; gap: var(--sp-1); margin: var(--sp-1) 0 var(--sp-2); }
+.error-cause {
+  display: inline-flex;
+  gap: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  padding: 1px var(--sp-2);
+}
+.error-cause b { color: var(--text-primary); font-weight: 600; font-variant-numeric: tabular-nums; }
+.error-list { display: flex; flex-direction: column; gap: 2px; }
+.error-group summary {
+  display: grid;
+  grid-template-columns: 3.5em minmax(0, 1fr);
+  gap: var(--sp-2);
+  padding: var(--sp-1);
+  cursor: pointer;
+  font-size: var(--fs-body);
+  list-style: none;
+}
+.error-group summary::-webkit-details-marker { display: none; }
+.error-group summary:hover { background: var(--surface-hover); }
+.error-group summary:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 1px; }
+.error-group[open] summary { background: var(--surface-raised); }
+.error-count { text-align: right; color: var(--text-secondary); font-variant-numeric: tabular-nums; }
+.error-message { overflow-wrap: anywhere; }
+.error-when { font-size: var(--fs-caption); color: var(--text-tertiary); padding: var(--sp-1) var(--sp-1) 0 calc(3.5em + var(--sp-3)); }
+.error-example {
+  margin: var(--sp-1) 0 var(--sp-2) calc(3.5em + var(--sp-3));
+  padding: var(--sp-2);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  font-size: var(--fs-caption);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  overflow-x: auto;
+}
+/* The All tools row sits above the per-tool bars, set apart by a rule under it. */
+.tool-all {
+  padding-bottom: var(--sp-1);
+  margin-bottom: var(--sp-1);
+  border-bottom: 1px solid var(--border);
+}
+
+/* A grid item will not shrink below its content width unless min-width is 0. The
+   model table is wider than a 400px viewport, so its column must be allowed to
+   shrink for .tool-model-scroll to scroll instead of widening the page. */
+#toolPanel .usage-group { min-width: 0; }
+
+/* The model table scrolls inside this box, so at a 400px viewport it does not
+   widen the page. */
+.tool-model-scroll {
+  overflow-x: auto;
+  margin: var(--sp-2) 0 var(--sp-3);
+}
+
+.tool-model-scroll .model-table td,
+.tool-model-scroll .model-table th {
+  white-space: nowrap;
+}

@@ -30,7 +30,7 @@ const MODEL_STYLE = {
 
 // CSS tokens a chart needs as a literal colour: an SVG <pattern>'s paint cannot
 // read a custom property. Each equals the token of the same kebab-case name in
-// public/style.css (test/palette-tokens.test.js checks them).
+// public/css/base.css (test/palette-tokens.test.js checks them).
 export const TOKENS = {
   surface: '#0b1222',
   textSecondary: '#7f93b8',

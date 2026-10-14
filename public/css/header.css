@@ -1,0 +1,274 @@
+/* ---------- Header ---------- */
+
+/* The sticky bar: one row with the title, the status strip, the tab switch and
+   today's three stats. A narrow screen wraps it onto more rows. */
+.topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2) var(--sp-4);
+  margin-bottom: var(--sp-5);
+  padding: var(--sp-2) 0;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--bg);
+  z-index: 10;
+  overflow: clip;
+  isolation: isolate;
+}
+
+.topbar h1 {
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--sp-3);
+  font-family: var(--font-num);
+  font-size: var(--fs-title);
+  font-weight: 700;
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+/* The favicon art, public/favicon.svg, beside the title. Its bright prompt sits in
+   the top half of the tile, so a box centred on the text made the icon look high.
+   At 20px, and 1px lower, the prompt and the tile both read as level with the
+   capitals. */
+.title-logo {
+  flex: none;
+  display: block;
+  position: relative;
+  top: 1px;
+}
+
+/* A static perspective grid behind the whole sticky header, after the TRON:
+   Legacy floor. rotateX foreshortens the element to well under its height, so
+   640px is what covers the title row, the controls and the header cards. The
+   fade starts at 30% of the floor, so its lines reach the header's bottom edge.
+   overflow: clip on .topbar keeps it from widening the page. */
+.topbar::before {
+  content: '';
+  position: absolute;
+  left: -20%;
+  right: -20%;
+  top: 0;
+  height: 640px;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    linear-gradient(color-mix(in srgb, var(--accent-cyan) 35%, transparent) 1px, transparent 1px) 0 0 / 48px 24px,
+    linear-gradient(90deg, color-mix(in srgb, var(--accent-cyan) 35%, transparent) 1px, transparent 1px) 0 0 / 48px 24px;
+  transform: perspective(300px) rotateX(62deg);
+  transform-origin: 50% 0;
+  mask: linear-gradient(#000 30%, transparent 95%);
+  opacity: 0.55;
+}
+
+/* Fades the grid into the background over the header's last 16px, so the header
+   ends on its own border and not on a grid line just above it. */
+.topbar::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 16px;
+  z-index: -1;
+  pointer-events: none;
+  background: linear-gradient(transparent, var(--bg));
+}
+
+/* A margin in the page background around everything that sits on the grid, so
+   grid lines fade out before they reach an edge. Without it, lines stopped at
+   card edges, ran through the gaps between cards, and passed a few pixels from
+   their tops and bottoms. */
+.topbar .sticky-stats,
+.topbar .tab-switch,
+.topbar .refresh-btn,
+.topbar .status-strip {
+  box-shadow: 0 0 0 4px var(--bg), 0 0 10px 4px color-mix(in srgb, var(--bg) 70%, transparent);
+}
+
+.status-strip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-1) var(--sp-4);
+  padding: var(--sp-1) var(--sp-2);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  /* Opaque, like the cards, so no grid line runs behind the strip's text. */
+  background: var(--bg);
+  font-family: var(--font-label);
+  font-weight: 500;
+  font-size: var(--fs-body);
+  letter-spacing: var(--ls-label);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+}
+
+.status-strip b {
+  font-family: var(--font-num);
+  font-weight: 600;
+  letter-spacing: 0;
+  color: var(--text-primary);
+}
+
+/* A plan limit warning can take 400px of the strip, and the bar must stay one row.
+   The Sessions and API calls counts give way while the warning shows. */
+.status-strip:has(.strip-limit:not([hidden])) .strip-extra { display: none; }
+
+/* The short plan limit warning. The amber left edge matches .status-banner; the
+   Limit or Budget label and the percents carry the meaning, not the colour. */
+.strip-limit {
+  border-left: 3px solid var(--warning);
+  padding-left: var(--sp-2);
+}
+
+/* A cyan ring and "Link live". The words carry the state, so it does not rely on
+   colour. */
+.live-dot {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+.live-ring {
+  position: relative;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-cyan);
+}
+.live-ring::after {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: 50%;
+  border: 2px solid var(--accent-cyan);
+  opacity: 0;
+}
+@media (prefers-reduced-motion: no-preference) {
+  .live-ring.ping::after { animation: live-ping 900ms ease-out; }
+}
+@keyframes live-ping {
+  from { transform: scale(1); opacity: 0.9; }
+  to { transform: scale(2.6); opacity: 0; }
+}
+
+.sticky-stats {
+  display: flex;
+  gap: var(--sp-5);
+  margin-left: auto;
+  padding: 0 var(--sp-2);
+  background: var(--bg);
+}
+.stat { display: flex; flex-direction: column; line-height: 1.2; min-width: 0; }
+.stat-label {
+  font-family: var(--font-label);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  color: var(--text-tertiary);
+}
+.stat-value { font-family: var(--font-num); font-size: var(--fs-stat); font-weight: 600; }
+.stat-value.money { color: var(--money); text-shadow: var(--money-glow); }
+.stat-note { font-size: var(--fs-caption); color: var(--text-tertiary); white-space: nowrap; }
+.topbar .menu-btn { margin-left: 0; }
+
+/* The range picker and Refresh, above the range's cards. */
+.tab-toolbar { display: flex; align-items: center; gap: var(--sp-3); margin-bottom: var(--sp-4); }
+
+.range-picker,
+.tab-switch {
+  display: flex;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
+.range-picker button,
+.tab-switch button {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  padding: var(--sp-2) var(--sp-3);
+  cursor: pointer;
+  border-right: 1px solid var(--border);
+}
+
+.range-picker button:last-child,
+.tab-switch button:last-child { border-right: none; }
+
+.range-picker button:hover,
+.tab-switch button:hover { color: var(--text-primary); }
+
+.range-picker button.active,
+.tab-switch button[aria-pressed="true"] {
+  background: var(--accent-cyan);
+  color: var(--bg);
+}
+
+.refresh-btn {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  border-radius: var(--radius-s);
+  padding: var(--sp-2) var(--sp-3);
+  font-size: var(--fs-body);
+  font-family: var(--font-label);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  cursor: pointer;
+}
+
+.refresh-btn:hover { color: var(--text-primary); border-color: var(--text-tertiary); }
+
+.panel-head .refresh-btn { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-caption); }
+.refresh-btn:disabled { opacity: 0.6; cursor: default; }
+
+/* Out of the sticky bar's flex flow while the bar fits one row, so a load never changes the
+   bar's height. It overlays the bar's lower left, under the title. */
+.load-status {
+  position: absolute;
+  left: 0;
+  bottom: 2px;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  font-size: var(--fs-caption);
+  color: var(--text-secondary);
+}
+/* Below the width where the bar fits one row (a bar 1320px wide or less), the bar
+   wraps, and a status overlaying its lower edge would cover the wrapped rows. It
+   joins the flow there, and an empty one takes no flex gap. The query reads the
+   bar's own width, so .topbar is a container; that does not change its size. */
+.topbar { container-type: inline-size; }
+@container (max-width: 1320px) {
+  .load-status { position: static; }
+  .load-status:empty { display: none; }
+}
+
+/* ---------- Status banner ---------- */
+
+.status-banner {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-m);
+  padding: var(--sp-3) var(--sp-4);
+  margin-bottom: var(--sp-5);
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.status-banner code { font-family: var(--font-data); color: var(--text-primary); }
+
+/* The heading carries the warning in text, so it does not rely on the amber edge. */
+.limits-banner strong { display: block; color: var(--text-primary); }

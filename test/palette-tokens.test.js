@@ -5,12 +5,14 @@ const assert = require('node:assert');
 const fs = require('node:fs');
 const path = require('node:path');
 
-const css = fs.readFileSync(path.join(__dirname, '..', 'public', 'style.css'), 'utf8');
+// Every file under public/css/, so the checks below cover the whole stylesheet.
+const cssDir = path.join(__dirname, '..', 'public', 'css');
+const css = fs.readdirSync(cssDir).sort().map((f) => fs.readFileSync(path.join(cssDir, f), 'utf8')).join('\n');
 const token = (name) => (css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`)) || [])[1];
 
 // An SVG <pattern>'s paint cannot read a CSS custom property, so palette.mjs
 // repeats these colours. This keeps the two copies equal.
-test('palette TOKENS equal the custom properties in style.css', async () => {
+test('palette TOKENS equal the custom properties in public/css', async () => {
   const { TOKENS } = await import('../public/charts/palette.mjs');
   const names = {
     surface: 'surface',

@@ -1,0 +1,86 @@
+/* ---------- Charts (hand-drawn SVG bars, no chart library) ---------- */
+
+.chart { width: 100%; }
+
+.chart svg { width: 100%; display: block; overflow: visible; }
+
+.bar-empty {
+  color: var(--text-tertiary);
+  font-size: var(--fs-body);
+  padding: var(--sp-5) 0;
+  text-align: center;
+}
+
+.bar { cursor: pointer; transition: opacity 0.12s ease; }
+.bar:hover { opacity: 0.8; }
+
+.gridline {
+  stroke: var(--border);
+  stroke-width: 1;
+  opacity: 0.55;
+}
+
+.log-line {
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: butt;
+}
+
+
+.crosshair {
+  stroke: var(--text-tertiary);
+  stroke-width: 1;
+  stroke-dasharray: 2 3;
+  pointer-events: none;
+}
+
+/* A short rule rather than a filled square: the legend has to sample the mark the
+   chart actually draws, and for a line chart that is a stroke, dashed or solid. */
+.legend-line {
+  width: 28px;
+  height: 4px;
+  display: inline-block;
+  flex: none;
+  vertical-align: middle;
+}
+
+.cumulative-line {
+  stroke: var(--money);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+
+/* While the pointer is over a line chart, each line glows in its own colour. */
+@media (prefers-reduced-motion: no-preference) {
+  .chart svg:hover .log-line,
+  .chart svg:hover .cumulative-line { filter: url(#line-glow); }
+}
+
+.axis-label {
+  font-family: var(--font-data);
+  font-size: var(--fs-caption);
+  fill: var(--text-tertiary);
+}
+
+.mix-bar {
+  display: flex;
+  width: 100%;
+  height: 12px;
+  border-radius: var(--radius-s);
+  overflow: hidden;
+  /* A 2px surface-coloured gap between segments keeps adjacent fills separable
+     for viewers who cannot distinguish the two hues. */
+  gap: 2px;
+  background: var(--surface);
+}
+
+.mix-seg {
+  height: 100%;
+  min-width: 2px;
+  cursor: default;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .bar { transition: none; }
+}

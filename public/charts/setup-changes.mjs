@@ -175,7 +175,7 @@ const BEFORE_INK = TOKENS.textSecondary;
 const PATTERN_SCOPE = 'ba';
 
 // Where the plot starts: the left gutter holds each lane's glyph and name, and the
-// y-axis labels. .ba-under in style.css indents the legend by the same amount.
+// y-axis labels. .ba-under in css/setup-changes.css indents the legend by the same amount.
 export const PLOT_LEFT = 110;
 const RIGHT_PAD = 10;
 const PLOT_HEIGHT = 170;
@@ -230,7 +230,7 @@ function drawWindowShade(svg, win, g) {
 }
 
 // Before-window bars are hatched, after-window bars solid amber, the rest --border.
-// A hatched bar's fill is an attribute, so style.css has no fill rule for .day-bar.before.
+// A hatched bar's fill is an attribute, so css/setup-changes.css has no fill rule for .day-bar.before.
 function drawDayBars(svg, days, row, win, g, dim) {
   const barWidth = Math.max(g.dayWidth * 0.64, 2);
   for (const d of days) {

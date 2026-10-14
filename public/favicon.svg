@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
   <!-- A terminal prompt (amber >, cyan cursor) over the header's perspective grid,
-       in the page's colours from style.css: background #05070d, cyan #3fe0ff and
+       in the page's colours from css/base.css: background #05070d, cyan #3fe0ff and
        the cost accent #ffb000. -->
   <defs>
     <clipPath id="tile"><rect width="32" height="32" rx="6"/></clipPath>

@@ -633,7 +633,6 @@ public/session-groups.js  Groups the Today table's rows by claude launch, then e
 public/state.mjs       The tab, the Analysis range and the hidden panels, shared by the modules
 public/stats.js        median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/sticky-poll.mjs  What the sticky poll fetches: today's summary and the plan limits
-public/style.css       All styling, including the @font-face rules for public/fonts/
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
 public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, the signed y axis for charts with negative values, and the Setup changes y axis with a 0 label and headroom
 public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
@@ -645,7 +644,8 @@ public/charts/palette.mjs  Series colours and textures, and the SVG pattern defi
 public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, window bar, daily metric chart with session dots, and its legend
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar, and drawShareBar, the share bar the Models panel also uses
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
-public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by style.css, with their SIL OFL licence files
+public/css/            All styling, one file per panel (base.css first, then header, cards, charts, model-list, activity, attribution, sessions, timeline, reviews, setup-changes, tool-errors, plan-usage and controls). public/index.html loads them in that order, and the order decides which rule wins between two rules of equal specificity. base.css holds the custom properties and the @font-face rules for public/fonts/
+public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by css/base.css, with their SIL OFL licence files
 public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, skill and subagent lists with invocation counts
 public/panels/cards.mjs  The Analysis tab's summary cards: two rows of cards: money (total cost, cost per day, 30-day projection, Claude Code's reported cost) over usage (tokens, cache, thinking share, tool calls)
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes

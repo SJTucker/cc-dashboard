@@ -1,0 +1,66 @@
+/* ---------- Session reviews ---------- */
+
+.reviews-list { list-style: none; margin: 0; padding: 0; }
+.review { padding: var(--sp-2) 0; border-top: 1px solid var(--border); }
+.review:first-child { border-top: none; }
+.review-top { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-3); }
+.review-top .review-head { min-width: 0; }
+.review-top .refresh-btn { padding: var(--sp-1) var(--sp-2); font-size: var(--fs-caption); flex: none; }
+.review-head { color: var(--text-secondary); font-size: var(--fs-caption); }
+.review-suggestions,
+.review-dismissed { list-style: none; margin: var(--sp-1) 0 0; padding: 0; }
+/* A row has three columns: the kind, the text and the actions. */
+.review-suggestions li,
+.review-dismissed li {
+  display: grid;
+  grid-template-columns: 13ch minmax(0, 1fr) auto;
+  gap: var(--sp-3);
+  align-items: start;
+  padding: var(--sp-1);
+  margin: 0 calc(-1 * var(--sp-1));
+  border-radius: var(--radius-s);
+}
+.review-suggestions li:hover,
+.review-dismissed li:hover { background: var(--surface-raised); }
+.review-dismissed { color: var(--text-secondary); }
+.review-dismissed .review-kind { color: var(--text-secondary); }
+.review-kind { font-weight: 600; color: var(--text-primary); }
+.review-empty { margin: var(--sp-1) 0 0; color: var(--text-tertiary); }
+.review-actions { display: inline-flex; gap: 2px; }
+.review-icon {
+  width: 24px;
+  height: 24px;
+  display: inline-grid;
+  place-items: center;
+  padding: 0;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.review-icon svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.review-icon:hover { color: var(--text-primary); border-color: var(--text-tertiary); background: var(--surface-hover); }
+.review-toggle {
+  background: none; border: none; padding: 2px 0; font: inherit; color: var(--text-secondary);
+  text-decoration: underline; cursor: pointer; text-align: left;
+}
+.review-toggle:hover { color: var(--text-primary); }
+.review-collapsed .review-toggle { display: block; width: 100%; text-decoration: none; }
+.review-dismissal { font-style: italic; }
+.review-dismissed-line { margin: var(--sp-1) 0 0; color: var(--text-secondary); font-size: var(--fs-caption); }
+.review button:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 2px; }
+@media (max-width: 720px) {
+  .review-suggestions li,
+  .review-dismissed li { grid-template-columns: minmax(0, 1fr) auto; }
+  .review-suggestions .review-kind,
+  .review-dismissed .review-kind,
+  .review-suggestions li > :nth-child(2),
+  .review-dismissed li > :nth-child(2) { grid-column: 1; }
+  .review-suggestions .review-actions,
+  .review-dismissed .review-actions { grid-column: 2; grid-row: 1 / span 2; }
+}
+
+.review-text { font-family: var(--font-ui); font-size: var(--fs-prose); line-height: 1.45; }
+.review-suggestions li,
+.review-dismissed li { align-items: baseline; }

@@ -1,0 +1,128 @@
+/* ---------- Model list ---------- */
+
+.model-list {
+  overflow-x: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.model-name {
+  font-size: var(--fs-body);
+  color: var(--text-primary);
+}
+
+.list-empty {
+  color: var(--text-tertiary);
+  font-size: var(--fs-body);
+  padding: var(--sp-3) 0;
+}
+
+.model-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-body);
+}
+
+.model-table th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  padding: var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.model-table td {
+  padding: var(--sp-2) var(--sp-2);
+  border-bottom: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.model-table tbody tr { transition: background 0.1s ease; }
+.model-table tbody tr:hover { background: var(--surface-hover); }
+
+.model-table .cost-cell { color: var(--money); text-shadow: var(--money-glow); }
+
+.model-table tr:last-child td { border-bottom: none; }
+
+.model-table .num {
+  text-align: right;
+  font-family: var(--font-data);
+}
+
+.model-table .model-name {
+  vertical-align: middle;
+  white-space: nowrap;
+}
+
+.model-table .swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: var(--radius-s);
+  flex: none;
+  margin-right: var(--sp-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .model-table tbody tr { transition: none; }
+}
+
+/* Tokens | Cost in the Models head: the .range-picker look at a smaller size.
+   The pair sits at the right because .panel-head > h2 takes the free space
+   (margin-right: auto). The pressed button is inverted (light on dark), so the
+   state does not rest on hue. */
+.mix-measure {
+  display: flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+.mix-measure button {
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  color: var(--text-secondary);
+  padding: var(--sp-1) var(--sp-2);
+  cursor: pointer;
+  font-family: var(--font-label);
+  font-size: var(--fs-caption);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+}
+.mix-measure button:last-child { border-right: none; }
+.mix-measure button:hover { color: var(--text-primary); }
+.mix-measure button[aria-pressed="true"] { background: var(--text-primary); color: var(--bg); }
+.mix-measure button:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: -2px; }
+/* Each model's share of the range as one bar, above the model table. */
+.model-share { margin-bottom: var(--sp-3); }
+
+/* The prices note and the button that checks those prices share one line under the table. */
+.prices-foot { display: flex; align-items: center; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-2); }
+.prices-foot .panel-note { margin: 0; }
+.prices-check { margin-top: var(--sp-3); }
+.prices-check .panel-note { margin: var(--sp-1) 0 0; }
+.prices-error { color: var(--text-primary); }
+
+.prices-apply {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-2);
+  margin-top: var(--sp-2);
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
+}
+
+.prices-apply input[type="date"] {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  border-radius: var(--radius-m);
+  padding: var(--sp-1) var(--sp-2);
+  font-family: var(--font-data);
+  font-size: var(--fs-body);
+  color-scheme: dark;
+}

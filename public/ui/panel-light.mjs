@@ -1,7 +1,7 @@
 // Lights the border of the panel under the pointer.
 
 // Lights the border of the panel under the pointer in cyan, near the pointer (see
-// .panel::before in style.css). One pointermove listener on #app serves every
+// .panel::before in css/base.css). One pointermove listener on #app serves every
 // panel, throttled to one update per frame. It runs only for a pointer that can
 // hover and when reduced motion is off. The header cards are not .panel, so they
 // never light.
