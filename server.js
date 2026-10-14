@@ -24,9 +24,9 @@ const { readReviews, setDismissal, DISMISS_REASONS } = require('./lib/review');
 const { createReviewDbGetter, legacyReviewsDir } = require('./lib/review-db');
 const { createServerDb, getStorePath, isBusy } = require('./lib/db');
 const { busiestDay, dayTotals } = require('./public/stats.mjs');
-const { currentRows } = require('./lib/pricing');
-const { loadPriceFile, pricesSource, appendSnapshot, getPricesPath } = require('./lib/price-store');
-const { PRICING_URL, PriceParseError, fetchPricingPage, parsePricingPage, diffPrices } = require('./lib/price-fetch');
+const { loadPriceFile, pricesSource, getPricesPath } = require('./lib/price-store');
+const { fetchPricingPage } = require('./lib/price-fetch');
+const { createPriceChecker } = require('./lib/price-check');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -106,7 +106,7 @@ function sendBusy(res, err) {
 
 // The one write the page makes to a review. app.use('/api', sameOriginOnly) in
 // createServer covers both methods, so a cross-site page cannot dismiss or undo, the same
-// protection the price POST routes have.
+// protection the price check route has.
 const DISMISS_PATH = '/api/reviews/:sessionId/suggestions/:idx/dismiss';
 const QUOTED_REASONS = DISMISS_REASONS.map((r) => `"${r}"`);
 const REASON_ERROR = `reason must be ${QUOTED_REASONS.slice(0, -1).join(', ')} or ${QUOTED_REASONS.at(-1)}.`;
@@ -124,7 +124,7 @@ function suggestionTarget(req, res) {
 // Builds the dashboard for one config (lib/config-dir.js) and returns an
 // http.Server that is not listening yet. Everything that keeps state lives in
 // here: the transcripts.db handle, the row store, the reviews import flag, the
-// aggregate memo and the pending price check. The handle closes when the server
+// aggregate memo and the price checker. The handle closes when the server
 // closes. The price table is the exception: lib/pricing.js holds it for the whole
 // process, so the last prices.json loaded or applied sets it for every server in
 // the process.
@@ -149,6 +149,10 @@ function createServer(config) {
   // Before the first scan, so every cost uses the applied price history.
   loadPriceFile(pricesPath);
   const { scan, clear: clearScans } = createScanMemo({ getRowStore, aggregate, getProjectsDir: () => projectsDir });
+  // One price check at a time (lib/price-check.js). Check prices, the daily check and
+  // the new-model check all go through it. After a snapshot is written, the cached
+  // scans are dropped so the next request computes costs with the new prices.
+  const priceChecker = createPriceChecker({ file: pricesPath, fetchPage: fetchPricingPage, onApplied: clearScans });
 
   const app = express();
   // Express names itself in every response unless told not to.
@@ -326,53 +330,24 @@ function createServer(config) {
     res.json({ ok: true });
   });
 
-  // The rows the last check found new or changed. Apply saves exactly these, so what
-  // the panel showed is what gets saved, and the browser never sends prices.
-  let pendingCheck = null;
-
   app.get('/api/prices', (req, res) => {
-    res.json(pricesSource());
+    res.json({ ...pricesSource(), lastError: priceChecker.state().lastError });
   });
 
-  // The dashboard's only outbound request. It runs when someone clicks Check prices.
+  // Fetches the pricing page and applies every new or changed price at once. It is
+  // the same check the server runs daily and when a model with no price of its own
+  // shows up; this route runs it when someone clicks Check prices. A failed check
+  // changes no price: 502 when the page could not be fetched, 422 when it did not
+  // parse, 500 for anything else.
+  const CHECK_STATUS = { fetch: 502, parse: 422 };
   app.post('/api/prices/check', async (req, res) => {
-    pendingCheck = null;
-    let page;
-    try {
-      page = await fetchPricingPage();
-    } catch (err) {
-      res.status(502).json({ error: `Could not fetch ${PRICING_URL}: ${err.message}` });
-      return;
-    }
-    try {
-      const { rows, skipped } = parsePricingPage(page);
-      const diff = diffPrices(rows, currentRows());
-      pendingCheck = [...diff.added, ...diff.changed.map((c) => c.after)];
-      res.json({ ...diff, skipped, checkedAt: new Date().toISOString() });
-    } catch (err) {
-      if (err instanceof PriceParseError) {
-        res.status(422).json({ error: `The pricing page did not parse, so prices are unchanged: ${err.message}` });
-        return;
-      }
-      console.error('[API] /api/prices/check failed:', err);
-      res.status(500).json({ error: 'Failed to check prices', detail: err.message });
-    }
-  });
-
-  app.post('/api/prices/apply', express.json({ limit: '1kb' }), (req, res) => {
-    if (!pendingCheck || !pendingCheck.length) {
-      res.status(409).json({ error: 'Nothing to apply. Check prices first.' });
-      return;
-    }
-    const effectiveFrom = req.body ? req.body.effectiveFrom : undefined;
-    const result = appendSnapshot({ effectiveFrom, rows: pendingCheck, source: PRICING_URL, file: pricesPath });
+    const result = await priceChecker.check();
     if (result.error) {
-      res.status(400).json({ error: result.error });
+      if (!CHECK_STATUS[result.kind]) console.error('[API] /api/prices/check failed:', result.error);
+      res.status(CHECK_STATUS[result.kind] || 500).json({ error: result.error });
       return;
     }
-    pendingCheck = null;
-    clearScans();
-    res.json(result.source);
+    res.json(result);
   });
 
   // Express 4 answers a body-parser error (malformed JSON, body over the limit)

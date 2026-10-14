@@ -654,72 +654,68 @@ test('the Today scan is shared between /api/summary and /api/sessions/live', asy
   assert.strictEqual(later.sessions[0].tokens, 10);
 });
 
-test('GET /api/prices reports built-in prices when nothing was applied', async (t) => {
+const DOUBLED_SONNET_46 = ['$6 / MTok', '$7.50 / MTok', '$12 / MTok', '$0.60 / MTok', '$30 / MTok'];
+
+test('GET /api/prices reports built-in prices with no check yet', async (t) => {
   const base = await listen(t);
   const source = await (await fetch(`${base}/api/prices`)).json();
   assert.strictEqual(source.kind, 'built-in');
   assert.strictEqual(source.date, '2026-10-14');
+  assert.strictEqual(source.lastCheck, null);
+  assert.strictEqual(source.lastError, null);
 });
 
-test('POST /api/prices/check returns the diff and changes nothing', async (t) => {
-  stubPricingPage(t, PAGE);
-  const base = await listen(t);
-  const res = await post(`${base}/api/prices/check`);
-  const diff = await res.json();
-  assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(diff.added, []);
-  assert.strictEqual(diff.unchanged, 20);
-  assert.strictEqual((await (await fetch(`${base}/api/prices`)).json()).kind, 'built-in');
-});
-
-test('POST /api/prices/apply saves the check and re-prices the summary', async (t) => {
-  stubPricingPage(t, withModelCells(PAGE, 'Claude Sonnet 4.6', ['$6 / MTok', '$7.50 / MTok', '$12 / MTok', '$0.60 / MTok', '$30 / MTok']));
+test('POST /api/prices/check applies at once and re-prices the summary', async (t) => {
+  stubPricingPage(t, withModelCells(PAGE, 'Claude Sonnet 4.6', DOUBLED_SONNET_46));
   const { url: base, config } = await startServer(t);
   const cost = async () => (await (await fetch(`${base}/api/summary?days=today`)).json()).summary.totalCost;
   // The fixture log is one claude-sonnet-4-6 request: 1000 input, 200 output.
   assert.ok(Math.abs((await cost()) - 0.006) < 1e-12);
 
-  await post(`${base}/api/prices/check`);
-  const today = localDateStr(new Date());
-  const res = await post(`${base}/api/prices/apply`, { effectiveFrom: today });
+  const res = await post(`${base}/api/prices/check`);
   assert.strictEqual(res.status, 200);
-  const source = await res.json();
-  assert.strictEqual(source.kind, 'fetched');
-  assert.strictEqual(source.date, today);
+  const result = await res.json();
+  assert.deepStrictEqual(result.changed.map((c) => c.after.match), ['sonnet-4-6']);
+  assert.ok(/^\d{4}-\d{2}-\d{2}$/.test(result.effectiveFrom));
   assert.ok(Math.abs((await cost()) - 0.012) < 1e-12, 'the cached scan was dropped and re-priced');
 
   const file = path.join(config.configDir, 'cc-dashboard', 'prices.json');
   const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.deepStrictEqual(saved.snapshots[0].rows.map((r) => r.match).sort(), ['sonnet-4-6']);
+  assert.deepStrictEqual(saved.snapshots[0].rows.map((r) => r.match), ['sonnet-4-6']);
+  assert.strictEqual(saved.lastCheck, localDateStr(new Date()));
+  const source = await (await fetch(`${base}/api/prices`)).json();
+  assert.strictEqual(source.kind, 'fetched');
+  assert.strictEqual(source.lastCheck, localDateStr(new Date()));
 
-  const again = await post(`${base}/api/prices/apply`, { effectiveFrom: today });
-  assert.strictEqual(again.status, 409, 'a second Apply needs a new check');
-  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).snapshots.length, 1);
+  const again = await (await post(`${base}/api/prices/check`)).json();
+  assert.deepStrictEqual(again.changed, []);
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).snapshots.length, 1, 'a second check adds no snapshot');
 });
 
-test('POST /api/prices/apply refuses with no check, and refuses a future date', async (t) => {
-  stubPricingPage(t, withModelCells(PAGE, 'Claude Sonnet 4.6', ['$6 / MTok', '$7.50 / MTok', '$12 / MTok', '$0.60 / MTok', '$30 / MTok']));
-  const base = await listen(t);
-  assert.strictEqual((await post(`${base}/api/prices/apply`, { effectiveFrom: '2026-09-01' })).status, 409);
-  await post(`${base}/api/prices/check`);
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const res = await post(`${base}/api/prices/apply`, { effectiveFrom: localDateStr(tomorrow) });
-  assert.strictEqual(res.status, 400);
-  assert.match((await res.json()).error, /future/);
-  assert.strictEqual((await post(`${base}/api/prices/apply`, {})).status, 400, 'a missing date is refused');
+test('POST /api/prices/check with nothing new writes lastCheck only', async (t) => {
+  stubPricingPage(t, PAGE);
+  const { url: base, config } = await startServer(t);
+  const result = await (await post(`${base}/api/prices/check`)).json();
+  assert.deepStrictEqual([result.added, result.changed, result.effectiveFrom], [[], [], null]);
+  const saved = JSON.parse(fs.readFileSync(path.join(config.configDir, 'cc-dashboard', 'prices.json'), 'utf8'));
+  assert.deepStrictEqual(saved, { version: 1, lastCheck: localDateStr(new Date()), snapshots: [] });
 });
 
-test('POST /api/prices/check refuses a page that does not parse, and clears the pending check', async (t) => {
+test('POST /api/prices/apply is gone', async (t) => {
   stubPricingPage(t, PAGE);
   const base = await listen(t);
-  await post(`${base}/api/prices/check`);
-  globalThis.fetch = ((realFetch) => (url, opts) =>
-    String(url).startsWith('https://') ? Promise.resolve(new Response('# nothing here')) : realFetch(url, opts))(globalThis.fetch);
+  assert.strictEqual((await post(`${base}/api/prices/apply`, { effectiveFrom: localDateStr(new Date()) })).status, 404);
+});
+
+test('POST /api/prices/check refuses a page that does not parse with 422 and shows the reason in GET /api/prices', async (t) => {
+  stubPricingPage(t, '# nothing here');
+  const base = await listen(t);
   const res = await post(`${base}/api/prices/check`);
   assert.strictEqual(res.status, 422);
   assert.match((await res.json()).error, /prices are unchanged/);
-  assert.strictEqual((await post(`${base}/api/prices/apply`, { effectiveFrom: localDateStr(new Date()) })).status, 409);
+  const source = await (await fetch(`${base}/api/prices`)).json();
+  assert.match(source.lastError, /did not parse/);
+  assert.strictEqual(source.lastCheck, null, 'a failed check does not record a check');
 });
 
 test('POST /api/prices/check reports a failed fetch as 502', async (t) => {
@@ -728,15 +724,14 @@ test('POST /api/prices/check reports a failed fetch as 502', async (t) => {
   const res = await post(`${base}/api/prices/check`);
   assert.strictEqual(res.status, 502);
   assert.match((await res.json()).error, /503/);
+  assert.match((await (await fetch(`${base}/api/prices`)).json()).lastError, /503/);
 });
 
-test('the price POST routes refuse a cross-site request', async (t) => {
+test('the price check route refuses a cross-site request', async (t) => {
   stubPricingPage(t, PAGE);
   const base = await listen(t);
-  for (const route of ['/api/prices/check', '/api/prices/apply']) {
-    const res = await fetch(`${base}${route}`, { method: 'POST', headers: { 'Sec-Fetch-Site': 'cross-site' } });
-    assert.strictEqual(res.status, 403, route);
-  }
+  const res = await fetch(`${base}/api/prices/check`, { method: 'POST', headers: { 'Sec-Fetch-Site': 'cross-site' } });
+  assert.strictEqual(res.status, 403);
 });
 
 test('GET /api/limits adds today\'s share of the weekly limit', async (t) => {
@@ -810,7 +805,7 @@ test("the POST /api routes refuse Sec-Fetch-Site: none, which only a GET from th
   stubPricingPage(t, PAGE); // so a broken guard cannot reach platform.claude.com
   const { url: base } = await startServer(t);
 
-  for (const route of ['/api/refresh', '/api/prices/check', '/api/prices/apply']) {
+  for (const route of ['/api/refresh', '/api/prices/check']) {
     const res = await fetch(base + route, { method: 'POST', headers: { 'Sec-Fetch-Site': 'none' } });
     assert.strictEqual(res.status, 403, route);
   }
@@ -969,7 +964,7 @@ test('POST and DELETE dismiss answer 404 for a session or an idx that does not e
   }
 });
 
-test('the dismiss routes refuse a cross-site request, like the price POST routes', async (t) => {
+test('the dismiss routes refuse a cross-site request, like the price check route', async (t) => {
   const { base } = await reviewServer(t);
   for (const site of ['cross-site', 'same-site', 'none']) {
     const post = await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }, { 'Sec-Fetch-Site': site });
@@ -1057,9 +1052,9 @@ test('the dismiss routes answer 503 within 1000 ms under the review lock, reads 
   assert.deepStrictEqual(await suggestionState(base, 'sess-a'), ['done', null]);
 });
 
-test('a malformed JSON body on the dismiss and apply routes answers JSON 400, not an HTML page', async (t) => {
+test('a malformed JSON body on the dismiss route answers JSON 400, not an HTML page', async (t) => {
   const { url: base } = await startServer(t);
-  for (const url of [dismissUrl(base, 'sess-a', 0), `${base}/api/prices/apply`]) {
+  for (const url of [dismissUrl(base, 'sess-a', 0)]) {
     const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json' });
     assert.strictEqual(res.status, 400, url);
     assert.match(res.headers.get('content-type'), /application\/json/, url);
