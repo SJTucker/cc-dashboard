@@ -28,3 +28,4 @@ then on.
 | [README screenshots after the design pass](readme-screenshots-after-design-pass.md) | Open: every screenshot predates the tabs, the sticky bar and the new legends; which to retake and how to scrub them open |
 | [Fable weekly limit and usage credits](fable-limit-and-usage-credits.md) | Open: both rows are already in the `/usage` cache Claude Code keeps in `.claude.json`; freshness through the mod, the credits reset date and which scoped weeks to show open |
 | [Hide the status strip when narrow](hide-status-strip-when-narrow.md) | Open: hide `#statusStrip` below a window width; the width, keeping the plan limit warning and Link live visible open |
+| [Subagent status line in Doing now](subagent-status-in-doing-now.md) | Open: show each subagent's status text instead of "1 subagent"; `meta.json` has the spawn description, and whether the live status line is readable anywhere is open |
