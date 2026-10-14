@@ -27,3 +27,4 @@ then on.
 | [Plan limit band below the prompt](limit-band-below-prompt.md) | Open: no mod render slot sits between the prompt and the status line; a `bin/limit-line` in the statusline script is the likely route; dismissing and shared band logic open |
 | [README screenshots after the design pass](readme-screenshots-after-design-pass.md) | Open: every screenshot predates the tabs, the sticky bar and the new legends; which to retake and how to scrub them open |
 | [Fable weekly limit and usage credits](fable-limit-and-usage-credits.md) | Open: both rows are already in the `/usage` cache Claude Code keeps in `.claude.json`; freshness through the mod, the credits reset date and which scoped weeks to show open |
+| [Hide the status strip when narrow](hide-status-strip-when-narrow.md) | Open: hide `#statusStrip` below a window width; the width, keeping the plan limit warning and Link live visible open |
