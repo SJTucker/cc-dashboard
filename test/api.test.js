@@ -658,7 +658,7 @@ test('GET /api/prices reports built-in prices when nothing was applied', async (
   const base = await listen(t);
   const source = await (await fetch(`${base}/api/prices`)).json();
   assert.strictEqual(source.kind, 'built-in');
-  assert.strictEqual(source.date, '2026-09-28');
+  assert.strictEqual(source.date, '2026-10-14');
 });
 
 test('POST /api/prices/check returns the diff and changes nothing', async (t) => {
@@ -667,8 +667,8 @@ test('POST /api/prices/check returns the diff and changes nothing', async (t) =>
   const res = await post(`${base}/api/prices/check`);
   const diff = await res.json();
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(diff.added.map((r) => r.match), ['sonnet-5-5']);
-  assert.strictEqual(diff.unchanged, 18);
+  assert.deepStrictEqual(diff.added, []);
+  assert.strictEqual(diff.unchanged, 20);
   assert.strictEqual((await (await fetch(`${base}/api/prices`)).json()).kind, 'built-in');
 });
 
@@ -690,7 +690,7 @@ test('POST /api/prices/apply saves the check and re-prices the summary', async (
 
   const file = path.join(config.configDir, 'cc-dashboard', 'prices.json');
   const saved = JSON.parse(fs.readFileSync(file, 'utf8'));
-  assert.deepStrictEqual(saved.snapshots[0].rows.map((r) => r.match).sort(), ['sonnet-4-6', 'sonnet-5-5']);
+  assert.deepStrictEqual(saved.snapshots[0].rows.map((r) => r.match).sort(), ['sonnet-4-6']);
 
   const again = await post(`${base}/api/prices/apply`, { effectiveFrom: today });
   assert.strictEqual(again.status, 409, 'a second Apply needs a new check');
@@ -698,7 +698,7 @@ test('POST /api/prices/apply saves the check and re-prices the summary', async (
 });
 
 test('POST /api/prices/apply refuses with no check, and refuses a future date', async (t) => {
-  stubPricingPage(t, PAGE);
+  stubPricingPage(t, withModelCells(PAGE, 'Claude Sonnet 4.6', ['$6 / MTok', '$7.50 / MTok', '$12 / MTok', '$0.60 / MTok', '$30 / MTok']));
   const base = await listen(t);
   assert.strictEqual((await post(`${base}/api/prices/apply`, { effectiveFrom: '2026-09-01' })).status, 409);
   await post(`${base}/api/prices/check`);

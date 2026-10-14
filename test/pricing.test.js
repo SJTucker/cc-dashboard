@@ -426,3 +426,13 @@ test('costForUsage reports familyRate for a bare-family match only', () => {
   assert.strictEqual(costForUsage({ input_tokens: 1000 }, 'claude-opus-5').familyRate, false);
   assert.deepStrictEqual(costForUsage({ input_tokens: 1000 }, 'claude-zeta-9'), { cost: 0, priced: false });
 });
+
+test('the built-in table has Haiku 5.5 with its tier and Sonnet 5.5 at 0.05x cache reads', () => {
+  assert.deepStrictEqual(priceFor('claude-haiku-5-5').longPrompt, { over: 100000, input: 0.5, output: 2.5 });
+  assert.strictEqual(priceFor('claude-haiku-5-5').input, 0.1);
+  assert.strictEqual(priceFor('claude-haiku-4-5-20251001').longPrompt, undefined);
+  assert.strictEqual(priceFor('claude-sonnet-5-5').cacheReadMult, 0.05);
+  assert.strictEqual(priceFor('claude-sonnet-5').cacheReadMult, undefined, 'sonnet-5 keeps its own row');
+  // A sample Haiku 5.5 request: 1,000 input and 200 output tokens is a short prompt.
+  closeTo(costForUsage({ input_tokens: 1000, output_tokens: 200 }, 'claude-haiku-5-5').cost, (1000 * 0.10 + 200 * 0.50) / 1e6, 'short Haiku 5.5 request');
+});
