@@ -26,7 +26,7 @@ test('getPricesPath is under the config dir', () => {
 
 test('with no file the prices are built-in', (t) => {
   useTempFile(t);
-  assert.deepStrictEqual(store.pricesSource(), { kind: 'built-in', date: BUILT_IN_DATE, appliedAt: null, snapshots: 0, error: null });
+  assert.deepStrictEqual(store.pricesSource(), { kind: 'built-in', date: BUILT_IN_DATE, appliedAt: null, snapshots: 0, error: null, lastCheck: null });
 });
 
 test('appendSnapshot writes the file and the new price applies from its date', (t) => {
@@ -147,4 +147,74 @@ test('a write that cannot succeed returns an error instead of throwing', (t) => 
   store.loadPriceFile(file);
   const result = store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [ROW], source: 'test', file, now: NOW });
   assert.match(result.error, /Could not write/);
+});
+
+// ---- lastCheck --------------------------------------------------------------
+const read = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+
+test('recordCheck on a missing file creates it with lastCheck and no snapshots', (t) => {
+  const file = useTempFile(t);
+  const result = store.recordCheck({ file, date: '2026-10-14' });
+  assert.strictEqual(result.error, undefined);
+  assert.deepStrictEqual(read(file), { version: 1, lastCheck: '2026-10-14', snapshots: [] });
+  assert.strictEqual(result.source.lastCheck, '2026-10-14');
+  assert.strictEqual(result.source.kind, 'built-in');
+  assert.strictEqual(store.pricesSource().lastCheck, '2026-10-14');
+});
+
+test('recordCheck keeps every snapshot and rewrites only lastCheck', (t) => {
+  const file = useTempFile(t);
+  store.appendSnapshot({ effectiveFrom: '2026-10-10', rows: [{ ...ROW, input: 4, output: 20 }], source: 'test', file, now: NOW });
+  store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [ROW], source: 'test', file, now: NOW });
+  const before = read(file).snapshots;
+  store.recordCheck({ file, date: '2026-10-16' });
+  assert.deepStrictEqual(read(file).snapshots, before);
+  assert.strictEqual(read(file).lastCheck, '2026-10-16');
+  assert.strictEqual(priceFor('claude-sonnet-4-6', new Date(2026, 9, 17).getTime()).input, 6, 'prices still apply');
+});
+
+test('appendSnapshot writes lastCheck with the snapshot, and keeps an existing lastCheck when none is given', (t) => {
+  const file = useTempFile(t);
+  store.appendSnapshot({ effectiveFrom: '2026-10-10', rows: [ROW], source: 'test', file, now: NOW, lastCheck: '2026-10-12' });
+  assert.strictEqual(read(file).lastCheck, '2026-10-12');
+  store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [{ ...ROW, input: 7, output: 35 }], source: 'test', file, now: NOW });
+  assert.strictEqual(read(file).lastCheck, '2026-10-12', 'an append with no lastCheck must not drop the stored one');
+  assert.strictEqual(read(file).snapshots.length, 2);
+});
+
+test('appendSnapshot and recordCheck refuse a lastCheck or date that is not a real date', (t) => {
+  const file = useTempFile(t);
+  assert.match(store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [ROW], source: 'test', file, now: NOW, lastCheck: '2026-02-30' }).error, /lastCheck/);
+  assert.match(store.recordCheck({ file, date: '2026-10-1' }).error, /YYYY-MM-DD/);
+  assert.strictEqual(fs.existsSync(file), false, 'nothing was written');
+});
+
+test('a file whose lastCheck is not a real date is ignored as a whole, and neither write overwrites it', (t) => {
+  const file = useTempFile(t);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  for (const bad of ['2026-02-30', '2026-10-1', 20261014, true]) {
+    const text = JSON.stringify({ version: 1, lastCheck: bad, snapshots: [{ effectiveFrom: '2026-10-10', appliedAt: NOW.toISOString(), source: 'test', rows: [ROW] }] });
+    fs.writeFileSync(file, text);
+    const source = store.loadPriceFile(file);
+    assert.strictEqual(source.kind, 'built-in', String(bad));
+    assert.match(source.error, /lastCheck/);
+    assert.match(store.recordCheck({ file, date: '2026-10-14' }).error, /unreadable/);
+    assert.match(store.appendSnapshot({ effectiveFrom: '2026-10-15', rows: [ROW], source: 'test', file, now: NOW }).error, /unreadable/);
+    assert.strictEqual(fs.readFileSync(file, 'utf8'), text, 'the file is left for the owner to fix');
+  }
+});
+
+test('recordCheck refuses to write over a corrupt file', (t) => {
+  const file = useTempFile(t);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, '{ not json');
+  assert.match(store.recordCheck({ file, date: '2026-10-14' }).error, /unreadable/);
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), '{ not json');
+});
+
+test('priceSnapshots returns the snapshots of the last load', (t) => {
+  const file = useTempFile(t);
+  assert.deepStrictEqual(store.priceSnapshots(), []);
+  store.appendSnapshot({ effectiveFrom: '2026-10-10', rows: [ROW], source: 'test', file, now: NOW });
+  assert.deepStrictEqual(store.priceSnapshots().map((s) => s.effectiveFrom), ['2026-10-10']);
 });

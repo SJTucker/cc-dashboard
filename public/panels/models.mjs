@@ -28,7 +28,7 @@ function drawModelList(container, models) {
       return `<tr>
         <td class="model-name" title="${escapeHtml(m.model)}"><span class="swatch" style="${segmentTexture(m.family)}"></span>${escapeHtml(modelLabel(m.model))}</td>
         <td class="num">${formatTokens(m.tokens)}</td>
-        <td class="num cost-cell">${unpriced ? 'unpriced' : formatCost(m.cost)}</td>
+        <td class="num cost-cell">${unpriced ? 'unpriced' : formatCost(m.cost)}${m.familyRate ? ' <span class="family-rate" title="This model has no price of its own. It is priced at the current rate for its family.">family rate</span>' : ''}</td>
         <td class="num">${unpriced ? '&mdash;' : share.toFixed(1) + '%'}</td>
         <td class="num">${unpriced ? '&mdash;' : formatCost(perMillion)}</td>
         <td class="num">${formatPercent(thinkingShare(m))}</td>

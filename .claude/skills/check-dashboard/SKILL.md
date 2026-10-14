@@ -14,7 +14,7 @@ Run from the checkout under test (the main checkout or a worktree). `server.js` 
 ```bash
 SP=<your scratchpad dir>
 PORT=$(node -e 'const s=require("net").createServer().listen(0,()=>{console.log(s.address().port);s.close()})')
-(PORT=$PORT nohup node server.js > $SP/server.log 2>&1 & echo $! > $SP/server.pid)
+(CC_DASHBOARD_PRICE_CHECK=off PORT=$PORT nohup node server.js > $SP/server.log 2>&1 & echo $! > $SP/server.pid)
 until curl -sf -o /dev/null http://localhost:$PORT/api/limits; do sleep 1; done
 ```
 
@@ -30,7 +30,7 @@ Never run `pkill -f "node server.js"`. It kills the owner's own dashboard and ot
 ```bash
 F=$SP/fixture; mkdir -p $F/projects/demo
 # write one or more transcript .jsonl files into $F/projects/demo
-CLAUDE_CONFIG_DIR=$F RTK_DB=$F/none.db PORT=$PORT node server.js
+CLAUDE_CONFIG_DIR=$F RTK_DB=$F/none.db CC_DASHBOARD_PRICE_CHECK=off PORT=$PORT node server.js
 ```
 
 `RTK_DB` (also read in `lib/config-dir.js`) stops the server reading the real rtk history. An empty `CLAUDE_CONFIG_DIR` gives the empty-state view. To copy real data instead, copy `~/.claude/cc-dashboard/transcripts.db` into `$F/cc-dashboard/` (one earlier session did this with `sqlite3 ... ".backup"`).

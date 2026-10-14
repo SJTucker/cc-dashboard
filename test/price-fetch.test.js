@@ -32,7 +32,7 @@ test('keyFor maps display names to PRICE_TABLE keys', () => {
 
 test('the fixture parses to every model with its cache and fast rates', () => {
   const { rows, skipped } = parsePricingPage(PAGE);
-  assert.strictEqual(rows.length, 19);
+  assert.strictEqual(rows.length, 20);
   assert.deepStrictEqual(skipped, []);
   assert.deepStrictEqual(rows.find((r) => r.match === 'opus-5-5'), {
     match: 'opus-5-5', family: 'opus', label: 'Opus', name: 'Claude Opus 5.5',
@@ -45,14 +45,19 @@ test('the fixture parses to every model with its cache and fast rates', () => {
   assert.strictEqual(rows.find((r) => r.match === 'opus-4-7').fast, undefined);
   assert.strictEqual(rows.find((r) => r.match === 'opus-4-1').name, 'Claude Opus 4.1', 'the retired-link note is stripped');
   assert.strictEqual(rows.find((r) => r.match === '3-5-haiku').input, 0.8);
+  assert.deepStrictEqual(rows.find((r) => r.match === 'haiku-5-5'), {
+    match: 'haiku-5-5', family: 'haiku', label: 'Haiku', name: 'Claude Haiku 5.5',
+    input: 0.1, output: 0.5, longPrompt: { over: 100000, input: 0.5, output: 2.5 },
+  });
+  assert.strictEqual(rows.find((r) => r.match === 'sonnet-5-5').cacheReadMult, 0.05, 'Sonnet 5.5 cache reads are 0.05x');
 });
 
-test('against the built-in table the fixture adds Sonnet 5.5 and changes nothing', () => {
-  // This also checks PRICE_TABLE against the page as it was on 2026-09-29.
+test('against the built-in table the fixture changes nothing', () => {
+  // This also checks PRICE_TABLE, including Haiku 5.5 and Sonnet 5.5, against the page as it was on 2026-10-14.
   const diff = diffPrices(parsePricingPage(PAGE).rows, currentRows());
-  assert.deepStrictEqual(diff.added.map((r) => r.match), ['sonnet-5-5']);
+  assert.deepStrictEqual(diff.added, []);
   assert.deepStrictEqual(diff.changed, []);
-  assert.strictEqual(diff.unchanged, 18);
+  assert.strictEqual(diff.unchanged, 20);
 });
 
 test('diffPrices reports a changed price with its old and new rows', () => {
@@ -61,7 +66,7 @@ test('diffPrices reports a changed price with its old and new rows', () => {
   assert.strictEqual(diff.changed.length, 1);
   assert.strictEqual(diff.changed[0].before.input, 3);
   assert.strictEqual(diff.changed[0].after.input, 6);
-  assert.strictEqual(diff.unchanged, 17);
+  assert.strictEqual(diff.unchanged, 19);
 });
 
 test('diffPrices counts a removed fast rate as a change', () => {
@@ -82,7 +87,7 @@ test('a model from an unknown family is skipped, not refused', () => {
     '| Claude Zephyr 1 | $1 / MTok | $1.25 / MTok | $2 / MTok | $0.10 / MTok | $5 / MTok |\n| Claude Fable 5.1 '
   );
   const { rows, skipped } = parsePricingPage(page);
-  assert.strictEqual(rows.length, 19);
+  assert.strictEqual(rows.length, 20);
   assert.deepStrictEqual(skipped, [{ name: 'Claude Zephyr 1', reason: 'unknown model family "zephyr"' }]);
 });
 
@@ -95,7 +100,7 @@ test('a page that changed shape is refused with the reason', () => {
   refused(withModelCells(PAGE, 'Claude Opus 5.5', [null, '$6 / MTok']), /1.25x/);
   refused(withModelCells(PAGE, 'Claude Opus 5.5', [null, null, null, null, '$3 / MTok']), /output/);
   refused(PAGE.replace('Claude Opus 5 / Claude Opus 4.8', 'Claude Opus 5 / Claude Opus 4.9'), /Opus 4\.9/);
-  refused(PAGE.split('\n').filter((l) => !/^\| Claude (Opus|Sonnet)/.test(l)).join('\n'), /only 6 models/);
+  refused(PAGE.split('\n').filter((l) => !/^\| Claude (Opus|Sonnet)/.test(l)).join('\n'), /only 7 models/);
 });
 
 test('fetchPricingPage requests the constant URL, refuses redirects, and fails on a bad status', async (t) => {
@@ -109,4 +114,68 @@ test('fetchPricingPage requests the constant URL, refuses redirects, and fails o
   assert.ok(calls[0].opts.signal, 'the request has a timeout');
   globalThis.fetch = async () => new Response('nope', { status: 503 });
   await assert.rejects(fetchPricingPage(), /503/);
+});
+
+// ---- prompt-length tier rows ----------------------------------------------
+// Lines of the Model pricing table for Claude Haiku 5.5, which are the first
+// lines containing the tier text (the Batch table lists them again further down).
+function tierLineIndexes(md) {
+  const lines = md.split('\n');
+  const up = lines.findIndex((l) => l.includes('Claude Haiku 5.5 (for prompts up to'));
+  const over = lines.findIndex((l) => l.includes('Claude Haiku 5.5 (for prompts over'));
+  return { lines, up, over };
+}
+
+// Rewrites one line of the page, found by index, and joins the page again.
+function editLine(md, which, fn) {
+  const found = tierLineIndexes(md);
+  found.lines[found[which]] = fn(found.lines[found[which]]);
+  return found.lines.join('\n');
+}
+
+const refused = (md, pattern) => assert.throws(() => parsePricingPage(md), (err) => err instanceof PriceParseError && pattern.test(err.message));
+
+test('the two Haiku 5.5 rows merge in either order into one row with a longPrompt tier', () => {
+  const expected = parsePricingPage(PAGE).rows.find((r) => r.match === 'haiku-5-5');
+  const { lines, up, over } = tierLineIndexes(PAGE);
+  [lines[up], lines[over]] = [lines[over], lines[up]];
+  const swapped = parsePricingPage(lines.join('\n'));
+  assert.deepStrictEqual(swapped.rows.find((r) => r.match === 'haiku-5-5'), expected);
+  assert.strictEqual(swapped.rows.filter((r) => r.match === 'haiku-5-5').length, 1);
+  assert.deepStrictEqual(swapped.skipped, []);
+});
+
+test('a threshold written without a thousands separator reads the same', () => {
+  const page = editLine(editLine(PAGE, 'up', (l) => l.replace('100,000', '100000')), 'over', (l) => l.replace('100,000', '100000'));
+  assert.strictEqual(parsePricingPage(page).rows.find((r) => r.match === 'haiku-5-5').longPrompt.over, 100000);
+});
+
+test('a tiered model with one tier row, mismatched thresholds, a broken ratio or a repeated row is refused', () => {
+  const { lines, up, over } = tierLineIndexes(PAGE);
+  const without = (i) => lines.filter((_, n) => n !== i).join('\n');
+  refused(without(over), /Haiku 5\.5.*"over" .*missing/);
+  refused(without(up), /Haiku 5\.5.*"up to" .*missing/);
+  refused(editLine(PAGE, 'over', (l) => l.replace('100,000', '200,000')), /thresholds/);
+  refused(editLine(PAGE, 'over', (l) => l.replace('$0.625 / MTok', '$0.70 / MTok')), /1\.25x/);
+  refused(editLine(PAGE, 'over', (l) => l.replace('$0.05 / MTok', '$0.10 / MTok')), /cache read/);
+  refused(PAGE.replace(lines[up], `${lines[up]}\n${lines[up]}`), /listed twice/);
+});
+
+test('a name keyFor cannot read is skipped as an unrecognised model name', () => {
+  const page = PAGE.replace(
+    '| Claude Fable 5.1 ',
+    '| Claude Mythos Preview | $1 / MTok | $1.25 / MTok | $2 / MTok | $0.10 / MTok | $5 / MTok |\n| Claude Fable 5.1 '
+  );
+  const { rows, skipped } = parsePricingPage(page);
+  assert.strictEqual(rows.length, 20);
+  assert.deepStrictEqual(skipped, [{ name: 'Claude Mythos Preview', reason: 'unrecognised model name' }]);
+});
+
+test('diffPrices counts a changed or missing longPrompt as a change', () => {
+  const parsed = parsePricingPage(PAGE).rows;
+  const tweak = (fn) => currentRows().map((r) => (r.match === 'haiku-5-5' ? fn(r) : r));
+  const higher = diffPrices(parsed, tweak((r) => ({ ...r, longPrompt: { ...r.longPrompt, output: 3 } })));
+  assert.deepStrictEqual(higher.changed.map((c) => c.after.match), ['haiku-5-5']);
+  const none = diffPrices(parsed, tweak(({ longPrompt, ...rest }) => rest));
+  assert.deepStrictEqual(none.changed.map((c) => c.after.match), ['haiku-5-5']);
 });

@@ -321,3 +321,118 @@ test('outputRate matches the output term of costForUsage', () => {
     closeTo(outputRate(usage, model) * 1_000_000, cost, `${model} ${usage.speed || 'standard'}`);
   }
 });
+
+// ---- longPrompt tier -------------------------------------------------------
+// A snapshot row for a model the table has not seen is priced for all dates, so
+// these tests install Haiku 5.5 that way. Task 3 adds the built-in row.
+const HAIKU_55 = {
+  match: 'haiku-5-5', family: 'haiku', label: 'Haiku', input: 0.10, output: 0.50,
+  longPrompt: { over: 100000, input: 0.50, output: 2.50 },
+};
+
+function useHaiku55(t) {
+  t.after(() => setSnapshots([]));
+  setSnapshots([{ effectiveFrom: '2026-10-01', rows: [HAIKU_55] }]);
+}
+
+test('a Haiku 5.5 request uses the lower rates at 100,000 prompt tokens and the higher at 100,001', (t) => {
+  useHaiku55(t);
+  closeTo(costForUsage({ input_tokens: 100000, output_tokens: 1000 }, 'claude-haiku-5-5').cost, (100000 * 0.10 + 1000 * 0.50) / 1e6, 'at the threshold');
+  closeTo(costForUsage({ input_tokens: 100001, output_tokens: 1000 }, 'claude-haiku-5-5').cost, (100001 * 0.50 + 1000 * 2.50) / 1e6, 'one over');
+});
+
+test('prompt size counts cache reads and cache writes of both lifetimes, and not output tokens', (t) => {
+  useHaiku55(t);
+  const split = (reads, w5m, w1h) => ({ input_tokens: 0, cache_read_input_tokens: reads, cache_creation: { ephemeral_5m_input_tokens: w5m, ephemeral_1h_input_tokens: w1h } });
+  // 60,000 + 30,000 + 10,001 = 100,001: long rates, with the 0.1x read and 1.25x / 2x write multipliers on 0.50.
+  closeTo(costForUsage(split(60000, 30000, 10001), 'claude-haiku-5-5').cost, (60000 * 0.50 * 0.1 + 30000 * 0.50 * 1.25 + 10001 * 0.50 * 2) / 1e6, 'over by one');
+  // 60,000 + 30,000 + 10,000 = 100,000: lower rates.
+  closeTo(costForUsage(split(60000, 30000, 10000), 'claude-haiku-5-5').cost, (60000 * 0.10 * 0.1 + 30000 * 0.10 * 1.25 + 10000 * 0.10 * 2) / 1e6, 'at the threshold');
+  // A flat cache_creation_input_tokens total counts as 5-minute writes.
+  closeTo(costForUsage({ cache_creation_input_tokens: 100001 }, 'claude-haiku-5-5').cost, (100001 * 0.50 * 1.25) / 1e6, 'flat write total over the threshold');
+  // 500,000 output tokens do not make a 100,000-token prompt long.
+  closeTo(costForUsage({ input_tokens: 100000, output_tokens: 500000 }, 'claude-haiku-5-5').cost, (100000 * 0.10 + 500000 * 0.50) / 1e6, 'output is not prompt');
+});
+
+test('a usage record with missing or null fields costs zero on a tiered row, not NaN', (t) => {
+  useHaiku55(t);
+  assert.strictEqual(costForUsage({}, 'claude-haiku-5-5').cost, 0);
+  assert.strictEqual(costForUsage({ input_tokens: null, cache_read_input_tokens: undefined, cache_creation: null }, 'claude-haiku-5-5').cost, 0);
+});
+
+test('outputRate follows the prompt-length tier', (t) => {
+  useHaiku55(t);
+  closeTo(outputRate({ input_tokens: 100000 }, 'claude-haiku-5-5') * 1e6, 0.5, 'lower output per MTok');
+  closeTo(outputRate({ input_tokens: 100001 }, 'claude-haiku-5-5') * 1e6, 2.5, 'higher output per MTok');
+});
+
+test('fast rates win over the prompt-length tier on a row with both', (t) => {
+  t.after(() => setSnapshots([]));
+  setSnapshots([{ effectiveFrom: '2026-10-01', rows: [{ ...HAIKU_55, match: 'haiku-5-6', fast: { input: 1, output: 5 }, longPrompt: { over: 1000, input: 0.5, output: 2.5 } }] }]);
+  closeTo(outputRate({ input_tokens: 5000, speed: 'fast' }, 'claude-haiku-5-6') * 1e6, 5, 'fast request over the threshold');
+  closeTo(outputRate({ input_tokens: 5000 }, 'claude-haiku-5-6') * 1e6, 2.5, 'standard request over the threshold');
+});
+
+test('currentRows carries longPrompt', (t) => {
+  useHaiku55(t);
+  assert.deepStrictEqual(currentRows().find((r) => r.match === 'haiku-5-5').longPrompt, { over: 100000, input: 0.50, output: 2.50 });
+});
+
+test('validateRow accepts a sound longPrompt and refuses a malformed one', () => {
+  assert.strictEqual(validateRow(HAIKU_55), null);
+  for (const bad of [
+    { over: 0, input: 0.5, output: 2.5 },
+    { over: 1.5, input: 0.5, output: 2.5 },
+    { over: '100000', input: 0.5, output: 2.5 },
+    { over: 100000, input: 0, output: 2.5 },
+    { over: 100000, input: 0.5, output: -1 },
+    { over: 100000, input: 0.5 },
+    'long',
+  ]) {
+    assert.match(validateRow({ ...HAIKU_55, longPrompt: bad }), /longPrompt/, JSON.stringify(bad));
+  }
+});
+
+// ---- unmatched models and family rates -------------------------------------
+const { unmatchedModels, clearUnmatched } = require('../lib/pricing');
+
+test('priceFor records a name that matches nothing or only a bare-family row, and not a versioned match', () => {
+  clearUnmatched();
+  priceFor('claude-sonnet-4-6-20260115');
+  priceFor('claude-opus-5');
+  priceFor('claude-opus-5-5');
+  assert.deepStrictEqual(unmatchedModels(), []);
+  priceFor('claude-zeta-9');
+  priceFor('claude-opus-9');
+  priceFor('claude-haiku-9');
+  assert.deepStrictEqual(unmatchedModels(), ['claude-haiku-9', 'claude-opus-9', 'claude-zeta-9']);
+  clearUnmatched();
+  assert.deepStrictEqual(unmatchedModels(), []);
+});
+
+test('synthetic, empty and non-Anthropic model names are never recorded as unmatched', () => {
+  clearUnmatched();
+  priceFor('<synthetic>');
+  priceFor('');
+  priceFor(null);
+  priceFor(undefined);
+  costForUsage({ input_tokens: 10 }, '<synthetic>');
+  costForUsage({ input_tokens: 10 }, 'gpt-4o');
+  assert.deepStrictEqual(unmatchedModels(), []);
+});
+
+test('costForUsage reports familyRate for a bare-family match only', () => {
+  assert.strictEqual(costForUsage({ input_tokens: 1000 }, 'claude-opus-9').familyRate, true);
+  assert.strictEqual(costForUsage({ input_tokens: 1000 }, 'claude-opus-5').familyRate, false);
+  assert.deepStrictEqual(costForUsage({ input_tokens: 1000 }, 'claude-zeta-9'), { cost: 0, priced: false });
+});
+
+test('the built-in table has Haiku 5.5 with its tier and Sonnet 5.5 at 0.05x cache reads', () => {
+  assert.deepStrictEqual(priceFor('claude-haiku-5-5').longPrompt, { over: 100000, input: 0.5, output: 2.5 });
+  assert.strictEqual(priceFor('claude-haiku-5-5').input, 0.1);
+  assert.strictEqual(priceFor('claude-haiku-4-5-20251001').longPrompt, undefined);
+  assert.strictEqual(priceFor('claude-sonnet-5-5').cacheReadMult, 0.05);
+  assert.strictEqual(priceFor('claude-sonnet-5').cacheReadMult, undefined, 'sonnet-5 keeps its own row');
+  // A sample Haiku 5.5 request: 1,000 input and 200 output tokens is a short prompt.
+  closeTo(costForUsage({ input_tokens: 1000, output_tokens: 200 }, 'claude-haiku-5-5').cost, (1000 * 0.10 + 200 * 0.50) / 1e6, 'short Haiku 5.5 request');
+});
