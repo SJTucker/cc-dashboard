@@ -19,7 +19,7 @@ Source files over 450 lines:
 | `public/style.css` | 1,566 | 92 |
 | `mod/hooks/register.ts` | 1,210 | 40 |
 | `lib/aggregate.js` | 564 | 14 |
-| `lib/extract.js` | 549 | 14 |
+| `lib/extract.js` | 476 | 14 |
 | `public/charts/setup-changes.mjs` | 492 | 9 |
 
 Test files over 450 lines: `mod/hooks/register.test.ts` (1,944),
@@ -45,6 +45,11 @@ up and removed), `README.md` (100), `public/style.css` (92), `public/index.html`
   hook, or reads the per-session maps (`forgetSession`), so
   the engine constraint keeps the file above about 1,150 lines. A limit, if enforced,
   needs an allowlist entry for `mod/hooks/register.ts`.
+- **`extract.js` is split on 2026-10-13.** The line helpers (`forEachLine`, the prompt
+  classifiers, `toolDetail`, `resultText`) moved to `lib/transcript-lines.js`, and
+  `TTL_5M_MS`, `TTL_1H_MS` and `nextTtl` moved to `lib/cache.js`. That took
+  `extract.js` from 595 to 476 lines. The row-set builder stays, so `review.js`,
+  `updates.js` and `sessions.js` no longer load the extractor.
 - `register.test.ts` holds the contract block that `test/mod-contract.test.js` reads
   between `// contract:begin` and `// contract:end`. A split must keep that block in
   one file, or the contract test must learn the new path.
