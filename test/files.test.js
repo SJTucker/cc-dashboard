@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const helpers = require('./helpers');
-const { writeFileAtomic, readJson } = require('../lib/files');
+const { writeFileAtomic, readJson, warnUnreadable, readable } = require('../lib/files');
 
 test('writeFileAtomic writes the text and leaves only the target file', (t) => {
   const dir = helpers.tmpDir(t, 'files');
@@ -58,4 +58,45 @@ test('readJson warns once per path for a file that does not parse, and never for
   assert.strictEqual(readJson(bad), null);
   assert.strictEqual(warn.mock.callCount(), 1);
   assert.match(String(warn.mock.calls[0].arguments[0]), /warn-bad\.json/);
+});
+
+test('readJson warns again when a file breaks, recovers and breaks again', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const file = path.join(helpers.tmpDir(t, 'files'), 'flap.json');
+  fs.writeFileSync(file, '{"a":');
+  readJson(file);
+  readJson(file);
+  assert.strictEqual(warn.mock.callCount(), 1);
+  fs.writeFileSync(file, '{"a":1}');
+  assert.deepStrictEqual(readJson(file), { a: 1 });
+  fs.writeFileSync(file, '{"a":');
+  readJson(file);
+  assert.strictEqual(warn.mock.callCount(), 2);
+});
+
+test('warnUnreadable words a SyntaxError as a parse problem and any other error as a read problem', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const warned = new Set();
+  warnUnreadable(warned, '/x/a.json', new SyntaxError('Unexpected end of JSON input'));
+  const parse = String(warn.mock.calls[0].arguments[0]);
+  assert.match(parse, /could not be parsed and was skipped, possibly because it was being written: Unexpected end/);
+  const denied = Object.assign(new Error("EACCES: permission denied, open '/x/b.json'"), { code: 'EACCES' });
+  warnUnreadable(warned, '/x/b.json', denied);
+  const read = String(warn.mock.calls[1].arguments[0]);
+  assert.match(read, /\/x\/b\.json could not be read and was skipped/);
+  assert.match(read, /EACCES/);
+  assert.match(read, /permission denied/);
+  assert.doesNotMatch(read, /parsed/);
+});
+
+test('warnUnreadable never warns for ENOENT', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  warnUnreadable(new Set(), '/x/none.json', Object.assign(new Error('ENOENT'), { code: 'ENOENT' }));
+  assert.strictEqual(warn.mock.callCount(), 0);
+});
+
+test('readable re-arms a path in the warned Set', () => {
+  const warned = new Set(['/x/a.json', '/x/b.json']);
+  readable(warned, '/x/a.json');
+  assert.deepStrictEqual([...warned], ['/x/b.json']);
 });

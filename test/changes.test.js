@@ -68,16 +68,18 @@ test('pluginMarkers returns [] for a missing or malformed file', () => {
   assert.deepStrictEqual(changes.pluginMarkers(setup({ plugins: '{not json' }).base), []);
 });
 
-test('modelMarkers skips models within a 7-day before-window of the earliest call', () => {
+test('modelMarkers marks each model at its first call and leaves the week rule to collectMarkers', () => {
   const t0 = Date.parse('2026-08-25T12:00:00Z');
   const calls = [
     { t: t0, model: 'claude-opus-5' },
-    { t: t0 + 3 * DAY, model: 'claude-haiku-4-5' }, // within the 7-day before-window
+    { t: t0 + 3 * DAY, model: 'claude-haiku-4-5' },
     { t: t0 + 20 * DAY, model: 'claude-opus-5-5' },
     { t: t0 + 21 * DAY, model: 'claude-opus-5-5' },
     { t: t0 + 22 * DAY, model: null },
   ];
   assert.deepStrictEqual(changes.modelMarkers(calls), [
+    { t: t0, kind: 'model', label: 'claude-opus-5 first used', source: 'model' },
+    { t: t0 + 3 * DAY, kind: 'model', label: 'claude-haiku-4-5 first used', source: 'model' },
     { t: t0 + 20 * DAY, kind: 'model', label: 'claude-opus-5-5 first used', source: 'model' },
   ]);
 });
@@ -115,7 +117,7 @@ test('fileMarkers: local times, unknown kind, bad date skipped and reported', ()
   assert.match(file.error, /entry 3/);
 });
 
-test('updateMarkers marks relevant versions at their first call, after a week of history', () => {
+test('updateMarkers marks relevant versions at their first call and leaves the week rule to collectMarkers', () => {
   const { base } = setup({
     updates: {
       '2.1.280': { relevant: true, summary: 'Running when history starts' },
@@ -133,6 +135,7 @@ test('updateMarkers marks relevant versions at their first call, after a week of
     { t: t0 + 11 * DAY, version: null },
   ];
   assert.deepStrictEqual(changes.updateMarkers(calls, path.join(base, 'cc-dashboard', 'updates.json')), [
+    { t: t0, kind: 'claude-code', label: 'Claude Code 2.1.280: Running when history starts', version: '2.1.280', summary: 'Running when history starts', source: 'update' },
     { t: t0 + 8 * DAY, kind: 'claude-code', label: 'Claude Code 2.1.286: Subagents share the parent cache', version: '2.1.286', summary: 'Subagents share the parent cache', source: 'update' },
   ]);
 });
@@ -316,4 +319,23 @@ test('autoMarkers warns once per file that does not parse, and never for a missi
   changes.autoMarkers(base);
   assert.strictEqual(warn.mock.callCount(), 1);
   assert.match(String(warn.mock.calls[0].arguments[0]), /bad\.json/);
+});
+
+test('collectMarkers drops a model and an update marker in the first week of history and keeps one after it', () => {
+  const { config } = setup({
+    updates: { '2.1.280': { relevant: true, summary: 'Early' }, '2.1.286': { relevant: true, summary: 'Late' } },
+  });
+  const t0 = new Date(2026, 8, 1, 9).getTime();
+  const calls = [
+    { t: t0, model: 'claude-opus-5', version: '2.1.280' },
+    { t: t0 + 3 * DAY, model: 'claude-haiku-4-5', version: '2.1.280' },
+    { t: t0 + 8 * DAY, model: 'claude-sonnet-5-5', version: '2.1.286' },
+  ];
+  const labels = changes.collectMarkers(calls, config).markers.map((m) => m.label);
+  assert.deepStrictEqual(labels.sort(), ['Claude Code 2.1.286: Late', 'claude-sonnet-5-5 first used']);
+});
+
+test('collectMarkers returns no markers when there are no calls', () => {
+  const { config } = setup({ changes: [{ date: '2026-09-01T09:00', kind: 'skill', label: 'file' }] });
+  assert.deepStrictEqual(changes.collectMarkers([], config).markers, []);
 });
