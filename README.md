@@ -589,7 +589,7 @@ lib/activity.js        Reads the activity files the mod writes (working or waiti
 lib/agent-steps.js     Reads the mod's agent-usage files: the output of each subagent request, for responses whose transcript has no final usage line
 lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill and subagent, plus per-session titles, branches and edited lines
 lib/changes.js         Setup change markers: plugin installs, new models, Claude Code releases, the mod's setup changes, changes.json
-lib/config-dir.js      loadConfig: the one place the server reads the environment (CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB, PORT)
+lib/config-dir.js      loadConfig: reads CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB and PORT for the server and the bin/ scripts (server.js reads CC_DASHBOARD_PRICE_CHECK itself, in priceCheckOn)
 lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
 lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeouts, and the server's one shared handle
 lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window, for the Setup changes panel

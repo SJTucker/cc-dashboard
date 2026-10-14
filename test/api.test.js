@@ -1132,6 +1132,13 @@ test('with priceCheck on and lastCheck today, startup does not fetch', async (t)
   assert.strictEqual(pages.calls, 0);
 });
 
+test('with priceCheck on and lastCheck in the future (clock set back), startup still checks', async (t) => {
+  stubPricingPage(t, PAGE);
+  const pages = countPricingFetches(t);
+  await startServer(t, { priceCheck: true, lastCheck: '2999-01-01' });
+  assert.ok(await until(() => pages.calls === 1), 'a future lastCheck counts as due');
+});
+
 test('an unmatched model after /api/summary starts one check, and not another within the hour', async (t) => {
   // A failed check leaves the unmatched set, so the second summary reaches the hour guard.
   stubPricingPage(t, 'unavailable', 503);

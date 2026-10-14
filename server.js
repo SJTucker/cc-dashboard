@@ -122,13 +122,6 @@ function suggestionTarget(req, res) {
   return { sessionId, idx: Number(idx) };
 }
 
-// Builds the dashboard for one config (lib/config-dir.js) and returns an
-// http.Server that is not listening yet. Everything that keeps state lives in
-// here: the transcripts.db handle, the row store, the reviews import flag, the
-// aggregate memo and the price checker. The handle closes when the server
-// closes. The price table is the exception: lib/pricing.js holds it for the whole
-// process, so the last prices.json loaded or applied sets it for every server in
-// the process.
 // CC_DASHBOARD_PRICE_CHECK=off stops the daily and new-model price checks. Anything
 // else, or no value, leaves them on. Read once, in the program block below: the
 // tests build their config with loadConfig and must not start background fetches.
@@ -136,6 +129,13 @@ function priceCheckOn(env) {
   return String(env.CC_DASHBOARD_PRICE_CHECK || '').trim().toLowerCase() !== 'off';
 }
 
+// Builds the dashboard for one config (lib/config-dir.js) and returns an
+// http.Server that is not listening yet. Everything that keeps state lives in
+// here: the transcripts.db handle, the row store, the reviews import flag, the
+// aggregate memo and the price checker. The handle closes when the server
+// closes. The price table is the exception: lib/pricing.js holds it for the whole
+// process, so the last prices.json loaded or applied sets it for every server in
+// the process.
 function createServer(config) {
   const projectsDir = getProjectsDir(config.configDir);
   const storePath = getStorePath(config.configDir);
@@ -169,7 +169,8 @@ function createServer(config) {
   // the next tick tries again. The timer is unref'd so it never keeps the process
   // alive, and cleared when the server closes.
   const HOUR_MS = 60 * 60 * 1000;
-  const checkDue = () => (priceChecker.state().lastCheck || '') < localDateStr(new Date());
+  // A lastCheck after today (the clock was set back) is due too, so the check does not wait for the clock to catch up.
+  const checkDue = () => (priceChecker.state().lastCheck || '') !== localDateStr(new Date());
   const attemptedLastHour = () => {
     const at = priceChecker.state().lastAttemptAt;
     return at != null && Date.now() - at < HOUR_MS;
