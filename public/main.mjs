@@ -382,9 +382,12 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
 // the new tab needs starts here. Setup changes load once, through ensureChanges,
 // which redraws from the loaded report on later visits. The price source reloads on
 // each switch to Now, because the Analysis tab never needs prices. The load runs
-// after showTab, so every chart is drawn at its visible width.
+// after showTab, so every chart is drawn at its visible width. The first call has
+// no old tab: state starts on Now's range, which would hide Now's own requests.
+let tabEntered = false;
 function enterTab(tab) {
-  const before = neededRequests(state.hiddenKeys, state.currentDays);
+  const before = tabEntered ? neededRequests(state.hiddenKeys, state.currentDays) : new Set();
+  tabEntered = true;
   state.tab = tab;
   state.currentDays = rangeForTab(tab, state.analysisDays);
   showTab(tab);
