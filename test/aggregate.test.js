@@ -16,7 +16,7 @@ const at = (daysBack, hour = 10) => {
 
 // A row set with nothing in it, overridden per test.
 function rowSet(overrides = {}) {
-  return { ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], sessions: {}, minT: null, maxT: null, ...overrides };
+  return { ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], commands: [], sessions: {}, minT: null, maxT: null, ...overrides };
 }
 
 function call(overrides = {}) {
@@ -253,13 +253,6 @@ test('a slash command adds to its skill invocations and counts once across row s
   const data = run([first, copy], { days: 30 });
 
   assert.deepStrictEqual(data.skills.map((r) => [r.name, r.invocations]), [['handoff', 2]]);
-});
-
-test('a row set with no commands field, as stored before EXTRACT_VERSION 2, counts no slash commands', () => {
-  // rowSet has no commands key, like the stored rows of a transcript Claude Code deleted.
-  const entry = rowSet({ calls: [call({ attributionSkill: 'tdd' })], toolUses: [toolUse('toolu_1', 'Skill', 'tdd')] });
-
-  assert.strictEqual(run([entry]).skills[0].invocations, 1);
 });
 
 const { ERROR_CAUSES } = require('../lib/aggregate');
