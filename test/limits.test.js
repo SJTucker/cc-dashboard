@@ -87,7 +87,8 @@ test('readLimits keeps a window with no reset time, and skips one with no number
   ]);
 });
 
-test('readLimits returns null for a missing file, missing key or bad JSON', () => {
+test('readLimits returns null for a missing file, missing key or bad JSON', (t) => {
+  t.mock.method(console, 'warn', () => {});
   const rateLimits = missingFile('rate-limits.json');
   assert.strictEqual(readLimits({ claudeJson: missingFile('.claude.json'), rateLimits, now: NOW }), null);
   assert.strictEqual(readLimits({ claudeJson: writeClaudeJson('{"cachedUsage'), rateLimits, now: NOW }), null);
@@ -460,4 +461,15 @@ test('loading lib/limits.js loads neither the transcript reader nor the price ta
   const out = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, encoding: 'utf8' });
   assert.strictEqual(out.status, 0, out.stderr);
   assert.deepStrictEqual(JSON.parse(out.stdout), []);
+});
+
+test('readLimits warns once per path for a claude.json that does not parse, and never for a missing one', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const rateLimits = missingFile('rate-limits.json');
+  readLimits({ claudeJson: missingFile('.claude.json'), rateLimits, now: NOW });
+  assert.strictEqual(warn.mock.callCount(), 0);
+  const claudeJson = writeClaudeJson('{"cachedUsage');
+  readLimits({ claudeJson, rateLimits, now: NOW });
+  readLimits({ claudeJson, rateLimits, now: NOW });
+  assert.strictEqual(warn.mock.callCount(), 1);
 });

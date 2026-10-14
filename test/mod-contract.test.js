@@ -96,6 +96,7 @@ test('collectMarkers turns the changes sample the mod writes into one auto marke
 });
 
 test('each reader skips a truncated copy of its sample without throwing', async (t) => {
+  t.mock.method(console, 'warn', () => {});
   const base = tmpDir(t, 'contract-truncated');
   const cut = (value) => JSON.stringify(value).slice(0, 25);
   const activityDir = path.join(base, 'activity');
