@@ -16,7 +16,7 @@ const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
-const { readLimits, readDailyShare, getRateLimitsPath } = require('./lib/limits');
+const { readLimits, readUsageFetchedAt, readDailyShare, getRateLimitsPath } = require('./lib/limits');
 const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = require('./lib/sessions');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
 const { readActivity, getActivityDir } = require('./lib/activity');
@@ -27,6 +27,7 @@ const { busiestDay, dayTotals } = require('./public/stats.mjs');
 const { loadPriceFile, pricesSource, getPricesPath } = require('./lib/price-store');
 const { fetchPricingPage } = require('./lib/price-fetch');
 const { createPriceChecker } = require('./lib/price-check');
+const { createUsageRefresher, getUsageRefreshDir } = require('./lib/usage-refresh');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -147,6 +148,14 @@ function priceCheckOn(env) {
   return String(env.CC_DASHBOARD_PRICE_CHECK || '').trim().toLowerCase() !== 'off';
 }
 
+// CC_DASHBOARD_USAGE_REFRESH=off stops the headless /usage runs (lib/usage-refresh.js).
+// CC_DASHBOARD_CLAUDE_BIN names the claude binary, and `claude` on PATH is the default.
+// Read once, in the program block below, for the same reason as priceCheckOn.
+function usageRefreshFrom(env) {
+  if (String(env.CC_DASHBOARD_USAGE_REFRESH || '').trim().toLowerCase() === 'off') return null;
+  return { bin: String(env.CC_DASHBOARD_CLAUDE_BIN || '').trim() || 'claude' };
+}
+
 // Builds the dashboard for one config (lib/config-dir.js) and returns an
 // http.Server that is not listening yet. Everything that keeps state lives in
 // here: the transcripts.db handle, the row store, the reviews import flag, the
@@ -211,6 +220,18 @@ function createServer(config) {
     priceTimer.unref();
   }
 
+  // Headless /usage runs that keep the usage cache fresh while a page is open, on
+  // when config.usageRefresh is set. GET /api/limits and POST /api/refresh start them.
+  // Tests pass their own spawn.
+  const usageRefresher = config.usageRefresh
+    ? createUsageRefresher({
+      bin: config.usageRefresh.bin,
+      spawn: config.usageRefresh.spawn,
+      cwd: getUsageRefreshDir(config.configDir),
+      lastFetchedAt: () => readUsageFetchedAt(config.claudeJsonPath),
+    })
+    : null;
+
   const app = express();
   // Express names itself in every response unless told not to.
   app.disable('x-powered-by');
@@ -261,6 +282,7 @@ function createServer(config) {
   // readLimits() and readDailyShare() return null rather than throwing, so there is
   // no error branch.
   app.get('/api/limits', (req, res) => {
+    usageRefresher?.seen();
     const limits = readLimits({ claudeJson: config.claudeJsonPath, rateLimits: rateLimitsPath });
     res.json(limits && { ...limits, today: readDailyShare({ rateLimits: rateLimitsPath }) });
   });
@@ -431,6 +453,7 @@ function createServer(config) {
 
   app.post('/api/refresh', (req, res) => {
     clearScans();
+    usageRefresher?.refreshNow();
     res.json({ ok: true });
   });
 
@@ -471,6 +494,7 @@ function createServer(config) {
   server.on('close', () => {
     clearInterval(priceTimer);
     priceChecker.stop();
+    usageRefresher?.stop();
     serverDb.close();
   });
   // Starts the first read of the transcripts without a request. The listen callback
@@ -492,7 +516,7 @@ function createServer(config) {
 // check the port, listen, and close cleanly on Ctrl-C (SIGINT) or a service stop
 // (SIGTERM). Required as a module (the tests), nothing starts.
 if (require.main === module) {
-  const config = { ...loadConfig(), priceCheck: priceCheckOn(process.env) };
+  const config = { ...loadConfig(), priceCheck: priceCheckOn(process.env), usageRefresh: usageRefreshFrom(process.env) };
   const port = getPort(config.port);
   const server = createServer(config);
 
@@ -502,6 +526,9 @@ if (require.main === module) {
     console.log(config.priceCheck
       ? 'Bound to localhost only. The one outbound request is the pricing page, from platform.claude.com, once a day, when a model has no price, and on Check prices.\n'
       : 'Bound to localhost only. The one outbound request is Check prices, to platform.claude.com. The daily and new-model price checks are off.\n');
+    console.log(config.usageRefresh
+      ? `While a page is open, Plan usage runs \`${config.usageRefresh.bin} -p /usage\` every 5 minutes. Claude Code makes that request with its own login.\n`
+      : 'The Plan usage refresh is off.\n');
     server.warmUp();
     if (process.argv.includes('--open')) {
       import('open').then((mod) => mod.default(`http://localhost:${port}`)).catch(() => {});
@@ -528,4 +555,4 @@ if (require.main === module) {
   process.once('SIGTERM', shutdown);
 }
 
-module.exports = { createServer, priceCheckOn };
+module.exports = { createServer, priceCheckOn, usageRefreshFrom };

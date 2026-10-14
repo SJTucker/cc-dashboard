@@ -14,11 +14,13 @@ Run from the checkout under test (the main checkout or a worktree). `server.js` 
 ```bash
 SP=<your scratchpad dir>
 PORT=$(node -e 'const s=require("net").createServer().listen(0,()=>{console.log(s.address().port);s.close()})')
-(CC_DASHBOARD_PRICE_CHECK=off PORT=$PORT nohup node server.js > $SP/server.log 2>&1 & echo $! > $SP/server.pid)
+(CC_DASHBOARD_PRICE_CHECK=off CC_DASHBOARD_USAGE_REFRESH=off PORT=$PORT nohup node server.js > $SP/server.log 2>&1 & echo $! > $SP/server.pid)
 until curl -sf -o /dev/null http://localhost:$PORT/api/limits; do sleep 1; done
 ```
 
 Earlier sessions used fixed ports such as 3611 and 3658. A fixed port can collide with another session's server, so pick a free one.
+
+`CC_DASHBOARD_USAGE_REFRESH=off` stops the server running `claude -p /usage`, which would rewrite the real `~/.claude.json` cache during a check.
 
 Never run `pkill -f "node server.js"`. It kills the owner's own dashboard and other sessions' servers. Stop only your own pid (step 6).
 
@@ -30,7 +32,7 @@ Never run `pkill -f "node server.js"`. It kills the owner's own dashboard and ot
 ```bash
 F=$SP/fixture; mkdir -p $F/projects/demo
 # write one or more transcript .jsonl files into $F/projects/demo
-CLAUDE_CONFIG_DIR=$F RTK_DB=$F/none.db CC_DASHBOARD_PRICE_CHECK=off PORT=$PORT node server.js
+CLAUDE_CONFIG_DIR=$F RTK_DB=$F/none.db CC_DASHBOARD_PRICE_CHECK=off CC_DASHBOARD_USAGE_REFRESH=off PORT=$PORT node server.js
 ```
 
 `RTK_DB` (also read in `lib/config-dir.js`) stops the server reading the real rtk history. An empty `CLAUDE_CONFIG_DIR` gives the empty-state view. To copy real data instead, copy `~/.claude/cc-dashboard/transcripts.db` into `$F/cc-dashboard/` (one earlier session did this with `sqlite3 ... ".backup"`).
