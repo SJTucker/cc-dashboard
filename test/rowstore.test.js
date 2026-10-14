@@ -1714,3 +1714,29 @@ test('the row store passes its own intern map to store.loadAll', () => {
   harness(dir, { store });
   assert.ok(given instanceof Map, 'loadAll received a map to intern through');
 });
+
+test('a transcript read again that lost calls logs one warning naming the file and the count', async (t) => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 's1', ['a', 'b', 'c'], 60_000);
+  const { refresh } = harness(dir);
+  await refresh();
+  const warn = t.mock.method(console, 'warn', () => {});
+  writeFile(dir, 's1', ['a']);
+  await refresh();
+  await refresh(); // unchanged now, so not read again
+  const lost = warn.mock.calls.map((c) => String(c.arguments[0])).filter((m) => m.includes('stored calls'));
+  assert.strictEqual(lost.length, 1);
+  assert.ok(lost[0].includes(file));
+  assert.ok(lost[0].includes('lost 2 of its 3 stored calls'));
+});
+
+test('a transcript that grows logs no lost-call warning', async (t) => {
+  const { dir } = makeProjects();
+  writeFile(dir, 's1', ['a'], 60_000);
+  const { refresh } = harness(dir);
+  await refresh();
+  const warn = t.mock.method(console, 'warn', () => {});
+  writeFile(dir, 's1', ['a', 'b']);
+  await refresh();
+  assert.strictEqual(warn.mock.calls.filter((c) => String(c.arguments[0]).includes('stored calls')).length, 0);
+});
