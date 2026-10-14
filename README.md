@@ -545,8 +545,9 @@ only. History then starts at the oldest transcript on disk. Raising
 - **One kind of network request from the server.** The server fetches
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's
   pricing page as markdown, once a day, when a model with no price of its own
-  appears (at most once an hour), and when you click Check prices in the Models
-  panel. `CC_DASHBOARD_PRICE_CHECK=off` stops the daily and new-model fetches.
+  appears that the last successful check did not already look for (at most once an
+  hour), and when you click Check prices in the Models panel.
+  `CC_DASHBOARD_PRICE_CHECK=off` stops the daily and new-model fetches.
   The URL is a constant in `lib/price-fetch.js`. The page's
   Content-Security-Policy blocks the browser from contacting any other host, so
   the request always comes from the server. The bar charts are hand-drawn SVG (see

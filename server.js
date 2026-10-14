@@ -27,7 +27,6 @@ const { busiestDay, dayTotals } = require('./public/stats.mjs');
 const { loadPriceFile, pricesSource, getPricesPath } = require('./lib/price-store');
 const { fetchPricingPage } = require('./lib/price-fetch');
 const { createPriceChecker } = require('./lib/price-check');
-const { unmatchedModels } = require('./lib/pricing');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -165,9 +164,10 @@ function createServer(config) {
   // Background price checks, on when config.priceCheck is set. A check starts at
   // startup and on an hourly tick while the last successful check is before today,
   // and after /api/summary answers when a model with no price of its own was seen
-  // and no check was attempted in the last hour. A failed check logs one line, and
-  // the next tick tries again. The timer is unref'd so it never keeps the process
-  // alive, and cleared when the server closes.
+  // that no successful check has looked for (priceChecker.newUnmatched) and no check
+  // was attempted in the last hour. A failed check logs one line, and the next tick
+  // tries again. The timer is unref'd so it never keeps the process alive. When the
+  // server closes, the timer is cleared and the checker is stopped.
   const HOUR_MS = 60 * 60 * 1000;
   // A lastCheck after today (the clock was set back) is due too, so the check does not wait for the clock to catch up.
   const checkDue = () => (priceChecker.state().lastCheck || '') !== localDateStr(new Date());
@@ -178,6 +178,7 @@ function createServer(config) {
   function checkInBackground() {
     if (priceChecker.state().running) return;
     priceChecker.check().then((result) => {
+      if (result.kind === 'stopped') return;
       if (result.error) console.warn(`[prices] check failed: ${result.error}`);
       else if (result.added.length || result.changed.length) {
         console.log(`[prices] applied ${result.added.length} new and ${result.changed.length} changed prices from ${result.effectiveFrom}`);
@@ -210,7 +211,7 @@ function createServer(config) {
     try {
       const data = days === 'today' ? await scan('today', 'hour') : await scan(days);
       res.json(publicSummary(data));
-      if (config.priceCheck && unmatchedModels().length && !attemptedLastHour()) checkInBackground();
+      if (config.priceCheck && priceChecker.newUnmatched().length && !attemptedLastHour()) checkInBackground();
     } catch (err) {
       console.error('[API] /api/summary failed:', err);
       res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
@@ -390,8 +391,9 @@ function createServer(config) {
   // the same check the server runs daily and when a model with no price of its own
   // shows up; this route runs it when someone clicks Check prices. A failed check
   // changes no price: 502 when the page could not be fetched, 422 when it did not
-  // parse, 500 for anything else.
-  const CHECK_STATUS = { fetch: 502, parse: 422 };
+  // parse, 409 when the last applied change is dated after today (the clock was set
+  // back), 500 for anything else.
+  const CHECK_STATUS = { fetch: 502, parse: 422, clock: 409 };
   app.post('/api/prices/check', async (req, res) => {
     const result = await priceChecker.check();
     if (result.error) {
@@ -417,6 +419,7 @@ function createServer(config) {
   const server = http.createServer(app);
   server.on('close', () => {
     clearInterval(priceTimer);
+    priceChecker.stop();
     serverDb.close();
   });
   // Starts the first read of the transcripts without a request. The listen callback
