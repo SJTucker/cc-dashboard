@@ -749,6 +749,13 @@ test('a session with a 1-hour write before today and only a read today has a 1-h
   assert.strictEqual(row.cache.expiresAt, NOW - 60_000 + TTL_1H);
 });
 
+test('a session with no transcript calls falls back to the Today calls for its cache', () => {
+  const calls = [cacheCall({ t: NOW - 60_000, write5m: 100_000 })];
+  const row = buildLiveSessions([snapshot()], calls, NOW, {}, {}, [], waitingMap(), { cacheCallsOf: () => [] }).sessions[0];
+  assert.strictEqual(row.cache.ttl, '5m');
+  assert.strictEqual(row.cache.minutesLeft, 4);
+});
+
 test('an expired cache has a negative minutesLeft', () => {
   const t = NOW - 6 * 60_000;
   const cache = liveCache([cacheCall({ t, write5m: 100_000 })]);
