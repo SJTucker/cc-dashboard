@@ -387,6 +387,8 @@ test('validateRow accepts a sound longPrompt and refuses a malformed one', () =>
     { over: 100000, input: 0, output: 2.5 },
     { over: 100000, input: 0.5, output: -1 },
     { over: 100000, input: 0.5 },
+    { over: 100000, input: 0.5, output: 0.5 },
+    { over: 100000, input: 0.5, output: 0.4 },
     'long',
   ]) {
     assert.match(validateRow({ ...HAIKU_55, longPrompt: bad }), /longPrompt/, JSON.stringify(bad));
@@ -490,4 +492,11 @@ test('costParts honours a row cacheReadMult', () => {
 test('costParts gives zeros and priced false for an unrecognised model', () => {
   const p = costParts(oneMillionEach(), 'mystery-model');
   assert.deepStrictEqual(p, { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, saved: 0, priced: false });
+});
+
+test('a mixed-case Claude name is recorded as unmatched with its original spelling', () => {
+  clearUnmatched();
+  assert.strictEqual(priceFor('Claude-Opus-9').match, 'opus', 'the bare opus row prices it');
+  assert.deepStrictEqual(unmatchedModels(), ['Claude-Opus-9']);
+  clearUnmatched();
 });

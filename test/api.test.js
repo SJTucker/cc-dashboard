@@ -734,6 +734,60 @@ test('POST /api/prices/check reports a failed fetch as 502', async (t) => {
   assert.match((await (await fetch(`${base}/api/prices`)).json()).lastError, /503/);
 });
 
+test('POST /api/prices/check answers 409 and writes nothing when the last applied change is dated after today', async (t) => {
+  stubPricingPage(t, PAGE);
+  const logged = t.mock.method(console, 'error', () => {});
+  const { url: base, config } = await startServer(t);
+  const file = path.join(config.configDir, 'cc-dashboard', 'prices.json');
+  const row = { match: 'sonnet-4-6', family: 'sonnet', label: 'Sonnet', name: 'Claude Sonnet 4.6', input: 3, output: 15 };
+  const text = JSON.stringify({ version: 1, snapshots: [{ effectiveFrom: '2999-01-01', appliedAt: '2026-10-14T10:00:00.000Z', source: 'test', rows: [row] }] });
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text);
+  const res = await post(`${base}/api/prices/check`);
+  assert.strictEqual(res.status, 409);
+  assert.strictEqual((await res.json()).error, 'The last applied price change is dated 2999-01-01, after today. Check the system clock.');
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), text);
+  assert.match((await (await fetch(`${base}/api/prices`)).json()).lastError, /Check the system clock/);
+  assert.strictEqual(logged.mock.calls.length, 0, 'a 409 is an answer the page shows, not a server error to log');
+});
+
+test('POST /api/prices/check answers 500 and logs it when prices.json cannot be used or written', async (t) => {
+  stubPricingPage(t, PAGE);
+  const logged = t.mock.method(console, 'error', () => {});
+  const warned = t.mock.method(console, 'warn', () => {});
+  const { url: base, config } = await startServer(t);
+  const dir = path.join(config.configDir, 'cc-dashboard');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'prices.json'), '{ not json');
+  const unreadable = await post(`${base}/api/prices/check`);
+  assert.strictEqual(unreadable.status, 500);
+  assert.match((await unreadable.json()).error, /The prices file is unreadable/);
+  assert.strictEqual(fs.readFileSync(path.join(dir, 'prices.json'), 'utf8'), '{ not json');
+  assert.ok(warned.mock.calls.some((c) => /\[prices\] ignoring .*not valid JSON/.test(c.arguments[0])), 'the unreadable file was reported');
+
+  fs.rmSync(path.join(dir, 'prices.json'));
+  fs.chmodSync(dir, 0o555); // the folder exists, so the write cannot create the file in it
+  const unwritable = await post(`${base}/api/prices/check`);
+  assert.strictEqual(unwritable.status, 500);
+  assert.match((await unwritable.json()).error, /^Could not write .*prices\.json/);
+  assert.strictEqual(logged.mock.calls.length, 2);
+  assert.ok(logged.mock.calls.every((c) => c.arguments[0] === '[API] /api/prices/check failed:'));
+});
+
+test('POST /api/prices/check answers 500 and logs it for an error that is not a fetch or a parse refusal', async (t) => {
+  const { PRICING_URL } = require('../lib/price-fetch');
+  const realFetch = globalThis.fetch;
+  // A response whose text() is null: parsePricingPage(null) throws a TypeError.
+  globalThis.fetch = (url, opts) => (String(url) === PRICING_URL ? Promise.resolve({ ok: true, status: 200, text: async () => null }) : realFetch(url, opts));
+  t.after(() => { globalThis.fetch = realFetch; });
+  const logged = t.mock.method(console, 'error', () => {});
+  const base = await listen(t);
+  const res = await post(`${base}/api/prices/check`);
+  assert.strictEqual(res.status, 500);
+  assert.match((await res.json()).error, /null/);
+  assert.strictEqual(logged.mock.calls.length, 1);
+});
+
 test('the price check route refuses a cross-site request', async (t) => {
   stubPricingPage(t, PAGE);
   const base = await listen(t);
@@ -1136,12 +1190,10 @@ test('the dismiss routes answer 503 within 1000 ms under the review lock, reads 
 
 test('a malformed JSON body on the dismiss route answers JSON 400, not an HTML page', async (t) => {
   const { url: base } = await startServer(t);
-  for (const url of [dismissUrl(base, 'sess-a', 0)]) {
-    const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json' });
-    assert.strictEqual(res.status, 400, url);
-    assert.match(res.headers.get('content-type'), /application\/json/, url);
-    assert.strictEqual(typeof (await res.json()).error, 'string', url);
-  }
+  const res = await fetch(dismissUrl(base, 'sess-a', 0), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'not json' });
+  assert.strictEqual(res.status, 400);
+  assert.match(res.headers.get('content-type'), /application\/json/);
+  assert.strictEqual(typeof (await res.json()).error, 'string');
 });
 
 // ---- background price checks -----------------------------------------------
@@ -1248,4 +1300,87 @@ test('a failed background check logs one line and leaves the server answering', 
   assert.match((await (await fetch(`${url}/api/prices`)).json()).lastError, /503/);
   assert.strictEqual((await fetch(`${url}/api/summary?days=today`)).status, 200);
   assert.strictEqual(failed().length, 1);
+});
+
+// The hourly tick and the close handler. setInterval is mocked, so the test sets
+// the tick off itself instead of waiting an hour.
+test('the hourly tick checks only when the last check is before today, and close stops the tick', async (t) => {
+  t.mock.timers.enable({ apis: ['setInterval'] });
+  const setSpy = t.mock.method(globalThis, 'setInterval');
+  const clearSpy = t.mock.method(globalThis, 'clearInterval');
+  stubPricingPage(t, PAGE);
+  const pages = countPricingFetches(t);
+  const { server, config } = await startServer(t, { priceCheck: true, lastCheck: TODAY() });
+  const tick = setSpy.mock.calls.find((c) => c.arguments[1] === 60 * 60 * 1000);
+  assert.ok(tick, 'the server set an hourly interval');
+  const file = path.join(config.configDir, 'cc-dashboard', 'prices.json');
+  const store = require('../lib/price-store');
+  const makeDue = () => {
+    fs.writeFileSync(file, JSON.stringify({ version: 1, lastCheck: '2000-01-01', snapshots: [] }));
+    store.loadPriceFile(file);
+  };
+  const lastCheck = () => JSON.parse(fs.readFileSync(file, 'utf8')).lastCheck;
+
+  t.mock.timers.tick(60 * 60 * 1000);
+  await sleep(100);
+  assert.strictEqual(pages.calls, 0, 'checked today, so the tick does not fetch');
+
+  makeDue();
+  t.mock.timers.tick(60 * 60 * 1000);
+  assert.ok(await until(() => pages.calls === 1 && lastCheck() === TODAY()), 'the tick started a check that recorded lastCheck');
+
+  makeDue();
+  assert.strictEqual(clearSpy.mock.calls.length, 0);
+  await new Promise((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+  assert.ok(clearSpy.mock.calls.some((c) => c.arguments[0] === tick.result), 'close cleared the hourly interval');
+  t.mock.timers.tick(60 * 60 * 1000);
+  await sleep(100);
+  assert.strictEqual(pages.calls, 1, 'no tick runs after the server closed');
+  assert.strictEqual(lastCheck(), '2000-01-01');
+});
+
+test('closing the server while a check is fetching leaves prices.json unwritten and logs no failure', async (t) => {
+  const { PRICING_URL } = require('../lib/price-fetch');
+  const realFetch = globalThis.fetch;
+  let release;
+  const gate = new Promise((resolve) => { release = resolve; });
+  let requested = 0;
+  globalThis.fetch = async (url, opts) => {
+    if (String(url) !== PRICING_URL) return realFetch(url, opts);
+    requested += 1;
+    await gate;
+    return new Response(PAGE, { status: 200 });
+  };
+  t.after(() => { globalThis.fetch = realFetch; });
+  const warn = t.mock.method(console, 'warn', () => {});
+  const { server, config } = await startServer(t, { priceCheck: true }); // no lastCheck: the startup check is due
+  assert.ok(await until(() => requested === 1), 'the startup check is fetching');
+  await new Promise((resolve) => { server.close(() => resolve()); server.closeAllConnections(); });
+  release();
+  await sleep(200);
+  assert.strictEqual(fs.existsSync(path.join(config.configDir, 'cc-dashboard', 'prices.json')), false, 'the check wrote nothing after the close');
+  assert.strictEqual(warn.mock.calls.filter((c) => /\[prices\] check failed/.test(c.arguments[0])).length, 0);
+});
+
+// A page that never names a model leaves it unpriced after every check. The check
+// has looked for the name once, so the summary does not start another one an hour later.
+test('a Claude model the pricing page never names starts one check, not one an hour', async (t) => {
+  const changed = PAGE.replace('| Claude Fable 5.1 ', '| Claude Opus 6 | $5 / MTok | $6.25 / MTok | $10 / MTok | $0.50 / MTok | $25 / MTok |\n| Claude Fable 5.1 ');
+  stubPricingPage(t, changed);
+  const pages = countPricingFetches(t);
+  const start = new Date();
+  start.setHours(10, 30, 0, 0); // the logged call is at 10:00 today, and an hour later is still today
+  t.mock.timers.enable({ apis: ['Date'], now: start.getTime() });
+  const { url } = await startServer(t, { model: 'claude-zeta-9', priceCheck: true, lastCheck: TODAY() });
+  // Date is frozen, so until() cannot be used here: it ends on Date.now().
+  const waitFor = async (fn) => { for (let i = 0; i < 120 && !(await fn()); i += 1) await sleep(25); return fn(); };
+
+  await fetch(`${url}/api/summary?days=today`);
+  assert.ok(await waitFor(() => pages.calls === 1), 'the unmatched model started a check');
+  assert.ok(await waitFor(() => console.log.mock.calls.some((c) => /\[prices\] applied 1 new/.test(c.arguments[0]))), 'the check applied the page');
+
+  t.mock.timers.tick(61 * 60 * 1000);
+  await fetch(`${url}/api/summary?days=today`); // the scan records the name again
+  await sleep(300);
+  assert.strictEqual(pages.calls, 1, 'that check already looked for this name');
 });

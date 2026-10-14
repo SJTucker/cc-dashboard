@@ -10,9 +10,12 @@ import { checkLines, sourceLine } from '../price-lines.mjs';
 // that scan.
 let onApplied = () => {};
 
-async function postJson(url) {
+// An answer that is not JSON (an HTML error page from a proxy or a crashed route)
+// gives { error: 'HTTP <status>' }, so the page shows the status and not a
+// JSON parse message.
+export async function postJson(url) {
   const res = await fetch(url, { method: 'POST' });
-  return res.json();
+  return res.json().catch(() => ({ error: `HTTP ${res.status}` }));
 }
 
 export async function loadPricesSource() {

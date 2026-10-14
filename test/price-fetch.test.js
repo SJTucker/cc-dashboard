@@ -179,3 +179,54 @@ test('diffPrices counts a changed or missing longPrompt as a change', () => {
   const none = diffPrices(parsed, tweak(({ longPrompt, ...rest }) => rest));
   assert.deepStrictEqual(none.changed.map((c) => c.after.match), ['haiku-5-5']);
 });
+
+test('a tiered name in the Fast mode table is skipped with a reason, and the page is still read', () => {
+  const fastTier = '| Claude Haiku 5.5 (for prompts up to 100,000 tokens) | $0.20 / MTok | $1 / MTok |';
+  const page = PAGE.replace(/\| Claude Opus 5 \/ Claude Opus 4\.8 .*\n/, (row) => `${row}${fastTier}\n`);
+  const { rows, skipped } = parsePricingPage(page);
+  assert.strictEqual(rows.length, 20);
+  assert.deepStrictEqual(skipped, [{ name: 'Claude Haiku 5.5 (for prompts up to 100,000 tokens)', reason: 'fast rates by prompt length are not supported' }]);
+  assert.strictEqual(rows.find((r) => r.match === 'haiku-5-5').fast, undefined, 'no fast rate is set from a tiered name');
+  assert.deepStrictEqual(rows.find((r) => r.match === 'opus-4-8').fast, { input: 10, output: 50 }, 'the untiered fast rows are still read');
+});
+
+test('a plain row and a tier row of the same model are refused as listed twice, in either order', () => {
+  const plain = '| Claude Haiku 5.5 | $0.10 / MTok | $0.125 / MTok | $0.20 / MTok | $0.01 / MTok | $0.50 / MTok |';
+  const { lines, up, over } = tierLineIndexes(PAGE);
+  const plainFirst = [...lines.slice(0, up), plain, ...lines.slice(up)].join('\n');
+  const plainLast = [...lines.slice(0, over + 1), plain, ...lines.slice(over + 1)].join('\n');
+  refused(plainFirst, /Claude Haiku 5\.5 \(for prompts up to 100,000 tokens\) is listed twice/);
+  refused(plainLast, /^Claude Haiku 5\.5 is listed twice/);
+});
+
+// Review Focus 1: a Fast mode row for a model the Model pricing table skipped.
+test('a Fast mode row for a model the Model pricing table skipped is skipped too, not refused', () => {
+  const zephyr = '| Claude Zephyr 1 | $1 / MTok | $1.25 / MTok | $2 / MTok | $0.10 / MTok | $5 / MTok |';
+  const page = PAGE
+    .replace('| Claude Fable 5.1 ', `${zephyr}\n| Claude Fable 5.1 `)
+    .replace(/\| Claude Opus 5 \/ Claude Opus 4\.8 .*\n/, (row) => `${row}| Claude Zephyr 1 | $2 / MTok | $10 / MTok |\n`);
+  const { rows, skipped } = parsePricingPage(page);
+  assert.strictEqual(rows.length, 20);
+  assert.deepStrictEqual(skipped, [{ name: 'Claude Zephyr 1', reason: 'unknown model family "zephyr"' }], 'listed once, with the Model table reason');
+  assert.deepStrictEqual(rows.find((r) => r.match === 'opus-4-8').fast, { input: 10, output: 50 });
+});
+
+// Review Focus 2: footnote markers on Fast mode names.
+test('a Fast mode name with a footnote marker is read like a Model pricing name', () => {
+  const page = PAGE.replace('| Claude Opus 5.5                 |', '| Claude Opus 5.5<sup>2</sup>             |');
+  assert.notStrictEqual(page, PAGE, 'the fixture row was found');
+  assert.deepStrictEqual(parsePricingPage(page).rows.find((r) => r.match === 'opus-5-5').fast, { input: 8, output: 40 });
+});
+
+test('a Fast mode row for a model the Model pricing table skipped as a tiered row is skipped too, not refused', () => {
+  const zephyr = [
+    '| Claude Zephyr 1 (for prompts up to 100,000 tokens) | $1 / MTok | $1.25 / MTok | $2 / MTok | $0.10 / MTok | $5 / MTok |',
+    '| Claude Zephyr 1 (for prompts over 100,000 tokens) | $2 / MTok | $2.50 / MTok | $4 / MTok | $0.20 / MTok | $10 / MTok |',
+  ].join('\n');
+  const page = PAGE
+    .replace('| Claude Fable 5.1 ', `${zephyr}\n| Claude Fable 5.1 `)
+    .replace(/\| Claude Opus 5 \/ Claude Opus 4\.8 .*\n/, (row) => `${row}| Claude Zephyr 1 | $2 / MTok | $10 / MTok |\n`);
+  const { rows, skipped } = parsePricingPage(page);
+  assert.strictEqual(rows.length, 20);
+  assert.deepStrictEqual(skipped.map((s) => s.name), ['Claude Zephyr 1 (for prompts up to 100,000 tokens)', 'Claude Zephyr 1 (for prompts over 100,000 tokens)']);
+});

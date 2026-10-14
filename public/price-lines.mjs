@@ -38,6 +38,7 @@ export function sourceLine(source) {
     ? `Prices: built-in, checked ${source.lastCheck || source.date}`
     : `Prices: from Anthropic's pricing page, effective ${source.date}${source.lastCheck ? `, checked ${source.lastCheck}` : ''}`;
   if (source.lastError) text += ` · last check failed: ${source.lastError}`;
-  if (source.error) text += ` · prices.json ignored: ${source.error}`;
+  // With applied snapshots in use, the file was good at an earlier read (lib/price-store.js).
+  if (source.error) text += ` · prices.json ${source.snapshots ? 'unreadable, last good prices kept' : 'ignored'}: ${source.error}`;
   return text;
 }
