@@ -34,15 +34,17 @@
   </svg>
   <div class="page">
     <header class="topbar">
-      <h1><img class="title-logo" src="/favicon.svg" alt="" width="20" height="20" />Claude Code Dashboard</h1>
-      <div class="status-strip" id="statusStrip">
-        <span id="liveDot" class="live-dot"><i class="live-ring" aria-hidden="true"></i><span class="live-text">Link live</span></span>
-        <span class="strip-item">Sync <b id="stripSync">—</b></span>
-        <span class="strip-item strip-extra">Sessions <b id="stripSessions">—</b></span>
-        <span class="strip-item strip-extra">API calls <b id="stripCalls">—</b></span>
-        <span id="stripLimit" class="strip-item strip-limit" hidden></span>
+      <div class="topbar-title">
+        <h1><img class="title-logo" src="/favicon.svg" alt="" width="20" height="20" />Claude Code Dashboard</h1>
+        <span id="loadStatus" class="load-status" role="status"></span>
+        <div class="status-strip" id="statusStrip">
+          <span id="liveDot" class="live-dot"><i class="live-ring" aria-hidden="true"></i><span class="live-text">Link live</span></span>
+          <span class="strip-item">Sync <b id="stripSync">—</b></span>
+          <span class="strip-item strip-extra">Sessions <b id="stripSessions">—</b></span>
+          <span class="strip-item strip-extra">API calls <b id="stripCalls">—</b></span>
+          <span id="stripLimit" class="strip-item strip-limit" hidden></span>
+        </div>
       </div>
-      <span id="loadStatus" class="load-status" role="status"></span>
       <div class="tab-switch" id="tabSwitch" role="group" aria-label="View">
         <button type="button" data-tab="now" aria-pressed="true">Now</button>
         <button type="button" data-tab="analysis" aria-pressed="false">Analysis</button>
