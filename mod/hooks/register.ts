@@ -16,11 +16,18 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevel
 // (checkSetup). It also shows a dismissable plan limit band above the prompt when the
 // Session or Week window passes 75% or 90%, and shares the dismissal between running
 // sessions through limit-warnings.json.
-// The scripts are the only writers of those files, so the file formats, the atomic
-// writes and the freshness checks are theirs. The activity files are the one
-// exception: the mod writes them itself with $.fs.write, because one writer per
-// session keeps a session's states in order, where a script started per event can
-// finish out of order.
+// The bin/ scripts write the session, usage, update-verdict and review files, so the
+// formats, the atomic writes and the freshness checks of those files are theirs.
+// The mod writes five formats itself with $.fs.write, under <config dir>/cc-dashboard/:
+//   activity/<session id>.json   the session's state. Read by lib/activity.js.
+//   agent-usage/<agent id>.json  each model request of a subagent (steps.ts). Read by lib/agent-steps.js.
+//   changes/<session id>.json    the setup changes checkSetup found. Read by collectMarkers in lib/changes.js.
+//   setup/<name>.json            the stored copy of each watched setup file. Read back by checkSetup.
+//   limit-warnings.json          the dismissed plan limit levels. Read by every running session's mod.
+// Activity has one writer per session, which keeps a session's states in order, where a
+// script started per event can finish out of order. The server reads the first three
+// formats, and the CONTRACT block in register.test.ts holds a sample of each, which
+// test/mod-contract.test.js parses with the server's readers.
 //
 // Only engine events are hooked. Claude Code's cc-plugin-sec-default skips every
 // classic.* hook of an installed plugin, so classic SessionStart and SessionEnd
