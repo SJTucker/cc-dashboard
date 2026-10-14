@@ -1081,7 +1081,7 @@ function countPricingFetches(t) {
     if (String(url) === PRICING_URL) counter.calls += 1;
     return stubbed(url, opts);
   };
-  t.after(() => { globalThis.fetch = stubbed; });
+  // stubPricingPage's t.after restores the real fetch, which removes both wrappers.
   return counter;
 }
 
@@ -1133,12 +1133,14 @@ test('with priceCheck on and lastCheck today, startup does not fetch', async (t)
 });
 
 test('an unmatched model after /api/summary starts one check, and not another within the hour', async (t) => {
-  stubPricingPage(t, PAGE);
+  // A failed check leaves the unmatched set, so the second summary reaches the hour guard.
+  stubPricingPage(t, 'unavailable', 503);
   const pages = countPricingFetches(t);
+  const warn = t.mock.method(console, 'warn', () => {});
   const { url } = await startServer(t, { model: 'claude-zeta-9', priceCheck: true, lastCheck: TODAY() });
   await fetch(`${url}/api/summary?days=today`);
   assert.ok(await until(() => pages.calls === 1), 'the unmatched model started a check');
-  await sleep(200);
+  assert.ok(await until(() => warn.mock.calls.some((c) => /\[prices\] check failed/.test(c.arguments[0]))), 'the check failed');
   await fetch(`${url}/api/summary?days=today`);
   await sleep(300);
   assert.strictEqual(pages.calls, 1, 'a check was attempted in the last hour');
