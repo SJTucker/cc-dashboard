@@ -1,7 +1,7 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
 import { baseName, changesFileText, commandPaths, fallbackLabel, cleanLabel, folderFile, includedPaths, lineDiff, readSetupState, settingsChanges, snapshotName } from './setup'
-import type { Kind, SetupEntry, SetupState, Snapshot, Watched } from './setup'
+import type { SetupEntry, SetupState, Snapshot, Watched } from './setup'
 import { projectFolder, rateLimitsInput, statuslineRecord } from './statusline'
 import type { Frozen } from './statusline'
 import { newestTool, setState, toolDetail, toolsOf } from './activity'
@@ -456,12 +456,13 @@ function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
 }
 
 // Drops the agent's steps and its write chain once its last queued write settles.
-// A step queued after this call finds no entry and starts a new list from the file.
+// A step queued before the chain settles replaces the chain, so this waits again on
+// the new one. A step queued after the entries are gone starts a new list from the file.
 function forgetAgentSteps(agentId: string) {
   const chain = stepWrites.get(agentId)
   if (!chain) return
   chain.finally(() => {
-    if (stepWrites.get(agentId) !== chain) return
+    if (stepWrites.get(agentId) !== chain) return forgetAgentSteps(agentId)
     stepWrites.delete(agentId)
     agentSteps.delete(agentId)
   })
@@ -667,13 +668,13 @@ function armHandoff($: EngineInterface, id: string) {
         if (armed === null) return
         const { wait, expiresAt } = armed
         const fire = $.clock.after(wait, () => {
-          fireHandoff($, id, expiresAt).catch((err) => fail($, `handoff timer failed (${errorText(err)})`))
+          fireHandoff($, id, expiresAt).catch((err) => fail($, `handoff timer failed (${errorName(err)})`))
         })
         handoffTimers.set(id, fire)
       })
       .catch((err) => {
         if (handoffTimers.get(id) === arming) handoffTimers.delete(id)
-        fail($, `handoff timer failed (${errorText(err)})`)
+        fail($, `handoff timer failed (${errorName(err)})`)
       })
   })
   handoffTimers.set(id, arming)
