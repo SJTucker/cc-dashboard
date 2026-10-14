@@ -357,3 +357,8 @@ test('store.close leaves a handle that getDb gave the store usable', (t) => {
   store.close();
   assert.deepStrictEqual({ ...handle.prepare('SELECT 1 AS x').get() }, { x: 1 });
 });
+
+test('migration 5 to 6 leaves the rows as they are', () => {
+  const old = rowsOf({ toolUses: [{ key: 'm:r:0', t: 1, name: 'Bash', detail: 'x', model: 'm' }] });
+  assert.strictEqual(MIGRATIONS[5](old), old);
+});
