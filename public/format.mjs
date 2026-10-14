@@ -33,7 +33,7 @@ export function thinkingShare(x) {
 // is 0, which happens when every model in the range is unpriced.
 export function thinkingNote(s) {
   if (!s.apiCalls) return '';
-  const coverage = `${Math.round((s.thinkingCalls / s.apiCalls) * 100)}% of calls report it`;
+  const coverage = `${Math.round(((s.thinkingCalls ?? 0) / s.apiCalls) * 100)}% of calls report it`;
   return s.thinkingCost > 0 ? `${formatCost(s.thinkingCost)} at output rates · ${coverage}` : coverage;
 }
 
