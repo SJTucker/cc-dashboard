@@ -162,6 +162,7 @@ only variable that moves them.
 | `PORT` | `3600` | The server's port. `--port` takes precedence. |
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's config folder, and so `<cfg>` for every path in "Files outside the repo". A leading `~` is expanded. |
 | `RTK_DB` | `~/Library/Application Support/rtk/history.db` | rtk's history. A leading `~` is expanded. |
+| `CHANGES_FILE` | `<clone>/changes.json` | The hand-written setup changes file. A leading `~` is expanded. |
 
 Set a variable for the server when you start it, for example
 `CLAUDE_CONFIG_DIR=/path/to/.claude npm start`.
@@ -175,8 +176,7 @@ Code does not write to. The mod also reads `HOME`, to find `~/.claude` when
 `CLAUDE_CONFIG_DIR` is unset, to find rtk's config, and to expand a leading `~` in
 paths. Without `HOME` the mod records no setup changes.
 
-`CHANGES_FILE` also exists. It points the server at another `changes.json` so the
-tests can avoid the one in the clone.
+Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 
 ## Files outside the repo
 

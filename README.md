@@ -515,7 +515,8 @@ It is gitignored, and the dashboard only reads it:
 that whole day in "after". `kind` is one of `plugin`, `skill`, `hook`,
 `claude-md`, `rtk`, `config`, `effort`, `model`, `claude-code`, `other`, and picks
 the marker's shape. Keep the file somewhere else with
-`CHANGES_FILE=~/path/changes.json npm start`.
+`CHANGES_FILE=~/path/changes.json npm start`. An entry dated before the oldest
+transcript, or in the future, does not show on the chart.
 
 A before/after is only as clean as its window. When another change falls within 7
 days either side, the panel lists it, and the numbers cover both.
