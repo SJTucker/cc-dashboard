@@ -10,8 +10,11 @@ const { openDatabase, getStorePath } = require('../lib/db');
 
 // Boots the server on a config whose projects/demo holds one Sonnet call at 10:00
 // today. Resolves to { server, config, port, url }.
-async function startServer(t) {
-  const config = helpers.testConfig(t, 'api');
+// Options: model (the logged call's model), priceCheck (turns the background price
+// checks on, as the CLI does) and lastCheck (a date string written to prices.json first).
+async function startServer(t, { model = 'claude-sonnet-4-6-20260115', priceCheck, lastCheck } = {}) {
+  require('../lib/pricing').clearUnmatched();
+  const config = { ...helpers.testConfig(t, 'api'), priceCheck };
   const now = new Date();
   now.setHours(10, 0, 0, 0);
   const line = JSON.stringify({
@@ -19,11 +22,15 @@ async function startServer(t) {
     requestId: 'req-1',
     message: {
       id: 'msg-1',
-      model: 'claude-sonnet-4-6-20260115',
+      model,
       usage: { input_tokens: 1000, output_tokens: 200 },
     },
   });
   fs.writeFileSync(path.join(config.configDir, 'projects', 'demo', 'session.jsonl'), line + '\n');
+  if (lastCheck) {
+    fs.mkdirSync(path.join(config.configDir, 'cc-dashboard'), { recursive: true });
+    fs.writeFileSync(path.join(config.configDir, 'cc-dashboard', 'prices.json'), JSON.stringify({ version: 1, lastCheck, snapshots: [] }));
+  }
   return helpers.bootServer(t, config);
 }
 
@@ -1060,4 +1067,101 @@ test('a malformed JSON body on the dismiss route answers JSON 400, not an HTML p
     assert.match(res.headers.get('content-type'), /application\/json/, url);
     assert.strictEqual(typeof (await res.json()).error, 'string', url);
   }
+});
+
+// ---- background price checks -----------------------------------------------
+const { priceCheckOn } = require('../server');
+
+// Call after stubPricingPage: wraps the stub and counts the requests for the pricing page.
+function countPricingFetches(t) {
+  const { PRICING_URL } = require('../lib/price-fetch');
+  const stubbed = globalThis.fetch;
+  const counter = { calls: 0 };
+  globalThis.fetch = (url, opts) => {
+    if (String(url) === PRICING_URL) counter.calls += 1;
+    return stubbed(url, opts);
+  };
+  t.after(() => { globalThis.fetch = stubbed; });
+  return counter;
+}
+
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+async function until(fn, ms = 3000) {
+  const end = Date.now() + ms;
+  while (Date.now() < end) {
+    if (await fn()) return true;
+    await sleep(25);
+  }
+  return false;
+}
+
+const TODAY = () => localDateStr(new Date());
+
+test('priceCheckOn is false only for off, in any case', () => {
+  assert.strictEqual(priceCheckOn({}), true);
+  assert.strictEqual(priceCheckOn({ CC_DASHBOARD_PRICE_CHECK: 'on' }), true);
+  assert.strictEqual(priceCheckOn({ CC_DASHBOARD_PRICE_CHECK: '' }), true);
+  assert.strictEqual(priceCheckOn({ CC_DASHBOARD_PRICE_CHECK: 'off' }), false);
+  assert.strictEqual(priceCheckOn({ CC_DASHBOARD_PRICE_CHECK: ' OFF ' }), false);
+});
+
+test('with priceCheck unset the server never fetches the pricing page, even for an unpriced model', async (t) => {
+  stubPricingPage(t, PAGE);
+  const pages = countPricingFetches(t);
+  const { url } = await startServer(t, { model: 'claude-zeta-9' });
+  await fetch(`${url}/api/summary?days=today`);
+  await sleep(300);
+  assert.strictEqual(pages.calls, 0);
+});
+
+test('with priceCheck on, startup checks once when lastCheck is before today and records it', async (t) => {
+  stubPricingPage(t, PAGE);
+  const pages = countPricingFetches(t);
+  const { url, config } = await startServer(t, { priceCheck: true });
+  const file = path.join(config.configDir, 'cc-dashboard', 'prices.json');
+  assert.ok(await until(() => fs.existsSync(file) && JSON.parse(fs.readFileSync(file, 'utf8')).lastCheck === TODAY()), 'lastCheck was written');
+  assert.strictEqual(pages.calls, 1);
+  assert.strictEqual((await (await fetch(`${url}/api/prices`)).json()).lastCheck, TODAY());
+});
+
+test('with priceCheck on and lastCheck today, startup does not fetch', async (t) => {
+  stubPricingPage(t, PAGE);
+  const pages = countPricingFetches(t);
+  await startServer(t, { priceCheck: true, lastCheck: TODAY() });
+  await sleep(300);
+  assert.strictEqual(pages.calls, 0);
+});
+
+test('an unmatched model after /api/summary starts one check, and not another within the hour', async (t) => {
+  stubPricingPage(t, PAGE);
+  const pages = countPricingFetches(t);
+  const { url } = await startServer(t, { model: 'claude-zeta-9', priceCheck: true, lastCheck: TODAY() });
+  await fetch(`${url}/api/summary?days=today`);
+  assert.ok(await until(() => pages.calls === 1), 'the unmatched model started a check');
+  await sleep(200);
+  await fetch(`${url}/api/summary?days=today`);
+  await sleep(300);
+  assert.strictEqual(pages.calls, 1, 'a check was attempted in the last hour');
+});
+
+test('a model with its own price does not start a check', async (t) => {
+  stubPricingPage(t, PAGE);
+  const pages = countPricingFetches(t);
+  const { url } = await startServer(t, { priceCheck: true, lastCheck: TODAY() });
+  await fetch(`${url}/api/summary?days=today`);
+  await sleep(300);
+  assert.strictEqual(pages.calls, 0);
+});
+
+test('a failed background check logs one line and leaves the server answering', async (t) => {
+  stubPricingPage(t, 'unavailable', 503);
+  const pages = countPricingFetches(t);
+  const warn = t.mock.method(console, 'warn', () => {});
+  const { url } = await startServer(t, { priceCheck: true });
+  assert.ok(await until(() => pages.calls === 1));
+  const failed = () => warn.mock.calls.filter((c) => /\[prices\] check failed: .*503/.test(c.arguments[0]));
+  assert.ok(await until(() => failed().length === 1), 'the failure was logged');
+  assert.match((await (await fetch(`${url}/api/prices`)).json()).lastError, /503/);
+  assert.strictEqual((await fetch(`${url}/api/summary?days=today`)).status, 200);
+  assert.strictEqual(failed().length, 1);
 });

@@ -27,6 +27,7 @@ const { busiestDay, dayTotals } = require('./public/stats.mjs');
 const { loadPriceFile, pricesSource, getPricesPath } = require('./lib/price-store');
 const { fetchPricingPage } = require('./lib/price-fetch');
 const { createPriceChecker } = require('./lib/price-check');
+const { unmatchedModels } = require('./lib/pricing');
 
 function getArg(name) {
   const idx = process.argv.findIndex((a) => a === `--${name}` || a.startsWith(`--${name}=`));
@@ -128,6 +129,13 @@ function suggestionTarget(req, res) {
 // closes. The price table is the exception: lib/pricing.js holds it for the whole
 // process, so the last prices.json loaded or applied sets it for every server in
 // the process.
+// CC_DASHBOARD_PRICE_CHECK=off stops the daily and new-model price checks. Anything
+// else, or no value, leaves them on. Read once, in the program block below: the
+// tests build their config with loadConfig and must not start background fetches.
+function priceCheckOn(env) {
+  return String(env.CC_DASHBOARD_PRICE_CHECK || '').trim().toLowerCase() !== 'off';
+}
+
 function createServer(config) {
   const projectsDir = getProjectsDir(config.configDir);
   const storePath = getStorePath(config.configDir);
@@ -154,6 +162,34 @@ function createServer(config) {
   // scans are dropped so the next request computes costs with the new prices.
   const priceChecker = createPriceChecker({ file: pricesPath, fetchPage: fetchPricingPage, onApplied: clearScans });
 
+  // Background price checks, on when config.priceCheck is set. A check starts at
+  // startup and on an hourly tick while the last successful check is before today,
+  // and after /api/summary answers when a model with no price of its own was seen
+  // and no check was attempted in the last hour. A failed check logs one line, and
+  // the next tick tries again. The timer is unref'd so it never keeps the process
+  // alive, and cleared when the server closes.
+  const HOUR_MS = 60 * 60 * 1000;
+  const checkDue = () => (priceChecker.state().lastCheck || '') < localDateStr(new Date());
+  const attemptedLastHour = () => {
+    const at = priceChecker.state().lastAttemptAt;
+    return at != null && Date.now() - at < HOUR_MS;
+  };
+  function checkInBackground() {
+    if (priceChecker.state().running) return;
+    priceChecker.check().then((result) => {
+      if (result.error) console.warn(`[prices] check failed: ${result.error}`);
+      else if (result.added.length || result.changed.length) {
+        console.log(`[prices] applied ${result.added.length} new and ${result.changed.length} changed prices from ${result.effectiveFrom}`);
+      }
+    });
+  }
+  let priceTimer = null;
+  if (config.priceCheck) {
+    if (checkDue()) checkInBackground();
+    priceTimer = setInterval(() => { if (checkDue()) checkInBackground(); }, HOUR_MS);
+    priceTimer.unref();
+  }
+
   const app = express();
   // Express names itself in every response unless told not to.
   app.disable('x-powered-by');
@@ -173,6 +209,7 @@ function createServer(config) {
     try {
       const data = days === 'today' ? await scan('today', 'hour') : await scan(days);
       res.json(publicSummary(data));
+      if (config.priceCheck && unmatchedModels().length && !attemptedLastHour()) checkInBackground();
     } catch (err) {
       console.error('[API] /api/summary failed:', err);
       res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
@@ -360,7 +397,10 @@ function createServer(config) {
   });
 
   const server = http.createServer(app);
-  server.on('close', () => serverDb.close());
+  server.on('close', () => {
+    clearInterval(priceTimer);
+    serverDb.close();
+  });
   // Starts the first read of the transcripts without a request. The listen callback
   // calls it, so the stat pass and the synchronous store.loadAll run before the
   // browser's first request arrives instead of while that request waits. Nothing
@@ -380,14 +420,16 @@ function createServer(config) {
 // check the port, listen, and close cleanly on Ctrl-C (SIGINT) or a service stop
 // (SIGTERM). Required as a module (the tests), nothing starts.
 if (require.main === module) {
-  const config = loadConfig();
+  const config = { ...loadConfig(), priceCheck: priceCheckOn(process.env) };
   const port = getPort(config.port);
   const server = createServer(config);
 
   server.listen(port, HOST, () => {
     console.log(`\nClaude Code Dashboard running at http://localhost:${port}`);
     console.log(`Reading logs from: ${getProjectsDir(config.configDir)}`);
-    console.log('Bound to localhost only. The one outbound request is Check prices, to platform.claude.com.\n');
+    console.log(config.priceCheck
+      ? 'Bound to localhost only. The one outbound request is the pricing page, from platform.claude.com, once a day, when a model has no price, and on Check prices.\n'
+      : 'Bound to localhost only. The one outbound request is Check prices, to platform.claude.com. The daily and new-model price checks are off.\n');
     server.warmUp();
     if (process.argv.includes('--open')) {
       import('open').then((mod) => mod.default(`http://localhost:${port}`)).catch(() => {});
@@ -414,4 +456,4 @@ if (require.main === module) {
   process.once('SIGTERM', shutdown);
 }
 
-module.exports = { createServer };
+module.exports = { createServer, priceCheckOn };

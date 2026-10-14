@@ -163,6 +163,7 @@ only variable that moves them.
 | `CLAUDE_CONFIG_DIR` | `~/.claude` | Claude Code's config folder, and so `<cfg>` for every path in "Files outside the repo". A leading `~` is expanded. |
 | `RTK_DB` | `~/Library/Application Support/rtk/history.db` | rtk's history. A leading `~` is expanded. |
 | `CHANGES_FILE` | `<clone>/changes.json` | The hand-written setup changes file. A leading `~` is expanded. |
+| `CC_DASHBOARD_PRICE_CHECK` | on | The server's price checks. `off` (in any case) stops the daily check and the new-model check. The Check prices button still works. |
 
 Set a variable for the server when you start it, for example
 `CLAUDE_CONFIG_DIR=/path/to/.claude npm start`.
@@ -196,7 +197,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
 | `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
 | `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session`. It also holds the rows of `agent-usage/` files. |
-| `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server, when you click Apply |
+| `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server's price check: daily, when a Claude model with no price of its own appears, and when you click Check prices. It holds the dated price changes and the date of the last check. |
 | `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, 6 minutes before a 1-hour prompt cache expires or when Claude Code's idle compaction starts, whichever comes first. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
 | rtk's `history.db` | `RTK_DB` | rtk |
 
@@ -234,8 +235,10 @@ of them.
 
 ## Network and model use
 
-- **The server** makes one request, and only when you click Check prices. It fetches
-  Anthropic's pricing page from `platform.claude.com`.
+- **The server** fetches Anthropic's pricing page from `platform.claude.com`. It does
+  this once a day, when a Claude model with no price of its own appears in your
+  transcripts (at most once an hour), and when you click Check prices. Set
+  `CC_DASHBOARD_PRICE_CHECK=off` to stop the daily and new-model fetches.
 - **The mod** fetches `CHANGELOG.md` from `raw.githubusercontent.com/anthropics/claude-code`
   when the running Claude Code version has no verdict, or when you run
   `/backfill-updates`.

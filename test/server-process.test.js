@@ -19,6 +19,8 @@ function serverEnv(base) {
     CLAUDE_CONFIG_DIR: base,
     RTK_DB: path.join(base, 'no-rtk-here.db'),
     CHANGES_FILE: path.join(base, 'changes.json'),
+    // A child server must never fetch the pricing page.
+    CC_DASHBOARD_PRICE_CHECK: 'off',
   };
 }
 

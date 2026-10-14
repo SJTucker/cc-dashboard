@@ -7,8 +7,7 @@ per million tokens, and a weekday-by-hour heatmap of when the spend happens.
 If you use `rtk`, it also charts the tokens rtk kept out of the model's context. See
 "rtk savings" below.
 
-Two dependencies, no telemetry, no CDN. The server makes one outbound request, and
-only when you click Check prices. The optional Claude Code mod in `mod/` also fetches
+Two dependencies, no telemetry, no CDN. The server makes one kind of outbound request, to Anthropic's pricing page: daily, when a model has no price of its own, and when you click Check prices. The optional Claude Code mod in `mod/` also fetches
 Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
 does and doesn't do" below.
 
@@ -543,11 +542,12 @@ only. History then starts at the oldest transcript on disk. Raising
   `rate-limits.json` and the `cc-dashboard/` folder in your Claude config folder.
   [Files outside the repo](SETUP.md#files-outside-the-repo) in SETUP.md lists each
   file, what writes it, and what deletes old files.
-- **One network request from the server, on demand.** The Models panel has
-  a Check prices button. Clicking it makes the server fetch
+- **One kind of network request from the server.** The server fetches
   `https://platform.claude.com/docs/en/about-claude/pricing.md`, Anthropic's
-  pricing page as markdown. Nothing fetches on page load, on a timer, or at
-  startup. The URL is a constant in `lib/price-fetch.js`. The page's
+  pricing page as markdown, once a day, when a model with no price of its own
+  appears (at most once an hour), and when you click Check prices in the Models
+  panel. `CC_DASHBOARD_PRICE_CHECK=off` stops the daily and new-model fetches.
+  The URL is a constant in `lib/price-fetch.js`. The page's
   Content-Security-Policy blocks the browser from contacting any other host, so
   the request always comes from the server. The bar charts are hand-drawn SVG (see
   `public/charts/`), so no charting library comes from a CDN.
@@ -567,19 +567,24 @@ only. History then starts at the oldest transcript on disk. Raising
   the bind address to something network-reachable unless you understand that
   trade-off.
 - **Pricing is an estimate, with a dated history.** `lib/pricing.js` has a built-in
-  price table, last checked against Anthropic's pricing page on 2026-09-28. Check
-  prices lists new models and changed prices and changes nothing. Apply saves them
-  to `~/.claude/cc-dashboard/prices.json` with an effective-from date. A changed
-  price applies to usage from that date on, and older usage keeps the price it had.
-  A new model is priced for all dates. A page that does not parse is refused with
-  the reason, and prices stay as they are. Any model the table does not recognize is
-  still counted in token totals but shown as "unpriced" rather than silently costed
-  at $0.
+  price table, last checked against Anthropic's pricing page on 2026-10-14. The
+  server checks the page and applies new models and changed prices without a click.
+  Each change goes into `~/.claude/cc-dashboard/prices.json` with an effective-from
+  date. The page carries no dates, so a change is dated the day after the last check
+  that saw the old price. A changed price applies to usage from that date on, and
+  older usage keeps the price it had. A new model is priced for all dates. Check
+  prices runs the same check at once and lists what it changed. A page that does not
+  parse is refused with the reason, and prices stay as they are. Haiku 5.5 is priced
+  per request by prompt length: a request over 100,000 prompt tokens (input, cache
+  reads and cache writes together) pays the higher rates. A model with no price of
+  its own is costed at its family's current rate and marked "family rate" in Cost by
+  model. A model the table does not recognize at all is still counted in token
+  totals but shown as "unpriced" rather than silently costed at $0.
 
 ## File layout
 
 ```
-server.js              Express app on 127.0.0.1: serves public/ and the /api routes summary, rtk, limits, changes, records, sessions/live, reviews (with dismiss and undo), refresh and prices (check, apply)
+server.js              Express app on 127.0.0.1: serves public/ and the /api routes summary, rtk, limits, changes, records, sessions/live, reviews (with dismiss and undo), refresh and prices (check)
 lib/activity.js        Reads the activity files the mod writes (working or waiting), ignores stale ones, deletes those older than a day
 lib/agent-steps.js     Reads the mod's agent-usage files: the output of each subagent request, for responses whose transcript has no final usage line
 lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill and subagent, plus per-session titles, branches and edited lines
@@ -594,8 +599,9 @@ lib/extract.js         Turns one transcript into rows: calls, tool uses, tool er
 lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
 lib/net-guard.js       Host-header check and security headers
-lib/price-fetch.js     Fetches and parses Anthropic's pricing page, and compares it with the current prices
-lib/price-store.js     Applied price history in prices.json
+lib/price-fetch.js     Fetches and parses Anthropic's pricing page (merging the prompt-length rows), and compares it with the current prices
+lib/price-check.js     One price check: fetch, parse, compare, apply, and date the change
+lib/price-store.js     Applied price history and the last check date in prices.json
 lib/pricing.js         Built-in price table, dated price versions, cost calculation
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
@@ -652,7 +658,8 @@ public/panels/cards.mjs  The Analysis tab's summary cards: two rows of cards: mo
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
 public/panels/models.mjs  The Models panel (share bar and table) and the model daily charts
-public/panels/prices.mjs  The prices note in the Models panel, and the Check prices and Apply buttons; uses the /api/prices routes
+public/panels/prices.mjs  The prices note in the Models panel and the Check prices button; uses the /api/prices routes
+public/price-lines.mjs  Text for the prices note and the lines a price check prints
 public/panels/records.mjs  Fetches /api/records for the sticky bar's 7d lines and Record day
 public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Duplicate, Not useful, Undo and Copy prompt; fetches /api/reviews
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
