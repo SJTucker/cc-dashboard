@@ -16,8 +16,8 @@ Source files over 450 lines:
 
 | File | Lines | Commits since 2026-09-01 |
 |---|---|---|
-| `public/style.css` | split into 14 files under `public/css/` on 2026-10-13; the largest, `base.css`, is 305 lines | 92 |
-| `mod/hooks/register.ts` | 1,210 | 40 |
+| `public/css/base.css` (largest of the 14 files `public/style.css` was split into on 2026-10-13) | 305 | 1 (`public/style.css` had 113) |
+| `mod/hooks/register.ts` | 1,240 | 40 |
 | `lib/aggregate.js` | 564 | 14 |
 | `lib/extract.js` | 476 | 14 |
 | `public/charts/setup-changes.mjs` | 492 | 9 |
@@ -39,11 +39,11 @@ up and removed), `README.md` (100), `public/style.css` (92), `public/index.html`
   a matcher. Every function that takes `$`, and every hook, stays in `register.ts`.
   Pure helpers can move out, as `handoff.ts`, `limits.ts` and `setup.ts` already
   have. See the mod engine facts recorded for Claude Code 2.1.296.
-- **`register.ts` stays near 1,240 lines.** The pure helpers are moved out into
+- **`register.ts` stays at about 1,240 lines.** The pure helpers are moved out into
   `statusline.ts`, `activity.ts`, `text.ts`, `setup.ts` and `handoff.ts`, which took
   `register.ts` from 1,375 to 1,240 lines on 2026-10-13. What remains takes `$`, is a
-  hook, or reads the per-session maps (`forgetSession`), so
-  the engine constraint keeps the file above about 1,150 lines. A limit, if enforced,
+  hook, or reads the per-session maps (`forgetSession`), so the engine constraint
+  keeps it near that size. A limit, if enforced,
   needs an allowlist entry for `mod/hooks/register.ts`.
 - **`extract.js` is split on 2026-10-13.** The line helpers (`forEachLine`, the prompt
   classifiers, `toolDetail`, `resultText`) moved to `lib/transcript-lines.js`, and
