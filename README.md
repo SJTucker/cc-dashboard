@@ -425,8 +425,8 @@ The panel note adds the day's rebuild count and total premium.
 ![Session timeline panel with one lane per session and a cache rebuild marker](docs/screenshots/timeline.png)
 
 The Where usage goes panel shows where total cost went: main thread against
-subagents, calls over against under 150k of context, a Cache bar, and the Skills and Subagents
-lists, which are collapsed until you open them. Each list row shows how many times
+subagents, calls over against under 150k of context, a Cache bar, and the Skills
+and Subagents lists, which are collapsed until you open them. Each list row shows how many times
 the skill or subagent type was invoked in the range, then its share of total cost,
 as in `21× · 4.3%`. A skill counts its Skill tool calls and the times you typed it as
 a slash command. A subagent type counts the Agent tool calls that started it. A skill

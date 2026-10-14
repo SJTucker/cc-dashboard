@@ -424,7 +424,9 @@ test('synthetic, empty and non-Anthropic model names are never recorded as unmat
 test('costForUsage reports familyRate for a bare-family match only', () => {
   assert.strictEqual(costForUsage({ input_tokens: 1000 }, 'claude-opus-9').familyRate, true);
   assert.strictEqual(costForUsage({ input_tokens: 1000 }, 'claude-opus-5').familyRate, false);
-  assert.deepStrictEqual(costForUsage({ input_tokens: 1000 }, 'claude-zeta-9'), { cost: 0, priced: false });
+  const unpriced = costForUsage({ input_tokens: 1000 }, 'claude-zeta-9');
+  assert.deepStrictEqual([unpriced.cost, unpriced.priced, unpriced.familyRate], [0, false, undefined]);
+  assert.deepStrictEqual(unpriced.parts, { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, saved: 0, priced: false });
 });
 
 test('the built-in table has Haiku 5.5 with its tier and Sonnet 5.5 at 0.05x cache reads', () => {
