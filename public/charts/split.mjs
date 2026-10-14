@@ -44,16 +44,21 @@ export function drawShareBar(container, items, { empty, extra = [] }) {
   container.append(bar, legend);
 }
 
+// A segment's tooltip: its name, cost and share of the bar's total.
+export function shareTooltip(name, cost, total) {
+  const share = total > 0 ? ((cost / total) * 100).toFixed(1) : '0.0';
+  return `<b>${escapeHtml(name)}</b><br>${formatCost(cost)} &middot; ${share}% of total`;
+}
+
 // Subagents against the main thread, or under against over the context threshold:
 // two parts of total cost. rows is [{ name, cost }], drawn in the order given, and
 // the legend follows the bar's order.
 export function drawSplitBar(container, rows) {
   const total = rows.reduce((sum, r) => sum + r.cost, 0);
-  const share = (cost) => (total > 0 ? ((cost / total) * 100).toFixed(1) : '0.0');
   drawShareBar(container, rows.map((row, i) => ({
     name: row.name,
     value: row.cost,
     ...SPLIT_STYLE[i],
-    tooltip: `<b>${escapeHtml(row.name)}</b><br>${formatCost(row.cost)} &middot; ${share(row.cost)}% of total`,
+    tooltip: shareTooltip(row.name, row.cost, total),
   })), { empty: 'Nothing attributed in this range.' });
 }

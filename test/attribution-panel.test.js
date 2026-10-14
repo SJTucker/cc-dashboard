@@ -28,3 +28,45 @@ test('a row with no invocations field reads as 0 invocations and does not throw'
   const { usageValue } = await load();
   assert.strictEqual(usageValue({ name: 'tdd', cost: 1 }, 100), '0× · 1.0%');
 });
+
+// ---- Cache bar -------------------------------------------------------------
+const { installDom } = require('./dom-stub');
+
+function renderWith(cacheCost) {
+  installDom();
+  const nodes = {};
+  const base = globalThis.document.createElement;
+  for (const id of ['attributionPanel', 'threadBars', 'contextBars', 'cacheBars', 'cacheSaved', 'skillBars', 'subagentBars']) nodes[id] = base('div');
+  globalThis.document.getElementById = (id) => nodes[id];
+  return load().then(({ renderAttribution }) => {
+    renderAttribution({
+      summary: { totalCost: 10 }, threads: { main: 1, subagent: 1 }, context: { over: 1, under: 1 },
+      contextThreshold: 150000, skills: [], subagents: [], cacheCost,
+    });
+    return nodes;
+  });
+}
+
+test('the Cache bar lists reads, writes, uncached input and output in that order with fixed fills, whichever is largest', async () => {
+  for (const cc of [
+    { cacheRead: 9, cacheWrite: 1, input: 1, output: 1, saved: 5 },
+    { cacheRead: 1, cacheWrite: 1, input: 1, output: 9, saved: 5 },
+  ]) {
+    const { cacheBars } = await renderWith(cc);
+    const [bar, legend] = cacheBars.children;
+    assert.deepEqual([...legend.children].map((item) => item.children[1].textContent), ['Cache reads', 'Cache writes', 'Uncached input', 'Output']);
+    const styles = bar.children.map((seg) => seg.getAttribute('style'));
+    assert.match(styles[0], /background:\s*(#3fe0ff|rgb\(63, 224, 255\))\s*;?/i);
+    assert.match(styles[1], /repeating-linear-gradient\(45deg/);
+    assert.match(styles[2], /radial-gradient/);
+    assert.match(styles[3], /linear-gradient/);
+    assert.notEqual(styles[3], styles[1]);
+  }
+});
+
+test('the Cache note says what cache reads saved, and is empty when nothing was saved or cacheCost is missing', async () => {
+  const text = 'Cache reads saved $5.00: what they would cost at the full input rate, minus what they cost.';
+  assert.equal((await renderWith({ cacheRead: 1, cacheWrite: 1, input: 1, output: 1, saved: 5 })).cacheSaved.textContent, text);
+  assert.equal((await renderWith({ cacheRead: 1, cacheWrite: 1, input: 1, output: 1, saved: 0 })).cacheSaved.textContent, '');
+  assert.equal((await renderWith(undefined)).cacheSaved.textContent, '');
+});
