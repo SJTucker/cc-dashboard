@@ -28,5 +28,5 @@ then on.
 | [Fable weekly limit and usage credits](fable-limit-and-usage-credits.md) | Open: both rows are already in the `/usage` cache Claude Code keeps in `.claude.json`; freshness through the mod, the credits reset date and which scoped weeks to show open |
 | [Hide the status strip when narrow](hide-status-strip-when-narrow.md) | Open: hide `#statusStrip` below a window width; the width, keeping the plan limit warning and Link live visible open |
 | [Subagent status line in Doing now](subagent-status-in-doing-now.md) | Open: show each subagent's status text instead of "1 subagent"; `meta.json` has the spawn description, and whether the live status line is readable anywhere is open |
-| [Cache efficiency bar](cache-efficiency-bar.md) | Open: a cache bar in Where usage goes, and a dimmer striped "Over 150k" segment; whether the cache bar splits tokens or cost, and its segments, open |
+| [Cache efficiency bar](cache-efficiency-bar.md) | Open: a cache bar in Where usage goes; whether the cache bar splits tokens or cost, and its segments, open |
 | [Record day confetti](record-day-confetti.md) | Open: confetti when today becomes the record day; what triggers it, once per day, and reduced motion open |

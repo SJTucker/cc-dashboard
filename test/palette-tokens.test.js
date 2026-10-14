@@ -18,6 +18,7 @@ test('palette TOKENS equal the custom properties in public/css', async () => {
     surface: 'surface',
     textSecondary: 'text-secondary',
     accentCyan: 'accent-cyan',
+    accentCyanDim: 'accent-cyan-dim',
     money: 'money',
     moneyFill: 'money-fill',
     seriesNeutral: 'series-neutral',

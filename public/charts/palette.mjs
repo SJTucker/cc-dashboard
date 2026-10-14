@@ -35,6 +35,7 @@ export const TOKENS = {
   surface: '#0b1222',
   textSecondary: '#7f93b8',
   accentCyan: '#3fe0ff',
+  accentCyanDim: '#257991',
   money: '#2bff88',
   moneyFill: '#2bc46f',
   seriesNeutral: '#6b86ad',

@@ -27,6 +27,7 @@
   --money-fill: #2bc46f;
   --money-glow: 0 0 6px color-mix(in srgb, var(--money) 45%, transparent);
   --accent-cyan: #3fe0ff;
+  --accent-cyan-dim: #257991;
   --series-neutral: #6b86ad;
   --warning: #ffb000;
 
