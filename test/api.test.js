@@ -218,8 +218,8 @@ test('GET /api/summary does not send the per-call efficiency records', async (t)
   }
 });
 
-// A fixture with one session that starts on Sep 1 and one on Sep 10, and a
-// changes.json marker on Sep 5 between them.
+// A fixture with sessions that start on Aug 28, Sep 5 and Sep 12, and a changes.json
+// marker on Sep 9, 12 days after the first call so the first-week rule keeps it.
 async function startChangesServer(t, { changes, plugins } = {}) {
   const config = helpers.testConfig(t, 'changes-api');
   const base = config.configDir;
@@ -229,8 +229,9 @@ async function startChangesServer(t, { changes, plugins } = {}) {
     message: { id: 'msg-' + id, model: 'claude-opus-5', content: [], usage: { input_tokens: context, output_tokens: 10 } },
   });
   fs.writeFileSync(path.join(dir, 'a.jsonl'), [
-    line('2026-09-01T15:00:00Z', 'a', 's1', 40000),
-    line('2026-09-10T15:00:00Z', 'b', 's2', 50000),
+    line('2026-08-28T15:00:00Z', 'z', 's0', 30000),
+    line('2026-09-05T15:00:00Z', 'a', 's1', 40000),
+    line('2026-09-12T15:00:00Z', 'b', 's2', 50000),
   ].join('\n') + '\n');
   if (plugins) {
     fs.mkdirSync(path.join(base, 'plugins'));
@@ -241,12 +242,12 @@ async function startChangesServer(t, { changes, plugins } = {}) {
 }
 
 test('GET /api/changes returns sessions and before/after windows per marker', async (t) => {
-  const { url } = await startChangesServer(t, { changes: [{ date: '2026-09-05T12:00', kind: 'skill', label: 'a skill' }] });
+  const { url } = await startChangesServer(t, { changes: [{ date: '2026-09-09T12:00', kind: 'skill', label: 'a skill' }] });
   const res = await fetch(`${url}/api/changes`);
   const data = await res.json();
 
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(data.sessions.map((s) => s.context), [40000, 50000]);
+  assert.deepStrictEqual(data.sessions.map((s) => s.context), [30000, 40000, 50000]);
   assert.strictEqual(data.markers.length, 1);
   const m = data.markers[0];
   assert.strictEqual(m.label, 'a skill');
@@ -258,7 +259,7 @@ test('GET /api/changes returns sessions and before/after windows per marker', as
     ['bashMedian', 'bashP90', 'cacheHit', 'callsPerPrompt', 'costPerPrompt', 'sessionStart', 'thinkingShare'],
     'no rtk database in the fixture, so no rtk series'
   );
-  assert.deepStrictEqual(data.daily.sessionStart.map((d) => d.value), [40000, 50000]);
+  assert.deepStrictEqual(data.daily.sessionStart.map((d) => d.value), [30000, 40000, 50000]);
   assert.strictEqual(data.bashDaily, undefined, 'daily.bashMedian replaced it');
   assert.strictEqual(data.changesFile.status, 'ok');
 });
@@ -268,7 +269,7 @@ test('GET /api/changes re-reads changes.json on every request', async (t) => {
   const url = `${base}/api/changes`;
 
   assert.strictEqual((await (await fetch(url)).json()).markers.length, 0);
-  fs.writeFileSync(changesPath, JSON.stringify([{ date: '2026-09-05T12:00', kind: 'hook', label: 'new hook' }]));
+  fs.writeFileSync(changesPath, JSON.stringify([{ date: '2026-09-09T12:00', kind: 'hook', label: 'new hook' }]));
   const second = await (await fetch(url)).json();
   assert.deepStrictEqual(second.markers.map((m) => m.label), ['new hook'], 'the scan is cached, the marker file is not');
 });
