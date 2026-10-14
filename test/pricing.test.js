@@ -436,3 +436,56 @@ test('the built-in table has Haiku 5.5 with its tier and Sonnet 5.5 at 0.05x cac
   // A sample Haiku 5.5 request: 1,000 input and 200 output tokens is a short prompt.
   closeTo(costForUsage({ input_tokens: 1000, output_tokens: 200 }, 'claude-haiku-5-5').cost, (1000 * 0.10 + 200 * 0.50) / 1e6, 'short Haiku 5.5 request');
 });
+
+// ---- costParts -------------------------------------------------------------
+const { costParts } = require('../lib/pricing');
+
+function assertPartsSum(usage, model, expectedCost, message) {
+  const p = costParts(usage, model);
+  const whole = costForUsage(usage, model).cost;
+  closeTo(p.input + p.output + p.cacheWrite + p.cacheRead, whole, `${message}: parts sum to costForUsage`);
+  closeTo(whole, expectedCost, `${message}: total`);
+  return p;
+}
+
+test('costParts splits a base-rate call and saved is reads at input rate minus read rate', () => {
+  const p = assertPartsSum(oneMillionEach(), 'claude-opus-5', 36.75, 'Opus 5');
+  closeTo(p.input, 5, 'input');
+  closeTo(p.output, 25, 'output');
+  closeTo(p.cacheWrite, 6.25, 'cache write');
+  closeTo(p.cacheRead, 0.5, 'cache read');
+  closeTo(p.saved, 4.5, 'saved = 5 - 0.5');
+  assert.strictEqual(p.priced, true);
+});
+
+test('costParts uses fast rates in fast mode', () => {
+  const p = assertPartsSum(oneMillionEach({ speed: 'fast' }), 'claude-opus-5', 73.5, 'Opus 5 fast');
+  closeTo(p.input, 10, 'fast input');
+  closeTo(p.saved, 9, 'saved at fast input rate');
+});
+
+test('costParts uses the Haiku 5.5 long-prompt rates over 100k and adds 5m and 1h writes into cacheWrite', (t) => {
+  useHaiku55(t);
+  const usage = { input_tokens: 1000, output_tokens: 2000, cache_read_input_tokens: 60000, cache_creation: { ephemeral_5m_input_tokens: 30000, ephemeral_1h_input_tokens: 10000 } };
+  const p = assertPartsSum(usage, 'claude-haiku-5-5', (1000 * 0.5 + 2000 * 2.5 + 30000 * 0.5 * 1.25 + 10000 * 0.5 * 2 + 60000 * 0.5 * 0.1) / 1e6, 'Haiku long');
+  closeTo(p.cacheWrite, (30000 * 0.5 * 1.25 + 10000 * 0.5 * 2) / 1e6, 'both write lifetimes');
+  closeTo(p.saved, (60000 * 0.5 * 0.9) / 1e6, 'saved at long input rate');
+});
+
+test('costParts prices a 1-hour write at 2x input', () => {
+  const p = costParts({ cache_creation: { ephemeral_5m_input_tokens: 0, ephemeral_1h_input_tokens: 1e6 } }, 'claude-opus-5');
+  closeTo(p.cacheWrite, 10, '1h write');
+  closeTo(p.saved, 0, 'no reads, nothing saved');
+});
+
+test('costParts honours a row cacheReadMult', () => {
+  const usage = oneMillionEach();
+  const p = assertPartsSum(usage, 'claude-opus-5-5', 4 + 20 + 5 + 0.2, 'Opus 5.5');
+  closeTo(p.cacheRead, 0.2, 'read at 0.05x of 4');
+  closeTo(p.saved, 3.8, 'saved = 4 - 0.2');
+});
+
+test('costParts gives zeros and priced false for an unrecognised model', () => {
+  const p = costParts(oneMillionEach(), 'mystery-model');
+  assert.deepStrictEqual(p, { input: 0, output: 0, cacheWrite: 0, cacheRead: 0, saved: 0, priced: false });
+});
