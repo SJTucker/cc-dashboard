@@ -51,7 +51,8 @@ test('openReviewDb imports every review file once, with all fields and suggestio
   db.close();
 });
 
-test('the import skips a corrupt file, an unknown status, a bad session id and a non-json name, and still marks itself done', () => {
+test('the import skips a corrupt file, an unknown status, a bad session id and a non-json name, and still marks itself done', (t) => {
+  t.mock.method(console, 'warn', () => {});
   const f = fixture();
   f.write('bad.json', '{not json');
   f.write('weird.json', { sessionId: 'weird', status: 'bogus' });

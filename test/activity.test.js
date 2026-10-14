@@ -44,7 +44,8 @@ test('readActivity returns a map keyed by session id', () => {
   assert.deepStrictEqual(map.get('s1'), activity());
 });
 
-test('readActivity skips unreadable, wrong-shaped and unknown-state files', () => {
+test('readActivity skips unreadable, wrong-shaped and unknown-state files', (t) => {
+  t.mock.method(console, 'warn', () => {});
   const dir = tmpDir();
   write(dir, activity({ sessionId: 'good' }));
   write(dir, '{"sessionId":"half","state":"work', 'half.json');
@@ -111,4 +112,17 @@ test('resolveActivity reports stale waiting with subagents as waiting with no su
   assert.deepStrictEqual(resolveActivity(justStale, NOW), { state: 'waiting', since: justStale.since, tool: null, subagents: 0 });
   const fresh = activity({ state: 'waiting', tool: null, subagents: 2, updatedAt: NOW - STALE_AFTER_MS });
   assert.deepStrictEqual(resolveActivity(fresh, NOW), { state: 'working', since: fresh.since, tool: null, subagents: 2 });
+});
+
+test('readActivity warns once per file that does not parse, and not for a wrong-shaped one', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  const dir = tmpDir();
+  write(dir, '{"sessionId":"half","state":"work', 'half.json');
+  write(dir, { sessionId: 'x' }, 'wrong-shape.json');
+  readActivity(dir, NOW);
+  readActivity(dir, NOW);
+  assert.strictEqual(warn.mock.callCount(), 1);
+  assert.match(String(warn.mock.calls[0].arguments[0]), /half\.json/);
+  readActivity(path.join(dir, 'missing'), NOW);
+  assert.strictEqual(warn.mock.callCount(), 1);
 });

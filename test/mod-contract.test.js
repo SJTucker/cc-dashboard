@@ -6,21 +6,25 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { tmpDir } = require('./helpers');
+const { readActivity } = require('../lib/activity');
+const { readAgentSteps } = require('../lib/agent-steps');
+const { collectMarkers } = require('../lib/changes');
 
 // The mod test runner refuses to import a .json file, so the entries live in
 // register.test.ts between two marker comments, as strict JSON.
 const SOURCE = fs.readFileSync(path.join(__dirname, '..', 'mod', 'hooks', 'register.test.ts'), 'utf8');
-const CALLS = (() => {
+const CONTRACT = (() => {
   const where = 'contract block between contract:begin and contract:end in mod/hooks/register.test.ts';
   const begun = SOURCE.split('// contract:begin\n')[1];
   if (begun === undefined || !begun.includes('// contract:end')) throw new Error(`${where} is missing a marker`);
   const block = begun.split('// contract:end')[0];
   try {
-    return JSON.parse(block.replace(/^const CONTRACT = /, '').replace(/,\s*\]\s*$/, ']'));
+    return JSON.parse(block.replace(/^const CONTRACT = /, ''));
   } catch (err) {
     throw new Error(`${where} is not strict JSON: ${err.message}`);
   }
 })();
+const CALLS = CONTRACT.calls;
 const PRINTS_JSON = new Set(['judge-updates', 'review-session', 'cache-state']);
 const PRINTS_NOTHING = new Set(['record-statusline', 'record-session-end']);
 
@@ -58,4 +62,53 @@ test('every call in the contract block of mod/hooks/register.test.ts runs agains
       assert.strictEqual(res.stdout, '', `${label} must print nothing, because its stdout is the statusline`);
     }
   }
+});
+
+test('readActivity parses the activity sample the mod writes', (t) => {
+  const dir = tmpDir(t, 'contract-activity');
+  fs.writeFileSync(path.join(dir, 's1.json'), JSON.stringify(CONTRACT.activity));
+  const a = CONTRACT.activity;
+  assert.deepStrictEqual(readActivity(dir, a.updatedAt + 1000).get('s1'), {
+    sessionId: a.sessionId, state: a.state, since: a.since, tool: null, subagents: 0, updatedAt: a.updatedAt,
+  });
+});
+
+test('readAgentSteps parses the agent usage sample the mod writes', async (t) => {
+  const file = path.join(tmpDir(t, 'contract-agent'), `${CONTRACT.agentUsage.agentId}.json`);
+  fs.writeFileSync(file, JSON.stringify(CONTRACT.agentUsage));
+  const rows = await readAgentSteps(file);
+  assert.strictEqual(rows.ok, true);
+  const { t: time, model, input, cacheWrite, cacheRead, output } = CONTRACT.agentUsage.steps[0];
+  assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a1', t: time, model, input, cacheWrite, cacheRead, output }]);
+});
+
+test('collectMarkers turns the changes sample the mod writes into one auto marker', (t) => {
+  const base = tmpDir(t, 'contract-changes');
+  const dir = path.join(base, 'cc-dashboard', 'changes');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 's1.json'), `${JSON.stringify(CONTRACT.changes, null, 2)}\n`);
+  const [entry] = CONTRACT.changes;
+  const week = 7 * 24 * 60 * 60 * 1000;
+  // One call a week before the entry, so the marker has the history a marker needs.
+  const calls = [{ t: entry.t - week, model: 'm', version: '2.1.290' }];
+  const { markers } = collectMarkers(calls, { configDir: base, changesFile: path.join(base, 'none.json') });
+  assert.deepStrictEqual(markers, [{ t: entry.t, kind: entry.kind, label: `${entry.name}: ${entry.label}`, source: 'auto' }]);
+});
+
+test('each reader skips a truncated copy of its sample without throwing', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const base = tmpDir(t, 'contract-truncated');
+  const cut = (value) => JSON.stringify(value).slice(0, 25);
+  const activityDir = path.join(base, 'activity');
+  fs.mkdirSync(activityDir);
+  fs.writeFileSync(path.join(activityDir, 's1.json'), cut(CONTRACT.activity));
+  assert.strictEqual(readActivity(activityDir, CONTRACT.activity.updatedAt).size, 0);
+  const agentFile = path.join(base, 'a1.json');
+  fs.writeFileSync(agentFile, cut(CONTRACT.agentUsage));
+  assert.strictEqual((await readAgentSteps(agentFile)).ok, false);
+  const changesDir = path.join(base, 'cc-dashboard', 'changes');
+  fs.mkdirSync(changesDir, { recursive: true });
+  fs.writeFileSync(path.join(changesDir, 's1.json'), cut(CONTRACT.changes));
+  const { markers } = collectMarkers([{ t: CONTRACT.changes[0].t - 7 * 24 * 60 * 60 * 1000, model: 'm' }], { configDir: base, changesFile: path.join(base, 'none.json') });
+  assert.deepStrictEqual(markers, []);
 });

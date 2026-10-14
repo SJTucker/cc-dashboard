@@ -239,7 +239,8 @@ test('autoMarkers keeps different days, kinds and files apart', () => {
   ]);
 });
 
-test('autoMarkers skips bad files and bad entries, and maps an unknown kind to other', () => {
+test('autoMarkers skips bad files and bad entries, and maps an unknown kind to other', (t) => {
+  t.mock.method(console, 'warn', () => {});
   const { base } = setup({
     auto: {
       'bad.json': '{not json',
@@ -304,4 +305,15 @@ test('collectMarkers drops a plugin, file and auto marker in the first week of h
   const calls = [{ t: t0 }, { t: t0 + 10 * DAY }];
   const labels = changes.collectMarkers(calls, config).markers.map((m) => m.label);
   assert.deepStrictEqual(labels.sort(), ['b.md: late auto', 'late file', 'late plugin installed']);
+});
+
+test('autoMarkers warns once per file that does not parse, and never for a missing folder', (t) => {
+  const warn = t.mock.method(console, 'warn', () => {});
+  changes.autoMarkers(setup().base);
+  assert.strictEqual(warn.mock.callCount(), 0);
+  const { base } = setup({ auto: { 'bad.json': '{"t":1', 's1.json': [] } });
+  changes.autoMarkers(base);
+  changes.autoMarkers(base);
+  assert.strictEqual(warn.mock.callCount(), 1);
+  assert.match(String(warn.mock.calls[0].arguments[0]), /bad\.json/);
 });
