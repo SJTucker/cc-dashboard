@@ -65,9 +65,9 @@ function chainGroups(sessions) {
 }
 
 // The key of a launch group: the launchId, else the sessionId, of its first session
-// to start (earliest first span start, then the oldest lastActiveAt). A session that
-// joins the chain later starts later, so the key, and the group's expanded state in
-// the panel, stay the same.
+// to start (earliest first span start). When no session has a span yet, the key comes
+// from the oldest session by lastActiveAt. A session that joins the chain later starts
+// later, so the key, and the group's expanded state in the panel, stay the same.
 function chainKey(list) {
   const start = (s) => (s.spans?.length ? s.spans[0][0] : Infinity);
   let first = list[list.length - 1];
