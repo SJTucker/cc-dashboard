@@ -236,18 +236,6 @@ html, body {
 .show-all:hover { color: var(--text-primary); }
 .show-all:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
 
-/* ---------- Footer ---------- */
-
-.footer {
-  margin-top: var(--sp-5);
-  color: var(--text-tertiary);
-  font-family: var(--font-ui);
-  font-size: var(--fs-prose);
-  line-height: 1.6;
-}
-
-.footer code { font-family: var(--font-data); }
-
 /* ---------- Tooltip ---------- */
 
 .tooltip {
