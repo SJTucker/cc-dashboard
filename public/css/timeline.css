@@ -11,7 +11,7 @@
 .timeline-follow { fill: var(--text-tertiary); font-style: normal; }
 .timeline-rebuild-cell { font-family: var(--font-data); font-size: var(--fs-caption); fill: var(--text-secondary); }
 /* The Rebuilds column heading, styled as the sessions table headings. */
-.timeline-column-head { font-family: var(--font-data); font-size: var(--fs-caption); letter-spacing: var(--ls-label); fill: var(--text-tertiary); }
+.timeline-column-head, .timeline-section { font-family: var(--font-data); font-size: var(--fs-caption); letter-spacing: var(--ls-label); fill: var(--text-tertiary); }
 .timeline-bar:hover { stroke: var(--text-primary); stroke-width: 1; }
 .timeline-rebuild:hover { stroke: var(--text-primary); stroke-width: 2; }
 .timeline-rebuild-count { font-size: var(--fs-caption); fill: var(--text-secondary); pointer-events: none; }

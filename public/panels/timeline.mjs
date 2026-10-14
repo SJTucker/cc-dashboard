@@ -16,6 +16,10 @@ import { LIVE_WINDOW_MS } from '../constants.mjs';
 // so TIMELINE_COLOR is TOKENS.accentCyan.
 const TIMELINE_COLOR = TOKENS.accentCyan;
 const TIMELINE_LANE_HEIGHT = 22;
+// Only when both sections of laneLayout have a lane: a "Running now" label band above
+// the first lane, and a band of the same height as a lane before the first earlier
+// lane, holding a rule and "Earlier today".
+const TIMELINE_SECTION_HEIGHT = 22;
 const TIMELINE_BAR_HEIGHT = 10;
 const TIMELINE_AXIS_HEIGHT = 20;
 const TIMELINE_RIGHT_PAD = 10;
@@ -161,7 +165,7 @@ function timelineKey(live, width, now) {
   return JSON.stringify([
     width,
     Math.floor(now / 60_000),
-    live.sessions.map((s) => [s.sessionId, s.clearedFrom, s.spans, s.live, s.title, s.titleSource, s.recap, s.project, s.branch, s.costTodayUsd, s.prompts, s.rebuilds]),
+    live.sessions.map((s) => [s.sessionId, s.clearedFrom, s.spans, s.live, s.activity?.state ?? null, s.title, s.titleSource, s.recap, s.project, s.branch, s.costTodayUsd, s.prompts, s.rebuilds]),
   ]);
 }
 
@@ -214,17 +218,21 @@ function drawRebuildCell(svg, rebuilds, column, width, mid) {
   svg.appendChild(cost);
 }
 
-const laneMid = (top, lane) => top + lane * TIMELINE_LANE_HEIGHT + TIMELINE_LANE_HEIGHT / 2;
+// The y of a lane's centre. Both bands are 0 when the timeline has one section. The
+// running label band shifts every lane, and the divider band shifts the earlier ones.
+const laneMid = (top, { lane, section }, bands) =>
+  top + bands.label + (section === 'earlier' ? bands.divider : 0) + lane * TIMELINE_LANE_HEIGHT + TIMELINE_LANE_HEIGHT / 2;
 
 // The curve from the end of the replaced session's last bar to the start of this
 // lane's first bar (linkPath in public/chart-geometry.mjs), with a dot at each end.
 // drawTimeline draws every link before the lanes, so bars sit on top of the curves.
-function drawLink(svg, { lane, bars, follows }, top) {
+function drawLink(svg, laneInfo, top, bands) {
+  const { bars, follows } = laneInfo;
   const last = follows.bars[follows.bars.length - 1];
   const x1 = last.x + last.width + (last.open ? ARROW_PX : 0) + LINK_GAP;
-  const y1 = laneMid(top, follows.lane);
+  const y1 = laneMid(top, follows, bands);
   const x2 = bars[0].x - LINK_GAP;
-  const y2 = laneMid(top, lane);
+  const y2 = laneMid(top, laneInfo, bands);
   const path = svgEl('path', {
     class: 'timeline-link', d: linkPath(x1, y1, x2, y2), fill: 'none',
     stroke: TIMELINE_COLOR, 'stroke-opacity': LINK_OPACITY, 'stroke-width': 1.25,
@@ -240,8 +248,9 @@ function drawLink(svg, { lane, bars, follows }, top) {
 
 // One session's label in the gutter, its bars and its Rebuilds cell. A lane a /clear
 // started has its label indented, with a ↳ before the glyph.
-function drawLane(svg, { session: s, lane, bars, follows }, maxChars, xOf, { top, column, width }) {
-  const mid = laneMid(top, lane);
+function drawLane(svg, laneInfo, maxChars, xOf, { top, bands, column, width }) {
+  const { session: s, bars, follows } = laneInfo;
+  const mid = laneMid(top, laneInfo, bands);
   const label = svgEl('text', { class: 'timeline-label', x: follows ? FOLLOW_INDENT : 0, y: mid + 4 });
   if (s.titleSource === 'prompt') label.classList.add('prompt-title');
   const fullName = s.title || s.project || '—';
@@ -297,7 +306,9 @@ function drawTimeline(container, sessions, width, now) {
   const top = column ? TIMELINE_HEAD_HEIGHT : 0;
   const xOf = (t) => gutter + ((t - domain[0]) / (domain[1] - domain[0])) * (plotRight - gutter);
   const lanes = laneLayout(sessions, xOf, now, 3, LIVE_WINDOW_MS);
-  const plotHeight = lanes.length * TIMELINE_LANE_HEIGHT;
+  const split = lanes.some((l) => l.section === 'running') && lanes.some((l) => l.section === 'earlier');
+  const bands = split ? { label: TIMELINE_SECTION_HEIGHT, divider: TIMELINE_SECTION_HEIGHT } : { label: 0, divider: 0 };
+  const plotHeight = bands.label + bands.divider + lanes.length * TIMELINE_LANE_HEIGHT;
   const height = top + plotHeight + TIMELINE_AXIS_HEIGHT;
   const liveLanes = lanes.filter((l) => l.session.live).length;
 
@@ -314,9 +325,20 @@ function drawTimeline(container, sessions, width, now) {
     head.textContent = 'REBUILDS';
     svg.appendChild(head);
   }
+  if (split) {
+    const firstEarlier = lanes.find((l) => l.section === 'earlier');
+    const dividerMid = laneMid(top, firstEarlier, bands) - TIMELINE_LANE_HEIGHT / 2 - bands.divider / 2;
+    const labelMid = top + bands.label / 2;
+    for (const [text, mid] of [['Running now', labelMid], ['Earlier today', dividerMid]]) {
+      const el = svgEl('text', { class: 'timeline-section', x: 0, y: mid + 4 });
+      el.textContent = text;
+      svg.appendChild(el);
+    }
+    svg.appendChild(svgEl('line', { x1: gutter, x2: plotRight, y1: dividerMid, y2: dividerMid, stroke: 'var(--text-tertiary)', 'stroke-width': 1 }));
+  }
   const maxChars = Math.floor((gutter - 8 - 14) / 6.6);
-  for (const lane of lanes) if (lane.follows) drawLink(svg, lane, top);
-  for (const lane of lanes) drawLane(svg, lane, maxChars, xOf, { top, column, width });
+  for (const lane of lanes) if (lane.follows) drawLink(svg, lane, top, bands);
+  for (const lane of lanes) drawLane(svg, lane, maxChars, xOf, { top, bands, column, width });
   svg.appendChild(svgEl('line', {
     class: 'timeline-now', x1: xOf(now), x2: xOf(now), y1: top, y2: top + plotHeight,
     stroke: 'var(--text-secondary)', 'stroke-width': 1, 'stroke-dasharray': '4 3',

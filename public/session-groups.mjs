@@ -132,6 +132,13 @@ function costShare(value, max) {
   return Math.min(1, Math.max(0, value / max));
 }
 
+// A session is running when it is live or waiting on the user. A session waiting on
+// the user stays running after its 10 minute live window, because that is when it
+// most needs the user. Ended sessions have no activity.
+function isRunning(s) {
+  return Boolean(s.live || s.activity?.state === 'waiting');
+}
+
 // Splits the items of groupSessions into the two bands of the Live sessions table.
 // running is { item, session } for every item that holds a live session or one
 // waiting on the user, where session is that running session (the item's newest
@@ -141,9 +148,6 @@ function costShare(value, max) {
 // it came in.
 function splitBands(items) {
   const start = (s) => (s.spans?.length ? s.spans[0][0] : Infinity);
-  // A session waiting on the user stays running after its 10 minute live window,
-  // because that is when it most needs the user. Ended sessions have no activity.
-  const isRunning = (s) => s.live || s.activity?.state === 'waiting';
   const byStart = (a, b) => {
     const sa = start(a);
     const sb = start(b);
@@ -209,4 +213,4 @@ function doingNow(activity) {
   return parts.length ? parts.join(' · ') : null;
 }
 
-export { groupSessions, itemCost, costShare, splitBands, costSplit, activityLabel, cacheLine, doingNow };
+export { groupSessions, itemCost, costShare, splitBands, isRunning, costSplit, activityLabel, cacheLine, doingNow };
