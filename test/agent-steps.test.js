@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const helpers = require('./helpers');
-const { getAgentUsageDir, findStepFiles, readAgentSteps, stepKey } = require('../lib/agent-steps');
+const { getAgentUsageDir, findStepFiles, readAgentSteps, stepKey, keepEarlierSteps } = require('../lib/agent-steps');
 
 const STEP = { t: 1000, model: 'claude-haiku-4-5', input: 2, cacheWrite: 3649, cacheRead: 33650, output: 163, turnId: 't1', index: 1 };
 
@@ -69,4 +69,14 @@ test('findStepFiles of no folder, or a missing one, is empty', () => {
 
 test('stepKey joins the agent id and the three input-side counts', () => {
   assert.strictEqual(stepKey('a1', 2, 3649, 33650), 'a1:2:3649:33650');
+});
+
+test('keepEarlierSteps adds the earlier steps the new file lacks, and the new copy of a shared step wins', () => {
+  const step = (over) => ({ agentId: 'a1', t: 1000, model: 'm', input: 2, cacheWrite: 10, cacheRead: 20, output: 5, ...over });
+  const rows = { agentSteps: [step({ t: 3000, cacheRead: 40, output: 300 }), step({ output: 163 })], minT: 1000, maxT: 3000 };
+  const earlier = [step({ output: 5 }), step({ t: 500, cacheRead: 10, output: 90 })];
+  keepEarlierSteps(rows, earlier);
+  assert.deepStrictEqual(rows.agentSteps.map((s) => [s.cacheRead, s.output]), [[40, 300], [20, 163], [10, 90]]);
+  assert.strictEqual(rows.minT, 500);
+  assert.strictEqual(rows.maxT, 3000);
 });

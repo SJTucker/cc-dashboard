@@ -97,6 +97,11 @@ Verified live on 2026-10-13, after the merge:
   final line: 3 output tokens in the transcript, 208 recorded. The dashboard uses
   208.
 
+A step file written again from a new `claude` process holds only that process's
+steps. `load()` in `lib/rowstore.js` adds back the previous entry's steps that the
+new file lacks (`keepEarlierSteps` in `lib/agent-steps.js`), so a continued agent
+keeps its earlier corrections.
+
 Reporting the transcript bug to Anthropic would fix new interactive sessions at the
 source.
 
@@ -106,8 +111,3 @@ source.
   an estimate on the page.
 - Whether `noFinalCalls` without `noFinalCorrected` stays near zero in practice. A
   step that retried inside one request matches nothing.
-- An agent continued in a new `claude` process more than a day after its last step
-  loses its earlier corrections. The server has deleted its step file by then, and the
-  reloaded mod holds no steps for it, so it writes a file with only the new steps. The
-  row store replaces the stored row set with that file's rows. Merging `agentSteps` by
-  `stepKey` in `load()` in `lib/rowstore.js` would keep them.

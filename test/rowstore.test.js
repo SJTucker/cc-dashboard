@@ -1658,6 +1658,40 @@ test('with no store, an old step file is kept', async () => {
   assert.strictEqual(fs.existsSync(file), true);
 });
 
+test('a step file rewritten without its earlier steps keeps them', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  writeSteps(stepsDir, 'a1', [STEP], 60_000);
+  const { rows, refresh } = harness(dir, { agentUsageDir: stepsDir });
+  await refresh();
+  const later = { ...STEP, t: STEP.t + 1000, cacheRead: 40, output: 500 };
+  writeSteps(stepsDir, 'a1', [later]);
+  await refresh();
+  const [entry] = stepEntries(rows);
+  assert.deepStrictEqual(entry.rows.agentSteps.map((s) => s.cacheRead).sort((x, y) => x - y), [20, 40]);
+  assert.strictEqual(entry.rows.minT, STEP.t);
+  assert.strictEqual(entry.rows.maxT, later.t);
+});
+
+test('a pruned step file written again after a restart keeps the steps the database held', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  const file = writeSteps(stepsDir, 'a1', [STEP], 2 * DAY_MS);
+  const dbPath = tmpDb();
+  const store = openStore(dbPath);
+  await harness(dir, { store, agentUsageDir: stepsDir }).refresh();
+  assert.strictEqual(fs.existsSync(file), false);
+  store.close();
+  // The restarted server loads the stored rows. The continued agent's mod writes a
+  // file with only its new step.
+  const reopened = openStore(dbPath);
+  const { rows, refresh } = harness(dir, { store: reopened, agentUsageDir: stepsDir });
+  writeSteps(stepsDir, 'a1', [{ ...STEP, t: Date.now(), cacheRead: 40 }]);
+  await refresh();
+  assert.deepStrictEqual(stepEntries(rows).map((e) => e.rows.agentSteps.length), [2]);
+  reopened.close();
+});
+
 test('a subagent response with no final line is priced at the output in its step file', async () => {
   const { base, dir } = makeProjects();
   const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
