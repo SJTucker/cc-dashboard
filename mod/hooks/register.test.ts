@@ -71,6 +71,8 @@ type World = {
   // What $.session.surfaces returns, and how far clock.now runs ahead of the mock timers.
   surfaces: string[]
   nowOffset: number
+  // Makes session.root reject.
+  rootFails: boolean
 }
 
 const entry = (name: string): Entry => ({ name, kind: name.endsWith('.md') ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -139,6 +141,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     cacheMs: 0,
     surfaces: ['terminal'],
     nowOffset: 0,
+    rootFails: false,
     ...w,
   }
   const ran: Ran[] = []
@@ -235,7 +238,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('session.id', () => ({ value: state.id }))
   on('session.surfaces', () => ({ value: state.surfaces }))
-  on('session.root', () => ({ value: '/work/my.demo' }))
+  on('session.root', () => {
+    if (state.rootFails) throw new Error('no root')
+    return { value: '/work/my.demo' }
+  })
   on('session.model', () => ({ value: state.model }))
   on('session.turns', () => ({ value: state.turns() }))
   on('session.usage', () => ({
@@ -479,6 +485,17 @@ test('two /clears with no prompt between link the new session to the first one',
   state.id = 's3'
   await $.session.measure(measure([FIVE]))
   expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual(['s1'])
+})
+
+test('a second /clear whose session.root rejects still calls the next hook and starts the reviews', async ($, on) => {
+  const { state, reviewRan, clock } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  const before = reviewRan.length
+  state.rootFails = true
+  await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  await clock.settle()
+  expect(reviewRan.length).toBeGreaterThan(before)
 })
 
 test('after an in-process /resume the next measure sends no cleared_from', async ($, on) => {

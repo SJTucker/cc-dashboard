@@ -1199,7 +1199,12 @@ export const register: Register = (on) => {
     // The lookup follows run, so the script is not delayed, and follows forgetSession,
     // so transcriptPath checks the file system instead of the dropped cache.
     if (e.reason !== 'clear') clearedFrom = undefined
-    else if (!clearedFrom || (await transcriptPath($, await $.session.root(), e.sessionId))) clearedFrom = e.sessionId
+    else if (!clearedFrom) clearedFrom = e.sessionId
+    else {
+      // A root that cannot be read leaves clearedFrom as it is.
+      const root = await $.session.root().catch(() => null)
+      if (root && (await transcriptPath($, root, e.sessionId).catch(() => null))) clearedFrom = e.sessionId
+    }
     const result = await next(e)
     await running
     if (e.reason === 'clear' || e.reason === 'resume') startReviews($)
