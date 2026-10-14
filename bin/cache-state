@@ -9,29 +9,12 @@
 // transcript path prints the reason on stderr and exits 1, and the mod logs it.
 
 const { extractFile } = require('../lib/extract');
-const { cacheWriteTokens } = require('../lib/pricing');
-const { cacheOf } = require('../lib/sessions');
+const { cacheOf, cacheCallsOf } = require('../lib/sessions');
 const { readStdin } = require('../lib/stdin');
 
 function fail(message) {
   process.stderr.write(`cache-state: ${message}\n`);
   process.exitCode = 1;
-}
-
-// cacheOf reads the per-call records that lib/aggregate.js builds. Only the fields
-// it uses are built here.
-function callsOf(rows) {
-  return rows.map((row) => {
-    const write = cacheWriteTokens(row.usage);
-    return {
-      t: row.t,
-      main: !row.sidechain,
-      model: row.model,
-      context: (row.usage.input_tokens || 0) + write.total + (row.usage.cache_read_input_tokens || 0),
-      write5m: write.write5m,
-      write1h: write.write1h,
-    };
-  });
 }
 
 function transcriptOf(input) {
@@ -48,7 +31,7 @@ readStdin()
     const transcript = transcriptOf(input);
     if (transcript === null) return fail('stdin is not JSON with a transcript path');
     const { calls } = await extractFile(transcript);
-    const cache = cacheOf(callsOf(calls), Date.now());
+    const cache = cacheOf(cacheCallsOf(calls), Date.now());
     process.stdout.write(JSON.stringify(cache ? { ttl: cache.ttl, expiresAt: cache.expiresAt } : {}) + '\n');
   })
   .catch((err) => fail(err.message));

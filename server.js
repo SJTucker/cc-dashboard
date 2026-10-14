@@ -17,7 +17,7 @@ const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits, readDailyShare, getRateLimitsPath } = require('./lib/limits');
-const { readSessions, buildLiveSessions, getSessionsDir } = require('./lib/sessions');
+const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = require('./lib/sessions');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
 const { readActivity, getActivityDir } = require('./lib/activity');
 const { readReviews, setDismissal, DISMISS_REASONS } = require('./lib/review');
@@ -253,10 +253,16 @@ function createServer(config) {
     try {
       const data = await scan('today', 'hour');
       const { efficiency } = data;
+      // A waiting session's cache TTL depends on its newest cache write, which can
+      // be before midnight. The row store holds the whole transcript, so the Today
+      // scan's calls are not used for it (as bin/cache-state does).
+      const entries = getRowStore().entries();
+      const transcriptCalls = (sessionId) => cacheCallsOf(entries.filter((e) => path.basename(e.path) === `${sessionId}.jsonl`).flatMap((e) => e.rows.calls || []));
       res.json(buildLiveSessions(readSessions(getSessionsDir(config.configDir)), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(getActivityDir(config.configDir)), {
         branchesBySession: efficiency.branchesBySession,
         branchBySession: efficiency.branchBySession,
         firstPromptBySession: efficiency.firstPromptBySession,
+        cacheCallsOf: transcriptCalls,
       }));
     } catch (err) {
       console.error('[API] /api/sessions/live failed:', err);

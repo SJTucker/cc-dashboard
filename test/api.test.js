@@ -572,6 +572,32 @@ test('GET /api/sessions/live joins the activity file of a session', async (t) =>
   assert.strictEqual('sessionId' in row.activity, false);
 });
 
+test('GET /api/sessions/live gives a waiting session the 1-hour cache a write before today set', async (t) => {
+  const { url, config } = await startServer(t);
+  const base = config.configDir;
+  const now = Date.now();
+  const line = (t, id, usage) => JSON.stringify({
+    timestamp: new Date(t).toISOString(), requestId: `req-${id}`, sessionId: 'sess-w',
+    message: { id: `msg-${id}`, model: 'claude-sonnet-4-6-20260115', usage },
+  }) + '\n';
+  fs.mkdirSync(path.join(base, 'projects', 'demo'), { recursive: true });
+  fs.writeFileSync(path.join(base, 'projects', 'demo', 'sess-w.jsonl'),
+    line(now - 3 * 86_400_000, 'w1', { input_tokens: 10, output_tokens: 10, cache_creation: { ephemeral_1h_input_tokens: 5000 } })
+    + line(now - 60_000, 'w2', { input_tokens: 10, output_tokens: 10, cache_read_input_tokens: 5000 }));
+  writeSnapshot(base, {
+    sessionId: 'sess-w', lastActiveAt: now - 60_000, project: 'demo', model: 'Sonnet 4.6',
+    costUsd: 0.1, durationMs: 60_000, apiDurationMs: 5_000, linesAdded: 0, linesRemoved: 0,
+  });
+  const dir = path.join(base, 'cc-dashboard', 'activity');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'sess-w.json'), JSON.stringify({
+    sessionId: 'sess-w', state: 'waiting', since: now - 30_000, tool: null, subagents: 0, updatedAt: now - 1000,
+  }));
+
+  const [row] = (await (await fetch(`${url}/api/sessions/live`)).json()).sessions;
+  assert.strictEqual(row.cache.ttl, '1h');
+});
+
 test('GET /api/sessions/live gives null activity when there is no activity directory', async (t) => {
   const { url, config } = await startServer(t);
   writeSnapshot(config.configDir, {
