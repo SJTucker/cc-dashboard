@@ -15,17 +15,17 @@ const { tmpDir, freshServerDb, holdWriteLock } = helpers;
 const tmpFile = () => path.join(helpers.tmpDir(null, 'db'), 'nested', 'transcripts.db');
 const tables = (db) => db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((r) => r.name);
 
-test('SCHEMA_VERSION is 3', () => {
-  assert.strictEqual(SCHEMA_VERSION, 3);
+test('SCHEMA_VERSION is 4', () => {
+  assert.strictEqual(SCHEMA_VERSION, 4);
 });
 
-test('openDatabase creates the folder, all four tables, WAL mode and schema 3', () => {
+test('openDatabase creates the folder, all four tables, WAL mode and schema 4', () => {
   const file = tmpFile();
   const db = openDatabase(file);
   assert.deepStrictEqual(tables(db), ['files', 'meta', 'reviews', 'suggestions']);
   assert.strictEqual(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   assert.strictEqual(db.prepare('PRAGMA busy_timeout').get().timeout, 5000);
-  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '3');
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '4');
   db.close();
 });
 
@@ -43,11 +43,13 @@ test('openDatabase upgrades a v1 file in place and keeps its rows', () => {
   const db = openDatabase(file);
   assert.deepStrictEqual(tables(db), ['files', 'meta', 'reviews', 'suggestions']);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM files').get().n, 1);
-  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '3');
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '4');
+  const indexNames = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((r) => r.name);
+  assert.ok(!indexNames.includes('reviews_reviewed_at'), 'the v3 index is gone');
   db.close();
 });
 
-test('openDatabase upgrades a v2 file to 3, keeps suggestions and dismissals, and then accepts duplicate', () => {
+test('openDatabase upgrades a v2 file to 4, keeps suggestions and dismissals, and then accepts duplicate', () => {
   const file = tmpFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const v2 = new DatabaseSync(file);
@@ -72,7 +74,7 @@ test('openDatabase upgrades a v2 file to 3, keeps suggestions and dismissals, an
   assert.strictEqual(reader.prepare('SELECT COUNT(*) AS n FROM suggestions').get().n, 2);
 
   const db = openDatabase(file);
-  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '3');
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '4');
   assert.deepStrictEqual(db.prepare('SELECT idx, text, dismissed_at, reason FROM suggestions ORDER BY idx').all().map((r) => ({ ...r })), [
     { idx: 0, text: 'open one', dismissed_at: null, reason: null },
     { idx: 1, text: 'done one', dismissed_at: 5, reason: 'done' },
@@ -95,14 +97,57 @@ test('openDatabase upgrades a v2 file to 3, keeps suggestions and dismissals, an
   again.close();
 });
 
+test('openDatabase upgrades a v3 file to 4, keeps rows and reasons, accepts expired and swaps the indexes', () => {
+  const file = tmpFile();
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const v3 = new DatabaseSync(file);
+  v3.exec(`
+    CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT);
+    INSERT INTO meta VALUES ('schema', '3');
+    CREATE TABLE reviews (
+      session_id TEXT PRIMARY KEY, project TEXT, ended_at INTEGER,
+      status TEXT NOT NULL CHECK (status IN ('pending', 'done', 'failed', 'skipped')),
+      claimed_at INTEGER, reviewed_at INTEGER, transcript TEXT, title TEXT, branch TEXT, skip_reason TEXT, error TEXT
+    );
+    CREATE INDEX reviews_reviewed_at ON reviews (reviewed_at);
+    CREATE TABLE suggestions (
+      session_id TEXT NOT NULL,
+      idx INTEGER NOT NULL CHECK (idx >= 0),
+      kind TEXT NOT NULL,
+      text TEXT NOT NULL,
+      dismissed_at INTEGER,
+      reason TEXT CHECK (reason IN ('done', 'not_useful', 'duplicate')),
+      CHECK ((dismissed_at IS NULL) = (reason IS NULL)),
+      PRIMARY KEY (session_id, idx)
+    );
+    INSERT INTO suggestions VALUES ('a', 0, 'workflow', 'open one', NULL, NULL), ('a', 1, 'claude-md', 'dup one', 5, 'duplicate');
+  `);
+  v3.close();
+
+  const db = openDatabase(file);
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '4');
+  assert.deepStrictEqual(db.prepare('SELECT idx, text, dismissed_at, reason FROM suggestions ORDER BY idx').all().map((r) => ({ ...r })), [
+    { idx: 0, text: 'open one', dismissed_at: null, reason: null },
+    { idx: 1, text: 'dup one', dismissed_at: 5, reason: 'duplicate' },
+  ]);
+  db.prepare("UPDATE suggestions SET dismissed_at = 6, reason = 'expired' WHERE session_id = 'a' AND idx = 0").run();
+  const insert = db.prepare('INSERT INTO suggestions (session_id, idx, kind, text, dismissed_at, reason) VALUES (?, ?, ?, ?, ?, ?)');
+  assert.throws(() => insert.run('a', 2, 'workflow', 't', 5, 'bored'), 'unknown reason refused');
+  const indexNames = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((r) => r.name);
+  assert.ok(indexNames.includes('suggestions_open'), indexNames.join(', '));
+  assert.ok(indexNames.includes('reviews_reviewed_at_id'), indexNames.join(', '));
+  assert.ok(!indexNames.includes('reviews_reviewed_at'), indexNames.join(', '));
+  db.close();
+});
+
 test('openDatabase throws for a newer schema and leaves the bytes unchanged', () => {
   const file = tmpFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const raw = new DatabaseSync(file);
-  raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO meta VALUES ('schema', '4');");
+  raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO meta VALUES ('schema', '5');");
   raw.close();
   const before = fs.readFileSync(file);
-  assert.throws(() => openDatabase(file), /schema 4, newer than this dashboard's 3/);
+  assert.throws(() => openDatabase(file), /schema 5, newer than this dashboard's 4/);
   assert.ok(fs.readFileSync(file).equals(before));
 });
 
@@ -122,6 +167,7 @@ test('suggestions rejects a half-dismissed row and an unknown reason', () => {
   insert.run('a', 0, 'workflow', 't', null, null);
   insert.run('a', 1, 'workflow', 't', 5, 'done');
   insert.run('a', 2, 'workflow', 't', 5, 'duplicate');
+  db.prepare("INSERT INTO suggestions (session_id, idx, kind, text, dismissed_at, reason) VALUES ('ok', 0, 'workflow', 't', 1, 'expired')").run();
   db.close();
 });
 
