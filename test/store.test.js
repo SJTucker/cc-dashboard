@@ -33,7 +33,7 @@ test('put then loadAll round-trips an entry, and put replaces the same path', ()
 
   const loaded = store.loadAll().sort((a, b) => (a.path < b.path ? -1 : 1));
   assert.strictEqual(loaded.length, 2);
-  assert.deepStrictEqual(loaded[0], { path: '/p/one.jsonl', size: 20, mtimeMs: 1234.5, version: 1, minT: 100, maxT: 200, onDisk: true, rows: rowsOf({ calls: [{ key: 'k2' }] }) });
+  assert.deepStrictEqual(loaded[0], { path: '/p/one.jsonl', size: 20, mtimeMs: 1234.5, version: 1, minT: 100, maxT: 200, onDisk: true, rows: rowsOf({ calls: [{ key: 'k2' }], commands: [] }) });
   assert.strictEqual(loaded[1].onDisk, false);
   store.close();
 });
@@ -189,7 +189,7 @@ test('upgradeRows takes a version 1 row set to EXTRACT_VERSION', () => {
   assert.strictEqual(out.rows.toolUses[0].model, 'm1');
 });
 
-test('loadAll migrates the rows of a file that is gone and leaves one still on disk at its version', () => {
+test('loadAll migrates the rows of every file, and an entry still on disk keeps its stored version', () => {
   const { EXTRACT_VERSION } = require('../lib/extract');
   const file = path.join(tmpDir(), 'a.db');
   const store = openStore(file);
@@ -200,7 +200,8 @@ test('loadAll migrates the rows of a file that is gone and leaves one still on d
   assert.strictEqual(byPath['/p/gone.jsonl'].version, EXTRACT_VERSION);
   assert.deepStrictEqual(byPath['/p/gone.jsonl'].rows.commands, []);
   assert.strictEqual(byPath['/p/here.jsonl'].version, 1, 'isCurrent still sees an old version and re-reads the file');
-  assert.ok(!('commands' in byPath['/p/here.jsonl'].rows));
+  assert.deepStrictEqual(byPath['/p/here.jsonl'].rows.commands, [], 'the shape is migrated in memory');
+  assert.strictEqual(byPath['/p/here.jsonl'].rows.toolUses[0].model, 'm1');
   store.close();
   const raw = new sqlite.DatabaseSync(file);
   const stored = JSON.parse(raw.prepare('SELECT data FROM files WHERE path = ?').get('/p/gone.jsonl').data);
