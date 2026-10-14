@@ -1740,3 +1740,26 @@ test('a transcript that grows logs no lost-call warning', async (t) => {
   await refresh();
   assert.strictEqual(warn.mock.calls.filter((c) => String(c.arguments[0]).includes('stored calls')).length, 0);
 });
+
+test('a transcript read again while its last response streams logs no lost-call warning', async (t) => {
+  const { dir } = makeProjects();
+  const ts = new Date().toISOString();
+  // One line of a response: the same message.id and requestId on every line, with
+  // output_tokens growing and stop_reason set only on the last.
+  const line = (id, output, stop) => JSON.stringify({
+    timestamp: ts,
+    requestId: `req-${id}`,
+    message: { id: `msg-${id}`, model: 'claude-sonnet-4-6', stop_reason: stop, usage: { input_tokens: 100, output_tokens: output } },
+  });
+  const file = path.join(dir, 's1.jsonl');
+  // The first read sees the stream-start line and half of the next line.
+  fs.writeFileSync(file, [line('a', 50, 'end_turn'), line('b', 5, null)].join('\n') + '\n' + line('b', 300, 'end_turn').slice(0, 40));
+  const { rows, refresh } = harness(dir);
+  await refresh();
+  const warn = t.mock.method(console, 'warn', () => {});
+  fs.writeFileSync(file, [line('a', 50, 'end_turn'), line('b', 5, null), line('b', 300, 'end_turn')].join('\n') + '\n');
+  await refresh();
+  assert.strictEqual(warn.mock.calls.filter((c) => String(c.arguments[0]).includes('stored calls')).length, 0);
+  const [entry] = rows.entries();
+  assert.deepStrictEqual(entry.rows.calls.map((c) => [c.key, c.usage.output_tokens]), [['msg-a:req-a', 50], ['msg-b:req-b', 300]]);
+});
