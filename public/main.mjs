@@ -129,6 +129,23 @@ function setPolling(onNow) {
   }
 }
 
+// A hidden tab stops both pollers, so a background tab sends no requests. Showing the
+// tab again refreshes once, unless a load is already running, then restarts the
+// pollers for the current tab. enterTab sets state.tab, so a tab that is not Now never
+// starts livePoller.
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) {
+    livePoller.stop();
+    stickyPoller.stop();
+    return;
+  }
+  if (!loadInFlight) {
+    if (state.tab === 'now') runLoad();
+    else loadStickyToday();
+  }
+  setPolling(state.tab === 'now');
+});
+
 // Every today summary draws the sticky bar and the status strip through here: the
 // full load on Today, the sticky poll on other ranges. Sync moves on each one.
 function drawSticky(data) {
