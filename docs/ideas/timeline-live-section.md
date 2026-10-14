@@ -15,8 +15,8 @@ jump back and forth. Asked for on 2026-10-13.
   `/api/sessions/live` carries `live`.
 - On 2026-10-13, 17 sessions were shown with 6 live, spread through the list. The
   live ones were hard to find among the striped lanes.
-- The Live sessions panel already splits its rows into Running now and Today
-  (`runningSessions` in `public/session-groups.mjs`). That split keeps a session that is
+- The Live sessions panel already splits its rows into Running now and Earlier today
+  (`splitBands` in `public/session-groups.mjs`). That split keeps a session that is
   waiting on the user in Running now after its live window ends.
 
 ## Open questions

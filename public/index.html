@@ -119,36 +119,19 @@
 
         <section class="panel" id="sessionsPanel" data-hide-key="sessions" hidden>
           <div class="panel-head">
-            <h2>Live sessions</h2>
+            <h2 id="sessionsHeading">Live sessions</h2>
             <span class="panel-meta" id="sessionsNote"></span>
           </div>
-          <div id="runningSessions" hidden>
-            <h3 class="sessions-subhead" id="runningHeading">Running now</h3>
-            <div class="table-scroll" tabindex="0" role="region" aria-labelledby="runningHeading">
-              <table class="sessions-table" aria-labelledby="runningHeading">
-                <thead>
-                  <tr>
-                    <th scope="col">Session</th>
-                    <th scope="col">State</th>
-                    <th scope="col">Doing now</th>
-                    <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. Hover a value for the session's own cost counter.">Cost today</th>
-                    <th scope="col">Last active</th>
-                  </tr>
-                </thead>
-                <tbody id="runningTable"></tbody>
-              </table>
-            </div>
-          </div>
-          <h3 class="sessions-subhead" id="todayHeading">Today</h3>
-          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="todayHeading">
-            <table class="sessions-table" aria-labelledby="todayHeading">
+          <div class="table-scroll" tabindex="0" role="region" aria-labelledby="sessionsHeading">
+            <table class="sessions-table" aria-labelledby="sessionsHeading">
               <thead>
                 <tr>
                   <th scope="col">Session</th>
+                  <th scope="col" title="What a running session is doing. Empty for a session that is not running.">State</th>
                   <th scope="col" class="num" title="Prompts typed in this session today.">Prompts</th>
                   <th scope="col" class="num">Length</th>
                   <th scope="col" class="num" title="Lines added and removed by today's Edit and Write calls in this session, subagents included. Edits made through Bash are not counted.">Lines</th>
-                  <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. The bar is the share of the day's highest session cost. Hover a value for the session's own cost counter, which covers the whole session.">Cost today</th>
+                  <th scope="col" class="num" title="Today's calls in this session's transcripts, subagents included, priced by this dashboard. The bar is the share of the day's highest row cost. In a group, the solid part is the newest session and the striped part the earlier ones. Hover a value for the session's own cost counter, which covers the whole session.">Cost today</th>
                   <th scope="col">Last active</th>
                 </tr>
               </thead>

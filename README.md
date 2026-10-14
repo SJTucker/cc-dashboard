@@ -290,7 +290,7 @@ cannot be reopened, but it can be marked done, duplicate or not useful.
 
 ### Live state
 
-The mod also records what each session is doing, so the Running now table can show
+The mod also records what each session is doing, so the Running now band can show
 it. It listens to the main loop's events and keeps one small state per session:
 
 - **working** from the start of a turn (`turn.start`).
@@ -365,30 +365,37 @@ produces either source for claude.ai subscription logins, and only while it runs
 so the panel shows the time of the last update. Per-model weekly limits are left
 out.
 
-The Live sessions panel holds two tables. Running now lists the live sessions,
-meaning those that wrote to a transcript in the last 10 minutes, and any session
-waiting on you, however long ago it last wrote. Its columns are Session, State, Doing
-now, Cost today and Last active. The Session column shows the session's title, with
-its project and git branch on a line under it. The title is Claude Code's last
-`ai-title` line. A session without one shows the first prompt typed in it, in dimmer
-italic type. Hover the title to read it in full, followed by Claude Code's last away recap for the session when there is one (the `away_summary` line it writes when you return to an idle session; the Session timeline's bar tooltip shows it too, cut to 4 lines). `transcripts.db` stores that recap text. Hover the branch for its full name and, when the session switched
-branch, every branch it used. Prompts, Length and Lines are only in Today. Running
-now is ordered by the start of each session's first span today (`runningSessions` in
-`public/session-groups.mjs`), so rows do not move while they run. State shows ▶
-working or ⏸ waiting on you. Doing now shows the running tool, such as `Bash: npm
-test`, and the subagent count. Both show "—" without the mod (see "Live state").
-Today lists every session of the day, live ones included, sorted by Cost today with
-the highest first. Sessions started inside one `claude` process collapse into a single
-expandable row when there are two or more of them, so a session a `/clear` started
-sits with the one it replaced. The row shows the newest session's title, ⬢ and "live"
-while one of them is live, and how many were cleared or ended. This needs the mod (see
-"Live state"). Other ended sessions of one project collapse into a single expandable
-row when the project has two or more of them. The bar behind each Cost today value in
-Today is that session's share of the day's highest single-session Cost today. Prompts
-counts the prompts typed in the session today. The Total row sums Prompts, Lines and
-Cost today.
+The Live sessions panel is one table with two bands. Running now lists the sessions
+that are live, meaning they wrote to a transcript in the last 10 minutes, and any
+session waiting on you, however long ago it last wrote. Earlier today lists every
+other session of the day, sorted by Cost today with the highest first. Running now
+is ordered by the start of each session's first span today (`splitBands` in
+`public/session-groups.mjs`), so rows do not move while they run. Each band header
+has a toggle that collapses it, and its count stays visible: Running now shows how
+many sessions are waiting on you, and Earlier today shows its summed Cost today. The
+collapsed bands are kept in the browser's localStorage. The Earlier today band shows
+its first 10 rows until Show all, and Running now is never cut. The Session column
+shows the session's title, with its project and git branch on a line under it. The
+title is Claude Code's last `ai-title` line. A session without one shows the first
+prompt typed in it, in dimmer italic type. Hover the title to read it in full,
+followed by Claude Code's last away recap for the session when there is one (the
+`away_summary` line it writes when you return to an idle session; the Session
+timeline's bar tooltip shows it too, cut to 4 lines). `transcripts.db` stores that
+recap text. Hover the branch for its full name and, when the session switched branch,
+every branch it used. State is filled for a running session only. It shows ▶ working
+or ⏸ waiting on you, then the running tool, such as `Bash`, and the subagent count,
+and shows "—" without the mod (see "Live state"). Sessions started inside one
+`claude` process collapse into a single expandable row when there are two or more of
+them, so a session a `/clear` started sits with the one it replaced. The row shows
+the newest session's title, ⬢ and "live" while one of them is live, and how many were
+cleared or ended. A launch group whose newest session is running sits in Running now.
+This needs the mod (see "Live state"). Other ended sessions of one project collapse
+into a single expandable row when the project has two or more of them. The bar behind
+each Cost today value is that row's share of the day's highest row Cost today. In a group it is split: the solid part is the newest session and the striped
+part is the earlier ones, so the two read apart without colour. Prompts counts the
+prompts typed in the session today. The Total row sums Prompts, Lines and Cost today.
 
-![Live sessions panel with the Running now and Today tables](docs/screenshots/live-sessions.png)
+![Live sessions panel with the Running now and Earlier today bands](docs/screenshots/live-sessions.png)
 
 The Live sessions panel marks a session "cleared" after `/clear`, and "ended" after
 any other end, such as quitting or `/resume`. It reads this from
@@ -649,7 +656,7 @@ public/load.mjs        loadPanels: draws each panel when its own request settles
 public/main.mjs        Starts the page: fetches the API routes, draws every panel, runs the 5 s live poll and the range picker
 public/poll.mjs         Runs the 5 s live poll so one poll finishes before the next one starts
 public/reviews.mjs      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath
-public/session-groups.mjs  Groups the Today table's rows by claude launch, then ended sessions by project, and the running-session and activity labels
+public/session-groups.mjs  Groups the Live sessions rows by claude launch, then ended sessions by project, and splits them into the Running now and Earlier today bands, and the activity labels
 public/state.mjs       The tab, the Analysis range and the hidden panels, shared by the modules
 public/stats.mjs       median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/sticky-poll.mjs  What the sticky poll fetches: today's summary and the plan limits
@@ -676,7 +683,7 @@ public/price-lines.mjs  Text for the prices note and the lines a price check pri
 public/panels/records.mjs  Fetches /api/records for the sticky bar's 7d lines and Record day
 public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Duplicate, Not useful, Undo and Copy prompt; fetches /api/reviews
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
-public/panels/sessions.mjs  Today's sessions and the Running now table; fetches /api/sessions/live
+public/panels/sessions.mjs  The Live sessions table with its Running now and Earlier today bands; fetches /api/sessions/live
 public/panels/sticky.mjs  The sticky bar's Cost today, Tokens today and Record day
 public/panels/timeline.mjs  The Session timeline: one lane per session with activity today, with its cache rebuild marks
 public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown, its errors and an error table per model

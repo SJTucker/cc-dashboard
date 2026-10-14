@@ -3,8 +3,8 @@
 const test = require('node:test');
 const { before } = require('node:test');
 const assert = require('node:assert');
-let groupSessions, itemCost, costShare, runningSessions, activityLabel, doingNow;
-before(async () => { ({ groupSessions, itemCost, costShare, runningSessions, activityLabel, doingNow } = await import('../public/session-groups.mjs')); });
+let groupSessions, itemCost, costShare, splitBands, costSplit, activityLabel, doingNow;
+before(async () => { ({ groupSessions, itemCost, costShare, splitBands, costSplit, activityLabel, doingNow } = await import('../public/session-groups.mjs')); });
 
 function session(project, lastActiveAt, overrides = {}) {
   return {
@@ -87,32 +87,6 @@ test('costShare is the value over the maximum, clamped, and 0 when the maximum i
   assert.strictEqual(costShare(-1, 8), 0);
 });
 
-test('runningSessions keeps live sessions only, ordered by first span start', () => {
-  const a = session('a', 100, { ended: null, live: true, spans: [[500, 600]] });
-  const b = session('b', 90, { ended: null, live: true, spans: [[100, 200], [400, 450]] });
-  const idle = session('c', 80, { ended: null, live: false, spans: [[1, 2]] });
-  const done = session('d', 70, { spans: [[1, 2]] });
-  assert.deepStrictEqual(runningSessions([a, idle, b, done]).map((s) => s.project), ['b', 'a']);
-});
-
-test('runningSessions puts a session with no span last, and breaks ties by newest lastActiveAt', () => {
-  const none = session('none', 100, { ended: null, live: true, spans: [] });
-  const tieOld = session('tie-old', 10, { ended: null, live: true, spans: [[100, 100]] });
-  const tieNew = session('tie-new', 20, { ended: null, live: true, spans: [[100, 100]] });
-  assert.deepStrictEqual(runningSessions([none, tieOld, tieNew]).map((s) => s.project), ['tie-new', 'tie-old', 'none']);
-});
-
-test('runningSessions sorts a live session without a spans array last and does not throw', () => {
-  const noSpans = session('no-spans', 100, { ended: null, live: true });
-  delete noSpans.spans;
-  const withSpan = session('with-span', 10, { ended: null, live: true, spans: [[100, 100]] });
-  assert.deepStrictEqual(runningSessions([noSpans, withSpan]).map((s) => s.project), ['with-span', 'no-spans']);
-});
-
-test('runningSessions returns [] when no session is live', () => {
-  assert.deepStrictEqual(runningSessions([session('a', 1)]), []);
-});
-
 test('a group keeps its sessions in incoming order', () => {
   const [g] = groupSessions([session('a', 30), session('a', 20), session('a', 10)]);
   assert.deepStrictEqual(g.sessions.map((s) => s.lastActiveAt), [30, 20, 10]);
@@ -155,15 +129,6 @@ test('doingNow shows the tool name without its detail, and the subagent count wh
 test('doingNow is null with no activity, or nothing running', () => {
   assert.strictEqual(doingNow(null), null);
   assert.strictEqual(doingNow({ state: 'waiting', tool: null, subagents: 0 }), null);
-});
-
-test('runningSessions keeps a session that is waiting on you after it stops being live', () => {
-  const base = { spans: [[1, 2]], lastActiveAt: 2, live: false };
-  const waiting = { ...base, project: 'waiting', activity: { state: 'waiting' } };
-  const approval = { ...base, project: 'approval', spans: [[3, 4]], activity: { state: 'approval' } };
-  const stale = { ...base, project: 'stale', activity: null };
-  const working = { ...base, project: 'working', activity: { state: 'working' } };
-  assert.deepStrictEqual(runningSessions([stale, approval, working, waiting]).map((s) => s.project), ['waiting']);
 });
 
 test('two sessions of one launch group even when one of them is live', () => {
@@ -272,4 +237,79 @@ test('cacheLine drops the cost clause when rebuildUsd is null', () => {
 test('cacheLine is null without a cache', () => {
   assert.strictEqual(cacheLine(undefined), null);
   assert.strictEqual(cacheLine(null), null);
+});
+
+const runningNames = (bands) => bands.running.map((r) => r.session.project);
+
+test('splitBands puts live sessions in running, ordered by first span start, and the rest in earlier', () => {
+  const a = session('a', 100, { ended: null, live: true, spans: [[500, 600]] });
+  const b = session('b', 90, { ended: null, live: true, spans: [[100, 200], [400, 450]] });
+  const idle = session('c', 80, { ended: null, live: false, spans: [[1, 2]] });
+  const done = session('d', 70, { spans: [[1, 2]] });
+  const bands = splitBands(groupSessions([a, idle, b, done]));
+  assert.deepStrictEqual(runningNames(bands), ['b', 'a']);
+  assert.deepStrictEqual(bands.running.map((r) => r.item.type), ['session', 'session']);
+  assert.deepStrictEqual(bands.earlier.map((i) => i.session.project).sort(), ['c', 'd']);
+});
+
+test('splitBands puts a session with no span last and breaks ties by newest lastActiveAt', () => {
+  const none = session('none', 100, { ended: null, live: true, spans: [] });
+  const noSpans = session('no-spans', 5, { ended: null, live: true });
+  delete noSpans.spans;
+  const tieOld = session('tie-old', 10, { ended: null, live: true, spans: [[100, 100]] });
+  const tieNew = session('tie-new', 20, { ended: null, live: true, spans: [[100, 100]] });
+  assert.deepStrictEqual(runningNames(splitBands(groupSessions([none, noSpans, tieOld, tieNew]))), ['tie-new', 'tie-old', 'none', 'no-spans']);
+});
+
+test('splitBands keeps a session waiting on you after it stops being live', () => {
+  const base = { spans: [[1, 2]], lastActiveAt: 2, live: false };
+  const waiting = { ...base, project: 'waiting', activity: { state: 'waiting' } };
+  const approval = { ...base, project: 'approval', spans: [[3, 4]], activity: { state: 'approval' } };
+  const stale = { ...base, project: 'stale', activity: null };
+  const working = { ...base, project: 'working', activity: { state: 'working' } };
+  const bands = splitBands(groupSessions([stale, approval, working, waiting]));
+  assert.deepStrictEqual(runningNames(bands), ['waiting']);
+  assert.strictEqual(bands.earlier.length, 3);
+});
+
+test('splitBands returns a launch group whose newest session is running, with that session', () => {
+  const newest = session('a', 30, { ended: null, live: true, launchId: 'L1', spans: [[10, 30]] });
+  const bands = splitBands(groupSessions([newest, session('a', 20, { launchId: 'L1' }), session('a', 10, { launchId: 'L1' })]));
+  assert.strictEqual(bands.running.length, 1);
+  assert.strictEqual(bands.running[0].item.kind, 'launch');
+  assert.strictEqual(bands.running[0].session, newest);
+  assert.deepStrictEqual(bands.earlier, []);
+});
+
+test('splitBands leaves a launch group of cleared sessions in earlier', () => {
+  const bands = splitBands(groupSessions([session('a', 30, { launchId: 'L1' }), session('a', 20, { launchId: 'L1' })]));
+  assert.deepStrictEqual(bands.running, []);
+  assert.strictEqual(bands.earlier.length, 1);
+});
+
+test('splitBands keeps earlier in groupSessions order and returns empty bands for no items', () => {
+  const items = groupSessions([session('a', 10, { costTodayUsd: 1 }), session('b', 20, { costTodayUsd: 3 })]);
+  assert.deepStrictEqual(splitBands(items).earlier, items);
+  assert.deepStrictEqual(splitBands([]), { running: [], earlier: [] });
+});
+
+test('costSplit of a single session is all newest', () => {
+  assert.deepStrictEqual(costSplit({ type: 'session', session: session('a', 1, { costTodayUsd: 2 }) }), { newest: 2, earlier: 0 });
+});
+
+test('costSplit of a group is the head session and the rest', () => {
+  const [g] = groupSessions([
+    session('a', 30, { launchId: 'L1', costTodayUsd: 1 }),
+    session('a', 20, { launchId: 'L1', costTodayUsd: 0.25 }),
+    session('a', 10, { launchId: 'L1', costTodayUsd: 0.5 }),
+  ]);
+  assert.deepStrictEqual(costSplit(g), { newest: 1, earlier: 0.75 });
+});
+
+test('costSplit with a newest cost of 0 puts all of the cost in earlier', () => {
+  const [g] = groupSessions([
+    session('a', 30, { launchId: 'L1', costTodayUsd: 0 }),
+    session('a', 20, { launchId: 'L1', costTodayUsd: 2 }),
+  ]);
+  assert.deepStrictEqual(costSplit(g), { newest: 0, earlier: 2 });
 });
