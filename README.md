@@ -631,7 +631,7 @@ public/poll.js         Runs the 5 s live poll so one poll finishes before the ne
 public/reviews.js      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath
 public/session-groups.js  Groups the Today table's rows by claude launch, then ended sessions by project, and the running-session and activity labels
 public/state.mjs       The tab, the Analysis range and the hidden panels, shared by the modules
-public/stats.js        median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
+public/stats.mjs       median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/sticky-poll.mjs  What the sticky poll fetches: today's summary and the plan limits
 public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
 public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, the signed y axis for charts with negative values, and the Setup changes y axis with a 0 label and headroom

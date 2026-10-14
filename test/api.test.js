@@ -464,10 +464,10 @@ test('the server still answers when the transcript database cannot be opened', a
   assert.ok(warn.mock.calls.some((c) => /Could not open/.test(c.arguments[0])));
 });
 
-test('GET /stats.js serves the shared statistics helpers', async (t) => {
+test('GET /stats.mjs serves the shared statistics helpers', async (t) => {
   const { url } = await startServer(t);
 
-  const res = await fetch(`${url}/stats.js`);
+  const res = await fetch(`${url}/stats.mjs`);
   assert.strictEqual(res.status, 200);
   assert.match(res.headers.get('content-type'), /javascript/);
   assert.match(await res.text(), /function percentile/);

@@ -1,9 +1,5 @@
-'use strict';
-
-// Loaded two ways, so the server and the browser compute the same numbers:
-// index.html loads it as a script before main.mjs, which makes these functions
-// globals, and lib/efficiency.js loads it with require(). server.js's
-// /api/records route also requires it directly.
+// Shared by the browser and the server, so both compute the same numbers: panels
+// import it, and lib/efficiency.js and server.js's /api/records route require() it.
 
 function median(values) {
   if (!values.length) return null;
@@ -71,4 +67,4 @@ function rollingWeek(priorDays, todayStr, today) {
   return week;
 }
 
-if (typeof module === 'object') module.exports = { median, percentile, dayTotals, busiestDay, rollingWeek };
+export { median, percentile, dayTotals, busiestDay, rollingWeek };

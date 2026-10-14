@@ -148,8 +148,8 @@ test('buildReport attaches before/after windows and rtk entries in range order',
   assert.strictEqual(buildReport({ calls: [], prompts: [] }, markers, null, {}).markers[0].before.rtk, null);
 });
 
-test('the browser and the server share one median and percentile', () => {
-  const stats = require('../public/stats');
+test('the browser and the server share one median and percentile', async () => {
+  const stats = await import('../public/stats.mjs');
   assert.strictEqual(median, stats.median);
   assert.strictEqual(percentile, stats.percentile);
 });

@@ -5,6 +5,7 @@ import { formatTokens, shortDate, localDateStr, escapeHtml, modelLabel } from '.
 import { drawPlotAxis } from './axes.mjs';
 import { legendRow } from './legend.mjs';
 import { appendPatternDefs, fillFor, textureCss, TOKENS } from './palette.mjs';
+import { percentile } from '../stats.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const WEEK_MS = 7 * DAY_MS;
