@@ -65,3 +65,23 @@ test('sourceLine adds a failed check and an ignored prices.json', async () => {
     'Prices: built-in, checked 2026-10-14 · last check failed: Could not fetch the page: 503 · prices.json ignored: not valid JSON',
   );
 });
+test('checkLines names a fast rate that is added to or removed from a model, and nothing else', async () => {
+  const { checkLines } = await load();
+  const OPUS = { match: 'opus-5-5', name: 'Claude Opus 5.5', input: 4, output: 20, cacheReadMult: 0.05 };
+  const withFast = { ...OPUS, fast: { input: 8, output: 40 } };
+  const lines = (before, after) => checkLines({ added: [], changed: [{ before, after }], unchanged: 19, skipped: [], effectiveFrom: '2026-10-14' });
+  assert.deepStrictEqual(lines(OPUS, withFast), ['Opus 5.5: fast none → $8 / $40, from 2026-10-14']);
+  assert.deepStrictEqual(lines(withFast, OPUS), ['Opus 5.5: fast $8 / $40 → none, from 2026-10-14']);
+});
+
+test('sourceLine says the last good prices are kept when prices.json became unreadable after a good read', async () => {
+  const { sourceLine } = await load();
+  assert.strictEqual(
+    sourceLine({ kind: 'fetched', date: '2026-10-08', snapshots: 2, lastCheck: '2026-10-14', error: 'not valid JSON', lastError: null }),
+    "Prices: from Anthropic's pricing page, effective 2026-10-08, checked 2026-10-14 · prices.json unreadable, last good prices kept: not valid JSON",
+  );
+  assert.strictEqual(
+    sourceLine({ kind: 'built-in', date: '2026-10-14', snapshots: 0, lastCheck: null, error: 'not valid JSON', lastError: null }),
+    'Prices: built-in, checked 2026-10-14 · prices.json ignored: not valid JSON',
+  );
+});
