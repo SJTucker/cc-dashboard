@@ -17,9 +17,9 @@ function tabMarkup(id) {
 const panelIds = (markup) => [...markup.matchAll(/<section class="panel"[^>]*?id="(\w+)"/g)].map((m) => m[1]);
 const headings = (markup) => [...markup.matchAll(/<h2[^>]*>([^<]*)<\/h2>/g)].map((m) => m[1]);
 
-test('the Now tab holds Plan usage and Where usage goes in one row, then the timeline, Live sessions and Models', () => {
+test('the Now tab holds Plan usage and Where usage goes in one row, then Live sessions, the timeline and Models', () => {
   const now = tabMarkup('tabNow');
-  assert.deepStrictEqual(panelIds(now), ['limitsPanel', 'attributionPanel', 'timelinePanel', 'sessionsPanel', 'modelsPanel']);
+  assert.deepStrictEqual(panelIds(now), ['limitsPanel', 'attributionPanel', 'sessionsPanel', 'timelinePanel', 'modelsPanel']);
   assert.match(now, /<div class="panel-row even stretch">\s*<section class="panel" id="limitsPanel"/);
 });
 
