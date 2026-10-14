@@ -32,15 +32,15 @@ test('a row with no invocations field reads as 0 invocations and does not throw'
 // ---- Cache bar -------------------------------------------------------------
 const { installDom } = require('./dom-stub');
 
-function renderWith(cacheCost) {
+function renderWith(cacheCost, tokens = {}) {
   installDom();
   const nodes = {};
   const base = globalThis.document.createElement;
-  for (const id of ['attributionPanel', 'threadBars', 'contextBars', 'cacheBars', 'cacheSaved', 'skillBars', 'subagentBars']) nodes[id] = base('div');
+  for (const id of ['attributionPanel', 'threadBars', 'contextBars', 'cacheBars', 'cacheHit', 'skillBars', 'subagentBars']) nodes[id] = base('div');
   globalThis.document.getElementById = (id) => nodes[id];
   return load().then(({ renderAttribution }) => {
     renderAttribution({
-      summary: { totalCost: 10 }, threads: { main: 1, subagent: 1 }, context: { over: 1, under: 1 },
+      summary: { totalCost: 10, ...tokens }, threads: { main: 1, subagent: 1 }, context: { over: 1, under: 1 },
       contextThreshold: 150000, skills: [], subagents: [], cacheCost,
     });
     return nodes;
@@ -64,9 +64,15 @@ test('the Cache bar lists reads, writes, uncached input and output in that order
   }
 });
 
-test('the Cache note says what cache reads saved, and is empty when nothing was saved or cacheCost is missing', async () => {
-  const text = 'reads saved $5.00 against the full input rate';
-  assert.equal((await renderWith({ cacheRead: 1, cacheWrite: 1, input: 1, output: 1, saved: 5 })).cacheSaved.textContent, text);
-  assert.equal((await renderWith({ cacheRead: 1, cacheWrite: 1, input: 1, output: 1, saved: 0 })).cacheSaved.textContent, '');
-  assert.equal((await renderWith(undefined)).cacheSaved.textContent, '');
+test('the Cache note gives hit and miss shares of input tokens, and is empty when the range has no input tokens', async () => {
+  const tokens = { totalInput: 100, totalCacheCreate: 400, totalCacheRead: 1500, cacheEfficiency: 0.75 };
+  assert.equal((await renderWith(undefined, tokens)).cacheHit.textContent, '75.0% hits, 25.0% misses by input tokens');
+  assert.equal((await renderWith(undefined)).cacheHit.textContent, '');
+});
+
+test('the Cache note tooltip says what cache reads saved, and is empty when nothing was saved or cacheCost is missing', async () => {
+  const text = 'Cache reads saved $5.00 against the full input rate';
+  assert.equal((await renderWith({ cacheRead: 1, cacheWrite: 1, input: 1, output: 1, saved: 5 })).cacheHit.title, text);
+  assert.equal((await renderWith({ cacheRead: 1, cacheWrite: 1, input: 1, output: 1, saved: 0 })).cacheHit.title, '');
+  assert.equal((await renderWith(undefined)).cacheHit.title, '');
 });

@@ -1,6 +1,6 @@
 // Where usage goes: main thread against subagents, over against under the context
 // threshold, the cache split of cost, and the skill and subagent lists.
-import { formatCost, axisTokens, escapeHtml } from '../format.mjs';
+import { formatCost, formatPercent, axisTokens, escapeHtml } from '../format.mjs';
 import { shown } from '../state.mjs';
 import { drawSplitBar, drawShareBar, shareTooltip } from '../charts/split.mjs';
 import { TOKENS } from '../charts/palette.mjs';
@@ -44,12 +44,22 @@ export function cacheItems(cacheCost) {
   return parts.map((p) => ({ name: p.name, value: p.cost, texture: p.texture, color: p.color, tooltip: shareTooltip(p.name, p.cost, total) }));
 }
 
-// The note beside the Cache title: what cache reads cost less than the same tokens
-// at the full input rate. Empty when there is nothing to say.
+// The note beside the Cache title: the share of input tokens read from cache
+// (hits) against those written to cache or sent uncached (misses). Empty when the
+// range has no input tokens.
+export function cacheHitText(summary) {
+  const eligible = (summary.totalInput || 0) + (summary.totalCacheCreate || 0) + (summary.totalCacheRead || 0);
+  if (!(eligible > 0)) return '';
+  const hit = summary.cacheEfficiency;
+  return `${formatPercent(hit)} hits, ${formatPercent(1 - hit)} misses by input tokens`;
+}
+
+// The note's tooltip: what cache reads cost less than the same tokens at the full
+// input rate. Empty when nothing was saved.
 export function cacheSavedText(cacheCost) {
   const saved = cacheCost?.saved;
   if (!(saved > 0)) return '';
-  return `reads saved ${formatCost(saved)} against the full input rate`;
+  return `Cache reads saved ${formatCost(saved)} against the full input rate`;
 }
 
 export function renderAttribution(data) {
@@ -83,7 +93,9 @@ export function renderAttribution(data) {
   drawSplitBar(document.getElementById('threadBars'), threadRows);
   drawSplitBar(document.getElementById('contextBars'), contextRows);
   drawShareBar(document.getElementById('cacheBars'), data.cacheCost ? cacheItems(data.cacheCost) : [], { empty: 'Nothing attributed in this range.' });
-  document.getElementById('cacheSaved').textContent = cacheSavedText(data.cacheCost);
+  const cacheNote = document.getElementById('cacheHit');
+  cacheNote.textContent = cacheHitText(data.summary);
+  cacheNote.title = cacheSavedText(data.cacheCost);
   drawHBars(document.getElementById('skillBars'), data.skills.slice(0, 8), usageBars);
   drawHBars(document.getElementById('subagentBars'), data.subagents.slice(0, 8), usageBars);
 }
