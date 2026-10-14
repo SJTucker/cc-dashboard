@@ -21,12 +21,68 @@ function groupFields(sessions) {
   return fields;
 }
 
+// The groups of `sessions` that hold two or more of them, as a map from each such
+// session to its group's sessions, in input order. Two sessions are in one group when
+// they share a launchId (one claude process), or when one's clearedFrom is the other's
+// sessionId (the /clear that started it). A session resumed in a new process and then
+// cleared has a different launchId from the session its /clear started, so only the
+// clearedFrom link joins them. A clearedFrom that names a session not in the list
+// joins nothing.
+function chainGroups(sessions) {
+  const parent = new Map(sessions.map((s) => [s, s]));
+  const find = (s) => {
+    while (parent.get(s) !== s) s = parent.get(s);
+    return s;
+  };
+  const join = (a, b) => {
+    const ra = find(a);
+    const rb = find(b);
+    if (ra !== rb) parent.set(ra, rb);
+  };
+  const firstOfLaunch = new Map();
+  const byId = new Map();
+  for (const s of sessions) {
+    if (s.sessionId != null) byId.set(s.sessionId, s);
+    if (s.launchId == null) continue;
+    if (firstOfLaunch.has(s.launchId)) join(s, firstOfLaunch.get(s.launchId));
+    else firstOfLaunch.set(s.launchId, s);
+  }
+  for (const s of sessions) {
+    const cleared = s.clearedFrom == null ? null : byId.get(s.clearedFrom);
+    if (cleared) join(s, cleared);
+  }
+  const members = new Map();
+  for (const s of sessions) {
+    const root = find(s);
+    if (!members.has(root)) members.set(root, []);
+    members.get(root).push(s);
+  }
+  const groupOf = new Map();
+  for (const list of members.values()) {
+    if (list.length >= 2) for (const s of list) groupOf.set(s, list);
+  }
+  return groupOf;
+}
+
+// The key of a launch group: the launchId, else the sessionId, of its first session
+// to start (earliest first span start, then the oldest lastActiveAt). A session that
+// joins the chain later starts later, so the key, and the group's expanded state in
+// the panel, stay the same.
+function chainKey(list) {
+  const start = (s) => (s.spans?.length ? s.spans[0][0] : Infinity);
+  let first = list[list.length - 1];
+  for (const s of list) if (start(s) < start(first)) first = s;
+  return `launch:${first.launchId ?? first.sessionId}`;
+}
+
 // Turns the sessions of /api/sessions/live (newest lastActiveAt first) into the rows
 // of the Live sessions table.
 // - Sessions with the same launchId came from one claude process (the mod's
-//   statuslineInput). Two or more of them collapse into a launch group, live and open
-//   ones included, so a /clear's new session sits with the one it replaced. head is
-//   the newest, and the row shows its title.
+//   statuslineInput), and a session whose clearedFrom names another came from that
+//   session's /clear (chainGroups). Two or more such sessions collapse into a launch
+//   group, live and open ones included, so a /clear's new session sits with the one
+//   it replaced, even when that one was resumed in another process. head is the
+//   newest, and the row shows its title.
 // - Of the rest, ended sessions of one project collapse into a project group when
 //   the project has two or more. Live and idle open sessions stay plain rows.
 // A session is in one group at most. key tells groups apart across polls, with a
@@ -34,13 +90,8 @@ function groupFields(sessions) {
 // sorted by Cost today, highest first, and a group counts by its summed Cost today.
 // Equal costs fall back to the newest lastActiveAt.
 function groupSessions(sessions) {
-  const byLaunch = new Map();
-  for (const s of sessions) {
-    if (s.launchId == null) continue;
-    if (!byLaunch.has(s.launchId)) byLaunch.set(s.launchId, []);
-    byLaunch.get(s.launchId).push(s);
-  }
-  const inLaunch = (s) => s.launchId != null && byLaunch.get(s.launchId).length >= 2;
+  const chainOf = chainGroups(sessions);
+  const inLaunch = (s) => chainOf.has(s);
 
   const endedByProject = new Map();
   for (const s of sessions) {
@@ -52,11 +103,11 @@ function groupSessions(sessions) {
   const items = [];
   for (const s of sessions) {
     if (inLaunch(s)) {
-      const launch = byLaunch.get(s.launchId);
+      const launch = chainOf.get(s);
       // The group takes the place of its first (newest) session.
       if (launch[0] !== s) continue;
       items.push({
-        type: 'group', kind: 'launch', key: `launch:${s.launchId}`, project: s.project,
+        type: 'group', kind: 'launch', key: chainKey(launch), project: s.project,
         sessions: launch, head: s, live: launch.some((e) => e.live), ...groupFields(launch),
       });
       continue;

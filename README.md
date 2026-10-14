@@ -386,7 +386,9 @@ every branch it used. State is filled for a running session only. It shows ▶ w
 or ⏸ waiting on you, then the running tool, such as `Bash`, and the subagent count,
 and shows "—" without the mod (see "Live state"). Sessions started inside one
 `claude` process collapse into a single expandable row when there are two or more of
-them, so a session a `/clear` started sits with the one it replaced. The row shows
+them, so a session a `/clear` started sits with the one it replaced. A `/clear` after
+`claude --continue` joins the same row, although the two sessions came from different
+processes. The row shows
 the newest session's title, ⬢ and "live" while one of them is live, and how many were
 cleared or ended. A launch group whose newest session is running sits in Running now.
 This needs the mod (see "Live state"). Other ended sessions of one project collapse

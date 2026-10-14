@@ -313,3 +313,41 @@ test('costSplit with a newest cost of 0 puts all of the cost in earlier', () => 
   ]);
   assert.deepStrictEqual(costSplit(g), { newest: 0, earlier: 2 });
 });
+
+test('a session resumed in a new process and then cleared groups with the session it cleared', () => {
+  const resumed = session('a', 20, { sessionId: 's1', launchId: 'L1' });
+  const next = session('a', 30, { sessionId: 's2', launchId: 'L2', clearedFrom: 's1', ended: null, live: true });
+  const items = groupSessions([next, resumed]);
+  assert.strictEqual(items.length, 1);
+  assert.strictEqual(items[0].kind, 'launch');
+  assert.deepStrictEqual(items[0].sessions, [next, resumed]);
+  assert.strictEqual(items[0].head, next);
+  assert.strictEqual(items[0].live, true);
+});
+
+test('a /clear chain joins the launch groups of two processes into one group', () => {
+  const a = session('a', 10, { sessionId: 's1', launchId: 'L1' });
+  const b = session('a', 20, { sessionId: 's2', launchId: 'L1', clearedFrom: 's1' });
+  const c = session('a', 30, { sessionId: 's3', launchId: 'L2', clearedFrom: 's2' });
+  const d = session('a', 40, { sessionId: 's4', launchId: 'L2', clearedFrom: 's3', ended: null });
+  const items = groupSessions([d, c, b, a]);
+  assert.strictEqual(items.length, 1);
+  assert.deepStrictEqual(items[0].sessions, [d, c, b, a]);
+  assert.strictEqual(items[0].head, d);
+});
+
+test('a clearedFrom naming a session not in the list joins nothing', () => {
+  const s = session('a', 20, { sessionId: 's2', launchId: 'L2', clearedFrom: 'yesterday', ended: null });
+  assert.deepStrictEqual(groupSessions([s]), [{ type: 'session', session: s }]);
+});
+
+test("a chain's key comes from its first session to start, so a session that joins later keeps it", () => {
+  const a = session('a', 10, { sessionId: 's1', launchId: 'L9', spans: [[100, 200]] });
+  const b = session('a', 20, { sessionId: 's2', launchId: 'L9', clearedFrom: 's1', spans: [[300, 400]] });
+  const c = session('a', 30, { sessionId: 's3', launchId: 'L1', clearedFrom: 's2', spans: [[500, 600]], ended: null });
+  assert.strictEqual(groupSessions([b, a])[0].key, 'launch:L9');
+  // L1 sorts before L9, so a key taken from the smallest launchId would change here.
+  const after = groupSessions([c, b, a]);
+  assert.strictEqual(after.length, 1);
+  assert.strictEqual(after[0].key, 'launch:L9');
+});
