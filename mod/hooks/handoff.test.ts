@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { REPO_STEPS, branchSlug, handoffDocument, planHandoff, resumePrompt } from './handoff'
+import { REPO_STEPS, branchSlug, handoffDocument, handoffWaitMs, hourCacheExpiry, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 
 const ok = (label: string, text: string): StepOutput => ({ label, ok: true, text })
@@ -108,4 +108,17 @@ test('the fork prompt calls a repo not a git repo only when the Worktree root st
 test('handoffDocument keeps a reply with no # Handoff: line, and rejects a blank one', async () => {
   expect(handoffDocument('Some document\n')).toBe('Some document\n')
   expect(handoffDocument('  \n')).toBe(null)
+})
+
+test('hourCacheExpiry gives the expiry of a 1h cache and null for anything else', async () => {
+  expect(hourCacheExpiry({ ttl: '1h', expiresAt: 5000 })).toBe(5000)
+  expect(hourCacheExpiry({ ttl: '5m', expiresAt: 5000 })).toBeNull()
+  expect(hourCacheExpiry({ ttl: '1h', expiresAt: '5000' })).toBeNull()
+  expect(hourCacheExpiry({})).toBeNull()
+})
+
+test('handoffWaitMs is the time to leadMs before expiry, and null once that has passed', async () => {
+  expect(handoffWaitMs(10_000, 1000, 6000)).toBe(3000)
+  expect(handoffWaitMs(10_000, 4000, 6000)).toBeNull()
+  expect(handoffWaitMs(10_000, 5000, 6000)).toBeNull()
 })

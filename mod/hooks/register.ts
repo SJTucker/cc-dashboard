@@ -8,7 +8,7 @@ import { newestTool, setState, toolDetail, toolsOf } from './activity'
 import type { Activity, ToolRun } from './activity'
 import { parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep } from './steps'
-import { REPO_STEPS, handoffDocument, planHandoff, resumePrompt } from './handoff'
+import { REPO_STEPS, handoffDocument, handoffWaitMs, hourCacheExpiry, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
@@ -704,9 +704,10 @@ async function handoffWait($: EngineInterface, id: string): Promise<{ wait: numb
     ttl?: unknown
     expiresAt?: unknown
   }
-  if (cache.ttl !== '1h' || typeof cache.expiresAt !== 'number') return null
-  const wait = cache.expiresAt - HANDOFF_LEAD_MS - (await $.clock.now())
-  return wait > 0 ? { wait, expiresAt: cache.expiresAt } : null
+  const expiresAt = hourCacheExpiry(cache)
+  if (expiresAt === null) return null
+  const wait = handoffWaitMs(expiresAt, await $.clock.now(), HANDOFF_LEAD_MS)
+  return wait === null ? null : { wait, expiresAt }
 }
 
 // The same checks as the session.compact trigger: the session is between turns and
