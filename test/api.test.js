@@ -878,21 +878,22 @@ test('GET /api/reviews lists finished reviews with suggestion state', async (t) 
   add('sess-b', 'skipped', { skip: 'under 3 prompts' });
   db.close();
 
-  const res = await fetch(`${url}/api/reviews`);
+  const res = await fetch(`${url}/api/reviews?days=7`);
   assert.strictEqual(res.status, 200);
   assert.deepStrictEqual(await res.json(), {
     reviews: [{
-      sessionId: 'sess-a', title: null, branch: null, transcript: null, project: 'demo', endedAt: now - 60_000, reviewedAt: now, status: 'done',
+      sessionId: 'sess-a', title: null, branch: null, transcript: null, project: 'demo', endedAt: now - 60_000, reviewedAt: now,
       suggestions: [{ idx: 0, kind: 'token-waste', text: 'Read the file once.', dismissedAt: null, reason: null }],
     }],
+    closedCount: 0,
   });
 });
 
 test('GET /api/reviews answers an empty list before any review exists', async (t) => {
   const { url } = await startServer(t);
-  const res = await fetch(`${url}/api/reviews`);
+  const res = await fetch(`${url}/api/reviews?days=7`);
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(await res.json(), { reviews: [] });
+  assert.deepStrictEqual(await res.json(), { reviews: [], closedCount: 0 });
 });
 
 test('GET /api/reviews imports review files from an earlier version', async (t) => {
@@ -903,7 +904,7 @@ test('GET /api/reviews imports review files from an earlier version', async (t) 
   fs.writeFileSync(path.join(dir, 'sess-old.json'), JSON.stringify({
     sessionId: 'sess-old', project: 'demo', endedAt: now - 1000, reviewedAt: now, status: 'done', suggestions: [{ kind: 'workflow', text: 'Plan first.' }],
   }));
-  const body = await (await fetch(`${url}/api/reviews`)).json();
+  const body = await (await fetch(`${url}/api/reviews?days=7`)).json();
   assert.deepStrictEqual(body.reviews.map((r) => [r.sessionId, r.suggestions.map((s) => s.text)]), [['sess-old', ['Plan first.']]]);
 });
 
@@ -913,7 +914,7 @@ test('GET /api/reviews answers 500 with the reason when transcripts.db cannot be
   fs.mkdirSync(path.dirname(file), { recursive: true });
   fs.writeFileSync(file, 'not a database '.repeat(100));
   t.mock.method(console, 'error', () => {});
-  const url = `${base}/api/reviews`;
+  const url = `${base}/api/reviews?days=7`;
   const res = await fetch(url);
   assert.strictEqual(res.status, 500);
   const body = await res.json();
@@ -938,7 +939,59 @@ async function reviewServer(t) {
 
 const dismissUrl = (base, id, idx) => `${base}/api/reviews/${id}/suggestions/${idx}/dismiss`;
 const postJson = (url, body, headers = {}) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', ...headers }, body: JSON.stringify(body) });
-const suggestionState = async (base, id) => (await (await fetch(`${base}/api/reviews`)).json()).reviews.find((r) => r.sessionId === id).suggestions.map((s) => s.reason);
+// Each suggestion's reason in idx order, read from the open list and the closed pages.
+const suggestionState = async (base, id) => {
+  const open = (await (await fetch(`${base}/api/reviews?days=7`)).json()).reviews.find((r) => r.sessionId === id)?.suggestions ?? [];
+  const closed = (await (await fetch(`${base}/api/reviews/closed?days=7&limit=50`)).json()).reviews.find((r) => r.sessionId === id)?.suggestions ?? [];
+  return [...open, ...closed].sort((a, b) => a.idx - b.idx).map((s) => s.reason);
+};
+
+test('the reviews routes answer 400 for a missing or bad days, limit or before', async (t) => {
+  const { url } = await startServer(t);
+  for (const route of [
+    '/api/reviews', '/api/reviews?days=', '/api/reviews?days=today', '/api/reviews?days=14', '/api/reviews?days=7&days=30',
+    '/api/reviews/closed', '/api/reviews/closed?days=abc', '/api/reviews/closed?days=7&limit=0', '/api/reviews/closed?days=7&limit=x',
+    '/api/reviews/closed?days=7&before=nope', `/api/reviews/closed?days=7&before=${encodeURIComponent('12:../x')}`,
+  ]) {
+    const res = await fetch(url + route);
+    assert.strictEqual(res.status, 400, route);
+    assert.ok((await res.json()).error, route);
+  }
+});
+
+test('GET /api/reviews/closed pages closed suggestions newest first and caps limit at 50', async (t) => {
+  const { url, config } = await startServer(t);
+  const db = openTestReviewDb(config);
+  const now = Date.now();
+  for (let i = 0; i < 55; i++) {
+    const id = `sess-${String(i).padStart(2, '0')}`;
+    db.prepare("INSERT INTO reviews (session_id, project, ended_at, status, claimed_at, reviewed_at) VALUES (?, 'demo', ?, 'done', ?, ?)").run(id, now - 1000, now - 2000, now - i);
+    db.prepare("INSERT INTO suggestions (session_id, idx, kind, text, dismissed_at, reason) VALUES (?, 0, 'workflow', 'x', ?, 'done')").run(id, now);
+  }
+  db.close();
+
+  const big = await (await fetch(`${url}/api/reviews/closed?days=7&limit=500`)).json();
+  assert.strictEqual(big.reviews.length, 50);
+  assert.strictEqual(big.next, `${now - 49}:sess-49`);
+  const rest = await (await fetch(`${url}/api/reviews/closed?days=7&before=${encodeURIComponent(big.next)}`)).json();
+  assert.deepStrictEqual(rest.reviews.map((r) => r.sessionId), ['sess-50', 'sess-51', 'sess-52', 'sess-53', 'sess-54']);
+  assert.strictEqual(rest.next, null);
+  assert.deepStrictEqual(await (await fetch(`${url}/api/reviews?days=7`)).json(), { reviews: [], closedCount: 55 });
+});
+
+test('an expired suggestion refuses undo and the expired reason, and takes a new reason', async (t) => {
+  const { base, config } = await reviewServer(t);
+  const db = openTestReviewDb(config);
+  db.prepare("UPDATE suggestions SET reason = 'expired', dismissed_at = 1 WHERE session_id = 'sess-a' AND idx = 0").run();
+  db.close();
+
+  const undo = await fetch(dismissUrl(base, 'sess-a', 0), { method: 'DELETE' });
+  assert.strictEqual(undo.status, 400);
+  assert.match((await undo.json()).error, /expired/);
+  assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'expired' })).status, 400);
+  assert.strictEqual((await postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' })).status, 200);
+  assert.deepStrictEqual(await suggestionState(base, 'sess-a'), ['done', null]);
+});
 
 test('POST dismiss stores the reason and GET /api/reviews shows it, DELETE undoes it', async (t) => {
   const { base } = await reviewServer(t);
@@ -1045,20 +1098,20 @@ test('GET /api/reviews answers 503 within 1000 ms when its first import meets th
   const { base, file } = await lockableServer(t);
   const release = await helpers.holdWriteLock(t, file);
   const started = Date.now();
-  const res = await fetch(`${base}/api/reviews`);
+  const res = await fetch(`${base}/api/reviews?days=7`);
   const took = Date.now() - started;
   assert.strictEqual(res.status, 503);
   assert.deepStrictEqual(await res.json(), BUSY);
   assert.ok(took < 1000, `answered in ${took} ms`);
   await release();
-  const after = await fetch(`${base}/api/reviews`);
+  const after = await fetch(`${base}/api/reviews?days=7`);
   assert.strictEqual(after.status, 200);
-  assert.deepStrictEqual(await after.json(), { reviews: [] });
+  assert.deepStrictEqual(await after.json(), { reviews: [], closedCount: 0 });
 });
 
 test('the dismiss routes answer 503 within 1000 ms under the review lock, reads still answer, and a dismiss works after', async (t) => {
   const { base, config } = await reviewServer(t);
-  assert.strictEqual((await fetch(`${base}/api/reviews`)).status, 200); // runs the import before the lock
+  assert.strictEqual((await fetch(`${base}/api/reviews?days=7`)).status, 200); // runs the import before the lock
   const release = await helpers.holdWriteLock(t, getStorePath(config.configDir));
   const sends = {
     POST: () => postJson(dismissUrl(base, 'sess-a', 0), { reason: 'done' }),
