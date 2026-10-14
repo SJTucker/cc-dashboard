@@ -593,6 +593,15 @@ test('a failing run logs once, and a second failure logs nothing', async ($, on)
   expect(logged).toEqual(['record-statusline failed (exit 1)'])
 })
 
+test('a different failure logs after the first one, and each message logs once', async ($, on) => {
+  const { logged } = world(on, {}, 1)
+  await $.session.measure(measure([FIVE]))
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await $.session.measure(measure([FIVE]))
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  expect(logged).toEqual(['record-statusline failed (exit 1)', 'record-session-end failed (exit 1)'])
+})
+
 const UPDATES = '/home/u/.claude/cc-dashboard/updates.json'
 const start = { cwd: '/work/my.demo', surface: null, isInteractive: true }
 const backfill = { command: 'backfill-updates', args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }

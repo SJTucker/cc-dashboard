@@ -53,7 +53,9 @@ type Window = { used_percentage: number; resets_at?: number }
 // the top of the file, so these flags are module variables. A reload starts them
 // over, which costs one more fs.stat or one more log line.
 let binDir: string | undefined
-let hasLogged = false
+// Messages already logged. Each distinct failure logs once, so a second kind of failure
+// still shows after the first.
+const logged = new Set<string>()
 // One id per claude process, sent with every measure as launch_id. A /clear starts a
 // new session id but the process and this module stay, so every session the process
 // records shares the id, and the Today table groups them. statuslineInput sets it on
@@ -76,8 +78,8 @@ let clearedFrom: string | undefined
 let statusCleared = false
 
 function fail($: EngineInterface, text: string) {
-  if (hasLogged) return
-  hasLogged = true
+  if (logged.has(text)) return
+  logged.add(text)
   $.ui.log(text)
 }
 
