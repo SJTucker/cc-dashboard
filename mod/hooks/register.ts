@@ -2,6 +2,8 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
 import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, settingsChanges, snapshotName } from './setup'
 import type { Kind, SetupEntry, Snapshot } from './setup'
+import { projectFolder, rateLimitsInput, statuslineRecord } from './statusline'
+import type { Frozen } from './statusline'
 import { parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep } from './steps'
 import { REPO_STEPS, handoffDocument, planHandoff, resumePrompt } from './handoff'
@@ -45,9 +47,6 @@ const RECORD_TIMEOUT_MS = 10_000
 const REVIEW_PROMPT_TIMEOUT_MS = 60_000
 const MODEL_TIMEOUT_MS = 60_000
 const RETRY_MS = 60 * 60 * 1000
-
-type Frozen<T> = { readonly [K in keyof T]: T[K] }
-type Window = { used_percentage: number; resets_at?: number }
 
 // `claude plugin validate` refuses a function that takes $ unless it is declared at
 // the top of the file, so these flags are module variables. A reload starts them
@@ -133,7 +132,7 @@ async function transcriptPath($: EngineInterface, root: string, id: string) {
   const dir = await configDir($)
   if (!dir) return null
   const projects = `${dir}/projects`
-  const folder = root.replace(/[^a-zA-Z0-9]/g, '-')
+  const folder = projectFolder(root)
   const built = `${projects}/${folder}/${id}.jsonl`
   let found: string | null = (await $.fs.exists(built)) ? built : null
   if (!found) {
@@ -149,36 +148,6 @@ async function transcriptPath($: EngineInterface, root: string, id: string) {
   }
   if (found) transcripts.set(id, found)
   return found
-}
-
-// $.session.model() returns the model id, and the statusline sent a display name,
-// which the Live sessions panel shows: claude-opus-5-5[1m] is "Opus 5.5 (1M
-// context)" and claude-haiku-4-5-20251001 is "Haiku 4.5". Any other form is sent
-// as it is.
-function displayName(id: string) {
-  const match = /^claude-([a-z]+)-(\d+(?:-\d{1,2})*)(?:-\d{8})?(\[1m\])?$/.exec(id)
-  if (!match) return id
-  const [, family = '', version = '', oneMillion] = match
-  const name = `${family.charAt(0).toUpperCase()}${family.slice(1)} ${version.replace(/-/g, '.')}`
-  return oneMillion ? `${name} (1M context)` : name
-}
-
-// The statusline sends resets_at as epoch seconds, and lib/limits.js reads it that
-// way. session.measure sends an ISO timestamp.
-function toWindow(limit: Frozen<SessionRateLimit>): Window {
-  const ms = limit.resetsAt === undefined ? Number.NaN : Date.parse(limit.resetsAt)
-  return Number.isNaN(ms)
-    ? { used_percentage: limit.percentUsed }
-    : { used_percentage: limit.percentUsed, resets_at: Math.floor(ms / 1000) }
-}
-
-// Only the two windows the statusline JSON has. A gateway's spend_limit is left out.
-function rateLimitsInput(limits: readonly Frozen<SessionRateLimit>[]): Record<string, Window> | undefined {
-  const out: Record<string, Window> = {}
-  for (const limit of limits) {
-    if (limit.kind === 'five_hour' || limit.kind === 'seven_day') out[limit.kind] = toWindow(limit)
-  }
-  return Object.keys(out).length ? out : undefined
 }
 
 // The JSON a statusLine command receives, cut to the fields bin/record-statusline
@@ -203,20 +172,9 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
   // assignment; two overlapping first measures then cannot each assign an id.
   const now = await $.clock.now()
   launchId ??= `${now.toString(36)}-${Math.random().toString(36).slice(2, 10)}`
-  const input: Record<string, unknown> = {
-    session_id: id,
-    launch_id: launchId,
-    transcript_path: transcript,
-    workspace: { project_dir: root },
-    model: { display_name: displayName(await $.session.model()) },
-  }
-  if (clearedFrom && clearedFrom !== id) input.cleared_from = clearedFrom
-  if (e.cost) {
-    const { startedAt } = await $.session.usage()
-    input.cost = { total_cost_usd: e.cost.usd, total_duration_ms: Math.max(0, (await $.clock.now()) - startedAt) }
-  }
-  if (rateLimits) input.rate_limits = rateLimits
-  return input
+  const modelId = await $.session.model()
+  const cost = e.cost ? { usd: e.cost.usd, startedAt: (await $.session.usage()).startedAt, now: await $.clock.now() } : undefined
+  return statuslineRecord({ id, launchId, transcript, root, modelId, clearedFrom, cost, rateLimits })
 }
 
 type Batch = { versions: string[]; system: string; prompt: string }
