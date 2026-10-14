@@ -4,6 +4,8 @@ import { commandPaths, fallbackLabel, cleanLabel, includedPaths, lineDiff, setti
 import type { Kind, SetupEntry, Snapshot } from './setup'
 import { projectFolder, rateLimitsInput, statuslineRecord } from './statusline'
 import type { Frozen } from './statusline'
+import { newestTool, setState, toolDetail, toolsOf } from './activity'
+import type { Activity, ToolRun } from './activity'
 import { parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep } from './steps'
 import { REPO_STEPS, handoffDocument, planHandoff, resumePrompt } from './handoff'
@@ -374,19 +376,8 @@ function backfillText(judged: Judged) {
 // In auto mode the classifier settles an ask with no event, so ask alone does not
 // mean a dialog opened.
 const ACTIVITY_WRITE_MS = 250
-const DETAIL_MAX = 60
 // The same characters as SESSION_ID_PATTERN in lib/session-id.js, because the id becomes a file name. The mod cannot require lib/, so test/session-id.test.js checks the two match.
 const SESSION_ID = /^[A-Za-z0-9_-]{1,128}$/
-
-type ToolRun = { name: string; detail: string; startedAt: number }
-type Activity = {
-  sessionId: string
-  state: 'working' | 'waiting'
-  since: number
-  tool: ToolRun | null
-  subagents: number
-  updatedAt: number
-}
 
 const activities = new Map<string, Activity>()
 // Main-loop tools that have started and not returned, by session id and tool_use_id,
@@ -409,40 +400,6 @@ const writing = new Map<string, Promise<void>>()
 const agentSteps = new Map<string, AgentStep[]>()
 const stepWrites = new Map<string, Promise<void>>()
 const lastWritten = new Map<string, string>()
-
-function toolsOf(id: string) {
-  let tools = runningTools.get(id)
-  if (!tools) {
-    tools = new Map()
-    runningTools.set(id, tools)
-  }
-  return tools
-}
-
-const newestTool = (tools: Map<string, ToolRun>) => [...tools.values()].pop() ?? null
-
-// A new activity starts as working. Only a main-loop event creates one: turn.start,
-// a main-loop tool.call, or turn.complete, which sets waiting at once. After a reload
-// mid-turn, the first of these is a tool call, and the turn is running. Subagent
-// events and agent.spawn create none, because the main loop may be waiting.
-function setState(a: Activity, state: Activity['state'], now: number) {
-  if (a.state === state) return
-  a.state = state
-  a.since = now
-}
-
-// The command cut to DETAIL_MAX characters for Bash, the file's name for Read, Edit
-// and Write, and nothing for any other tool. Whitespace runs become one space, so a
-// multi-line command stays on one line.
-function toolDetail(tool: string, args: Record<string, unknown>) {
-  if (tool === 'Bash') {
-    return typeof args.command === 'string' ? args.command.replace(/\s+/g, ' ').trim().slice(0, DETAIL_MAX) : ''
-  }
-  if (tool === 'Read' || tool === 'Edit' || tool === 'Write') {
-    return typeof args.file_path === 'string' ? (args.file_path.split(/[\\/]/).pop() ?? '') : ''
-  }
-  return ''
-}
 
 // An agent counts while it is pending, running or waiting: all three are work that
 // has not ended. idle is a teammate between turns, and completed, failed and killed
@@ -1221,7 +1178,7 @@ export const register: Register = (on) => {
       return result
     }
     await track($, (a, now) => {
-      toolsOf(a.sessionId).clear()
+      toolsOf(runningTools, a.sessionId).clear()
       a.tool = null
       setState(a, 'waiting', now)
     })
@@ -1285,14 +1242,14 @@ export const register: Register = (on) => {
     const args = e as unknown as Record<string, unknown>
     await track($, (a, now) => {
       const run = { name: e.tool, detail: toolDetail(e.tool, args), startedAt: now }
-      toolsOf(a.sessionId).set(id, run)
+      toolsOf(runningTools, a.sessionId).set(id, run)
       a.tool = run
     })
     try {
       return await next(e)
     } finally {
       await track($, (a) => {
-        const tools = toolsOf(a.sessionId)
+        const tools = toolsOf(runningTools, a.sessionId)
         tools.delete(id)
         a.tool = newestTool(tools)
       })
