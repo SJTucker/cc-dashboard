@@ -16,7 +16,7 @@ Source files over 450 lines:
 
 | File | Lines | Commits since 2026-09-01 |
 |---|---|---|
-| `public/style.css` | 1,566 | 92 |
+| `public/style.css` | split into 14 files under `public/css/` on 2026-10-13; the largest, `base.css`, is 305 lines | 92 |
 | `mod/hooks/register.ts` | 1,210 | 40 |
 | `lib/aggregate.js` | 564 | 14 |
 | `lib/extract.js` | 476 | 14 |
@@ -68,4 +68,4 @@ up and removed), `README.md` (100), `public/style.css` (92), `public/index.html`
   in subagents or through `sed`. The [What fills the context](context-fillers.md)
   idea covers repeated reads too and may share the work.
 - **Order.** Rank by reads × size once reads are counted. Until then, start with
-  `register.ts` and `style.css`, which are both large and often edited.
+  `register.ts` (`style.css` is already split into `public/css/`), which is large and often edited.
