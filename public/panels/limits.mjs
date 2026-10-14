@@ -5,7 +5,7 @@ import { localDateStr } from '../format.mjs';
 import { state } from '../state.mjs';
 import { createDrawGuard } from '../guards.mjs';
 import { LIMIT_WARN_PERCENT } from '../constants.mjs';
-import { shareMeter, dailyWarning, limitStripText, limitsBannerParts } from '../hud.mjs';
+import { shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText } from '../hud.mjs';
 
 // Draw guards for the panel and the banner. redrawCharts leaves them alone,
 // because a change of width does not change a table.
@@ -24,6 +24,34 @@ function formatReset(ms) {
     .toLowerCase();
   if (localDateStr(d) === localDateStr(new Date())) return `Resets ${time}`;
   return `Resets ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} at ${time}`;
+}
+
+// "Resets Nov 1" for usage credits, which reset at local midnight, so no time is shown.
+function formatResetDay(ms) {
+  return `Resets ${new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+}
+
+// "1:42 PM", the form #limitsNote uses.
+function clockTime(ms) {
+  return new Date(ms).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+}
+
+// One window, scoped week or credits row. A credits row shows its spend before its
+// reset, so its percent cell stays as narrow as the others and every meter has the
+// same length. A row read from an older cache than the panel's time (asOf, set by
+// lib/limits.js) says so after its reset.
+function limitRow(limit) {
+  const fill = el('i');
+  fill.style.width = Math.min(100, Math.max(0, limit.percent)) + '%';
+  const notes = limit.credits ? [creditsText(limit.credits)] : [];
+  if (limit.resetsAt != null) notes.push(limit.credits ? formatResetDay(limit.resetsAt) : formatReset(limit.resetsAt));
+  if (limit.asOf != null) notes.push(`as of ${clockTime(limit.asOf)}`);
+  return el('div', { class: 'limit-row' }, [
+    el('span', { class: 'limit-name', text: limit.label }),
+    el('span', { class: 'usage-track' }, [fill]),
+    el('span', { class: 'limit-pct', text: `${Math.round(limit.percent)}% used` }),
+    el('span', { class: 'limit-reset', text: notes.join(' · ') }),
+  ]);
 }
 
 // The usage-cache source only refreshes while Claude Code runs, and /usage itself
@@ -82,33 +110,28 @@ export function renderLimits(limits) {
   limitsGuard.draw(limits, () => drawLimits(limits));
 }
 
+// Session and Week first, then Today (a share of the week), then the scoped weeks and
+// usage credits in the order lib/limits.js sends them.
 function drawLimits(limits) {
-  const rows = document.getElementById('limitsRows');
-  rows.replaceChildren();
-  for (const limit of limits.limits) {
-    const fill = el('i');
-    fill.style.width = Math.min(100, Math.max(0, limit.percent)) + '%';
-    rows.appendChild(el('div', { class: 'limit-row' }, [
-      el('span', { class: 'limit-name', text: limit.label }),
-      el('span', { class: 'usage-track' }, [fill]),
-      el('span', { class: 'limit-pct', text: `${Math.round(limit.percent)}% used` }),
-      el('span', { class: 'limit-reset', text: limit.resetsAt == null ? '' : formatReset(limit.resetsAt) }),
-    ]));
-  }
-  if (limits.today) rows.appendChild(dailyShareRow(limits.today));
-  const asOf = new Date(limits.fetchedAt).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+  const windows = planWindows(limits.limits);
+  const others = limits.limits.filter((l) => !windows.includes(l));
+  document.getElementById('limitsRows').replaceChildren(
+    ...windows.map(limitRow),
+    ...(limits.today ? [dailyShareRow(limits.today)] : []),
+    ...others.map(limitRow),
+  );
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const stale = Date.now() - limits.fetchedAt > LIMITS_STALE_MS
     ? ' · may be stale'
     : '';
-  document.getElementById('limitsNote').textContent = `as of ${asOf} (${zone})${stale}`;
+  document.getElementById('limitsNote').textContent = `as of ${clockTime(limits.fetchedAt)} (${zone})${stale}`;
 }
 
-// Warn once either window reaches LIMIT_WARN_PERCENT, on every range. Within a
-// window the percent only rises, and readLimits() drops a window past its reset,
-// so a stale cache understates usage and never raises a false warning. The
-// rounded percent is compared so the banner agrees with the "N% used" the panel
-// shows.
+// Warn once the session or weekly window (planWindows) reaches LIMIT_WARN_PERCENT,
+// on every range. Within a window the percent only rises, and readLimits() drops a
+// window past its reset, so a stale cache understates usage and never raises a false
+// warning. The rounded percent is compared so the banner agrees with the "N% used"
+// the panel shows.
 //
 // The banner's "x" saves the warnings it shows (limitsBannerParts) in localStorage,
 // and the banner stays hidden until a warning appears that the saved list lacks.
@@ -141,7 +164,7 @@ export function renderLimitsBanner(limits) {
 
 function drawLimitsBanner(limits) {
   const banner = document.getElementById('limitsBanner');
-  const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
+  const high = planWindows(limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
   // dailyWarning (public/hud.mjs) compares today's share with the rolling budget.
   const dayHigh = dailyWarning(limits ? limits.today : null);
   const parts = limitsBannerParts(high, dayHigh, localDateStr(new Date()));

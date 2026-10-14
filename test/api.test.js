@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const helpers = require('./helpers');
+const { EventEmitter } = require('events');
 const { localDateStr } = require('../lib/dates');
 const { openDatabase, getStorePath } = require('../lib/db');
 
@@ -12,9 +13,9 @@ const { openDatabase, getStorePath } = require('../lib/db');
 // today. Resolves to { server, config, port, url }.
 // Options: model (the logged call's model), priceCheck (turns the background price
 // checks on, as the CLI does) and lastCheck (a date string written to prices.json first).
-async function startServer(t, { model = 'claude-sonnet-4-6-20260115', priceCheck, lastCheck } = {}) {
+async function startServer(t, { model = 'claude-sonnet-4-6-20260115', priceCheck, lastCheck, usageRefresh } = {}) {
   require('../lib/pricing').clearUnmatched();
-  const config = { ...helpers.testConfig(t, 'api'), priceCheck };
+  const config = { ...helpers.testConfig(t, 'api'), priceCheck, usageRefresh };
   const now = new Date();
   now.setHours(10, 0, 0, 0);
   const line = JSON.stringify({
@@ -320,6 +321,67 @@ test('GET /api/limits returns null when there is no usage cache', async (t) => {
   const res = await fetch(`${url}/api/limits`);
   assert.strictEqual(res.status, 200);
   assert.strictEqual(await res.json(), null);
+});
+
+test('GET /api/limits sends the scoped week and credits rows from the usage cache', async (t) => {
+  const { url, config } = await startServer(t);
+  const resets = new Date(Date.now() + 2 * 24 * 60 * 60 * 1000).toISOString();
+  fs.writeFileSync(path.join(config.configDir, '.claude.json'), JSON.stringify({
+    cachedUsageUtilization: {
+      fetchedAtMs: 123,
+      utilization: {
+        limits: [{ kind: 'weekly_scoped', percent: 58, resets_at: resets, scope: { model: { id: null, display_name: 'Fable' } } }],
+        extra_usage: { is_enabled: true, monthly_limit: 20000, used_credits: 4117, currency: 'USD', decimal_places: 2 },
+      },
+    },
+  }));
+
+  const body = await (await fetch(`${url}/api/limits`)).json();
+  assert.deepStrictEqual(body.limits.map((l) => l.label), ['Current week (Fable)', 'Usage credits']);
+  assert.deepStrictEqual(body.limits[1].credits, { usedMinor: 4117, limitMinor: 20000, currency: 'USD', decimalPlaces: 2 });
+});
+
+// A spawn that records each run and never starts a process.
+function recordingSpawn() {
+  const runs = [];
+  const spawn = (bin, args, opts) => {
+    const proc = new EventEmitter();
+    proc.kill = () => { proc.emit('exit', null, 'SIGTERM'); return true; };
+    runs.push({ bin, args, cwd: opts.cwd, proc });
+    return proc;
+  };
+  return { runs, spawn };
+}
+
+test('GET /api/limits starts a /usage refresh, and POST /api/refresh starts another', async (t) => {
+  const { runs, spawn } = recordingSpawn();
+  const { url, config } = await startServer(t, { usageRefresh: { bin: 'claude-test', spawn } });
+
+  await fetch(`${url}/api/limits`);
+  await fetch(`${url}/api/limits`);
+  assert.strictEqual(runs.length, 1);
+  assert.strictEqual(runs[0].bin, 'claude-test');
+  assert.deepStrictEqual(runs[0].args, ['-p', '--no-session-persistence', '/usage']);
+  assert.strictEqual(runs[0].cwd, path.join(config.configDir, 'cc-dashboard', 'usage-refresh'));
+  runs[0].proc.emit('exit', 0, null);
+
+  await fetch(`${url}/api/refresh`, { method: 'POST' });
+  assert.strictEqual(runs.length, 2);
+});
+
+test('the default test config starts no /usage refresh', async (t) => {
+  const { url, config } = await startServer(t);
+  await fetch(`${url}/api/limits`);
+  assert.strictEqual(fs.existsSync(path.join(config.configDir, 'cc-dashboard', 'usage-refresh')), false);
+});
+
+test('usageRefreshFrom is off only for off, and names claude by default', () => {
+  const { usageRefreshFrom } = require('../server');
+  assert.deepStrictEqual(usageRefreshFrom({}), { bin: 'claude' });
+  assert.deepStrictEqual(usageRefreshFrom({ CC_DASHBOARD_USAGE_REFRESH: 'on' }), { bin: 'claude' });
+  assert.strictEqual(usageRefreshFrom({ CC_DASHBOARD_USAGE_REFRESH: ' OFF ' }), null);
+  assert.deepStrictEqual(usageRefreshFrom({ CC_DASHBOARD_CLAUDE_BIN: ' /opt/claude ' }), { bin: '/opt/claude' });
+  assert.deepStrictEqual(usageRefreshFrom({ CC_DASHBOARD_CLAUDE_BIN: '  ' }), { bin: 'claude' });
 });
 
 test('GET /api/records returns the all-time busiest day', async (t) => {

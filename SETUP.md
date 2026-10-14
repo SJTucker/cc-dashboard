@@ -87,7 +87,7 @@ your statusline script or to `settings.json`.
   `claude plugin validate` says what Claude Code refuses to load.
 
 Without the mod, the Plan usage panel reads only the usage cache in `~/.claude.json`,
-which updates when you run `/usage`. Live sessions has no Length column data and no
+which the server refreshes while a page is open. Live sessions has no Length column data and no
 cleared or ended marks.
 
 ## Cache countdown in the statusline
@@ -164,6 +164,8 @@ only variable that moves them.
 | `RTK_DB` | `~/Library/Application Support/rtk/history.db` | rtk's history. A leading `~` is expanded. |
 | `CHANGES_FILE` | `<clone>/changes.json` | The hand-written setup changes file. A leading `~` is expanded. |
 | `CC_DASHBOARD_PRICE_CHECK` | on | The server's price checks. `off` (in any case) stops the daily check and the new-model check. The Check prices button still works. |
+| `CC_DASHBOARD_USAGE_REFRESH` | on | The server's headless `/usage` runs, which keep Plan usage fresh. `off` (in any case) stops them. Plan usage then updates only when you run `/usage`. |
+| `CC_DASHBOARD_CLAUDE_BIN` | `claude` | The Claude Code binary those runs start. Set it when the server's `PATH` has no `claude`, for example under launchd. |
 
 Set a variable for the server when you start it, for example
 `CLAUDE_CONFIG_DIR=/path/to/.claude npm start`.
@@ -197,6 +199,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
 | `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
 | `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server's price check: daily, when a Claude model with no price of its own appears that the last successful check did not already look for, and when you click Check prices. It holds the dated price changes and the date of the last check. |
+| `<cfg>/cc-dashboard/usage-refresh/` | `CLAUDE_CONFIG_DIR` | the server. It is the working folder of the headless `/usage` runs and stays empty. Claude Code also creates a matching empty project folder under `<cfg>/projects/`. The runs write no transcript. |
 | `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session`. It also holds the rows of `agent-usage/` files, and for each session the text of Claude Code's last away-summary recap (the `away_summary` line it writes when you return to an idle session). |
 | `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, 6 minutes before a 1-hour prompt cache expires or when Claude Code's idle compaction starts, whichever comes first. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
 | rtk's `history.db` | `RTK_DB` | rtk |
@@ -240,6 +243,11 @@ of them.
   transcripts and the last successful check did not already look for it (at most
   once an hour), and when you click Check prices. Set
   `CC_DASHBOARD_PRICE_CHECK=off` to stop the daily and new-model fetches.
+- **The server runs `claude -p --no-session-persistence /usage`** while a dashboard page
+  is open: when the `/usage` cache in `~/.claude.json` is at least 5 minutes old, and
+  when you click Refresh. Claude Code then fetches your plan usage from Anthropic with
+  its own login and rewrites that cache. No model is called and the dashboard reads no
+  token. Set `CC_DASHBOARD_USAGE_REFRESH=off` to stop it.
 - **The mod** fetches `CHANGELOG.md` from `raw.githubusercontent.com/anthropics/claude-code`
   when the running Claude Code version has no verdict, or when you run
   `/backfill-updates`.
