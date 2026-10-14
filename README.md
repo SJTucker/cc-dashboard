@@ -7,7 +7,9 @@ per million tokens, and a weekday-by-hour heatmap of when the spend happens.
 If you use `rtk`, it also charts the tokens rtk kept out of the model's context. See
 "rtk savings" below.
 
-Two dependencies, no telemetry, no CDN. The server makes one kind of outbound request, to Anthropic's pricing page: daily, when a model has no price of its own, and when you click Check prices. The optional Claude Code mod in `mod/` also fetches
+Two dependencies, no telemetry, no CDN. The server makes one kind of outbound
+request, to Anthropic's pricing page: daily, when a model has no price of its own,
+and when you click Check prices. The optional Claude Code mod in `mod/` also fetches
 Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
 does and doesn't do" below.
 
