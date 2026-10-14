@@ -627,7 +627,7 @@ public/index.html      Page shell: the panels' markup, the plain scripts, then m
 public/layout.mjs      orderRowKeys: the saved panel row order merged with the default order in index.html
 public/load.mjs        loadPanels: draws each panel when its own request settles, with no DOM access
 public/main.mjs        Starts the page: fetches the API routes, draws every panel, runs the 5 s live poll and the range picker
-public/poll.js         Runs the 5 s live poll so one poll finishes before the next one starts
+public/poll.mjs         Runs the 5 s live poll so one poll finishes before the next one starts
 public/reviews.mjs      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath
 public/session-groups.mjs  Groups the Today table's rows by claude launch, then ended sessions by project, and the running-session and activity labels
 public/state.mjs       The tab, the Analysis range and the hidden panels, shared by the modules
