@@ -49,7 +49,7 @@ function drawModelList(container, models) {
 // page starts on tokens and a switch holds for this page view.
 const MIX_MEASURE_KEY = 'cc-dashboard:model-mix-measure';
 
-// The models renderModels last received, so a switch redraws with no request.
+// The models renderModelsPanel last received, so a switch redraws with no request.
 let lastModels = null;
 
 function loadMixMeasure() {
@@ -113,13 +113,18 @@ export function setupModelMixToggle() {
   }
 }
 
-export function renderModels(data) {
+// The Models panel: the share bar and the model list. Drawn on the Now tab.
+export function renderModelsPanel(data) {
   lastModels = data.models;
   if (shown('costByModel')) {
     drawShare();
     drawModelList(document.getElementById('modelList'), data.models);
   }
-  // An hourly model split is noise, so the over-time view is multi-day only.
+}
+
+// The daily-by-model charts. Drawn on the Analysis tab. An hourly model split is
+// noise, so the over-time view is multi-day only.
+export function renderModelDailyCharts(data) {
   const multiDay = state.currentDays !== 'today';
   document.getElementById('modelDailyPanel').hidden = !multiDay;
   document.getElementById('modelCostDailyPanel').hidden = !multiDay;

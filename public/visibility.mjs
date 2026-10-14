@@ -14,8 +14,8 @@ const REQUEST_CONSUMERS = {
 
 // The requests whose panels are on each tab. The Now tab is the Today range and the
 // Analysis tab is every other range (public/ui/tabs.mjs), so the range names the tab.
-const NOW_REQUESTS = ['sessions', 'records'];
-const ANALYSIS_REQUESTS = ['changes', 'rtk', 'reviews', 'records', 'prices'];
+const NOW_REQUESTS = ['sessions', 'records', 'prices'];
+const ANALYSIS_REQUESTS = ['changes', 'rtk', 'reviews', 'records'];
 
 // The hidden keys saved in localStorage. Anything that is not a JSON list gives
 // an empty list, and entries that are not strings are dropped.

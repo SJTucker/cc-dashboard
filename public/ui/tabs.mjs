@@ -23,8 +23,8 @@ export function rangeForTab(tab, analysisDays) {
 // other tab's panels are hidden, so drawing them would put the wrong range's
 // numbers in them and size their charts at the 200px fallback width.
 const SUMMARY_PANELS = {
-  now: ['attribution'],
-  analysis: ['cards', 'usage', 'models', 'tools'],
+  now: ['attribution', 'models'],
+  analysis: ['cards', 'usage', 'modelDaily', 'tools'],
 };
 
 export function summaryPanelsFor(tab) {

@@ -163,6 +163,23 @@
           </div>
           <div id="sessionsMore" class="show-all-box"></div>
         </section>
+
+        <section class="panel" id="modelsPanel" data-hide-key="costByModel">
+          <div class="panel-head">
+            <h2>Models</h2>
+            <div class="mix-measure" id="mixMeasure" role="group" aria-label="Share by">
+              <button type="button" data-measure="tokens" aria-pressed="true">Tokens</button>
+              <button type="button" data-measure="cost" aria-pressed="false">Cost</button>
+            </div>
+          </div>
+          <div id="modelShare" class="model-share"></div>
+          <div id="modelList" class="model-list"></div>
+          <div class="prices-foot">
+            <p id="pricesSource" class="panel-note"></p>
+            <button id="checkPricesBtn" class="refresh-btn" type="button" title="Fetch Anthropic's pricing page and apply any new or changed prices">Check prices</button>
+          </div>
+          <div id="pricesCheck" class="prices-check" hidden></div>
+        </section>
       </div>
       <div class="tab" id="tabAnalysis" hidden>
         <div class="tab-toolbar">
@@ -281,23 +298,6 @@
             <span class="panel-meta">cost by weekday and hour, local time</span>
           </div>
           <div id="activityHeatmap" aria-label="Heatmap of cost by weekday and hour"></div>
-        </section>
-
-        <section class="panel" id="modelsPanel" data-hide-key="costByModel">
-          <div class="panel-head">
-            <h2>Models</h2>
-            <div class="mix-measure" id="mixMeasure" role="group" aria-label="Share by">
-              <button type="button" data-measure="tokens" aria-pressed="true">Tokens</button>
-              <button type="button" data-measure="cost" aria-pressed="false">Cost</button>
-            </div>
-          </div>
-          <div id="modelShare" class="model-share"></div>
-          <div id="modelList" class="model-list"></div>
-          <div class="prices-foot">
-            <p id="pricesSource" class="panel-note"></p>
-            <button id="checkPricesBtn" class="refresh-btn" type="button" title="Fetch Anthropic's pricing page and apply any new or changed prices">Check prices</button>
-          </div>
-          <div id="pricesCheck" class="prices-check" hidden></div>
         </section>
 
         <section class="panel" id="toolPanel" data-hide-key="tools" hidden>
