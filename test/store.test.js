@@ -367,3 +367,8 @@ test('migration 5 to 6 leaves the rows as they are', () => {
   const old = rowsOf({ toolUses: [{ key: 'm:r:0', t: 1, name: 'Bash', detail: 'x', model: 'm' }] });
   assert.strictEqual(MIGRATIONS[5](old), old);
 });
+
+test('migration 7 to 8 leaves rows as they are', () => {
+  const old = rowsOf({ prompts: [{ id: 'u1', t: 1, sessionId: 's1' }] });
+  assert.deepStrictEqual(MIGRATIONS[7](old), old);
+});

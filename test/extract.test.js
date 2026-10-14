@@ -324,6 +324,28 @@ test('a typed prompt is a row with its uuid, or sessionId:timestamp when it has 
   assert.strictEqual(rows.sessions.s1.firstPrompt, 'first');
 });
 
+// A forked skill (a /skill typed by the user) is written with origin human and no promptSource key.
+const forked = (text, extra = {}) => ({ type: 'user', origin: { kind: 'human' }, sessionId: 's1', message: { content: text }, ...extra });
+
+test('a forked-skill line (origin human, no promptSource, starts with /) is a typed prompt and the first prompt', async () => {
+  const file = writeTranscript([forked('/code-review xhigh - https://github.com/x/y/pull/305', { uuid: 'u1', timestamp: T0 })]);
+  const rows = await extractFile(file);
+
+  assert.deepStrictEqual(rows.prompts, [{ id: 'u1', t: Date.parse(T0), sessionId: 's1' }]);
+  assert.strictEqual(rows.sessions.s1.firstPrompt, '/code-review xhigh - https://github.com/x/y/pull/305');
+});
+
+test('a slash-looking line without a human typed tag is not a prompt', async () => {
+  const file = writeTranscript([
+    forked('<command-name>/clear</command-name>\n<command-message>clear</command-message>', { uuid: 'u1', timestamp: T0 }),
+    forked('/foo', { uuid: 'u2', timestamp: T1, promptSource: 'sdk' }),
+    forked('/foo', { uuid: 'u3', timestamp: T2, origin: undefined }),
+  ]);
+  const rows = await extractFile(file);
+
+  assert.deepStrictEqual(rows.prompts, []);
+});
+
 test('session summaries: main-thread branches in first-seen order, newest branch, last title, highest cost', async () => {
   const file = writeTranscript([
     { type: 'user', sessionId: 's1', gitBranch: 'main', timestamp: T0, message: { content: [] } },
@@ -564,8 +586,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 7', () => {
-  assert.strictEqual(EXTRACT_VERSION, 7);
+test('EXTRACT_VERSION is 8', () => {
+  assert.strictEqual(EXTRACT_VERSION, 8);
 });
 
 // Two tool_use blocks without an id, one per line as Claude Code writes them.
