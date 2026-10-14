@@ -1071,7 +1071,8 @@ test('a file that changes after a worker death loses its death count', async (t)
   bump(fresh);
   await refresh(); // death 2
 
-  bump(held); // changed, so the count of 2 goes and the small run reads it on the main thread
+  bump(held); // changed, so it has a new key and its old count of 2 no longer applies (the prune only
+  // stops the Map from growing); the small run reads it on the main thread
   bump(fresh);
   await refresh();
   assert.deepStrictEqual(mainReads, [fresh, held], 'a file with a count would have gone to a worker');
@@ -1158,7 +1159,7 @@ test('after a worker died, the next refresh reads the file it was reading and th
   assert.ok(rows.entries().find((e) => e.path === files[1]).rows.ok, 'f1 reads on the retry');
 });
 
-test('a failed result without a worker death does not put the file in the skipped set', async (t) => {
+test('a failed result without a worker death does not count a worker death', async (t) => {
   t.mock.method(console, 'warn', () => {});
   const { failedRows } = require('../lib/extract-pool');
   const { dir } = makeProjects();

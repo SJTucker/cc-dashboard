@@ -256,19 +256,20 @@ function createServer(config) {
       // A waiting session's cache TTL depends on its newest cache write, which can
       // be before midnight. The row store holds the whole transcript, so the Today
       // scan's calls are not used for it (as bin/cache-state does).
-      // The index is built on the first waiting session, so a poll with none never
-      // copies and sorts the entries.
-      let callsByFile = null;
+      // The index maps each file name to its row-store entries and is built on the
+      // first waiting session, so a poll with none never copies and sorts the
+      // entries. Only the requested session's calls are concatenated.
+      let entriesByFile = null;
       const transcriptCalls = (sessionId) => {
-        if (!callsByFile) {
-          callsByFile = new Map();
+        if (!entriesByFile) {
+          entriesByFile = new Map();
           for (const e of getRowStore().entries()) {
             const name = path.basename(e.path);
-            if (!callsByFile.has(name)) callsByFile.set(name, []);
-            callsByFile.get(name).push(...(e.rows.calls || []));
+            if (!entriesByFile.has(name)) entriesByFile.set(name, []);
+            entriesByFile.get(name).push(e);
           }
         }
-        return cacheCallsOf(callsByFile.get(`${sessionId}.jsonl`) || []);
+        return cacheCallsOf((entriesByFile.get(`${sessionId}.jsonl`) || []).flatMap((e) => e.rows.calls || []));
       };
       res.json(buildLiveSessions(readSessions(getSessionsDir(config.configDir)), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(getActivityDir(config.configDir)), {
         branchesBySession: efficiency.branchesBySession,

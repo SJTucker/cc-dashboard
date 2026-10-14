@@ -137,7 +137,7 @@ function heldStore(t) {
   const rowStore = createRowStore({
     projectsDir: () => dir,
     now: () => clock.now,
-    openPool: (size, fn) => fn({ extract: g.extract }),
+    openPool: (size, fn) => fn({ extract: g.extract, started: Promise.resolve(true) }),
     poolLimits: { files: 0, bytes: 0 },
   });
   const touch = (file) => {

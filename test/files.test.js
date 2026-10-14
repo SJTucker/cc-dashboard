@@ -87,6 +87,10 @@ test('warnUnreadable words a SyntaxError as a parse problem and any other error 
   assert.match(read, /EACCES/);
   assert.match(read, /permission denied/);
   assert.doesNotMatch(read, /parsed/);
+  assert.strictEqual(read, "[files] /x/b.json could not be read and was skipped: EACCES: permission denied, open '/x/b.json'");
+  const bare = Object.assign(new Error('disk gone'), { code: 'EIO' });
+  warnUnreadable(warned, '/x/c.json', bare);
+  assert.strictEqual(String(warn.mock.calls[2].arguments[0]), '[files] /x/c.json could not be read and was skipped: EIO disk gone');
 });
 
 test('warnUnreadable never warns for ENOENT', (t) => {
