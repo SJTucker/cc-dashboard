@@ -18,9 +18,8 @@ then on.
 | [What fills the context](context-fillers.md) | Open: largest tool results and repeated reads across the range; result size storage and grouping open |
 | [Cost by plugin](plugin-cost-rows.md) | Open: a Plugins list in Where usage goes from the unused `attributionPlugin` field, and MCP servers from `attributionMcpServer`; invocation counts and subagent calls open |
 | [Costliest prompts](costliest-prompts.md) | Open: rank prompts by cost with a drill-down; storing prompt text open |
-| [Guard: rows when a transcript loses lines](transcript-rewrites.md) | Open: the rewrite report was not reproduced on Claude Code 2.1.296; a warning when a re-read file loses stored call keys, and whether to merge rows, open |
+| [Guard: rows when a transcript loses lines](transcript-rewrites.md) | Open: the rewrite report was not reproduced on Claude Code 2.1.296; the server logs a warning when a re-read file loses stored call keys; whether to merge rows open |
 | [File line limit](file-line-limit.md) | Open: a line limit for source files and splits of the largest, most read and edited files first; the limit, enforcement and how to count reads open |
-| [Today table: group by /clear link](today-table-clear-chains.md) | Open: `launchId` grouping misses a session resumed in a new process and then cleared; join on `clearedFrom` as well or instead open |
 | [Session timeline: live sessions above a divider](timeline-live-section.md) | Open: live lanes on top and the rest below a divider; the buffer that stops lanes jumping, /clear chains that span both sections, and which live rule to use open |
 | [Subagent output is undercounted](subagent-output-undercount.md) | Open: the mod records subagent steps and the dashboard corrects new responses; estimating the 27,134 earlier responses open |
 | [Plan limit band below the prompt](limit-band-below-prompt.md) | Open: no mod render slot sits between the prompt and the status line; a `bin/limit-line` in the statusline script is the likely route; dismissing and shared band logic open |

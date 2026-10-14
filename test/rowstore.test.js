@@ -1658,6 +1658,40 @@ test('with no store, an old step file is kept', async () => {
   assert.strictEqual(fs.existsSync(file), true);
 });
 
+test('a step file rewritten without its earlier steps keeps them', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  writeSteps(stepsDir, 'a1', [STEP], 60_000);
+  const { rows, refresh } = harness(dir, { agentUsageDir: stepsDir });
+  await refresh();
+  const later = { ...STEP, t: STEP.t + 1000, cacheRead: 40, output: 500 };
+  writeSteps(stepsDir, 'a1', [later]);
+  await refresh();
+  const [entry] = stepEntries(rows);
+  assert.deepStrictEqual(entry.rows.agentSteps.map((s) => s.cacheRead).sort((x, y) => x - y), [20, 40]);
+  assert.strictEqual(entry.rows.minT, STEP.t);
+  assert.strictEqual(entry.rows.maxT, later.t);
+});
+
+test('a pruned step file written again after a restart keeps the steps the database held', async () => {
+  const { base, dir } = makeProjects();
+  const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
+  const file = writeSteps(stepsDir, 'a1', [STEP], 2 * DAY_MS);
+  const dbPath = tmpDb();
+  const store = openStore(dbPath);
+  await harness(dir, { store, agentUsageDir: stepsDir }).refresh();
+  assert.strictEqual(fs.existsSync(file), false);
+  store.close();
+  // The restarted server loads the stored rows. The continued agent's mod writes a
+  // file with only its new step.
+  const reopened = openStore(dbPath);
+  const { rows, refresh } = harness(dir, { store: reopened, agentUsageDir: stepsDir });
+  writeSteps(stepsDir, 'a1', [{ ...STEP, t: Date.now(), cacheRead: 40 }]);
+  await refresh();
+  assert.deepStrictEqual(stepEntries(rows).map((e) => e.rows.agentSteps.length), [2]);
+  reopened.close();
+});
+
 test('a subagent response with no final line is priced at the output in its step file', async () => {
   const { base, dir } = makeProjects();
   const stepsDir = path.join(base, 'cc-dashboard', 'agent-usage');
@@ -1679,4 +1713,53 @@ test('the row store passes its own intern map to store.loadAll', () => {
   const store = { loadAll: (intern) => { given = intern; return []; }, put: () => {}, markGone: () => {}, transaction: (fn) => fn() };
   harness(dir, { store });
   assert.ok(given instanceof Map, 'loadAll received a map to intern through');
+});
+
+test('a transcript read again that lost calls logs one warning naming the file and the count', async (t) => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 's1', ['a', 'b', 'c'], 60_000);
+  const { refresh } = harness(dir);
+  await refresh();
+  const warn = t.mock.method(console, 'warn', () => {});
+  writeFile(dir, 's1', ['a']);
+  await refresh();
+  await refresh(); // unchanged now, so not read again
+  const lost = warn.mock.calls.map((c) => String(c.arguments[0])).filter((m) => m.includes('stored calls'));
+  assert.strictEqual(lost.length, 1);
+  assert.ok(lost[0].includes(file));
+  assert.ok(lost[0].includes('lost 2 of its 3 stored calls'));
+});
+
+test('a transcript that grows logs no lost-call warning', async (t) => {
+  const { dir } = makeProjects();
+  writeFile(dir, 's1', ['a'], 60_000);
+  const { refresh } = harness(dir);
+  await refresh();
+  const warn = t.mock.method(console, 'warn', () => {});
+  writeFile(dir, 's1', ['a', 'b']);
+  await refresh();
+  assert.strictEqual(warn.mock.calls.filter((c) => String(c.arguments[0]).includes('stored calls')).length, 0);
+});
+
+test('a transcript read again while its last response streams logs no lost-call warning', async (t) => {
+  const { dir } = makeProjects();
+  const ts = new Date().toISOString();
+  // One line of a response: the same message.id and requestId on every line, with
+  // output_tokens growing and stop_reason set only on the last.
+  const line = (id, output, stop) => JSON.stringify({
+    timestamp: ts,
+    requestId: `req-${id}`,
+    message: { id: `msg-${id}`, model: 'claude-sonnet-4-6', stop_reason: stop, usage: { input_tokens: 100, output_tokens: output } },
+  });
+  const file = path.join(dir, 's1.jsonl');
+  // The first read sees the stream-start line and half of the next line.
+  fs.writeFileSync(file, [line('a', 50, 'end_turn'), line('b', 5, null)].join('\n') + '\n' + line('b', 300, 'end_turn').slice(0, 40));
+  const { rows, refresh } = harness(dir);
+  await refresh();
+  const warn = t.mock.method(console, 'warn', () => {});
+  fs.writeFileSync(file, [line('a', 50, 'end_turn'), line('b', 5, null), line('b', 300, 'end_turn')].join('\n') + '\n');
+  await refresh();
+  assert.strictEqual(warn.mock.calls.filter((c) => String(c.arguments[0]).includes('stored calls')).length, 0);
+  const [entry] = rows.entries();
+  assert.deepStrictEqual(entry.rows.calls.map((c) => [c.key, c.usage.output_tokens]), [['msg-a:req-a', 50], ['msg-b:req-b', 300]]);
 });

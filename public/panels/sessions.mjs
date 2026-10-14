@@ -156,8 +156,8 @@ function drawSessions(live) {
     cell(formatAgo(s.lastActiveAt, now) + sessionState(s), s.live ? 'is-live' : ''),
   ]);
   // A project group shows the project name. A launch group (sessions of one claude
-  // process, split by /clear) reads like its newest session's row with a toggle in
-  // front, and says live when one of its sessions is.
+  // process, or of one /clear chain across processes) reads like its newest session's
+  // row with a toggle in front, and says live when one of its sessions is.
   const groupRow = (g, running) => {
     const launch = g.kind === 'launch';
     const name = launch ? g.head.title || g.project || '—' : g.project || '—';

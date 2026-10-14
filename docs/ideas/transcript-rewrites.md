@@ -32,13 +32,14 @@ A file that lost lines after it was stored would lose those calls from the datab
 at the next refresh. A deleted file keeps its rows (`reconcileMissing`), and a failed
 read keeps the previous rows.
 
-## Possible guard
+## Guard built
 
-When `load` replaces an entry, compare the new call keys with the old ones, and log a
-warning naming the file and the count when keys are missing. That costs one set
-comparison per changed file and would catch the untested cases if they happen.
+`warnLostCalls` in `lib/rowstore.js` compares the call keys of a file read again
+with the keys its previous entry held, and logs the file and the count when keys are
+missing. It keeps nothing.
 
 ## Open questions
 
-- Warn only, or also keep the old rows by merging on key.
-- Whether a warning in the server log is enough, or the page should show it.
+- Whether to keep the old rows by merging on key. Decide once the warning shows in
+  the server log.
+- Whether the page should show the warning as well as the server log.
