@@ -5,6 +5,7 @@ import { getJson } from '../api.mjs';
 import { el, svgEl, withTooltip, withFocusTooltip } from '../dom.mjs';
 import { formatAgo, localDateStr } from '../format.mjs';
 import { createDrawGuard } from '../guards.mjs';
+import { reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText } from '../reviews.mjs';
 import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
 import { REVIEW_DAYS } from '../constants.mjs';
 import { contextLine } from './sessions.mjs';
@@ -99,7 +100,7 @@ const TIP_DUPLICATE = reviewTip('Duplicate', 'Useful, but a rule, skill or earli
 const TIP_NOT_USEFUL = reviewTip('Not useful', 'Hide it and record that Haiku got it wrong.');
 const TIP_UNDO = reviewTip('Undo', 'Put this suggestion back in the open list.');
 
-// What Copy prompt copies, worded to match reviewPrompt in public/reviews.js.
+// What Copy prompt copies, worded to match reviewPrompt in public/reviews.mjs.
 function copyTip(r) {
   const copies = 'Copies a prompt for a new Claude Code session.';
   if (r.status === 'failed') return reviewTip('Copy prompt', copies, 'It gives Claude this transcript and asks what it would suggest,', 'since the Haiku review failed.');

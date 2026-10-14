@@ -1,7 +1,4 @@
-'use strict';
-
-// Pure helpers for the Session reviews panel. Loaded by index.html before main.mjs,
-// and required by test/reviews.test.js.
+// Pure helpers for the Session reviews panel.
 
 const isOpen = (s) => s.dismissedAt == null;
 const openSuggestions = (review) => review.suggestions.filter(isOpen);
@@ -28,4 +25,4 @@ function reviewPrompt(review) {
   return `${intro} A Haiku review of it suggested:\n${lines}\nWhich of these are right, which are wrong, and what did it miss?`;
 }
 
-if (typeof module === 'object') module.exports = { reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText };
+export { reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText };
