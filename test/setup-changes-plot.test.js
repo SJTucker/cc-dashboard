@@ -12,3 +12,13 @@ test('plotY keeps a negative value on the baseline and a value above max at the 
   assert.equal(plotY(-0.2, g), 200, 'a negative share draws at the baseline, not into the lanes below');
   assert.equal(plotY(3, g), 100);
 });
+
+test('plotRawMax on the Session start row is at least the before and after medians', async () => {
+  globalThis.percentile = require('../public/stats').percentile; // index.html loads stats.js as a global script
+  const { plotRawMax } = await load();
+  const row = { key: 'sessionStart' };
+  const inView = [10, 20, 30, 40].map((context) => ({ context }));
+  assert.ok(plotRawMax(row, [], null, inView) < 45);
+  assert.equal(plotRawMax(row, [], { before: 60, after: 12 }, inView), 60, 'a before median above the p95 raises the max');
+  assert.equal(plotRawMax(row, [], { before: null, after: 70 }, inView), 70);
+});

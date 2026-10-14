@@ -1,5 +1,8 @@
 'use strict';
 
+// Day and hour buckets use local time, so the zone is set before any Date is made.
+process.env.TZ = 'America/New_York';
+
 const test = require('node:test');
 const helpers = require('./helpers');
 const assert = require('node:assert');
@@ -282,4 +285,23 @@ test('collectMarkers merges all sources sorted by time', () => {
   const { markers, changesFile } = changes.collectMarkers(calls, config);
   assert.deepStrictEqual(markers.map((m) => m.source), ['file', 'plugin', 'update']);
   assert.strictEqual(changesFile.status, 'ok');
+});
+
+test('collectMarkers drops a plugin, file and auto marker in the first week of history and keeps one after it', () => {
+  const t0 = new Date(2026, 8, 1, 9).getTime();
+  const iso = (t) => new Date(t).toISOString();
+  const settings = '/home/u/.claude/settings.json';
+  const { config } = setup({
+    plugins: { plugins: { 'early@x': [{ installedAt: iso(t0 + 2.5 * DAY) }], 'late@x': [{ installedAt: iso(t0 + 8 * DAY) }] } },
+    changes: [{ date: iso(t0 + 2.5 * DAY), kind: 'skill', label: 'early file' }, { date: iso(t0 + 8 * DAY), kind: 'skill', label: 'late file' }],
+    auto: {
+      's1.json': [
+        { t: t0 + 2.5 * DAY, kind: 'skill', name: 'a.md', label: 'early auto', file: settings },
+        { t: t0 + 8 * DAY, kind: 'skill', name: 'b.md', label: 'late auto', file: settings },
+      ],
+    },
+  });
+  const calls = [{ t: t0 }, { t: t0 + 10 * DAY }];
+  const labels = changes.collectMarkers(calls, config).markers.map((m) => m.label);
+  assert.deepStrictEqual(labels.sort(), ['b.md: late auto', 'late file', 'late plugin installed']);
 });

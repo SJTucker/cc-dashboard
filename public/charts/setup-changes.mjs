@@ -94,11 +94,12 @@ function drawSessionDots(svg, report, g) {
 // The top of the y axis before headroom. On the Session start row it is the 95th
 // percentile of the sessions in view: one outlier session (260,620 tokens against a
 // typical 38k-52k) would otherwise squash every ordinary session into the bottom
-// slice. Other rows, and a Session start range with no session, use the tallest bar
-// or median line.
-function plotRawMax(row, days, win, inView) {
-  if (row.key === 'sessionStart' && inView.length) return percentile(inView.map((s) => s.context), 95);
+// slice. The before and after median lines stay under the top even when they are
+// above that percentile. Other rows, and a Session start range with no session, use
+// the tallest bar or median line.
+export function plotRawMax(row, days, win, inView) {
   const lines = win ? [win.before, win.after].filter((v) => v != null) : [];
+  if (row.key === 'sessionStart' && inView.length) return Math.max(percentile(inView.map((s) => s.context), 95), ...lines);
   return Math.max(...days.map((d) => d.value), ...lines);
 }
 
