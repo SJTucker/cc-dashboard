@@ -1,7 +1,8 @@
 /* ---------- Header ---------- */
 
 /* The sticky bar: one row with the title, the status strip, the tab switch and
-   today's three stats. A narrow screen wraps it onto more rows. */
+   today's three stats. Below 1240px the status strip hides. A narrow screen wraps
+   the bar onto more rows. */
 .topbar {
   display: flex;
   flex-wrap: wrap;
@@ -118,6 +119,13 @@
 /* A plan limit warning can take 400px of the strip, and the bar must stay one row.
    The Sessions and API calls counts give way while the warning shows. */
 .status-strip:has(.strip-limit:not([hidden])) .strip-extra { display: none; }
+
+/* Below 1240px the strip pushes today's stats onto a second row, so it goes. A
+   showing plan limit warning stays, alone in the strip. */
+@media (max-width: 1240px) {
+  .status-strip:not(:has(.strip-limit:not([hidden]))) { display: none; }
+  .status-strip > :not(.strip-limit) { display: none; }
+}
 
 /* The short plan limit warning. The amber left edge matches .status-banner; the
    Limit or Budget label and the percents carry the meaning, not the colour. */
