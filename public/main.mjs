@@ -276,8 +276,9 @@ function renderMetaBanner(meta) {
 }
 
 // Draws everything the summary feeds on the tab shown: the banner, then the cards,
-// charts, daily-by-model charts and tools on Analysis, or Where usage goes and Models on Now. lastSummarySignature is set on the last line, after every renderer has
-// run. A renderer that throws therefore leaves the previous signature, and
+// charts, daily-by-model charts and tools on Analysis, or Where usage goes and
+// Models on Now. lastSummarySignature is set on the last line, after every renderer
+// has run. A renderer that throws therefore leaves the previous signature, and
 // reportDrawError clears that one. The panel draw guards keep no key for a draw that
 // threw, so those panels need no clearing.
 function drawSummaryPanels(data) {

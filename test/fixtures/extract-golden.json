@@ -394,6 +394,7 @@
           "branch": "feature/x2"
         },
         "title": "Final title",
+        "recap": "Goal was the golden corpus. Next: commit.",
         "firstPrompt": "a long pasted prompt that runs past the eighty character preview limit, so its…",
         "reportedCost": 2.25
       }
@@ -617,6 +618,7 @@
           "branch": "feature/z"
         },
         "title": "Title from b",
+        "recap": null,
         "firstPrompt": "a long pasted prompt that runs past the eighty character preview limit, so its…",
         "reportedCost": 3
       },
@@ -630,6 +632,7 @@
           "branch": "main"
         },
         "title": "Resumed work",
+        "recap": null,
         "firstPrompt": "pick up where we left off",
         "reportedCost": 0.5
       }
@@ -701,6 +704,7 @@
           "branch": "old-branch"
         },
         "title": "Old session",
+        "recap": null,
         "firstPrompt": "an old prompt",
         "reportedCost": 0.75
       }
@@ -752,6 +756,7 @@
         "branches": [],
         "newestBranch": null,
         "title": "No session id",
+        "recap": null,
         "firstPrompt": null,
         "reportedCost": null
       },
@@ -764,6 +769,7 @@
           "branch": "proto"
         },
         "title": null,
+        "recap": null,
         "firstPrompt": null,
         "reportedCost": null
       }
@@ -902,6 +908,7 @@
         "branches": [],
         "newestBranch": null,
         "title": "Titles only",
+        "recap": null,
         "firstPrompt": null,
         "reportedCost": 0.1
       }
