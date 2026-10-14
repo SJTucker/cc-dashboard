@@ -368,7 +368,7 @@ its project and git branch on a line under it. The title is Claude Code's last
 italic type. Hover the branch for its full name and, when the session switched
 branch, every branch it used. Prompts, Length and Lines are only in Today. Running
 now is ordered by the start of each session's first span today (`runningSessions` in
-`public/session-groups.js`), so rows do not move while they run. State shows ▶
+`public/session-groups.mjs`), so rows do not move while they run. State shows ▶
 working or ⏸ waiting on you. Doing now shows the running tool, such as `Bash: npm
 test`, and the subagent count. Both show "—" without the mod (see "Live state").
 Today lists every session of the day, live ones included, sorted by Cost today with
@@ -629,7 +629,7 @@ public/load.mjs        loadPanels: draws each panel when its own request settles
 public/main.mjs        Starts the page: fetches the API routes, draws every panel, runs the 5 s live poll and the range picker
 public/poll.js         Runs the 5 s live poll so one poll finishes before the next one starts
 public/reviews.js      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath
-public/session-groups.js  Groups the Today table's rows by claude launch, then ended sessions by project, and the running-session and activity labels
+public/session-groups.mjs  Groups the Today table's rows by claude launch, then ended sessions by project, and the running-session and activity labels
 public/state.mjs       The tab, the Analysis range and the hidden panels, shared by the modules
 public/stats.mjs       median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/sticky-poll.mjs  What the sticky poll fetches: today's summary and the plan limits

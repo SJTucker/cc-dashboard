@@ -23,7 +23,7 @@ in the phase 3 review of Live sessions on 2026-10-06.
 - **No approval state.** Commit `refactor: drop the approval state` removed the
   `tool.check` hook from `mod/hooks/register.ts`, and removed `approval` from
   `STATES` in `lib/activity.js` and from `ACTIVITY_STATES` in
-  `public/session-groups.js`. `tool.check` answers `ask` before the permission mode
+  `public/session-groups.mjs`. `tool.check` answers `ask` before the permission mode
   settles the call. In auto mode the classifier then allows the tool with no event,
   so "needs approval" showed for the whole run of an allowed tool.
 - **Subagent events.** A subagent's `tool.call` carries its `agentId`. The mod's

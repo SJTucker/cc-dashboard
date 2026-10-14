@@ -1,8 +1,10 @@
 'use strict';
 
 const test = require('node:test');
+const { before } = require('node:test');
 const assert = require('node:assert');
-const { groupSessions, itemCost, costShare, runningSessions, activityLabel, doingNow } = require('../public/session-groups');
+let groupSessions, itemCost, costShare, runningSessions, activityLabel, doingNow;
+before(async () => { ({ groupSessions, itemCost, costShare, runningSessions, activityLabel, doingNow } = await import('../public/session-groups.mjs')); });
 
 function session(project, lastActiveAt, overrides = {}) {
   return {
@@ -245,7 +247,8 @@ test('a null project gets the key project: with nothing after it', () => {
   assert.strictEqual(g.key, 'project:');
 });
 
-const { cacheLine } = require('../public/session-groups');
+let cacheLine;
+before(async () => { ({ cacheLine } = await import('../public/session-groups.mjs')); });
 const usd = (n) => '$' + n.toFixed(2);
 
 test('cacheLine shows minutes left and the rebuild cost', () => {

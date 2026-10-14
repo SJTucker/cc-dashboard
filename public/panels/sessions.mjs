@@ -3,6 +3,7 @@ import { getJson } from '../api.mjs';
 import { el } from '../dom.mjs';
 import { formatCost, formatDuration, formatAgo } from '../format.mjs';
 import { state } from '../state.mjs';
+import { groupSessions, costShare, runningSessions, activityLabel, cacheLine, doingNow } from '../session-groups.mjs';
 import { createDrawGuard } from '../guards.mjs';
 import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
 
@@ -23,7 +24,7 @@ function sessionState(s) {
 }
 
 // Groups whose sessions are shown one by one, by item.key (groupSessions in
-// public/session-groups.js). Kept for the page's lifetime only, and read again by
+// public/session-groups.mjs). Kept for the page's lifetime only, and read again by
 // every renderSessions call so the 5 s poll keeps it.
 const expandedGroups = new Set();
 let lastLiveSessions = null;

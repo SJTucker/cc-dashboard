@@ -67,7 +67,7 @@
 .sessions-table .cost { color: var(--money); text-shadow: var(--money-glow); }
 .sessions-table .is-live { color: var(--text-primary); }
 .sessions-table .is-attention { color: var(--text-primary); font-weight: 600; }
-/* Second line of the State cell: the cache countdown (cacheLine in public/session-groups.js).
+/* Second line of the State cell: the cache countdown (cacheLine in public/session-groups.mjs).
    It wraps, so on a narrow screen it does not widen the State column past its label. */
 .sessions-table .cache-line { display: block; font-size: var(--fs-caption); font-weight: 400; color: var(--text-tertiary); white-space: normal; }
 .sessions-table .session-child td:first-child { padding-left: var(--sp-5); }

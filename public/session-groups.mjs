@@ -1,8 +1,3 @@
-'use strict';
-
-// Loaded two ways: index.html loads it as a script before main.mjs, which makes these
-// functions globals, and the tests load them with require().
-
 const GROUP_SUMS = ['costUsd', 'costTodayUsd', 'durationMs', 'linesAdded', 'linesRemoved', 'tokens', 'prompts'];
 
 // Cost today of a row of the Today table: a plain session or a group.
@@ -140,4 +135,4 @@ function doingNow(activity) {
   return parts.length ? parts.join(' · ') : null;
 }
 
-if (typeof module === 'object') module.exports = { groupSessions, itemCost, costShare, runningSessions, activityLabel, cacheLine, doingNow };
+export { groupSessions, itemCost, costShare, runningSessions, activityLabel, cacheLine, doingNow };
