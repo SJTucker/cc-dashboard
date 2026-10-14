@@ -2125,6 +2125,20 @@ test('the recheck timer redraws the reset countdown', async ($, on) => {
   await ui.unmount()
 })
 
+test('the recheck timer stops reading limit-warnings.json once the band shows nothing', async ($, on) => {
+  const { state, clock, readLog } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81), WEEK]))
+  await ui.press({ key: 'dismiss-limits' })
+  state.files[LIMITS] = '{"five_hour":75,"seven_day":0}'
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  const reads = readLog.filter((p) => p === LIMITS).length
+  await clock.advance(120_000)
+  expect(readLog.filter((p) => p === LIMITS).length).toBe(reads)
+  await ui.unmount()
+})
+
 test('an unreadable limit-warnings.json counts as no dismissal', async ($, on) => {
   world(on, { files: { [LIMITS]: 'not json' } })
   const ui = await $.ui.mount(BAND)
