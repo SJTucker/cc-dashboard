@@ -217,3 +217,16 @@ test('a Fast mode name with a footnote marker is read like a Model pricing name'
   assert.notStrictEqual(page, PAGE, 'the fixture row was found');
   assert.deepStrictEqual(parsePricingPage(page).rows.find((r) => r.match === 'opus-5-5').fast, { input: 8, output: 40 });
 });
+
+test('a Fast mode row for a model the Model pricing table skipped as a tiered row is skipped too, not refused', () => {
+  const zephyr = [
+    '| Claude Zephyr 1 (for prompts up to 100,000 tokens) | $1 / MTok | $1.25 / MTok | $2 / MTok | $0.10 / MTok | $5 / MTok |',
+    '| Claude Zephyr 1 (for prompts over 100,000 tokens) | $2 / MTok | $2.50 / MTok | $4 / MTok | $0.20 / MTok | $10 / MTok |',
+  ].join('\n');
+  const page = PAGE
+    .replace('| Claude Fable 5.1 ', `${zephyr}\n| Claude Fable 5.1 `)
+    .replace(/\| Claude Opus 5 \/ Claude Opus 4\.8 .*\n/, (row) => `${row}| Claude Zephyr 1 | $2 / MTok | $10 / MTok |\n`);
+  const { rows, skipped } = parsePricingPage(page);
+  assert.strictEqual(rows.length, 20);
+  assert.deepStrictEqual(skipped.map((s) => s.name), ['Claude Zephyr 1 (for prompts up to 100,000 tokens)', 'Claude Zephyr 1 (for prompts over 100,000 tokens)']);
+});
