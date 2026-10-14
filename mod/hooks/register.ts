@@ -584,9 +584,11 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
 }
 
 // Releases everything held for a session that ended. Its throttle timer is
-// cancelled, so a write waiting on it never lands. A write already queued finds no
-// state and writes nothing. A write already inside fs.write finishes, and
-// writeActivity does not record its text.
+// cancelled, so a timer that has not fired never queues a write. A timer callback
+// already waiting on clock.now checks activities.has(id) and returns, so it queues
+// no write either. A write already queued finds no state in writeActivity and writes
+// nothing. A write already inside fs.write finishes, and writeActivity does not
+// record its text.
 function forgetSession(id: string) {
   activities.delete(id)
   runningTools.delete(id)
