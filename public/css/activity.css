@@ -1,0 +1,48 @@
+/* ---------- When usage happens ---------- */
+
+.heatmap {
+  display: grid;
+  /* minmax(0, 1fr) lets a column narrow below its cell's minimum width. */
+  grid-template-columns: 32px repeat(24, minmax(0, 1fr));
+  gap: 2px;
+  align-items: center;
+}
+
+.heat-row-label {
+  font-family: var(--font-data);
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+
+.heat-cell {
+  /* Wide cells rather than squares: 24 columns of squares across a 1400px page
+     makes the grid taller than the charts above it. */
+  aspect-ratio: 2.4;
+  min-height: 10px;
+  /* A grid item with aspect-ratio does not stretch to its column, so its width
+     came from min-height: 24px, which pushed 24 columns past a 390px screen. */
+  width: 100%;
+  min-width: 0;
+  border-radius: var(--radius-s);
+  border: 1px solid var(--border);
+  cursor: pointer;
+}
+
+.heat-cell:hover { outline: 1px solid var(--text-secondary); }
+
+.heat-hours {
+  display: grid;
+  grid-template-columns: 32px repeat(8, 1fr);
+  gap: 2px;
+  margin-top: var(--sp-1);
+  font-family: var(--font-data);
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+
+.heat-hours span { grid-column: span 1; }
+.heat-hours span:first-child { grid-column-start: 2; }
+
+.heat-scale { gap: var(--sp-2); }
+.heat-scale-cells { display: inline-flex; gap: 2px; }
+.heat-scale-cell { width: 18px; height: 10px; border-radius: var(--radius-s); border: 1px solid var(--border); }

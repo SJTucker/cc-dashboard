@@ -1,0 +1,40 @@
+/* ---------- Plan usage ---------- */
+
+/* Laid out like Claude Code's /usage screen: the label on its own line, the bar
+   with its percentage beside it, the reset time underneath. */
+.limit-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas: "name name" "track pct" "reset reset";
+  column-gap: var(--sp-3);
+  row-gap: 2px;
+  padding: var(--sp-1) 0 var(--sp-2);
+}
+.limit-name { grid-area: name; font-family: var(--font-label); font-weight: 600; font-size: var(--fs-body); letter-spacing: var(--ls-label); text-transform: uppercase; color: var(--text-primary); }
+/* Plan usage meters are cells: 10px on a 12px pitch, for the track and the fill
+   alike. The pitch is fixed, so the fill's cells line up with the track's cells at
+   any width. Other .usage-track bars keep their solid fill. */
+.limit-row .usage-track {
+  grid-area: track;
+  align-self: center;
+  position: relative;
+  height: 12px;
+  overflow: visible;
+  border-radius: 0;
+  background: repeating-linear-gradient(90deg, var(--surface-raised) 0 10px, transparent 10px 12px);
+}
+.limit-row .usage-track > i {
+  border-radius: 0;
+  background: repeating-linear-gradient(90deg, var(--accent-cyan) 0 10px, transparent 10px 12px);
+}
+/* The day's budget on the Today row, as a percent of the week. */
+.budget-tick {
+  position: absolute;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  margin-left: -1px;
+  background: var(--text-primary);
+}
+.limit-pct { grid-area: pct; font-family: var(--font-num); font-size: var(--fs-body); color: var(--text-primary); font-variant-numeric: tabular-nums; }
+.limit-reset { grid-area: reset; font-size: var(--fs-caption); color: var(--text-tertiary); }

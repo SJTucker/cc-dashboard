@@ -298,7 +298,7 @@ function drawSummaryPanels(data) {
 }
 
 // The summary request's draw. The first one of the page's life, a failure included,
-// ends the "Loading…" lines (.first-load in style.css). On Today the summary is
+// ends the "Loading…" lines (.first-load in css/base.css). On Today the summary is
 // today's, so it draws the sticky bar too.
 function drawSummary(data) {
   document.body.classList.remove('first-load');

@@ -1,0 +1,19 @@
+/* ---------- Session timeline ---------- */
+
+/* Session timeline (renderTimeline in public/panels/timeline.mjs). */
+.timeline-label {
+  font-family: var(--font-data);
+  font-size: var(--fs-caption);
+  fill: var(--text-primary);
+}
+.timeline-label.prompt-title { font-style: italic; }
+/* The ↳ before the label of a lane that a /clear started (drawLane in public/panels/timeline.mjs). */
+.timeline-follow { fill: var(--text-tertiary); font-style: normal; }
+.timeline-rebuild-cell { font-family: var(--font-data); font-size: var(--fs-caption); fill: var(--text-secondary); }
+/* The Rebuilds column heading, styled as the sessions table headings. */
+.timeline-column-head { font-family: var(--font-data); font-size: var(--fs-caption); letter-spacing: var(--ls-label); fill: var(--text-tertiary); }
+.timeline-bar:hover { stroke: var(--text-primary); stroke-width: 1; }
+.timeline-rebuild:hover { stroke: var(--text-primary); stroke-width: 2; }
+.timeline-rebuild-count { font-size: var(--fs-caption); fill: var(--text-secondary); pointer-events: none; }
+
+.timeline-follow-key { color: var(--text-tertiary); }

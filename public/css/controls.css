@@ -1,0 +1,121 @@
+/* ---------- Collapsible rows ---------- */
+
+.row-toggle {
+  font: inherit;
+  color: var(--text-tertiary);
+  background: none;
+  border: none;
+  padding: 0 var(--sp-1) 0 0;
+  cursor: pointer;
+}
+.row-toggle::before { content: '▾'; }
+.row-toggle[aria-expanded="false"]::before { content: '▸'; }
+.row-toggle:hover { color: var(--text-primary); }
+.row-toggle:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+
+/* A collapsed row keeps only its headings. */
+.panel.row-collapsed > :not(.panel-head),
+.panel-row.row-collapsed > .panel > :not(.panel-head) { display: none; }
+
+/* ---------- Row order and hide buttons ---------- */
+
+.row-handle {
+  color: var(--text-tertiary);
+  padding: 0 var(--sp-2) 0 0;
+  cursor: grab;
+  user-select: none;
+}
+.row-handle::before { content: '⠿'; }
+.row-handle:hover { color: var(--accent-cyan); }
+.row-dragging { opacity: 0.4; }
+/* The drop point is a 3px cyan line on the target row's top or bottom edge. The
+   line's position and thickness mark the drop point without relying on colour. */
+.drop-before { box-shadow: 0 -3px 0 0 var(--accent-cyan); }
+.drop-after { box-shadow: 0 3px 0 0 var(--accent-cyan); }
+.row-collapsed .panel-head { margin-bottom: 0; }
+
+/* A collapsed Skills or Subagents list in Where usage goes keeps only its title
+   (see setupUsageGroupToggles in public/ui/collapse.mjs). */
+.usage-group.group-collapsed > :not(.usage-group-title) { display: none; }
+.usage-group.group-collapsed .usage-group-title { margin-bottom: 0; }
+
+/* The list name sits inside its toggle, so clicking the name opens the list.
+   A button does not inherit the title's case or letter spacing on its own. */
+.group-toggle {
+  padding: 0;
+  text-transform: inherit;
+  letter-spacing: inherit;
+}
+.group-toggle::before { margin-right: var(--sp-1); }
+
+.hide-btn {
+  background: none;
+  border: 0;
+  padding: 0 var(--sp-1);
+  margin-left: 0;
+  color: var(--text-tertiary);
+  font-size: var(--fs-title);
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+}
+.card > .hide-btn { position: absolute; top: 4px; right: 4px; margin: 0; }
+.panel:hover > .panel-head > .hide-btn,
+.panel:focus-within > .panel-head > .hide-btn,
+.card:hover > .hide-btn,
+.card:focus-within > .hide-btn { opacity: 1; }
+.hide-btn:hover { color: var(--text-primary); }
+.hide-btn:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+/* A touch screen has no hover, so the buttons always show there. */
+@media (hover: none) { .hide-btn, .row-controls { opacity: 1; } }
+
+/* A row's handle and toggle show while the pointer is over the row or focus is
+   inside it. A collapsed row keeps its toggle in view, so it can be opened again. */
+.row-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--sp-1);
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.panel:hover > .panel-head > .row-controls,
+.panel-row:hover .row-controls,
+.panel:focus-within > .panel-head > .row-controls,
+.panel-row:focus-within .row-controls,
+.row-collapsed .row-controls { opacity: 1; }
+.row-controls .row-toggle,
+.row-controls .row-handle { padding: 0 var(--sp-1); }
+
+/* The ☰ button sits at the right end of the title row. */
+.menu-btn { margin-left: auto; padding: var(--sp-1) var(--sp-2); font-size: var(--fs-title); }
+
+/* A popover renders in the top layer, outside the header's overflow clip.
+   public/ui/hidden.mjs sets top and right from the button's position each time
+   it opens. */
+.hidden-menu {
+  position: fixed;
+  inset: auto;
+  margin: 0;
+  min-width: 220px;
+  padding: var(--sp-1);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-m);
+  color: var(--text-primary);
+}
+.hidden-menu-item {
+  display: block;
+  width: 100%;
+  padding: var(--sp-1) var(--sp-2);
+  background: none;
+  border: 0;
+  border-radius: var(--radius-s);
+  color: var(--text-secondary);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.hidden-menu-item:hover,
+.hidden-menu-item:focus-visible { background: var(--border); color: var(--text-primary); outline: none; }
+.hidden-menu-all { margin-top: var(--sp-1); border-top: 1px solid var(--border); border-radius: 0 0 var(--radius-s) var(--radius-s); }
+.hidden-menu-empty { margin: var(--sp-1) var(--sp-2); color: var(--text-tertiary); font-size: var(--fs-body); }

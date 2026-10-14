@@ -10,7 +10,7 @@ let onResume = () => {};
 // Any panel or summary card can be hidden with its "x" button and shown again
 // from the ☰ menu in the header. The hidden keys (data-hide-key in index.html)
 // are kept in localStorage. A hidden element gets data-user-hidden, which
-// style.css hides with !important, so a renderer setting `panel.hidden = false`
+// css/base.css hides with !important, so a renderer setting `panel.hidden = false`
 // cannot show it. Storage can throw (a private window, blocked site data), and
 // then nothing starts hidden.
 const HIDDEN_KEY = 'cc-dashboard:hidden';

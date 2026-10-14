@@ -1,0 +1,128 @@
+/* ---------- Setup changes ---------- */
+
+/* SVG glyphs stroke with currentColor, so a pressed button can recolour its icon. */
+.changes-chart { color: var(--text-primary); }
+.changes-legend { flex-wrap: wrap; margin-top: var(--sp-2); }
+.marker-icon { color: inherit; flex: none; }
+.marker-glyph { fill: none; stroke: currentColor; stroke-width: 1.5; }
+.session-dot { fill: var(--text-secondary); stroke: var(--text-secondary); stroke-width: 1.2; }
+.session-dot.hollow { fill: var(--surface); }
+
+.day-bar.outside { fill: var(--border); }
+.day-bar.before { stroke: var(--text-secondary); stroke-width: 1; }
+.day-bar.after { fill: var(--accent-cyan); }
+.day-bar.dimmed { opacity: 0.5; }
+.session-halo { fill: var(--bg); stroke: var(--bg); stroke-width: 4; }
+.empty-dash { stroke: var(--text-tertiary); stroke-width: 1.5; }
+.weekend-shade { fill: var(--text-primary); opacity: 0.03; pointer-events: none; }
+.median-label { font-family: var(--font-data); font-size: var(--fs-caption); paint-order: stroke; stroke: var(--surface); stroke-width: 3px; }
+.median-label.before { fill: var(--text-primary); }
+.median-label.after { fill: var(--accent-cyan); }
+.axis-label.picked { fill: var(--accent-cyan); font-weight: 700; }
+/* A window icon in the Setup changes legend: its bar fill with its median rule across it. */
+.window-swatch { position: relative; overflow: visible; }
+.window-swatch::after {
+  content: '';
+  position: absolute;
+  left: -3px;
+  right: -3px;
+  top: 50%;
+  margin-top: -1px;
+  border-top: 2px dashed var(--text-primary);
+}
+.window-swatch.after::after { border-top: 2px solid var(--accent-cyan); }
+.window-swatch.outside::after { content: none; }
+.legend-lead { color: var(--text-tertiary); }
+.window-before { fill: var(--text-primary); opacity: 0.04; }
+.window-after { fill: var(--accent-cyan); opacity: 0.08; }
+.window-median { stroke-width: 2; }
+.window-median.before { stroke: var(--text-primary); stroke-dasharray: 5 3; }
+.window-median.after { stroke: var(--accent-cyan); }
+.marker-line { stroke: var(--accent-cyan); stroke-width: 1.5; }
+.lane-name { font-family: var(--font-data); font-size: var(--fs-caption); fill: var(--text-secondary); }
+.lane-rule { stroke: var(--border); opacity: 0.35; }
+.lane-count { font-family: var(--font-data); font-size: var(--fs-caption); fill: var(--text-primary); pointer-events: none; }
+.lane-picked { fill: var(--accent-cyan); fill-opacity: 0.08; stroke: var(--accent-cyan); stroke-opacity: 0.6; pointer-events: none; }
+.lane-hit { fill: transparent; stroke: none; }
+.lane-cell { cursor: pointer; outline: none; }
+.lane-cell:focus-visible .lane-hit { stroke: var(--text-primary); stroke-width: 1.5; }
+.lane-cell.picked .marker-glyph { fill: var(--accent-cyan); stroke: var(--accent-cyan); }
+.window-bar.after { fill: var(--accent-cyan); }
+.plot-empty { font-family: var(--font-data); font-size: var(--fs-caption); fill: var(--text-tertiary); }
+
+.ba-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: var(--sp-4); align-items: start; }
+@media (max-width: 900px) { .ba-grid { grid-template-columns: 1fr; } }
+
+/* The legend and title start at the plot's left edge. 110px equals PLOT_LEFT in public/charts/setup-changes.mjs,
+   so it is deliberately off the spacing scale. test/palette-tokens.test.js keeps the two equal. */
+.ba-under { margin-left: 110px; }
+.ba-under .usage-group-title { margin: -2px 0 var(--sp-1); }
+.ba-grid { margin-top: var(--sp-2); }
+/* The before/after table needs about 390px. Below that its column scrolls sideways instead of widening the page. */
+.ba-main { overflow-x: auto; }
+
+.day-list { border-left: 2px solid var(--accent-cyan); padding: 2px 0 2px var(--sp-3); }
+.day-list-head { margin-bottom: var(--sp-1); }
+.day-change {
+  display: flex;
+  width: 100%;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  padding: var(--sp-1);
+  border: 0;
+  border-radius: var(--radius-s);
+  background: none;
+  font: inherit;
+  font-size: var(--fs-body);
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+.day-change:hover { background: var(--surface-hover); }
+.day-change[aria-pressed="true"], .day-change[aria-pressed="true"]:hover { background: var(--accent-cyan); color: var(--bg); font-weight: 700; }
+.day-change:focus-visible { outline: 2px solid var(--text-primary); outline-offset: 1px; }
+.day-change-time { color: var(--text-tertiary); flex: none; }
+.day-change[aria-pressed="true"] .day-change-time { color: inherit; opacity: 0.75; }
+.ba-table { width: 100%; }
+.ba-table .n { color: var(--text-tertiary); font-size: var(--fs-caption); margin-left: var(--sp-1); }
+.ba-table .dim { color: var(--text-tertiary); }
+.ba-table .down::before { content: "▼ "; font-size: var(--fs-caption); }
+.ba-table .up::before { content: "▲ "; font-size: var(--fs-caption); }
+.ba-table .group td { color: var(--text-tertiary); font-size: var(--fs-caption); text-transform: uppercase; letter-spacing: var(--ls-label); }
+
+/* A row picks the chart beside the table. The selected row is marked by a bar on
+   its left edge and a bold label, not by colour (see the README's charts note). The
+   bar is an inset shadow: a border on a <tr> does not draw with separate borders. */
+.ba-table tr[data-key] { cursor: pointer; }
+.ba-table tr[data-key] td:first-child { padding-left: var(--sp-2); }
+.ba-table tr.selected td:first-child { box-shadow: inset 3px 0 0 var(--text-primary); }
+.ba-row-btn {
+  background: none;
+  border: 0;
+  padding: 0;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.ba-table tr.selected .ba-row-btn { font-weight: 700; }
+.ba-table tr[data-key]:hover .ba-row-btn, .ba-row-btn:focus-visible { text-decoration: underline; }
+.ba-row-btn:focus-visible { outline: 1px solid var(--text-primary); outline-offset: 2px; }
+.changes-file-note { margin: 0 0 var(--sp-2); }
+
+.changes-error { color: var(--warning); }
+
+/* Same height as a chart, so the panel keeps its size when the chart replaces it. */
+.chart-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-2);
+  height: 180px;
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
+}
+
+.window-list { list-style: none; margin: 0; padding: 0; font-family: var(--font-ui); font-size: var(--fs-prose); }
+.window-list li { display: flex; align-items: baseline; gap: var(--sp-2); padding: 2px 0; }
+.window-time { flex: none; color: var(--text-tertiary); font-family: var(--font-data); font-size: var(--fs-body); }

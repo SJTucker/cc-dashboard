@@ -79,7 +79,7 @@ function baRow(row, before, after, onSelect) {
 }
 
 // A change younger than 7 days has a partial after window. The header says how many
-// days it covers. th text is uppercased by style.css.
+// days it covers. th text is uppercased by css/base.css.
 function afterHeading(marker, now) {
   if (marker.t + WEEK_MS <= now) return 'after';
   return `after · ${afterDaysSoFar(marker.t, now)} of 7 days`;

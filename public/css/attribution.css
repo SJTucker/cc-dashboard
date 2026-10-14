@@ -1,0 +1,168 @@
+/* ---------- Attribution bars ---------- */
+
+.usage-group + .usage-group { margin-top: var(--sp-4); }
+
+/* A legend beside the plot rather than under it, so this panel is exactly as tall
+   as the plain chart it sits next to. The caller reverses the series so the rows
+   run in the same order as the lines, cache read down to input. */
+.chart-with-legend {
+  display: flex;
+  gap: var(--sp-3);
+  align-items: flex-start;
+}
+
+.chart-with-legend .chart {
+  flex: 1;
+  min-width: 0; /* a flex item defaults to min-content, which would stop the SVG shrinking */
+}
+
+/* The legend and the scale caveat share the column beside the plot. The caveat
+   used to sit in the panel head, where at half width it wrapped to a second line
+   and made this panel taller than the chart beside it. */
+.chart-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+  flex-shrink: 0;
+  max-width: 36%;
+  padding-top: 2px;
+}
+
+.side-legend {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--sp-2);
+  margin-top: 0;
+}
+
+/* Two shares side by side rather than stacked: each group is two numbers, and
+   four full-width rows made this panel taller than every chart above it. */
+.usage-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--sp-4) var(--sp-5);
+  align-items: start;
+}
+
+.usage-grid .usage-group + .usage-group { margin-top: 0; }
+
+/* Where usage goes is half the row beside Plan usage on Today, and the whole row on
+   other ranges. Its two columns follow the panel's own width, not the viewport's.
+   818px is the full-width panel's content box at a 900px viewport (900 − 48 page
+   padding − 2 border − 32 panel padding), so the full-width panel switches where
+   it always did with overlay scrollbars. With classic scrollbars the container is
+   narrower than the viewport by the scrollbar width, about 15px, so it switches
+   slightly later. At half width, two columns wrapped each legend's percentage onto
+   the line under its label. */
+/* #toolPanel is a container too, so its .usage-grid stacks at the same width. */
+#attributionPanel, #toolPanel { container-type: inline-size; }
+
+@container (max-width: 818px) {
+  .usage-grid { grid-template-columns: 1fr; }
+}
+
+/* .usage-row gives the name column up to 280px before the bar track gets any space.
+   Beside Plan usage the panel is half the row, so the name column took nearly all of
+   it and the Skills and Subagents bars shrank to 2px or less at 960px. Here the name
+   column is capped at 40% of the row. The rule sits in a min-width media query so the
+   max-width: 720px rule for .usage-row, which hides the track, is not overridden: an
+   id selector would beat it. The Tool calls panel is outside #attributionPanel and
+   keeps its 280px column. */
+@media (min-width: 721px) {
+  #attributionPanel .usage-row { grid-template-columns: minmax(0, min(280px, 40%)) 1fr auto; }
+}
+
+@media (max-width: 900px) {
+  .chart-with-legend { flex-direction: column; }
+  .chart-side { max-width: none; }
+  .side-legend { flex-direction: row; flex-wrap: wrap; }
+}
+
+.usage-group-note {
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--text-tertiary);
+  margin-left: var(--sp-2);
+}
+
+.usage-group-title {
+  font-size: var(--fs-caption);
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  color: var(--text-tertiary);
+  margin-bottom: var(--sp-2);
+}
+/* Where usage goes sits beside Plan usage, so its section titles and bars match
+   the Plan usage meters: .limit-name's label style and cyan fills. */
+#attributionPanel .usage-group-title {
+  font-family: var(--font-label);
+  font-weight: 600;
+  font-size: var(--fs-body);
+  color: var(--text-primary);
+}
+#attributionPanel .usage-track > i { background: var(--accent-cyan); }
+#attributionPanel .group-toggle { color: var(--text-primary); }
+#attributionPanel .usage-group-note { font-family: var(--font-data); font-size: var(--fs-caption); }
+
+.usage-row {
+  display: grid;
+  grid-template-columns: minmax(0, 280px) 1fr auto;
+  gap: var(--sp-3);
+  align-items: center;
+  padding: var(--sp-1) 0 var(--sp-1) var(--sp-2);
+}
+
+.usage-name {
+  font-size: var(--fs-body);
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.usage-track {
+  height: 10px;
+  background: var(--surface-raised);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
+.usage-track > i {
+  display: block;
+  height: 100%;
+  min-width: 1px;
+  background: var(--series-neutral);
+  border-radius: var(--radius-s);
+}
+
+.usage-row:hover .usage-track { outline: 1px solid var(--text-tertiary); }
+
+/* Only the tool list is clickable; the cost breakdowns have nothing to drill into. */
+.usage-row.selectable { cursor: pointer; border-radius: var(--radius-s); }
+.usage-row.selectable:hover { background: var(--surface-raised); }
+.usage-row.selectable:focus-visible { outline: 1px solid var(--accent-cyan); outline-offset: 1px; }
+
+/* Bold text and the left bar mark the selected row without relying on colour. The
+   bar is the one .ba-table tr.selected uses. */
+.usage-row.selected .usage-name { color: var(--text-primary); font-weight: 700; }
+.usage-row.selected .usage-track > i { background: var(--accent-cyan); }
+.usage-row.selected { background: var(--surface-raised); box-shadow: inset 3px 0 0 var(--text-primary); }
+
+/* Counts run wider than the "99.9%" the cost rows show. */
+.usage-count { min-width: 96px; }
+
+.usage-pct {
+  font-size: var(--fs-body);
+  text-align: right;
+  color: var(--text-primary);
+}
+
+@media (max-width: 720px) {
+  /* auto, not a fixed 40px: a count such as "869 · 7.4% err" is wider than 40px,
+     and .usage-count's 96px minimum pushed it past the panel edge. The track is
+     hidden in drawHBars rows only. Plan usage meters (.limit-row) use the same
+     class and keep their bars at every width. */
+  .usage-row { grid-template-columns: minmax(0, 1fr) auto; }
+  .usage-row .usage-track { display: none; }
+}

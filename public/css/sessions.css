@@ -1,0 +1,107 @@
+/* ---------- Live sessions ---------- */
+
+.session-hex { color: var(--accent-cyan); margin-right: var(--sp-1); }
+
+/* The title is the row's main text. Under it, in small muted type, the project and
+   git branch (contextLine in public/panels/sessions.mjs), so two sessions of one
+   project can be told apart. A title taken from the first prompt is dimmer and
+   italic, so it reads apart from a title Claude Code wrote without relying on
+   hue. */
+.session-title {
+  display: inline-block;
+  max-width: 28ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+.session-title.from-prompt {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+
+/* Under a title the context line is a second, smaller line. With no title it is the
+   row's main text and keeps the normal size. */
+.session-title ~ .session-context {
+  display: block;
+  font-size: var(--fs-caption);
+  color: var(--text-tertiary);
+}
+
+/* In a table row, line the context up under the title, past the hex glyph. */
+.session-hex ~ .session-title ~ .session-context {
+  padding-left: calc(1ch + var(--sp-1));
+}
+
+.session-branch {
+  display: inline-block;
+  max-width: 24ch;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: bottom;
+}
+
+/* Live sessions panel (renderSessions in public/panels/sessions.mjs). */
+.sessions-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: var(--fs-body);
+}
+.sessions-table th {
+  font-size: var(--fs-caption);
+  font-weight: 400;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  color: var(--text-tertiary);
+  text-align: left;
+  padding: 0 var(--sp-3) var(--sp-2) 0;
+}
+.sessions-table td {
+  padding: var(--sp-1) var(--sp-3) var(--sp-1) 0;
+  border-top: 1px solid var(--border);
+  white-space: nowrap;
+}
+.sessions-table .num { text-align: right; font-variant-numeric: tabular-nums; }
+.sessions-table .cost { color: var(--money); text-shadow: var(--money-glow); }
+.sessions-table .is-live { color: var(--text-primary); }
+.sessions-table .is-attention { color: var(--text-primary); font-weight: 600; }
+/* Second line of the State cell: the cache countdown (cacheLine in public/session-groups.js).
+   It wraps, so on a narrow screen it does not widen the State column past its label. */
+.sessions-table .cache-line { display: block; font-size: var(--fs-caption); font-weight: 400; color: var(--text-tertiary); white-space: normal; }
+.sessions-table .session-child td:first-child { padding-left: var(--sp-5); }
+.sessions-table .session-group .row-toggle { padding-right: var(--sp-1); }
+/* In a launch group row the toggle sits before the hex glyph, so the project and
+   branch line starts further in to stay under the title. The 2ch + 12px matches the
+   width of the `.row-toggle` glyph plus its padding in `.session-group` rows, so a
+   change to that padding needs this value changed too. */
+.sessions-table .launch-group .session-hex ~ .session-title ~ .session-context {
+  padding-left: calc(2ch + var(--sp-3));
+}
+
+.sessions-subhead {
+  margin: var(--sp-3) 0 var(--sp-1);
+  font-family: var(--font-label);
+  font-size: var(--fs-body);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: var(--ls-label);
+  color: var(--text-secondary);
+}
+.panel-head + #runningSessions .sessions-subhead,
+#runningSessions[hidden] + .sessions-subhead { margin-top: var(--sp-1); }
+
+/* The Cost today bar: one series in one colour, behind the number. */
+.sessions-table .cost-cell { position: relative; }
+.sessions-table .cost-bar {
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  background: color-mix(in srgb, var(--money-fill) 20%, transparent);
+  border-radius: var(--radius-s);
+}
+.sessions-table .cost-value { position: relative; }
+
+.sessions-total td { font-weight: 600; }
