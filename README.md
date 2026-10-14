@@ -364,7 +364,7 @@ waiting on you, however long ago it last wrote. Its columns are Session, State, 
 now, Cost today and Last active. The Session column shows the session's title, with
 its project and git branch on a line under it. The title is Claude Code's last
 `ai-title` line. A session without one shows the first prompt typed in it, in dimmer
-italic type. Hover the branch for its full name and, when the session switched
+italic type. Hover the title to read it in full, followed by Claude Code's last away recap for the session when there is one (the `away_summary` line it writes when you return to an idle session; the Session timeline's bar tooltip shows it too, cut to 4 lines). `transcripts.db` stores that recap text. Hover the branch for its full name and, when the session switched
 branch, every branch it used. Prompts, Length and Lines are only in Today. Running
 now is ordered by the start of each session's first span today (`runningSessions` in
 `public/session-groups.mjs`), so rows do not move while they run. State shows ▶

@@ -343,6 +343,21 @@ test('session summaries: main-thread branches in first-seen order, newest branch
   assert.strictEqual(s1.reportedCost, 1.5);
 });
 
+test('session recap: the last away_summary wins, the /config suffix is stripped, bad content is ignored', async () => {
+  const away = (content) => ({ type: 'system', subtype: 'away_summary', sessionId: 's1', content });
+  const file = writeTranscript([
+    away('Goal was A. Next: B. (disable recaps in /config)'),
+    away(' Goal was C. Next: say whether to commit. (disable recaps in /config)  '),
+    away(42),
+    away('   '),
+    { type: 'system', subtype: 'other', sessionId: 's1', content: 'not a recap' },
+  ]);
+  const { s1 } = (await extractFile(file)).sessions;
+  assert.strictEqual(s1.recap, 'Goal was C. Next: say whether to commit.');
+  const none = (await extractFile(writeTranscript([{ type: 'ai-title', sessionId: 's2', aiTitle: 't' }]))).sessions.s2;
+  assert.strictEqual(none.recap, null);
+});
+
 test('a line with no sessionId is filed under the transcript path', async () => {
   const file = writeTranscript([{ ...assistant(), sessionId: undefined }]);
   const rows = await extractFile(file);
@@ -549,8 +564,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 6', () => {
-  assert.strictEqual(EXTRACT_VERSION, 6);
+test('EXTRACT_VERSION is 7', () => {
+  assert.strictEqual(EXTRACT_VERSION, 7);
 });
 
 // Two tool_use blocks without an id, one per line as Claude Code writes them.

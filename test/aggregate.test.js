@@ -127,6 +127,12 @@ test('an error or edit row with no timestamp is inside every range', () => {
 
 const session = (overrides) => ({ branches: [], newestBranch: null, title: null, firstPrompt: null, reportedCost: null, ...overrides });
 
+test('recapBySession takes the recap of the last row set that has one, in walk order', () => {
+  const rows = (recap) => rowSet({ sessions: { s1: session(recap === undefined ? {} : { recap }) } });
+  const { efficiency } = run([rows('Old'), rows('New'), rows(undefined), rows(null)]);
+  assert.deepStrictEqual(efficiency.recapBySession, { s1: 'New' });
+});
+
 test('session summaries merge in walk order: branches append, newest branch by time, last title, first prompt', () => {
   const first = rowSet({
     sessions: { s1: session({ branches: ['main', 'feat'], newestBranch: { t: 100, branch: 'feat' }, title: 'Old title', firstPrompt: 'first' }) },
@@ -141,6 +147,7 @@ test('session summaries merge in walk order: branches append, newest branch by t
   assert.strictEqual(efficiency.branchBySession.s1, 'feat');
   assert.strictEqual(efficiency.titleBySession.s1, 'New title');
   assert.strictEqual(efficiency.firstPromptBySession.s1, 'first');
+  assert.deepStrictEqual(efficiency.recapBySession, {}, 'rows without recap leave the map empty');
 });
 
 test('reportedCost takes the highest value per session, and only on an all-time scan', () => {

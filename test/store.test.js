@@ -180,6 +180,11 @@ test('migration 4 to 5 leaves a call without noFinal as it is', () => {
   assert.ok(!('noFinal' in out.calls[0]), 'noFinal is written only where it is true');
 });
 
+test('migration 6 to 7 leaves rows as they are, with no recap on their sessions', () => {
+  const old = rowsOf({ sessions: { s1: { title: 't' } } });
+  assert.deepStrictEqual(MIGRATIONS[6](old), old);
+});
+
 test('upgradeRows takes a version 1 row set to EXTRACT_VERSION', () => {
   const { EXTRACT_VERSION } = require('../lib/extract');
   const old = rowsOf({ calls: [{ key: 'a', t: 10, model: 'm1' }], toolUses: [{ key: 'u', t: 11, name: 'Bash', detail: '' }] });

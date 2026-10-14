@@ -146,21 +146,22 @@ function clockTime(ms) {
   return new Date(ms).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-function timelineTooltip(s, bar) {
+export function timelineTooltip(s, bar) {
   const name = s.title || s.project || '—';
   // With a title, the line under it is project · branch. Without one the project is
   // already the name, so the line is the branch alone.
   const context = (s.title ? [s.project, s.branch] : [s.branch]).filter(Boolean);
   const contextHtml = context.length ? `${context.map(escapeHtml).join(' · ')}<br>` : '';
   const range = bar.start === bar.end ? clockTime(bar.start) : `${clockTime(bar.start)} – ${clockTime(bar.end)}`;
-  return `<b>${escapeHtml(name)}</b><br>${contextHtml}${range}<br>${formatCost(s.costTodayUsd)} today · ${plural(s.prompts, 'prompt', 'prompts')}`;
+  const recapHtml = s.recap ? `<div class="tooltip-recap">${escapeHtml(s.recap)}</div>` : '';
+  return `<b>${escapeHtml(name)}</b><br>${contextHtml}${range}<br>${formatCost(s.costTodayUsd)} today · ${plural(s.prompts, 'prompt', 'prompts')}${recapHtml}`;
 }
 
 function timelineKey(live, width, now) {
   return JSON.stringify([
     width,
     Math.floor(now / 60_000),
-    live.sessions.map((s) => [s.sessionId, s.clearedFrom, s.spans, s.live, s.title, s.titleSource, s.project, s.branch, s.costTodayUsd, s.prompts, s.rebuilds]),
+    live.sessions.map((s) => [s.sessionId, s.clearedFrom, s.spans, s.live, s.title, s.titleSource, s.recap, s.project, s.branch, s.costTodayUsd, s.prompts, s.rebuilds]),
   ]);
 }
 
