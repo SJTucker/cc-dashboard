@@ -120,6 +120,12 @@ function setBusy(on) {
 // The Now tab polls the whole tab. The Analysis tab polls only the sticky bar and the
 // plan limit warning, which show today on every tab.
 function setPolling(onNow) {
+  // A hidden tab polls nothing. The visibilitychange listener calls this again on show.
+  if (document.hidden) {
+    livePoller.stop();
+    stickyPoller.stop();
+    return;
+  }
   if (onNow) {
     stickyPoller.stop();
     livePoller.start();
