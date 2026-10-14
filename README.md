@@ -622,7 +622,7 @@ public/favicon.ico     Tab icon, linked from index.html
 public/favicon.svg     Tab icon and the header logo
 public/format.mjs      Text formatting for costs, token counts, durations, dates and model names
 public/guards.mjs      Request sequence numbers and per-panel redraw guards
-public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
+public/hud.mjs         Display helpers for the header status strip and the Plan usage Today meter
 public/index.html      Page shell: the panels' markup, the plain scripts, then main.mjs as a module
 public/layout.mjs      orderRowKeys: the saved panel row order merged with the default order in index.html
 public/load.mjs        loadPanels: draws each panel when its own request settles, with no DOM access

@@ -12,6 +12,7 @@ import { escapeHtml } from './format.mjs';
 
 import { spinnerNode } from './dom.mjs';
 
+import { formatStatus } from './hud.mjs';
 import { renderAttribution } from './panels/attribution.mjs';
 import { renderCards } from './panels/cards.mjs';
 import { ensureChanges, loadChanges, redrawChanges } from './panels/changes.mjs';
