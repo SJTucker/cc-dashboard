@@ -12,6 +12,12 @@ subagents and Context size bars.
 - `lib/efficiency.js` computes `cacheHit` as cache read tokens over all prompt
   tokens. The Setup changes panel charts it per day as "Cache hit rate".
 
+## Also asked for
+
+- Make the striped "Over 150k context" segment of the Context size bar dimmer. The
+  stripes still tell the two segments apart; the dimmer fill makes the solid "Under
+  150k" segment stand out.
+
 ## Open questions
 
 - What the bar splits. Two candidates:

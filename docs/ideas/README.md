@@ -30,4 +30,4 @@ then on.
 | [Hide the status strip when narrow](hide-status-strip-when-narrow.md) | Open: hide `#statusStrip` below a window width; the width, keeping the plan limit warning and Link live visible open |
 | [Subagent status line in Doing now](subagent-status-in-doing-now.md) | Open: show each subagent's status text instead of "1 subagent"; `meta.json` has the spawn description, and whether the live status line is readable anywhere is open |
 | [Models panel on the Now tab](models-panel-on-now-tab.md) | Open: show `#modelsPanel` at the bottom of the Now tab; its range there, and whether it moves or shows on both tabs, open |
-| [Cache efficiency bar](cache-efficiency-bar.md) | Open: a cache bar in Where usage goes; whether it splits tokens or cost, and the segments, open |
+| [Cache efficiency bar](cache-efficiency-bar.md) | Open: a cache bar in Where usage goes, and a dimmer striped "Over 150k" segment; whether the cache bar splits tokens or cost, and its segments, open |
