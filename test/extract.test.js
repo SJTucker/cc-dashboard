@@ -273,7 +273,7 @@ test('tool uses on later lines of a group are kept, with detail and a fallback k
 
   assert.deepStrictEqual(rows.toolUses, [
     { key: 'toolu_1', t: Date.parse(T1), name: 'Bash', detail: 'git', model: 'claude-sonnet-4-6' },
-    { key: 'm1:r1:1', t: Date.parse(T1), name: 'Read', detail: '/a.js', model: 'claude-sonnet-4-6' },
+    { key: 'm1:r1:0', t: Date.parse(T1), name: 'Read', detail: '/a.js', model: 'claude-sonnet-4-6' },
   ]);
 });
 
@@ -553,3 +553,27 @@ test('extractFile reads a .json path as a step file', async () => {
 test('EXTRACT_VERSION is 5', () => {
   assert.strictEqual(EXTRACT_VERSION, 5);
 });
+
+// Two tool_use blocks without an id, one per line as Claude Code writes them.
+function idlessToolLines(extra) {
+  const usage = (out) => ({ input_tokens: 10, cache_creation_input_tokens: 0, cache_read_input_tokens: 0, output_tokens: out });
+  const line = (block, out, stop, more) => ({
+    type: 'assistant', sessionId: 's1', timestamp: atMin(0), requestId: 'req_1', ...more,
+    message: { id: 'msg_1', model: 'claude-sonnet-4-5', usage: usage(out), content: [block], ...(stop ? { stop_reason: 'tool_use' } : {}) },
+  });
+  return [
+    line({ type: 'tool_use', name: 'Read', input: { file_path: '/a' } }, 5, false, extra(0)),
+    line({ type: 'tool_use', name: 'Bash', input: { command: 'ls' } }, 9, true, extra(1)),
+  ];
+}
+
+for (const [label, extra] of [['apiBlockIndex on each line', (i) => ({ apiBlockIndex: i })], ['no apiBlockIndex (per-response counter)', () => ({})]]) {
+  test(`two id-less tool_use blocks on separate lines of one response get two keys: ${label}`, async () => {
+    const rows = await extractFile(writeTranscript(idlessToolLines(extra)));
+    assert.strictEqual(rows.calls.length, 1, 'one response');
+    assert.deepStrictEqual(rows.calls[0].tools, ['Read', 'Bash']);
+    assert.deepStrictEqual(rows.toolUses.map((u) => u.name), ['Read', 'Bash']);
+    assert.strictEqual(new Set(rows.toolUses.map((u) => u.key)).size, 2, 'the keys differ');
+    assert.ok(!('idlessUses' in rows));
+  });
+}

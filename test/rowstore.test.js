@@ -936,6 +936,35 @@ test('a file the pool could not read keeps its previous entry, and the others ar
   assert.strictEqual(byPath[b].ok, true);
 });
 
+test('a file whose worker died after the pool started is not extracted on the main thread until its size or mtime changes', async (t) => {
+  t.mock.method(console, 'warn', () => {});
+  const { failedRows } = require('../lib/extract-pool');
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'a', ['1'], 2 * HOUR_MS);
+  const mainReads = [];
+  const extract = (f) => { mainReads.push(f); return extractFile(f); };
+  const limits = { files: 0, bytes: 0 };
+  // The pool has started (started resolves true) and then fails every file.
+  const openPool = (size, fn) => fn({ extract: () => Promise.resolve(failedRows()), started: Promise.resolve(true) });
+  const clock = { now: Date.now() };
+  const rows = createRowStore({ projectsDir: () => dir, now: () => clock.now, extract, openPool, poolLimits: limits });
+
+  await rows.refresh(); // run 1: the worker dies on the file
+  assert.strictEqual(rows.entries()[0].rows.ok, false);
+
+  limits.files = 99; // run 2 would read on the main thread, as the 5 s refresh does
+  clock.now += REFRESH_SHARE_MS + 1;
+  await rows.refresh();
+  assert.deepStrictEqual(mainReads, [], 'the file that killed a worker stays off the main thread');
+  assert.strictEqual(rows.entries()[0].rows.ok, false, 'it still counts as unreadable');
+
+  bump(file); // run 3: the mtime changed
+  clock.now += REFRESH_SHARE_MS + 1;
+  await rows.refresh();
+  assert.deepStrictEqual(mainReads, [file], 'a changed file is read again');
+  assert.strictEqual(rows.entries()[0].rows.ok, true);
+});
+
 test('when worker threads cannot run, the files are extracted on the main thread and the store has current entries', async (t) => {
   t.mock.method(console, 'warn', () => {});
   const { withPool } = require('../lib/extract-pool');
