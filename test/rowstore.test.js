@@ -667,7 +667,7 @@ test('version 1 rows: a file on disk is read again for its command rows, and a g
   assert.deepStrictEqual(reads, [onDisk], 'only the file on disk is read again');
   const byPath = new Map(rows.entries().map((e) => [e.path, e.rows]));
   assert.deepStrictEqual(byPath.get(onDisk).commands.map((c) => c.name), ['tdd']);
-  assert.ok(!('commands' in byPath.get(gone)), 'a deleted transcript cannot be read for command rows');
+  assert.deepStrictEqual(byPath.get(gone).commands, [], 'a deleted transcript cannot be read for command rows, so its migration adds none');
   const data = aggregate(rows.entries().map((e) => e.rows), { days: null });
   assert.deepStrictEqual(data.skills.map((r) => [r.name, r.invocations]), [['tdd', 1]]);
   store.close();
@@ -1510,4 +1510,12 @@ test('a subagent response with no final line is priced at the output in its step
   const data = aggregate(rows.entries().map((e) => e.rows), { days: null });
   assert.strictEqual(data.summary.totalOutput, 300);
   assert.deepStrictEqual([data.meta.noFinalCalls, data.meta.noFinalCorrected], [1, 1]);
+});
+
+test('the row store passes its own intern map to store.loadAll', () => {
+  const { dir } = makeProjects();
+  let given = null;
+  const store = { loadAll: (intern) => { given = intern; return []; }, put: () => {}, markGone: () => {}, transaction: (fn) => fn() };
+  harness(dir, { store });
+  assert.ok(given instanceof Map, 'loadAll received a map to intern through');
 });

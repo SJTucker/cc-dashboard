@@ -5,7 +5,7 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { openStore, upgradeRows } = require('../lib/store');
+const { openStore, upgradeRows, MIGRATIONS } = require('../lib/store');
 const { getStorePath, SCHEMA_VERSION, openDatabase, isBusy } = require('../lib/db');
 const sqlite = require('../lib/sqlite');
 
@@ -33,7 +33,7 @@ test('put then loadAll round-trips an entry, and put replaces the same path', ()
 
   const loaded = store.loadAll().sort((a, b) => (a.path < b.path ? -1 : 1));
   assert.strictEqual(loaded.length, 2);
-  assert.deepStrictEqual(loaded[0], { path: '/p/one.jsonl', size: 20, mtimeMs: 1234.5, version: 1, minT: 100, maxT: 200, onDisk: true, rows: rowsOf({ calls: [{ key: 'k2' }] }) });
+  assert.deepStrictEqual(loaded[0], { path: '/p/one.jsonl', size: 20, mtimeMs: 1234.5, version: 1, minT: 100, maxT: 200, onDisk: true, rows: rowsOf({ calls: [{ key: 'k2' }], commands: [] }) });
   assert.strictEqual(loaded[1].onDisk, false);
   store.close();
 });
@@ -148,6 +148,76 @@ test('upgradeRows runs each migration in order up to EXTRACT_VERSION, and stops 
   assert.strictEqual(gap.version, 0, 'with no migration the rows stay at their version');
 });
 
+test('migration 1 to 2 adds an empty commands list and keeps the other rows', () => {
+  const old = rowsOf({ prompts: [{ id: 'p', t: 1, sessionId: 's' }] });
+  const out = MIGRATIONS[1](old);
+  assert.deepStrictEqual(out.commands, []);
+  assert.deepStrictEqual(out.prompts, old.prompts);
+  assert.ok(!('commands' in old), 'the input is not changed');
+});
+
+test('migration 2 to 3 gives each tool use the model of the call at or before its t', () => {
+  const old = rowsOf({
+    calls: [{ key: 'a', t: 10, model: 'm1' }, { key: 'b', t: 20, model: 'm2' }, { key: 'c', t: 20, model: 'm3' }],
+    toolUses: [{ key: 'u1', t: 15, name: 'Bash', detail: 'x' }, { key: 'u2', t: 25, name: 'Read', detail: 'y' }, { key: 'u0', t: 5, name: 'Edit', detail: 'z' }],
+  });
+  const out = MIGRATIONS[2](old);
+  assert.deepStrictEqual(out.toolUses.map((u) => [u.key, u.model]), [['u1', 'm1'], ['u2', 'm3'], ['u0', null]]);
+  assert.ok(!('model' in old.toolUses[0]), 'the input is not changed');
+});
+
+test('migration 3 to 4 leaves a call without rebuild as it is', () => {
+  const old = rowsOf({ calls: [{ key: 'a', t: 1, model: 'm', usage: {} }] });
+  const out = MIGRATIONS[3](old);
+  assert.deepStrictEqual(out.calls, old.calls);
+  assert.ok(!('rebuild' in out.calls[0]), 'rebuild is written only on a call that rebuilt the cache');
+});
+
+test('migration 4 to 5 leaves a call without noFinal as it is', () => {
+  const old = rowsOf({ calls: [{ key: 'a', t: 1, model: 'm', usage: {} }] });
+  const out = MIGRATIONS[4](old);
+  assert.deepStrictEqual(out.calls, old.calls);
+  assert.ok(!('noFinal' in out.calls[0]), 'noFinal is written only where it is true');
+});
+
+test('upgradeRows takes a version 1 row set to EXTRACT_VERSION', () => {
+  const { EXTRACT_VERSION } = require('../lib/extract');
+  const old = rowsOf({ calls: [{ key: 'a', t: 10, model: 'm1' }], toolUses: [{ key: 'u', t: 11, name: 'Bash', detail: '' }] });
+  const out = upgradeRows(old, 1);
+  assert.strictEqual(out.version, EXTRACT_VERSION);
+  assert.deepStrictEqual(out.rows.commands, []);
+  assert.strictEqual(out.rows.toolUses[0].model, 'm1');
+});
+
+test('loadAll migrates the rows of every file, and an entry still on disk keeps its stored version', () => {
+  const { EXTRACT_VERSION } = require('../lib/extract');
+  const file = path.join(tmpDir(), 'a.db');
+  const store = openStore(file);
+  const old = rowsOf({ calls: [{ key: 'a', t: 10, model: 'm1' }], toolUses: [{ key: 'u', t: 11, name: 'Bash', detail: '' }] });
+  store.put('/p/gone.jsonl', entryOf({ version: 1, onDisk: false, rows: old }));
+  store.put('/p/here.jsonl', entryOf({ version: 1, onDisk: true, rows: old }));
+  const byPath = Object.fromEntries(store.loadAll().map((e) => [e.path, e]));
+  assert.strictEqual(byPath['/p/gone.jsonl'].version, EXTRACT_VERSION);
+  assert.deepStrictEqual(byPath['/p/gone.jsonl'].rows.commands, []);
+  assert.strictEqual(byPath['/p/here.jsonl'].version, 1, 'isCurrent still sees an old version and re-reads the file');
+  assert.deepStrictEqual(byPath['/p/here.jsonl'].rows.commands, [], 'the shape is migrated in memory');
+  assert.strictEqual(byPath['/p/here.jsonl'].rows.toolUses[0].model, 'm1');
+  store.close();
+  const raw = new sqlite.DatabaseSync(file);
+  const stored = JSON.parse(raw.prepare('SELECT data FROM files WHERE path = ?').get('/p/gone.jsonl').data);
+  raw.close();
+  assert.ok(!('commands' in stored), 'the stored row is not rewritten');
+});
+
+test('loadAll interns strings in the map it is given', () => {
+  const store = openStore(path.join(tmpDir(), 'a.db'));
+  store.put('/p/a.jsonl', entryOf({ version: 5, rows: rowsOf({ calls: [{ key: 'a', t: 1, sessionId: 'sess-1', model: 'm', usage: {} }] }) }));
+  const intern = new Map();
+  store.loadAll(intern);
+  assert.ok(intern.has('sess-1'), 'the caller map holds the interned session id');
+  store.close();
+});
+
 const tableNames = (file) => {
   const raw = new sqlite.DatabaseSync(file);
   const names = raw.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY rowid").all().map((r) => r.name);
@@ -234,7 +304,7 @@ test('loadAll skips a row whose migration throws and warns', (t) => {
   const file = path.join(tmpDir(), 'a.db');
   const store = openStore(file);
   store.close();
-  insertRaw(file, INSERT, '/p/old.jsonl', 0, '{"ok":true}');
+  insertRaw(file, INSERT.replace('1, 1, 1, ?)', '1, 1, 0, ?)'), '/p/old.jsonl', 0, '{"ok":true}');
   MIGRATIONS[0] = () => { throw new Error('bad migration'); };
   t.after(() => { delete MIGRATIONS[0]; });
   const warn = t.mock.method(console, 'warn', () => {});
