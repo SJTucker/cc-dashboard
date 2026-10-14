@@ -1,8 +1,10 @@
 'use strict';
 
 const test = require('node:test');
+const { before } = require('node:test');
 const assert = require('node:assert');
-const { orderRowKeys } = require('../public/layout');
+let orderRowKeys;
+before(async () => { ({ orderRowKeys } = await import('../public/layout.mjs')); });
 
 test('with no saved order the default order comes back as a new array', () => {
   const defaults = ['a', 'b', 'c'];

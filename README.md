@@ -624,7 +624,7 @@ public/format.mjs      Text formatting for costs, token counts, durations, dates
 public/guards.mjs      Request sequence numbers and per-panel redraw guards
 public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
 public/index.html      Page shell: the panels' markup, the plain scripts, then main.mjs as a module
-public/layout.js       orderRowKeys: the saved panel row order merged with the default order in index.html
+public/layout.mjs      orderRowKeys: the saved panel row order merged with the default order in index.html
 public/load.mjs        loadPanels: draws each panel when its own request settles, with no DOM access
 public/main.mjs        Starts the page: fetches the API routes, draws every panel, runs the 5 s live poll and the range picker
 public/poll.js         Runs the 5 s live poll so one poll finishes before the next one starts

@@ -1,8 +1,3 @@
-'use strict';
-
-// Loaded two ways: index.html loads it as a script before main.mjs, which makes
-// orderRowKeys a global, and the tests load it with require().
-
 // The panel rows' keys in the order to show them. defaultKeys is the order in
 // index.html. saved is the list the page stored after the last drag. Saved keys
 // with no row are dropped, and a duplicate counts at its first position. A row
@@ -25,4 +20,4 @@ function orderRowKeys(defaultKeys, saved) {
   return result;
 }
 
-if (typeof module === 'object') module.exports = { orderRowKeys };
+export { orderRowKeys };
