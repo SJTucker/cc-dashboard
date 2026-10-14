@@ -3,8 +3,8 @@
 const test = require('node:test');
 const { before } = require('node:test');
 const assert = require('node:assert');
-let formatStatus, shareMeter, dailyWarning, limitStripText;
-before(async () => { ({ formatStatus, shareMeter, dailyWarning, limitStripText } = await import('../public/hud.mjs')); });
+let formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts;
+before(async () => { ({ formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts } = await import('../public/hud.mjs')); });
 
 test('formatStatus shows the load time as 24-hour local HH:MM:SS and counts with separators', () => {
   const loadedAt = new Date(2026, 8, 30, 10, 24, 21).getTime();
@@ -95,4 +95,21 @@ test('limitStripText returns null when nothing is high', () => {
 
 test('limitStripText rounds the percent', () => {
   assert.deepStrictEqual(limitStripText([{ ...SESSION, percent: 81.6 }], null), { label: 'Limit', value: 'Session 82%' });
+});
+
+test('limitsBannerParts ties each window to its reset and the day budget to the date', () => {
+  const high = [{ key: 'five_hour', resetsAt: 1000 }, { key: 'seven_day', resetsAt: 2000 }];
+  assert.deepStrictEqual(limitsBannerParts(high, { share: 14, budget: 14, rolling: true }, '2026-10-14'), [
+    'five_hour@1000', 'seven_day@2000', 'today@2026-10-14',
+  ]);
+});
+
+test('limitsBannerParts changes when a window resets or a new day starts', () => {
+  const before = limitsBannerParts([{ key: 'seven_day', resetsAt: 2000 }], {}, '2026-10-14');
+  assert.notDeepStrictEqual(limitsBannerParts([{ key: 'seven_day', resetsAt: 3000 }], {}, '2026-10-14'), before);
+  assert.notDeepStrictEqual(limitsBannerParts([{ key: 'seven_day', resetsAt: 2000 }], {}, '2026-10-15'), before);
+});
+
+test('limitsBannerParts is empty when nothing warns', () => {
+  assert.deepStrictEqual(limitsBannerParts([], null, '2026-10-14'), []);
 });

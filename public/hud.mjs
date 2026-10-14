@@ -54,4 +54,15 @@ function limitStripText(high, dayHigh) {
   return { label: high.length ? 'Limit' : 'Budget', value: parts.join(' · ') };
 }
 
-export { formatStatus, shareMeter, dailyWarning, limitStripText };
+// The warnings #limitsBanner shows, one string per warning, each tied to the period
+// it belongs to: a window's carries its reset time and the day's carries the local
+// date. The banner's "x" saves these strings, and the banner shows again once a
+// warning has a string the saved list lacks: a new window crosses, a window resets,
+// or a new day starts. `high` and `dayHigh` are as in limitStripText.
+function limitsBannerParts(high, dayHigh, date) {
+  const parts = high.map((l) => `${l.key}@${l.resetsAt}`);
+  if (dayHigh) parts.push(`today@${date}`);
+  return parts;
+}
+
+export { formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts };

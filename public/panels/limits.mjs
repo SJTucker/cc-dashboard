@@ -5,7 +5,7 @@ import { localDateStr } from '../format.mjs';
 import { state } from '../state.mjs';
 import { createDrawGuard } from '../guards.mjs';
 import { LIMIT_WARN_PERCENT } from '../constants.mjs';
-import { shareMeter, dailyWarning, limitStripText } from '../hud.mjs';
+import { shareMeter, dailyWarning, limitStripText, limitsBannerParts } from '../hud.mjs';
 
 // Draw guards for the panel and the banner. redrawCharts leaves them alone,
 // because a change of width does not change a table.
@@ -109,6 +109,32 @@ function drawLimits(limits) {
 // so a stale cache understates usage and never raises a false warning. The
 // rounded percent is compared so the banner agrees with the "N% used" the panel
 // shows.
+//
+// The banner's "x" saves the warnings it shows (limitsBannerParts) in localStorage,
+// and the banner stays hidden until a warning appears that the saved list lacks.
+// The status strip keeps its short form either way. Storage can throw (a private
+// window, blocked site data), and then the dismissal holds until the next reload.
+const BANNER_DISMISSED_KEY = 'cc-dashboard:limits-banner-dismissed';
+let dismissedFallback = [];
+
+function loadDismissed() {
+  try {
+    const saved = JSON.parse(localStorage.getItem(BANNER_DISMISSED_KEY));
+    return Array.isArray(saved) ? saved : [];
+  } catch {
+    return dismissedFallback;
+  }
+}
+
+function saveDismissed(parts) {
+  dismissedFallback = parts;
+  try {
+    localStorage.setItem(BANNER_DISMISSED_KEY, JSON.stringify(parts));
+  } catch {
+    // Not saved. dismissedFallback holds it for this page view.
+  }
+}
+
 export function renderLimitsBanner(limits) {
   bannerGuard.draw(limits, () => drawLimitsBanner(limits));
 }
@@ -118,13 +144,21 @@ function drawLimitsBanner(limits) {
   const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
   // dailyWarning (public/hud.mjs) compares today's share with the rolling budget.
   const dayHigh = dailyWarning(limits ? limits.today : null);
-  banner.hidden = !high.length && !dayHigh;
+  const parts = limitsBannerParts(high, dayHigh, localDateStr(new Date()));
+  const dismissed = loadDismissed();
+  banner.hidden = !parts.some((p) => !dismissed.includes(p));
   // The banner scrolls away, so the sticky header's status strip repeats it in short form.
   const strip = document.getElementById('stripLimit');
   const stripText = limitStripText(high, dayHigh);
   strip.hidden = !stripText;
   strip.replaceChildren(...(stripText ? [`${stripText.label} `, el('b', { text: stripText.value })] : []));
+  const close = el('button', { type: 'button', class: 'hide-btn banner-close', 'aria-label': 'Dismiss this warning', title: 'Dismiss', text: '×' });
+  close.addEventListener('click', () => {
+    saveDismissed(parts);
+    banner.hidden = true;
+  });
   banner.replaceChildren(
+    close,
     el('strong', { text: high.length ? 'Nearing your plan limit' : "Nearing today's budget" }),
     ...high.map((l) => el('div', {
       text: `${l.label}: ${Math.round(l.percent)}% used${l.resetsAt == null ? '' : ` · ${formatReset(l.resetsAt)}`}`,

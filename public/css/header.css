@@ -280,3 +280,8 @@
 
 /* The heading carries the warning in text, so it does not rely on the amber edge. */
 .limits-banner strong { display: block; color: var(--text-primary); }
+
+/* The "x" that dismisses the banner. It always shows, unlike a panel's hide-btn,
+   which waits for hover. */
+.limits-banner { position: relative; padding-right: calc(var(--sp-4) * 2 + 1em); }
+.limits-banner > .banner-close { position: absolute; top: var(--sp-2); right: var(--sp-2); opacity: 1; }
