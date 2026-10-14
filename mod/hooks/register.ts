@@ -543,6 +543,18 @@ function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
   stepWrites.set(agentId, previous.then(() => recordStep($, agentId, step)).catch((err) => fail($, `agent usage failed (${errorName(err)})`)))
 }
 
+// Drops the agent's steps and its write chain once its last queued write settles.
+// A step queued after this call finds no entry and starts a new list from the file.
+function forgetAgentSteps(agentId: string) {
+  const chain = stepWrites.get(agentId)
+  if (!chain) return
+  chain.finally(() => {
+    if (stepWrites.get(agentId) !== chain) return
+    stepWrites.delete(agentId)
+    agentSteps.delete(agentId)
+  })
+}
+
 // Applies change to the session's state, then queues a write of it. A change within
 // ACTIVITY_WRITE_MS of the last write waits for a timer and writes the newest state
 // once. A change that returns false means nothing changed, and nothing is written.
@@ -584,9 +596,11 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
 }
 
 // Releases everything held for a session that ended. Its throttle timer is
-// cancelled, so a write waiting on it never lands. A write already queued finds no
-// state and writes nothing. A write already inside fs.write finishes, and
-// writeActivity does not record its text.
+// cancelled, so a timer that has not fired never queues a write. A timer callback
+// already waiting on clock.now checks activities.has(id) and returns, so it queues
+// no write either. A write already queued finds no state in writeActivity and writes
+// nothing. A write already inside fs.write finishes, and writeActivity does not
+// record its text.
 function forgetSession(id: string) {
   activities.delete(id)
   runningTools.delete(id)
@@ -1199,7 +1213,12 @@ export const register: Register = (on) => {
     // The lookup follows run, so the script is not delayed, and follows forgetSession,
     // so transcriptPath checks the file system instead of the dropped cache.
     if (e.reason !== 'clear') clearedFrom = undefined
-    else if (!clearedFrom || (await transcriptPath($, await $.session.root(), e.sessionId))) clearedFrom = e.sessionId
+    else if (!clearedFrom) clearedFrom = e.sessionId
+    else {
+      // A root that cannot be read leaves clearedFrom as it is.
+      const root = await $.session.root().catch(() => null)
+      if (root && (await transcriptPath($, root, e.sessionId).catch(() => null))) clearedFrom = e.sessionId
+    }
     const result = await next(e)
     await running
     if (e.reason === 'clear' || e.reason === 'resume') startReviews($)
@@ -1231,6 +1250,7 @@ export const register: Register = (on) => {
         }
         ended.add(agentId)
       }, false)
+      forgetAgentSteps(agentId)
       return result
     }
     await track($, (a, now) => {

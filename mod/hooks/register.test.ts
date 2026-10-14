@@ -71,6 +71,8 @@ type World = {
   // What $.session.surfaces returns, and how far clock.now runs ahead of the mock timers.
   surfaces: string[]
   nowOffset: number
+  // Makes session.root reject.
+  rootFails: boolean
 }
 
 const entry = (name: string): Entry => ({ name, kind: name.endsWith('.md') ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -139,6 +141,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     cacheMs: 0,
     surfaces: ['terminal'],
     nowOffset: 0,
+    rootFails: false,
     ...w,
   }
   const ran: Ran[] = []
@@ -235,7 +238,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('session.id', () => ({ value: state.id }))
   on('session.surfaces', () => ({ value: state.surfaces }))
-  on('session.root', () => ({ value: '/work/my.demo' }))
+  on('session.root', () => {
+    if (state.rootFails) throw new Error('no root')
+    return { value: '/work/my.demo' }
+  })
   on('session.model', () => ({ value: state.model }))
   on('session.turns', () => ({ value: state.turns() }))
   on('session.usage', () => ({
@@ -479,6 +485,17 @@ test('two /clears with no prompt between link the new session to the first one',
   state.id = 's3'
   await $.session.measure(measure([FIVE]))
   expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual(['s1'])
+})
+
+test('a second /clear whose session.root rejects still calls the next hook and starts the reviews', async ($, on) => {
+  const { state, reviewRan, clock } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  const before = reviewRan.length
+  state.rootFails = true
+  await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  await clock.settle()
+  expect(reviewRan.length).toBeGreaterThan(before)
 })
 
 test('after an in-process /resume the next measure sends no cleared_from', async ($, on) => {
@@ -2108,6 +2125,20 @@ test('the recheck timer redraws the reset countdown', async ($, on) => {
   await ui.unmount()
 })
 
+test('the recheck timer stops reading limit-warnings.json once the band shows nothing', async ($, on) => {
+  const { state, clock, readLog } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(81), WEEK]))
+  await ui.press({ key: 'dismiss-limits' })
+  state.files[LIMITS] = '{"five_hour":75,"seven_day":0}'
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  const reads = readLog.filter((p) => p === LIMITS).length
+  await clock.advance(120_000)
+  expect(readLog.filter((p) => p === LIMITS).length).toBe(reads)
+  await ui.unmount()
+})
+
 test('an unreadable limit-warnings.json counts as no dismissal', async ($, on) => {
   world(on, { files: { [LIMITS]: 'not json' } })
   const ui = await $.ui.mount(BAND)
@@ -2229,4 +2260,20 @@ test('a failing write leaves the stream and the result unchanged and logs once',
   expect(result).toEqual(STEP_RESULT)
   await clock.settle()
   expect(logged.some((line) => line.startsWith('agent usage failed'))).toBe(true)
+})
+
+test('a subagent that ends drops its in-memory steps, and a later step re-reads its file', async ($, on) => {
+  const { writes, clock, state, readLog } = world(on)
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(JSON.parse(writes[AGENT_FILE]).steps).toHaveLength(1)
+  // The mock's fs.read serves state.files, so the first write is put there as the disk would hold it.
+  state.files[AGENT_FILE] = writes[AGENT_FILE]
+  readLog.length = 0
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await clock.settle()
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(readLog).toContain(AGENT_FILE)
+  expect(JSON.parse(writes[AGENT_FILE]).steps).toHaveLength(2)
 })
