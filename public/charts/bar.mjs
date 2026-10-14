@@ -2,6 +2,7 @@
 import { el, svgEl, showTooltip, hideTooltip, chartWidth } from '../dom.mjs';
 import { formatCost, shortDate, fullDate, axisCost, axisTokens } from '../format.mjs';
 import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawYAxis, drawSignedYAxis } from './axes.mjs';
+import { barSlots, labelStep } from '../chart-geometry.mjs';
 
 export function drawBarChart(container, data, { color, valueKey, tooltipFn }) {
   hideTooltip();

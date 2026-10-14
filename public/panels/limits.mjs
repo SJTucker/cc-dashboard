@@ -5,6 +5,7 @@ import { localDateStr } from '../format.mjs';
 import { state } from '../state.mjs';
 import { createDrawGuard } from '../guards.mjs';
 import { LIMIT_WARN_PERCENT } from '../constants.mjs';
+import { shareMeter, dailyWarning, limitStripText } from '../hud.mjs';
 
 // Draw guards for the panel and the banner. redrawCharts leaves them alone,
 // because a change of width does not change a table.
@@ -115,7 +116,7 @@ export function renderLimitsBanner(limits) {
 function drawLimitsBanner(limits) {
   const banner = document.getElementById('limitsBanner');
   const high = (limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
-  // dailyWarning (public/hud.js) compares today's share with the rolling budget.
+  // dailyWarning (public/hud.mjs) compares today's share with the rolling budget.
   const dayHigh = dailyWarning(limits ? limits.today : null);
   banner.hidden = !high.length && !dayHigh;
   // The banner scrolls away, so the sticky header's status strip repeats it in short form.

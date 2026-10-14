@@ -7,7 +7,7 @@ jump back and forth. Asked for on 2026-10-13.
 
 ## What exists
 
-- `laneLayout` in `public/chart-geometry.js` orders lanes by first span start
+- `laneLayout` in `public/chart-geometry.mjs` orders lanes by first span start
   (`byStart`). A session started by `/clear` sits directly under the session it
   cleared (`clearParents`), drawn with ↳ and a curve.
 - A session is live when it has not ended and its last call is within
@@ -16,7 +16,7 @@ jump back and forth. Asked for on 2026-10-13.
 - On 2026-10-13, 17 sessions were shown with 6 live, spread through the list. The
   live ones were hard to find among the striped lanes.
 - The Live sessions panel already splits its rows into Running now and Today
-  (`runningSessions` in `public/session-groups.js`). That split keeps a session that is
+  (`runningSessions` in `public/session-groups.mjs`). That split keeps a session that is
   waiting on the user in Running now after its live window ends.
 
 ## Open questions

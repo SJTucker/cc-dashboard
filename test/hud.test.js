@@ -1,8 +1,10 @@
 'use strict';
 
 const test = require('node:test');
+const { before } = require('node:test');
 const assert = require('node:assert');
-const { formatStatus, shareMeter, dailyWarning, limitStripText } =require('../public/hud');
+let formatStatus, shareMeter, dailyWarning, limitStripText;
+before(async () => { ({ formatStatus, shareMeter, dailyWarning, limitStripText } = await import('../public/hud.mjs')); });
 
 test('formatStatus shows the load time as 24-hour local HH:MM:SS and counts with separators', () => {
   const loadedAt = new Date(2026, 8, 30, 10, 24, 21).getTime();

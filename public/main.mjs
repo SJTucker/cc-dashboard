@@ -12,6 +12,9 @@ import { escapeHtml } from './format.mjs';
 
 import { spinnerNode } from './dom.mjs';
 
+import { formatStatus } from './hud.mjs';
+import { neededRequests } from './visibility.mjs';
+import { createPoller } from './poll.mjs';
 import { renderAttribution } from './panels/attribution.mjs';
 import { renderCards } from './panels/cards.mjs';
 import { ensureChanges, loadChanges, redrawChanges } from './panels/changes.mjs';
@@ -35,7 +38,7 @@ import { setupTabs, showTab, rangeForTab, summaryPanelsFor } from './ui/tabs.mjs
 
 const LIVE_POLL_MS = 5000;
 // While Today is shown, runLoad runs LIVE_POLL_MS after the previous run finished
-// (createPoller in public/poll.js), so a slow scan delays the next poll instead of
+// (createPoller in public/poll.mjs), so a slow scan delays the next poll instead of
 // overlapping it. On any other range only the sticky bar polls (stickyPoller).
 const livePoller = createPoller(() => runLoad(), LIVE_POLL_MS);
 const stickyPoller = createPoller(() => loadStickyToday(), LIVE_POLL_MS);
@@ -200,7 +203,7 @@ async function fetchAll({ busy = false } = {}) {
   // rendered (loadPanels keeps that order).
   const summaryRequest = getJson(`/api/summary?days=${state.currentDays}`);
   // A request whose every panel is hidden is skipped (see neededRequests in
-  // visibility.js), and its panels render from null, as on a failed request.
+  // visibility.mjs), and its panels render from null, as on a failed request.
   const needed = neededRequests(state.hiddenKeys, state.currentDays);
   const rtkRequest = needed.has('rtk')
     ? getJson(`/api/rtk?days=${state.currentDays}`, { optional: true })
@@ -345,7 +348,7 @@ function reportDrawError(err) {
 }
 
 // Every load goes through runLoad, so no caller leaves a rejection unhandled.
-// runLoad never rejects, which createPoller requires (public/poll.js): a
+// runLoad never rejects, which createPoller requires (public/poll.mjs): a
 // rejected run would end the live poll chain. reportDrawError only writes text
 // to #statusBanner and never throws, so the catch cannot throw.
 function runLoad(options) {

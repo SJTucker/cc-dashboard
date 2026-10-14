@@ -1,5 +1,6 @@
 // DOM building blocks shared by the charts and panels. Nothing here runs at load
 // time, so node can import this module (test/modules-load.test.js).
+import { tooltipPosition } from './chart-geometry.mjs';
 
 // The one tooltip element in index.html, looked up per call so this module does
 // not touch the DOM when it loads.

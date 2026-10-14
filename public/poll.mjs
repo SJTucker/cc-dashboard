@@ -1,8 +1,3 @@
-'use strict';
-
-// Loaded two ways: index.html loads it as a script before main.mjs, which makes
-// createPoller a global, and the tests load it with require().
-
 // Calls run() every ms milliseconds between start() and stop(). The wait starts
 // when a run finishes, so within one chain a run that takes longer than ms delays
 // the next one instead of overlapping it. run() must return a promise that never
@@ -47,4 +42,4 @@ function createPoller(run, ms, timers = GLOBAL_TIMERS) {
   };
 }
 
-if (typeof module === 'object') module.exports = { createPoller };
+export { createPoller };

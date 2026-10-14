@@ -1,8 +1,10 @@
 'use strict';
 
 const test = require('node:test');
+const { before } = require('node:test');
 const assert = require('node:assert');
-const { createPoller } = require('../public/poll');
+let createPoller;
+before(async () => { ({ createPoller } = await import('../public/poll.mjs')); });
 
 // Timers the test fires by hand. fire() runs the oldest pending callback and
 // returns its promise, so a test can act while a run is still in progress.

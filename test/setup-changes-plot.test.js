@@ -14,7 +14,6 @@ test('plotY keeps a negative value on the baseline and a value above max at the 
 });
 
 test('plotRawMax on the Session start row is at least the before and after medians', async () => {
-  globalThis.percentile = require('../public/stats').percentile; // index.html loads stats.js as a global script
   const { plotRawMax } = await load();
   const row = { key: 'sessionStart' };
   const inView = [10, 20, 30, 40].map((context) => ({ context }));

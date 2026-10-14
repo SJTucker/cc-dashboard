@@ -4,6 +4,7 @@ import { formatCost, formatTokens, formatPercent, thinkingShare, modelLabel, esc
 import { state, shown } from '../state.mjs';
 import { segmentTexture, modelColor, modelTexture } from '../charts/palette.mjs';
 import { drawShareBar } from '../charts/split.mjs';
+import { mixEntries } from '../chart-geometry.mjs';
 import { swatchIcon } from '../charts/legend.mjs';
 import { drawModelDailyChart } from '../charts/stacked.mjs';
 

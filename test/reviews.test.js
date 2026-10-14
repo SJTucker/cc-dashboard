@@ -1,8 +1,10 @@
 'use strict';
 
 const test = require('node:test');
+const { before } = require('node:test');
 const assert = require('node:assert');
-const { reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText } = require('../public/reviews');
+let reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText;
+before(async () => { ({ reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText } = await import('../public/reviews.mjs')); });
 
 test('reviewPrompt names the transcript and lists each suggestion', () => {
   const review = { transcript: '/h/p/a.jsonl', suggestions: [{ kind: 'workflow', text: 'Plan first.' }, { kind: 'token-waste', text: 'Read once.' }] };

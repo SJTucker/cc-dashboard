@@ -1,8 +1,3 @@
-'use strict';
-
-// Loaded two ways: index.html loads it as a script before main.mjs, which makes these
-// functions globals, and the tests load it with require().
-
 // The status strip's display strings. loadedAt is the time of the last successful
 // summary load, shown as 24-hour local time. A value not known yet shows as a dash.
 function formatStatus({ loadedAt, sessions, apiCalls }) {
@@ -59,4 +54,4 @@ function limitStripText(high, dayHigh) {
   return { label: high.length ? 'Limit' : 'Budget', value: parts.join(' · ') };
 }
 
-if (typeof module === 'object') module.exports = { formatStatus, shareMeter, dailyWarning, limitStripText };
+export { formatStatus, shareMeter, dailyWarning, limitStripText };

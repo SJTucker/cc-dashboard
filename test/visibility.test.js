@@ -1,8 +1,10 @@
 'use strict';
 
 const test = require('node:test');
+const { before } = require('node:test');
 const assert = require('node:assert');
-const { parseHidden, neededRequests } = require('../public/visibility');
+let parseHidden, neededRequests;
+before(async () => { ({ parseHidden, neededRequests } = await import('../public/visibility.mjs')); });
 
 const needed = (hidden, range) => [...neededRequests(new Set(hidden), range)].sort();
 

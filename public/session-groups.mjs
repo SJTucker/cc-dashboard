@@ -1,8 +1,3 @@
-'use strict';
-
-// Loaded two ways: index.html loads it as a script before main.mjs, which makes these
-// functions globals, and the tests load them with require().
-
 const GROUP_SUMS = ['costUsd', 'costTodayUsd', 'durationMs', 'linesAdded', 'linesRemoved', 'tokens', 'prompts'];
 
 // Cost today of a row of the Today table: a plain session or a group.
@@ -119,8 +114,8 @@ function activityLabel(activity) {
 // Second line of the State cell for a session waiting on the user: how long its
 // prompt cache lasts and what the next reply pays to rebuild it. `cache` is the
 // session's cache field from lib/sessions.js, and a negative minutesLeft means it
-// expired. `formatUsd` is formatCost from format.mjs, passed in because this file is
-// a plain script and cannot import it. Null without a cache.
+// expired. `formatUsd` is formatCost from format.mjs, passed in so this file
+// does not import format.mjs. Null without a cache.
 function cacheLine(cache, formatUsd) {
   if (!cache) return null;
   const cost = cache.rebuildUsd == null ? null : formatUsd(cache.rebuildUsd);
@@ -140,4 +135,4 @@ function doingNow(activity) {
   return parts.length ? parts.join(' · ') : null;
 }
 
-if (typeof module === 'object') module.exports = { groupSessions, itemCost, costShare, runningSessions, activityLabel, cacheLine, doingNow };
+export { groupSessions, itemCost, costShare, runningSessions, activityLabel, cacheLine, doingNow };

@@ -1,8 +1,10 @@
 'use strict';
 
 const test = require('node:test');
+const { before } = test;
 const assert = require('node:assert');
-const { busiestDay, dayTotals, rollingWeek } = require('../public/stats.js');
+let busiestDay, dayTotals, rollingWeek;
+before(async () => { ({ busiestDay, dayTotals, rollingWeek } = await import('../public/stats.mjs')); });
 
 function day(date, over = {}) {
   return { date, input: 0, output: 0, cacheCreate: 0, cacheRead: 0, cost: 0, byModel: {}, costByModel: {}, ...over };

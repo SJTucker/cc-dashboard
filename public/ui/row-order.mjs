@@ -1,6 +1,7 @@
 // Rows of panels move by drag, and the order is saved.
 import { el } from '../dom.mjs';
 import { ROW_SELECTOR } from './tabs.mjs';
+import { orderRowKeys } from '../layout.mjs';
 
 // Each row of panels (a full-width panel or a .panel-row pair) can be moved. The
 // order is kept in localStorage as a list of row keys, so the page reopens as it

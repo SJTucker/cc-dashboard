@@ -1,8 +1,3 @@
-'use strict';
-
-// Loaded two ways: index.html loads it as a script before main.mjs, which makes
-// these names globals, and the tests load it with require().
-
 // The optional requests and the hide keys of the panels and cards each one feeds.
 // A request is skipped when every key it feeds is hidden. An empty list means a
 // consumer that cannot be hidden: /api/records feeds the sticky bar's 7d lines and
@@ -45,4 +40,4 @@ function neededRequests(hidden, range) {
   return needed;
 }
 
-if (typeof module === 'object') module.exports = { REQUEST_CONSUMERS, parseHidden, neededRequests };
+export { REQUEST_CONSUMERS, parseHidden, neededRequests };

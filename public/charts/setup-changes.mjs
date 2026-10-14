@@ -5,6 +5,8 @@ import { formatTokens, shortDate, localDateStr, escapeHtml, modelLabel } from '.
 import { drawPlotAxis } from './axes.mjs';
 import { legendRow } from './legend.mjs';
 import { appendPatternDefs, fillFor, textureCss, TOKENS } from './palette.mjs';
+import { percentile } from '../stats.mjs';
+import { domainDays, dateLabelStep, localMidnight, markerKey, pickInCell, markersInDomain, laneKinds, laneCells } from '../chart-geometry.mjs';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 export const WEEK_MS = 7 * DAY_MS;
@@ -119,7 +121,7 @@ function dayNoon(dateKey) {
 // sliding start, while rtk keeps every row. A marker or an rtk day from before
 // the earliest surviving transcript would stretch the axis with an empty strip on
 // one side. Markers outside the resulting domain are filtered out by
-// markersInDomain (public/chart-geometry.js), and rtk days by daysInDomain.
+// markersInDomain (public/chart-geometry.mjs), and rtk days by daysInDomain.
 export function timeDomain(report, keys) {
   const times = [
     ...report.sessions.map((s) => s.t),

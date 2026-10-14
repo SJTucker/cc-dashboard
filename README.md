@@ -368,7 +368,7 @@ its project and git branch on a line under it. The title is Claude Code's last
 italic type. Hover the branch for its full name and, when the session switched
 branch, every branch it used. Prompts, Length and Lines are only in Today. Running
 now is ordered by the start of each session's first span today (`runningSessions` in
-`public/session-groups.js`), so rows do not move while they run. State shows ▶
+`public/session-groups.mjs`), so rows do not move while they run. State shows ▶
 working or ⏸ waiting on you. Doing now shows the running tool, such as `Bash: npm
 test`, and the subagent count. Both show "—" without the mod (see "Live state").
 Today lists every session of the day, live ones included, sorted by Cost today with
@@ -615,25 +615,25 @@ bin/review-session     Lists ended sessions to review and records Haiku's sugges
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
 public/apple-touch-icon.png  Home-screen icon, linked from index.html
-public/chart-geometry.js  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, mixEntries (the Models panel's share bar entries per measure) and the Session timeline's hour ticks, cache rebuild marks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
+public/chart-geometry.mjs  X-axis label spacing, bar slot widths, y-axis scale, tooltip placement, mixEntries (the Models panel's share bar entries per measure) and the Session timeline's hour ticks, cache rebuild marks, lane layout, range domain, and the Setup changes lane cells, picked change and date label rules
 public/constants.mjs   Numbers the page shares with the server; test/front-end-constants.test.js keeps them equal
 public/dom.mjs         Element builders (el, svgEl) and the tooltip
 public/favicon.ico     Tab icon, linked from index.html
 public/favicon.svg     Tab icon and the header logo
 public/format.mjs      Text formatting for costs, token counts, durations, dates and model names
 public/guards.mjs      Request sequence numbers and per-panel redraw guards
-public/hud.js          Display helpers for the header status strip and the Plan usage Today meter
-public/index.html      Page shell: the panels' markup, the plain scripts, then main.mjs as a module
-public/layout.js       orderRowKeys: the saved panel row order merged with the default order in index.html
+public/hud.mjs         Display helpers for the header status strip and the Plan usage Today meter
+public/index.html      Page shell: the panels' markup, then main.mjs as a module
+public/layout.mjs      orderRowKeys: the saved panel row order merged with the default order in index.html
 public/load.mjs        loadPanels: draws each panel when its own request settles, with no DOM access
 public/main.mjs        Starts the page: fetches the API routes, draws every panel, runs the 5 s live poll and the range picker
-public/poll.js         Runs the 5 s live poll so one poll finishes before the next one starts
-public/reviews.js      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath
-public/session-groups.js  Groups the Today table's rows by claude launch, then ended sessions by project, and the running-session and activity labels
+public/poll.mjs         Runs the 5 s live poll so one poll finishes before the next one starts
+public/reviews.mjs      Session reviews helpers: open and dismissed suggestions, the Copy prompt text, shortPath
+public/session-groups.mjs  Groups the Today table's rows by claude launch, then ended sessions by project, and the running-session and activity labels
 public/state.mjs       The tab, the Analysis range and the hidden panels, shared by the modules
-public/stats.js        median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
+public/stats.mjs       median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/sticky-poll.mjs  What the sticky poll fetches: today's summary and the plan limits
-public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
+public/visibility.mjs  Parses the hidden panel list and decides which requests hidden panels still need
 public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, the signed y axis for charts with negative values, and the Setup changes y axis with a 0 label and headroom
 public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
 public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and rtk commands
