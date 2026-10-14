@@ -62,6 +62,8 @@ async function loadPage(redraw, focusNew) {
 
 function toggle(redraw) {
   view.shown = !view.shown;
+  // Hiding removes the focused Hide button, so focus moves to the toggle that stays.
+  if (!view.shown) view.focusKey = 'closed-toggle';
   version++;
   if (view.shown && !view.loaded) loadPage(redraw, false);
   else redraw();
@@ -106,6 +108,13 @@ function controlButton(text, focusKey, onClick, { busy = false } = {}) {
   return button;
 }
 
+// Returns the focus key a change asked for and clears it.
+function takeFocusKey() {
+  const focusKey = view.focusKey;
+  view.focusKey = null;
+  return focusKey;
+}
+
 // Draws the toggle into #reviewsClosedToggle and the list into #reviewsClosed.
 // closedCount null, or 0 while the list is hidden, draws nothing. Returns the focus
 // key a page load asked for, for the panel to focus after its own draw, or null.
@@ -122,7 +131,7 @@ export function drawClosed({ closedCount, now, onChange, redraw }) {
   toggleButton.setAttribute('aria-controls', 'reviewsClosed');
   toggleBox.replaceChildren(toggleButton);
   section.hidden = !view.shown;
-  if (!view.shown) return null;
+  if (!view.shown) return takeFocusKey();
 
   document.getElementById('reviewsClosedList').replaceChildren(...view.reviews.map((r) => closedItem(r, now, onChange)));
   const status = document.getElementById('reviewsClosedStatus');
@@ -137,7 +146,5 @@ export function drawClosed({ closedCount, now, onChange, redraw }) {
   controls.push(controlButton('Hide closed ▴', 'closed-hide', () => toggle(redraw)));
   document.getElementById('reviewsClosedMore').replaceChildren(...controls);
 
-  const focusKey = view.focusKey;
-  view.focusKey = null;
-  return focusKey;
+  return takeFocusKey();
 }
