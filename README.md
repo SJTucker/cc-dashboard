@@ -435,9 +435,9 @@ transcripts Claude Code has since deleted counts no slash commands, because the
 dashboard did not record them before this version.
 
 The Cache bar splits total cost into cache reads, cache writes, uncached input and
-output, always in that order. The four parts add up to the total cost. A note under
-it gives what cache reads saved: what they would cost at the full input rate, minus
-what they cost.
+output, always in that order. The four parts add up to the total cost. The note
+beside its title gives what cache reads saved: what they would cost at the full
+input rate, minus what they cost.
 
 The Tool calls panel lists calls per tool, with the error rate beside each tool that
 had errors. Pick a tool, or "All tools" above the list, to see its breakdown, its

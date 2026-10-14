@@ -65,7 +65,7 @@ test('the Cache bar lists reads, writes, uncached input and output in that order
 });
 
 test('the Cache note says what cache reads saved, and is empty when nothing was saved or cacheCost is missing', async () => {
-  const text = 'Cache reads saved $5.00: what they would cost at the full input rate, minus what they cost.';
+  const text = 'reads saved $5.00 against the full input rate';
   assert.equal((await renderWith({ cacheRead: 1, cacheWrite: 1, input: 1, output: 1, saved: 5 })).cacheSaved.textContent, text);
   assert.equal((await renderWith({ cacheRead: 1, cacheWrite: 1, input: 1, output: 1, saved: 0 })).cacheSaved.textContent, '');
   assert.equal((await renderWith(undefined)).cacheSaved.textContent, '');

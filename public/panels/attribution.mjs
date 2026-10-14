@@ -44,11 +44,12 @@ export function cacheItems(cacheCost) {
   return parts.map((p) => ({ name: p.name, value: p.cost, texture: p.texture, color: p.color, tooltip: shareTooltip(p.name, p.cost, total) }));
 }
 
-// The note under the Cache bar, empty when there is nothing to say.
+// The note beside the Cache title: what cache reads cost less than the same tokens
+// at the full input rate. Empty when there is nothing to say.
 export function cacheSavedText(cacheCost) {
   const saved = cacheCost?.saved;
   if (!(saved > 0)) return '';
-  return `Cache reads saved ${formatCost(saved)}: what they would cost at the full input rate, minus what they cost.`;
+  return `reads saved ${formatCost(saved)} against the full input rate`;
 }
 
 export function renderAttribution(data) {
