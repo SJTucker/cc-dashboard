@@ -125,7 +125,7 @@ test('laneLayout never opens the bar of a session that is not live', () => {
 });
 
 // A row with a session id and an optional /clear link, as /api/sessions/live sends it.
-const row = (sessionId, spans, clearedFrom = null, live = false) => ({ sessionId, spans, clearedFrom, live });
+const row = (sessionId, spans, clearedFrom = null, live = false, activity) => ({ sessionId, spans, clearedFrom, live, activity });
 const order = (lanes) => lanes.map((l) => [l.session.sessionId, l.follows ? l.follows.session.sessionId : null]);
 
 test('laneLayout puts a session started by /clear directly under the one it replaced', () => {
@@ -165,6 +165,47 @@ test('laneLayout keeps both lanes of a two-session loop', () => {
   const lanes = laneLayout([b, a], xOf, NOW_T);
   assert.strictEqual(lanes.length, 2);
   assert.strictEqual(lanes.filter((l) => l.follows === null).length, 1);
+});
+
+test('laneLayout puts running chains first and sets section on every lane', () => {
+  const old = row('old', [[at(9, 10), at(9, 20)]]);
+  const run = row('run', [[at(10), at(10, 30)]], null, true);
+  const lanes = laneLayout([old, run], xOf, NOW_T);
+  assert.deepStrictEqual(order(lanes), [['run', null], ['old', null]]);
+  assert.deepStrictEqual(lanes.map((l) => [l.lane, l.section]), [[0, 'running'], [1, 'earlier']]);
+});
+
+test('laneLayout moves an ended parent with a live /clear child up as one chain', () => {
+  const a = row('a', [[at(9, 10), at(9, 40)]]);
+  const b = row('b', [[at(9, 45), at(10, 0)]], 'a', true);
+  const other = row('other', [[at(9, 5), at(9, 8)]]);
+  const lanes = laneLayout([other, b, a], xOf, NOW_T);
+  assert.deepStrictEqual(order(lanes), [['a', null], ['b', 'a'], ['other', null]]);
+  assert.deepStrictEqual(lanes.map((l) => l.section), ['running', 'running', 'earlier']);
+});
+
+test('laneLayout counts a session waiting on the user as running', () => {
+  const old = row('old', [[at(9, 10), at(9, 20)]]);
+  const waiting = row('waiting', [[at(10), at(10, 30)]], null, false, { state: 'waiting' });
+  assert.deepStrictEqual(order(laneLayout([old, waiting], xOf, NOW_T)), [['waiting', null], ['old', null]]);
+});
+
+test('laneLayout keeps first span start order inside each section', () => {
+  const e1 = row('e1', [[at(9, 10), at(9, 20)]]);
+  const e2 = row('e2', [[at(9, 50), at(10)]]);
+  const r1 = row('r1', [[at(9, 30), at(9, 40)]], null, true);
+  const r2 = row('r2', [[at(11), at(11, 10)]], null, true);
+  const lanes = laneLayout([r2, e2, r1, e1], xOf, NOW_T);
+  assert.deepStrictEqual(lanes.map((l) => l.session.sessionId), ['r1', 'r2', 'e1', 'e2']);
+  assert.deepStrictEqual(lanes.map((l) => l.lane), [0, 1, 2, 3]);
+});
+
+test('laneLayout keeps the start order when every lane is in one section', () => {
+  const a = row('a', [[at(9, 10), at(9, 20)]], null, true);
+  const b = row('b', [[at(9, 30), at(9, 40)]], null, true);
+  const lanes = laneLayout([b, a], xOf, NOW_T);
+  assert.deepStrictEqual(order(lanes), [['a', null], ['b', null]]);
+  assert.ok(lanes.every((l) => l.section === 'running'));
 });
 
 test('linkPath is a curve that leaves and arrives horizontally', () => {

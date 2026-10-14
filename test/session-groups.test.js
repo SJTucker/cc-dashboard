@@ -3,8 +3,8 @@
 const test = require('node:test');
 const { before } = require('node:test');
 const assert = require('node:assert');
-let groupSessions, itemCost, costShare, splitBands, costSplit, activityLabel, doingNow;
-before(async () => { ({ groupSessions, itemCost, costShare, splitBands, costSplit, activityLabel, doingNow } = await import('../public/session-groups.mjs')); });
+let groupSessions, itemCost, costShare, splitBands, isRunning, costSplit, activityLabel, doingNow;
+before(async () => { ({ groupSessions, itemCost, costShare, splitBands, isRunning, costSplit, activityLabel, doingNow } = await import('../public/session-groups.mjs')); });
 
 function session(project, lastActiveAt, overrides = {}) {
   return {
@@ -240,6 +240,13 @@ test('cacheLine is null without a cache', () => {
 });
 
 const runningNames = (bands) => bands.running.map((r) => r.session.project);
+
+test('isRunning is true for a live session or one waiting on the user', () => {
+  assert.strictEqual(isRunning({ live: true }), true);
+  assert.strictEqual(isRunning({ live: false, activity: { state: 'waiting' } }), true);
+  assert.strictEqual(isRunning({ live: false, activity: { state: 'working' } }), false);
+  assert.strictEqual(isRunning({ live: false }), false);
+});
 
 test('splitBands puts live sessions in running, ordered by first span start, and the rest in earlier', () => {
   const a = session('a', 100, { ended: null, live: true, spans: [[500, 600]] });

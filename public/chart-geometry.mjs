@@ -1,3 +1,5 @@
+import { isRunning } from './session-groups.mjs';
+
 // Draw every how-many-th x-axis label. Labels stay at least minGap pixels apart,
 // and a chart never shows more than 12. "00:00" in the axis font is about 30px
 // wide, so 44px leaves a visible space between neighbouring labels.
@@ -119,6 +121,10 @@ function clearParents(sessions, shown) {
 // be newer than its last call, and stretching the bar then would draw activity that
 // did not happen. A bar is at least minWidth px wide, so a one-call span still shows.
 // liveWindowMs matches LIVE_WINDOW_MS in lib/sessions.js.
+// A top-level session and the sessions placed under it form a chain. A chain is
+// running when any session in it satisfies isRunning. Running chains come first,
+// then the others, each in the order above. Every lane gets section 'running' or
+// 'earlier', the section of its chain.
 function laneLayout(sessions, xOf, now, minWidth = 3, liveWindowMs = 10 * 60 * 1000) {
   const shown = sessions.filter((s) => s.spans.length);
   const parent = clearParents(sessions, shown);
@@ -128,15 +134,21 @@ function laneLayout(sessions, xOf, now, minWidth = 3, liveWindowMs = 10 * 60 * 1
     if (!children.has(p)) children.set(p, []);
     children.get(p).push(s);
   }
-  const ordered = [];
-  const visit = (s) => {
-    ordered.push(s);
-    for (const child of (children.get(s) || []).sort(byStart)) visit(child);
+  const sections = { running: [], earlier: [] };
+  const visit = (s, chain) => {
+    chain.push(s);
+    for (const child of (children.get(s) || []).sort(byStart)) visit(child, chain);
   };
-  for (const s of shown.filter((x) => !parent.has(x)).sort(byStart)) visit(s);
+  for (const s of shown.filter((x) => !parent.has(x)).sort(byStart)) {
+    const chain = [];
+    visit(s, chain);
+    const section = chain.some(isRunning) ? 'running' : 'earlier';
+    sections[section].push(...chain.map((x) => [x, section]));
+  }
+  const ordered = [...sections.running, ...sections.earlier];
 
   const laneOf = new Map();
-  return ordered.map((session, lane) => {
+  return ordered.map(([session, section], lane) => {
     const last = session.spans.length - 1;
     const bars = session.spans.map(([start, end], i) => {
       const open = i === last && session.live === true && now - end <= liveWindowMs;
@@ -144,7 +156,7 @@ function laneLayout(sessions, xOf, now, minWidth = 3, liveWindowMs = 10 * 60 * 1
       const x = xOf(start);
       return { start, end: to, x, width: Math.max(minWidth, xOf(to) - x), open };
     });
-    const result = { session, lane, bars, follows: parent.has(session) ? laneOf.get(parent.get(session)) : null };
+    const result = { session, lane, section, bars, follows: parent.has(session) ? laneOf.get(parent.get(session)) : null };
     laneOf.set(session, result);
     return result;
   });
