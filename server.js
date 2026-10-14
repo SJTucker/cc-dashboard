@@ -20,7 +20,7 @@ const { readLimits, readDailyShare, getRateLimitsPath } = require('./lib/limits'
 const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = require('./lib/sessions');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
 const { readActivity, getActivityDir } = require('./lib/activity');
-const { readReviews, setDismissal, DISMISS_REASONS } = require('./lib/review');
+const { readReviews, readClosedPage, parseCursor, suggestionReason, setDismissal, DISMISS_REASONS, CLOSED_PAGE_SIZE, CLOSED_PAGE_MAX } = require('./lib/review');
 const { createReviewDbGetter, legacyReviewsDir } = require('./lib/review-db');
 const { createServerDb, getStorePath, isBusy } = require('./lib/db');
 const { busiestDay, dayTotals } = require('./public/stats.mjs');
@@ -92,6 +92,25 @@ function parseDays(raw) {
   const n = Number(raw);
   return RANGE_DAYS.has(n) ? { days: n } : { error: INVALID_DAYS(raw) };
 }
+
+// The days query of the reviews routes, as { days } or { error }. days is 7, 30 or
+// 90, or null for All. The panel is on the Analysis tab only and always sends its
+// range, so a missing value and 'today' are errors too.
+function parseReviewDays(raw) {
+  if (raw === 'all') return { days: null };
+  if (raw === '7' || raw === '30' || raw === '90') return { days: Number(raw) };
+  return { error: `Invalid days: ${String(raw)}. Use 7, 30, 90 or 'all'.` };
+}
+
+// The limit query of /api/reviews/closed: CLOSED_PAGE_SIZE when missing, else a whole
+// number from 1, capped at CLOSED_PAGE_MAX. null for anything else.
+function parseLimit(raw) {
+  if (raw == null) return CLOSED_PAGE_SIZE;
+  if (typeof raw !== 'string' || !/^\d{1,4}$/.test(raw) || Number(raw) < 1) return null;
+  return Math.min(Number(raw), CLOSED_PAGE_MAX);
+}
+
+const EXPIRED_UNDO = 'An expired suggestion cannot be reopened. Mark it done, duplicate or not useful instead.';
 
 // bin/review-session holds the write lock while it records a review. The server
 // waits SERVER_BUSY_TIMEOUT_MS (250 ms, lib/db.js) for it and then answers 503 with
@@ -327,7 +346,7 @@ function createServer(config) {
   });
 
   // Reviews of ended sessions from the reviews and suggestions tables in
-  // transcripts.db (lib/review.js), finished in the last 7 days. bin/review-session
+  // transcripts.db (lib/review.js), finished in the range picker's range. bin/review-session
   // writes the reviews, run by the mod in mod/. The dismiss routes below write the
   // dismissals. Each review includes its session id and transcript path, because the
   // user pastes them into a prompt for another model. Only this machine can reach the
@@ -336,8 +355,13 @@ function createServer(config) {
   // (getReviewDb) or a write meets the lock of bin/review-session the answer is a
   // 503 with DB_BUSY. The panel shows either as text.
   app.get('/api/reviews', (req, res) => {
+    const range = parseReviewDays(req.query.days);
+    if (range.error) {
+      res.status(400).json({ error: range.error });
+      return;
+    }
     try {
-      res.json({ reviews: readReviews(getReviewDb(), projectsDir) });
+      res.json(readReviews(getReviewDb(), projectsDir, { days: range.days }));
     } catch (err) {
       if (sendBusy(res, err)) return;
       console.error('[API] /api/reviews failed:', err);
@@ -345,11 +369,38 @@ function createServer(config) {
     }
   });
 
+  // One page of reviews with closed suggestions in the range, newest first, from
+  // lib/review.js readClosedPage. before is the next value of the previous page.
+  app.get('/api/reviews/closed', (req, res) => {
+    const range = parseReviewDays(req.query.days);
+    const limit = parseLimit(req.query.limit);
+    const before = req.query.before == null ? null : parseCursor(req.query.before);
+    const error = range.error
+      || (limit == null && `Invalid limit: ${String(req.query.limit)}. Use a whole number from 1.`)
+      || (req.query.before != null && !before && 'Invalid before: use the next value of an earlier page.');
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+    try {
+      res.json(readClosedPage(getReviewDb(), projectsDir, { days: range.days, before, limit }));
+    } catch (err) {
+      if (sendBusy(res, err)) return;
+      console.error('[API] /api/reviews/closed failed:', err);
+      res.status(500).json({ error: 'Failed to read closed suggestions', detail: err.message });
+    }
+  });
+
   // Sets or clears the dismissal and answers. reason null clears it.
   function changeDismissal(res, target, reason) {
     try {
+      const db = getReviewDb();
+      if (reason === null && suggestionReason(db, target.sessionId, target.idx) === 'expired') {
+        res.status(400).json({ error: EXPIRED_UNDO });
+        return;
+      }
       const dismissedAt = reason ? Date.now() : null;
-      if (!setDismissal(getReviewDb(), target.sessionId, target.idx, reason, dismissedAt ?? undefined)) {
+      if (!setDismissal(db, target.sessionId, target.idx, reason, dismissedAt ?? undefined)) {
         res.status(404).json({ error: 'No such suggestion.' });
         return;
       }

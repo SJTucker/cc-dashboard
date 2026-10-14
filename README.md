@@ -221,25 +221,30 @@ When a session ends or `/clear` runs, the mod asks Haiku to review it and sugges
 to three changes. The kinds are a CLAUDE.md rule that would have prevented a
 correction, a skill or hook for repeated steps, token waste such as large tool output
 or repeated reads, and a change to how the session was run. "No suggestions" is a
-normal result. The Session reviews panel lists the reviews from the last 7 days. Each
-review shows the session's title (Claude Code's last `ai-title` line, when the
-transcript has one), the project and the git branch the session ended on. The Copy
-prompt button, at the right of the title row, copies a prompt that names the
-transcript and lists Haiku's suggestions, so you can paste it into a stronger model
-to check them. A review made before the transcript path was saved gets the path
-found by session id, and has no title. A review made before branches were saved
-shows no branch.
+normal result. The Session reviews panel lists reviews that still have an open
+suggestion, from the range picked on the Analysis tab (7d, 30d, 90d or All). A review
+with no suggestions, or whose Haiku call failed, is not listed. An open suggestion
+closes as expired 14 days after its review. Each review shows the session's title
+(Claude Code's last `ai-title` line, when the transcript has one), the project and
+the git branch the session ended on. The Copy prompt button, at the right of the
+title row, copies a prompt that names the transcript and lists Haiku's suggestions,
+so you can paste it into a stronger model to check them. A review made before the
+transcript path was saved gets the path found by session id, and has no title. A
+review made before branches were saved shows no branch.
 
 ![Session reviews panel listing reviews with their suggestions and Done and Not useful buttons](docs/screenshots/session-reviews.png)
 
 Each open suggestion has Done, Duplicate and Not useful icon buttons, with a tooltip
 on each. Duplicate is for a suggestion that is right but already covered by a rule,
-a skill or an earlier suggestion. A dismissed suggestion is hidden, and the review
-shows `N dismissed · Show`. Show lists each dismissed suggestion with `Marked done`,
-`Marked duplicate` or `Marked not useful` and an Undo icon button. Copy prompt
-leaves dismissed suggestions out. The panel note counts reviews that still have an
-open suggestion. A review whose suggestions are all dismissed shows as one line that
-opens with Enter or Space.
+a skill or an earlier suggestion. A suggestion you close stays in place as one line,
+such as `Marked done`, with an Undo button, until the panel next loads. Copy prompt
+leaves closed suggestions out. The panel note counts reviews that still have an open
+suggestion.
+
+Show closed (n) lists the closed suggestions in the same range, 10 reviews at a time
+with Show 10 more. Each one shows its reason: Done, Duplicate, Not useful or Expired.
+Undo reopens a suggestion and moves it back to the open list. An expired suggestion
+cannot be reopened, but it can be marked done, duplicate or not useful.
 
 - **When it runs.** After a `/clear` or an in-process `/resume`, at once, because the
   process goes on. After an exit, at the next session start in any project. `-p` and

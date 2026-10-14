@@ -9,8 +9,9 @@ export const DETAIL_LIMIT = 12;
 // lib/sessions.js LIVE_WINDOW_MS.
 export const LIVE_WINDOW_MS = 10 * 60 * 1000;
 
-// Days of session reviews /api/reviews returns. lib/review.js KEEP_MS.
-export const REVIEW_DAYS = 7;
+// Reviews per page of the closed list in the Session reviews panel.
+// lib/review.js CLOSED_PAGE_SIZE.
+export const REVIEWS_CLOSED_PAGE = 10;
 
 // The limits banner shows once a plan window reaches this percent. The server
 // has no matching constant.

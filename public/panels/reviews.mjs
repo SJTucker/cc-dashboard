@@ -1,52 +1,50 @@
-// The Session reviews panel: suggestions from reviews of ended sessions, with
-// Done, Duplicate, Not useful, Undo and Copy prompt. The four row actions are icon buttons
-// with tooltips.
+// The Session reviews panel: open suggestions from reviews of ended sessions in the
+// range picker's range, with Done, Duplicate, Not useful, Undo and Copy prompt.
+// Closed suggestions load a page at a time in reviews-closed.mjs.
 import { getJson } from '../api.mjs';
-import { el, svgEl, withTooltip, withFocusTooltip } from '../dom.mjs';
-import { formatAgo, localDateStr } from '../format.mjs';
+import { el, withTooltip, withFocusTooltip } from '../dom.mjs';
 import { createDrawGuard } from '../guards.mjs';
-import { reviewPrompt, openSuggestions, dismissedSuggestions, allDismissed, countWithOpen, dismissalText } from '../reviews.mjs';
+import { reviewPrompt, countWithOpen, dismissalText, rangePhrase, rangeShort, byEnd, upsertSuggestion } from '../reviews.mjs';
 import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
-import { REVIEW_DAYS } from '../constants.mjs';
 import { contextLine } from './sessions.mjs';
+import { kindName, reviewTime, iconButton, reviewTip, TIP_UNDO, suggestionName, dismissButtons, sendDismissal } from './review-ui.mjs';
+import { resetClosed, updateClosed, drawClosed, closedVersion } from './reviews-closed.mjs';
 
-// Draw guard for Session reviews, which main.mjs draws on every settled
-// reviews response. redrawCharts leaves it alone, because a change of width does not
-// change a table.
+// Draw guard for Session reviews. redrawCharts leaves it alone, because a change of
+// width does not change a list.
 const reviewsGuard = createDrawGuard();
 
-// Reviews of ended sessions from the last REVIEW_DAYS days (see lib/review.js). A
-// server error resolves to { error } so the panel shows the reason. A network
-// failure (status 0) resolves to null and hides the panel, like requestSessions.
-export function requestReviews() {
-  return getJson('/api/reviews').then((reviews) => (reviews?.error && reviews.status === 0 ? null : reviews));
+// The range of the last request: '7', '30', '90' or 'all'.
+let reviewsDays = '7';
+
+// Open suggestions in the range (see lib/review.js readReviews). A new request
+// hides the closed list and drops its pages. A server error resolves to { error }
+// so the panel shows the reason. A network failure (status 0) resolves to null and
+// hides the panel, like requestSessions.
+export function requestReviews(days) {
+  reviewsDays = String(days);
+  resetClosed(reviewsDays);
+  return getJson(`/api/reviews?days=${encodeURIComponent(reviewsDays)}`).then((reviews) => (reviews?.error && reviews.status === 0 ? null : reviews));
 }
 
-const REVIEW_KINDS = {
-  'claude-md': 'CLAUDE.md',
-  'skill-or-hook': 'Skill or hook',
-  'token-waste': 'Token waste',
-  workflow: 'Workflow',
-};
-
-// "5m ago" or a time for today, and a weekday with a time for earlier days.
-function reviewTime(ms, now) {
-  if (localDateStr(new Date(ms)) === localDateStr(new Date(now))) return formatAgo(ms, now);
-  // A review can be about 8 days old, so past 6 days a weekday alone is ambiguous.
-  const older = now - ms > 6 * 24 * 60 * 60 * 1000;
-  const parts = older ? { month: 'short', day: 'numeric' } : { weekday: 'short' };
-  return new Date(ms).toLocaleString([], { ...parts, hour: '2-digit', minute: '2-digit' });
-}
-
-// The last reviews payload shown. Dismiss and undo change it in place and redraw
-// without a request.
+// The payload main.mjs last passed in, and the reviews on screen. Dismiss and undo
+// replace lastReviews and redraw without a request. renderPayload in main.mjs passes
+// a loaded payload again on a resize, and the set below keeps local changes.
 let lastReviews = null;
+// Every object lastReviews has held. renderReviews gets a payload from before a local
+// change as often as a new one (reviewsSince can return an older object, and the
+// payload main.mjs stores can lag), so it replaces lastReviews only with an object
+// outside this set. A server response is always a new object.
+const heldReviews = new WeakSet();
+function holdReviews(reviews) {
+  lastReviews = reviews;
+  if (reviews && typeof reviews === 'object') heldReviews.add(reviews);
+}
+// Keys (`sessionId:idx`) of dismiss and undo requests in flight. A second click on
+// the same suggestion is ignored until the first request settles.
+const changesInFlight = new Set();
 // Counts local dismiss and undo actions (see reviewsSince).
 let reviewMutations = 0;
-// Session ids whose "N dismissed" list is showing, and session ids whose collapsed
-// all-dismissed review is expanded. The 5 s redraw reads both.
-const reviewDismissedShown = new Set();
-const reviewExpanded = new Set();
 // Session id -> "Copied" or "Copy failed" while it shows, for the label's 2 s.
 const reviewCopyResults = new Map();
 // The control to focus after the next draw, set by an action that removes the
@@ -59,56 +57,12 @@ const REVIEWS_LIMIT = 5;
 let showAllReviews = false;
 
 // fetchAll calls reviewsMark() before its requests and reviewsSince(mark, fetched)
-// after them. A dismiss or undo in between makes the fetched reviews older than
-// the page, so reviewsSince returns lastReviews, the reviews on screen, which the
-// action changed in place. A slow poll therefore cannot put a dismissed
-// suggestion back. The next poll shows the saved state.
+// after them. A dismiss or undo in between makes the fetched reviews older than the
+// page, so reviewsSince returns lastReviews, the reviews on screen.
 export const reviewsMark = () => reviewMutations;
 export const reviewsSince = (mark, fetched) => (reviewMutations === mark ? fetched : lastReviews);
 
-const reviewButton = (label, focusKey, ariaLabel, onClick, cls = 'refresh-btn') => {
-  const button = el('button', { type: 'button', class: cls, text: label, 'data-review-focus': focusKey });
-  if (ariaLabel) button.setAttribute('aria-label', ariaLabel);
-  button.addEventListener('click', onClick);
-  return button;
-};
-
-// Lucide icon paths, drawn in a 24 x 24 box.
-const ICONS = {
-  check: [{ d: 'M20 6 9 17l-5-5' }],
-  x: [{ d: 'M18 6 6 18' }, { d: 'm6 6 12 12' }],
-  undo: [{ d: 'M9 14 4 9l5-5' }, { d: 'M4 9h10.5a5.5 5.5 0 0 1 0 11H11' }],
-  copy: [{ d: 'M10 8h10a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H10a2 2 0 0 1-2-2V10a2 2 0 0 1 2-2z' }, { d: 'M4 16a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2' }],
-};
-
-// The tooltip text is fixed, so it needs no escaping. A <br> breaks a long line,
-// because .tooltip does not wrap.
-const reviewTip = (title, ...lines) => `<b>${title}</b><br>${lines.join('<br>')}`;
-
-// A square icon button. The aria-label names the suggestion, which the icon alone
-// cannot, so the tooltip is for sighted users and adds nothing for a screen reader.
-function iconButton(icon, focusKey, ariaLabel, tip, onClick) {
-  const svg = svgEl('svg', { viewBox: '0 0 24 24', 'aria-hidden': 'true' });
-  for (const attrs of ICONS[icon]) svg.appendChild(svgEl('path', attrs));
-  const button = el('button', { type: 'button', class: 'review-icon', 'data-review-focus': focusKey, 'aria-label': ariaLabel }, [svg]);
-  button.addEventListener('click', onClick);
-  return withFocusTooltip(withTooltip(button, tip), tip);
-}
-
-const TIP_DONE = reviewTip('Done', 'I acted on this. Moves it to the dismissed list.');
-const TIP_DUPLICATE = reviewTip('Duplicate', 'Useful, but a rule, skill or earlier suggestion already covers it.');
-const TIP_NOT_USEFUL = reviewTip('Not useful', 'Hide it and record that Haiku got it wrong.');
-const TIP_UNDO = reviewTip('Undo', 'Put this suggestion back in the open list.');
-
-// What Copy prompt copies, worded to match reviewPrompt in public/reviews.mjs.
-function copyTip(r) {
-  const copies = 'Copies a prompt for a new Claude Code session.';
-  if (r.status === 'failed') return reviewTip('Copy prompt', copies, 'It gives Claude this transcript and asks what it would suggest,', 'since the Haiku review failed.');
-  if (!r.suggestions.length) return reviewTip('Copy prompt', copies, 'It gives Claude this transcript and asks what it would suggest,', 'since Haiku made none.');
-  return reviewTip('Copy prompt', copies, 'It gives Claude this transcript and the open suggestions,', 'and asks which are right and what Haiku missed.');
-}
-
-const suggestionName = (s) => `${REVIEW_KINDS[s.kind] || s.kind}: ${s.text.length > 80 ? `${s.text.slice(0, 79)}…` : s.text}`;
+const TIP_COPY = reviewTip('Copy prompt', 'Copies a prompt for a new Claude Code session.', 'It gives Claude this transcript and the open suggestions,', 'and asks which are right and what Haiku missed.');
 
 async function copyReviewPrompt(id, prompt) {
   reviewCopyResults.set(id, await navigator.clipboard.writeText(prompt).then(() => 'Copied', () => 'Copy failed'));
@@ -123,132 +77,87 @@ async function copyReviewPrompt(id, prompt) {
   }, 2000);
 }
 
-// Sends a dismissal (POST) or its undo (DELETE, when reason is null). Resolves to
-// the server's answer, or to { error } when the request or the server failed.
-async function sendDismissal(review, suggestion, reason) {
-  const url = `/api/reviews/${encodeURIComponent(review.sessionId)}/suggestions/${suggestion.idx}/dismiss`;
-  const init = reason
-    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }) }
-    : { method: 'DELETE' };
-  const res = await fetch(url, init).catch(() => null);
-  const body = res ? await res.json().catch(() => null) : null;
-  if (res && res.ok && body && body.ok) return body;
-  return { error: (body && body.error) || 'the request failed' };
-}
-
-// A poll that landed during the request replaced lastReviews, so the suggestion
-// captured at click time may no longer be the one on screen. Writes the answer to
-// both, and returns the review on screen now, found by session.
-function applyDismissal(review, suggestion, answer) {
-  const currentReview = lastReviews?.reviews?.find((r) => r.sessionId === review.sessionId) ?? review;
-  const current = currentReview.suggestions.find((s) => s.idx === suggestion.idx);
-  for (const target of new Set([suggestion, current])) {
-    if (!target) continue;
-    target.dismissedAt = answer.dismissedAt;
-    target.reason = answer.reason;
-  }
-  return currentReview;
-}
-
-// The button the user pressed is about to leave the page. Dismiss moves focus to
-// the next open suggestion's Done button, else to the control that replaced it.
-// Undo moves focus to the restored suggestion's Done button.
-function focusAfterDismissal(currentReview, review, suggestion, reason) {
-  if (!reason) return `done:${review.sessionId}:${suggestion.idx}`;
-  const nextOpen = openSuggestions(currentReview).find((s) => s.idx !== suggestion.idx);
-  if (nextOpen) return `done:${review.sessionId}:${nextOpen.idx}`;
-  return allDismissed(currentReview) ? `toggle:${review.sessionId}` : `shown:${review.sessionId}`;
-}
-
-// Dismisses a suggestion, or undoes its dismissal when reason is null, then
-// redraws. A failure leaves the suggestion as it was and shows why.
-async function changeSuggestion(review, suggestion, reason) {
-  const answer = await sendDismissal(review, suggestion, reason);
-  if (answer.error) {
-    reviewActionError = `Could not ${reason ? 'dismiss' : 'undo the dismissal of'} "${suggestionName(suggestion)}": ${answer.error}`;
+// Sends a dismissal, a new reason or an undo (reason null) from either list, then
+// puts the answer into both lists and redraws. closedCount moves by one when a
+// suggestion opens or closes. A failure leaves both lists as they were and shows why.
+async function changeSuggestion(review, suggestion, reason, focusKey) {
+  const key = `${review.sessionId}:${suggestion.idx}`;
+  if (changesInFlight.has(key)) return;
+  changesInFlight.add(key);
+  const days = reviewsDays;
+  const answer = await sendDismissal(review, suggestion, reason).finally(() => changesInFlight.delete(key));
+  if (reviewsDays !== days) {
+    // The range changed while the request ran. The server has the change, and the new
+    // range's data was read after it or does not hold this review, so merging would
+    // count it twice or count a review outside the range.
+  } else if (answer.error) {
+    reviewActionError = `Could not ${reason ? 'dismiss' : 'reopen'} "${suggestionName(suggestion)}": ${answer.error}`;
   } else {
     reviewActionError = null;
-    const currentReview = applyDismissal(review, suggestion, answer);
+    const changed = { ...suggestion, dismissedAt: answer.dismissedAt, reason: answer.reason };
+    const delta = (changed.reason ? 1 : 0) - (suggestion.reason ? 1 : 0);
+    holdReviews({
+      ...lastReviews,
+      reviews: upsertSuggestion(lastReviews.reviews, review, changed, { order: byEnd, insert: !changed.reason }),
+      closedCount: lastReviews.closedCount + delta,
+    });
+    updateClosed(review, changed);
     reviewMutations++;
-    reviewFocusKey = focusAfterDismissal(currentReview, review, suggestion, reason);
+    reviewFocusKey = focusKey;
   }
-  renderReviews(lastReviews);
+  redraw();
 }
 
-function toggleSet(set, id) {
-  if (set.has(id)) set.delete(id);
-  else set.add(id);
-  renderReviews(lastReviews);
+// Open suggestions with their three buttons. A suggestion closed since the panel
+// loaded stays as one line, "Marked done" with Undo, until the next load.
+function suggestionList(r) {
+  return el('ul', { class: 'review-suggestions' }, r.suggestions.map((s) => {
+    const key = `${r.sessionId}:${s.idx}`;
+    if (s.dismissedAt != null) {
+      return el('li', { class: 'review-closed-line' }, [
+        el('span', { class: 'review-kind', text: kindName(s) }),
+        el('span', { class: 'review-dismissal', text: dismissalText(s) }),
+        el('span', { class: 'review-actions' }, [
+          iconButton('undo', `undo:${key}`, `Undo: ${suggestionName(s)}`, TIP_UNDO, () => changeSuggestion(r, s, null, `done:${key}`)),
+        ]),
+      ]);
+    }
+    return el('li', {}, [
+      el('span', { class: 'review-kind', text: kindName(s) }),
+      el('span', { class: 'review-text', text: s.text }),
+      el('span', { class: 'review-actions' }, dismissButtons(r, s, (reason) => changeSuggestion(r, s, reason, `undo:${key}`))),
+    ]);
+  }));
 }
 
-// Each row has three columns: the kind, the text and the actions.
-function dismissedList(review) {
-  return el('ul', { class: 'review-dismissed' }, dismissedSuggestions(review).map((s) => el('li', {}, [
-    el('span', { class: 'review-kind', text: REVIEW_KINDS[s.kind] || s.kind }),
-    el('span', { class: 'review-text' }, [
-      document.createTextNode(`${s.text} `),
-      el('span', { class: 'review-dismissal', text: `(${dismissalText(s)})` }),
-    ]),
-    el('span', { class: 'review-actions' }, [
-      iconButton('undo', `undo:${review.sessionId}:${s.idx}`, `Undo dismissal: ${suggestionName(s)}`, TIP_UNDO, () => changeSuggestion(review, s, null)),
-    ]),
-  ])));
-}
-
-function openList(review) {
-  return el('ul', { class: 'review-suggestions' }, openSuggestions(review).map((s) => el('li', {}, [
-    el('span', { class: 'review-kind', text: REVIEW_KINDS[s.kind] || s.kind }),
-    el('span', { class: 'review-text', text: s.text }),
-    el('span', { class: 'review-actions' }, [
-      iconButton('check', `done:${review.sessionId}:${s.idx}`, `Mark done: ${suggestionName(s)}`, TIP_DONE, () => changeSuggestion(review, s, 'done')),
-      iconButton('copy', `duplicate:${review.sessionId}:${s.idx}`, `Dismiss as duplicate: ${suggestionName(s)}`, TIP_DUPLICATE, () => changeSuggestion(review, s, 'duplicate')),
-      iconButton('x', `notuseful:${review.sessionId}:${s.idx}`, `Dismiss as not useful: ${suggestionName(s)}`, TIP_NOT_USEFUL, () => changeSuggestion(review, s, 'not_useful')),
-    ]),
-  ])));
-}
-
-// The body of one review: the open suggestions, then a "N dismissed · Show" line
-// with the dismissed list under it when shown. A review with every suggestion
-// dismissed shows a toggle line above the dismissed list instead.
-function reviewBody(r) {
-  if (r.status === 'failed') return [el('p', { class: 'review-empty', text: `Review failed: ${r.error || 'no reason recorded'}` })];
-  if (!r.suggestions.length) return [el('p', { class: 'review-empty', text: 'No suggestions' })];
-  if (allDismissed(r)) {
-    const hide = reviewButton(`All ${r.suggestions.length} dismissed · Hide`, `toggle:${r.sessionId}`, null, () => toggleSet(reviewExpanded, r.sessionId), 'review-toggle');
-    hide.setAttribute('aria-expanded', 'true');
-    return [hide, dismissedList(r)];
+function openItem(r, now) {
+  const head = el('div', { class: 'review-head' }, [
+    ...(r.title ? [el('span', { class: 'session-title', title: r.title, text: r.title })] : []),
+    contextLine(r, ` · ended ${reviewTime(r.endedAt ?? r.reviewedAt, now)}`),
+  ]);
+  const top = [head];
+  const prompt = reviewPrompt(r);
+  if (prompt) {
+    const button = el('button', { type: 'button', class: 'refresh-btn', text: reviewCopyResults.get(r.sessionId) || 'Copy prompt', 'data-review-focus': `copy:${r.sessionId}` });
+    button.addEventListener('click', () => copyReviewPrompt(r.sessionId, prompt));
+    top.push(withFocusTooltip(withTooltip(button, TIP_COPY), TIP_COPY));
   }
-  const parts = [openList(r)];
-  const dismissed = dismissedSuggestions(r);
-  if (dismissed.length) {
-    const shown = reviewDismissedShown.has(r.sessionId);
-    const toggle = reviewButton(shown ? 'Hide' : 'Show', `shown:${r.sessionId}`, `${shown ? 'Hide' : 'Show'} ${dismissed.length} dismissed ${dismissed.length === 1 ? 'suggestion' : 'suggestions'}`, () => toggleSet(reviewDismissedShown, r.sessionId), 'review-toggle');
-    toggle.setAttribute('aria-expanded', String(shown));
-    parts.push(el('p', { class: 'review-dismissed-line' }, [document.createTextNode(`${dismissed.length} dismissed · `), toggle]));
-    if (shown) parts.push(dismissedList(r));
-  }
-  return parts;
+  return el('li', { class: 'review' }, [el('div', { class: 'review-top' }, top), suggestionList(r)]);
 }
 
-// A review with every suggestion dismissed is one button line until expanded. The
-// button is keyboard-operable and carries aria-expanded.
-function collapsedReview(r, now) {
-  const name = r.title || r.project || r.sessionId;
-  const label = `${name} · ended ${reviewTime(r.endedAt ?? r.reviewedAt, now)} · all ${r.suggestions.length} ${r.suggestions.length === 1 ? 'suggestion' : 'suggestions'} dismissed · Show`;
-  const button = reviewButton(label, `toggle:${r.sessionId}`, null, () => toggleSet(reviewExpanded, r.sessionId), 'review-toggle');
-  button.setAttribute('aria-expanded', 'false');
-  return el('li', { class: 'review review-collapsed' }, [button]);
-}
-
-// Shown on every range, because a review belongs to a session, not to a day.
-// Hidden when the request failed or no session was reviewed in the last 7 days.
-// A server error shows its text in place of the list.
+// Called by main.mjs with each loaded payload, and again with the same payload on a
+// redraw. Shown on the Analysis tab only. Hidden when the request failed or the
+// range has no open and no closed suggestion. A server error shows its text.
 export function renderReviews(data) {
-  lastReviews = data;
-  // The key holds every input of the draw, so a dismiss, an undo, a Show or Hide
-  // toggle and a failed action each redraw from their own call.
+  if (!data || data.error || !heldReviews.has(data)) holdReviews(data);
+  redraw();
+}
+
+function redraw() {
+  const data = lastReviews;
+  // The key holds every input of the draw, so each action redraws from its own call.
   reviewsGuard.draw(
-    [data, reviewMutations, [...reviewDismissedShown], [...reviewExpanded], reviewActionError, showAllReviews],
+    [data, reviewsDays, reviewMutations, reviewActionError, showAllReviews, closedVersion()],
     () => drawReviews(data)
   );
 }
@@ -257,49 +166,41 @@ function drawReviews(data) {
   const panel = document.getElementById('reviewsPanel');
   const status = document.getElementById('reviewsStatus');
   const list = document.getElementById('reviewsList');
+  const note = document.getElementById('reviewsNote');
   if (data && data.error) {
     panel.hidden = false;
     status.hidden = false;
     status.textContent = `Could not read session reviews: ${data.error}`;
     list.replaceChildren();
     document.getElementById('reviewsMore').replaceChildren();
-    document.getElementById('reviewsNote').textContent = '';
+    drawClosed({ closedCount: null });
+    note.textContent = '';
     return;
   }
-  panel.hidden = !data || !data.reviews.length;
+  panel.hidden = !data || (!data.reviews.length && !data.closedCount);
   if (panel.hidden) return;
 
   const active = document.activeElement;
-  const focusKey = reviewFocusKey || (active && list.contains(active) ? active.dataset.reviewFocus : null);
-  reviewFocusKey = null;
+  const activeKey = active && panel.contains(active) ? active.dataset.reviewFocus : null;
   status.hidden = !reviewActionError;
   status.textContent = reviewActionError || '';
 
   const now = Date.now();
-  const items = visibleRows(data.reviews, REVIEWS_LIMIT, showAllReviews).map((r) => {
-    if (allDismissed(r) && !reviewExpanded.has(r.sessionId)) return collapsedReview(r, now);
-    const ended = ` · ended ${reviewTime(r.endedAt ?? r.reviewedAt, now)}`;
-    const head = el('div', { class: 'review-head' }, [
-      ...(r.title ? [el('span', { class: 'session-title', title: r.title, text: r.title })] : []),
-      contextLine(r, ended),
-    ]);
-    const prompt = reviewPrompt(r);
-    const top = [head];
-    if (prompt) {
-      const button = reviewButton(reviewCopyResults.get(r.sessionId) || 'Copy prompt', `copy:${r.sessionId}`, null, () => copyReviewPrompt(r.sessionId, prompt));
-      top.push(withFocusTooltip(withTooltip(button, copyTip(r)), copyTip(r)));
-    }
-    return el('li', { class: 'review' }, [el('div', { class: 'review-top' }, top), ...reviewBody(r)]);
-  });
-  list.replaceChildren(...items);
+  list.replaceChildren(...(data.reviews.length
+    ? visibleRows(data.reviews, REVIEWS_LIMIT, showAllReviews).map((r) => openItem(r, now))
+    : [el('li', { class: 'review review-empty', text: `No open suggestions ${rangePhrase(reviewsDays)}` })]));
   const more = showAllButton(data.reviews.length, REVIEWS_LIMIT, showAllReviews, () => {
     showAllReviews = !showAllReviews;
-    renderReviews(lastReviews);
+    redraw();
     refocusShowAll('reviewsMore');
   });
   keepShowAllFocus('reviewsMore', () => document.getElementById('reviewsMore').replaceChildren(...(more ? [more] : [])));
-  if (focusKey) [...list.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus({ preventScroll: true });
+  const closedFocus = drawClosed({ closedCount: data.closedCount, now, onChange: changeSuggestion, redraw });
 
-  document.getElementById('reviewsNote').textContent =
-    `${data.reviews.length} in the last ${REVIEW_DAYS} days · ${countWithOpen(data.reviews)} with open suggestions`;
+  const focusKey = closedFocus || reviewFocusKey || activeKey;
+  reviewFocusKey = null;
+  if (focusKey) [...panel.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus({ preventScroll: true });
+
+  const withOpen = countWithOpen(data.reviews);
+  note.textContent = `${withOpen} ${withOpen === 1 ? 'review' : 'reviews'} with open suggestions · ${rangeShort(reviewsDays)}`;
 }

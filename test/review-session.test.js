@@ -122,3 +122,21 @@ test('a newer schema exits 1 and the file is unchanged', () => {
   assert.match(err, new RegExp(`newer than this dashboard's ${SCHEMA_VERSION}`));
   assert.ok(fs.readFileSync(file).equals(before));
 });
+
+test('prompt expires open suggestions from reviews finished over 14 days ago, then claims sessions', () => {
+  const base = fixture();
+  const { openDatabase, getStorePath } = require('../lib/db');
+  const db = openDatabase(getStorePath(base));
+  const old = Date.now() - 15 * 24 * 60 * 60 * 1000;
+  db.prepare("INSERT INTO reviews (session_id, project, ended_at, status, claimed_at, reviewed_at) VALUES ('old', 'demo', ?, 'done', ?, ?)").run(old, old, old);
+  db.prepare("INSERT INTO suggestions (session_id, idx, kind, text) VALUES ('old', 0, 'workflow', 'stale')").run();
+  db.close();
+
+  const prompted = run(base, ['prompt']);
+  assert.strictEqual(prompted.code, 0, prompted.err);
+  assert.deepStrictEqual(prompted.out.reviews.map((r) => r.sessionId), ['abc']);
+
+  const after = openDatabase(getStorePath(base));
+  assert.strictEqual(after.prepare("SELECT reason FROM suggestions WHERE session_id = 'old'").get().reason, 'expired');
+  after.close();
+});

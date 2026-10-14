@@ -18,3 +18,5 @@ setup-changes.
   sticky bar.
 - Retakes need the scrubbed scratch config and the mock routes an earlier session
   used, so no personal session titles or paths appear.
+- `docs/screenshots/session-reviews.png` shows the collapsed "all N suggestions
+  dismissed" lines, which the panel no longer draws (2026-10-14).

@@ -83,7 +83,7 @@ const within = (promise, ms) => Promise.race([promise, delay(ms, 'timeout')]);
 for (const signal of ['SIGTERM', 'SIGINT']) {
   test(`${signal} closes transcripts.db and exits 0 within 2 s, leaving no WAL behind`, async (t) => {
     const server = await startServerProcess(t);
-    assert.strictEqual((await fetch(`${server.url}/api/reviews`)).status, 200); // opens the database
+    assert.strictEqual((await fetch(`${server.url}/api/reviews?days=7`)).status, 200); // opens the database
     assert.ok(fs.existsSync(server.wal), 'the open database has a WAL file');
     server.child.kill(signal);
     assert.deepStrictEqual(await within(server.exited, 2000), { code: 0, signal: null });
@@ -107,7 +107,7 @@ for (const signal of ['SIGINT', 'SIGTERM']) {
       }).on('error', reject);
     });
     assert.strictEqual(await get('/api/summary?days=7'), 200);
-    assert.strictEqual(await get('/api/reviews'), 200);
+    assert.strictEqual(await get('/api/reviews?days=7'), 200);
     const started = Date.now();
     server.child.kill(signal);
     assert.deepStrictEqual(await within(server.exited, 3000), { code: 0, signal: null });
