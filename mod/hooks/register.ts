@@ -543,6 +543,18 @@ function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
   stepWrites.set(agentId, previous.then(() => recordStep($, agentId, step)).catch((err) => fail($, `agent usage failed (${errorName(err)})`)))
 }
 
+// Drops the agent's steps and its write chain once its last queued write settles.
+// A step queued after this call finds no entry and starts a new list from the file.
+function forgetAgentSteps(agentId: string) {
+  const chain = stepWrites.get(agentId)
+  if (!chain) return
+  chain.finally(() => {
+    if (stepWrites.get(agentId) !== chain) return
+    stepWrites.delete(agentId)
+    agentSteps.delete(agentId)
+  })
+}
+
 // Applies change to the session's state, then queues a write of it. A change within
 // ACTIVITY_WRITE_MS of the last write waits for a timer and writes the newest state
 // once. A change that returns false means nothing changed, and nothing is written.
@@ -1238,6 +1250,7 @@ export const register: Register = (on) => {
         }
         ended.add(agentId)
       }, false)
+      forgetAgentSteps(agentId)
       return result
     }
     await track($, (a, now) => {

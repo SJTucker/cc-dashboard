@@ -2261,3 +2261,15 @@ test('a failing write leaves the stream and the result unchanged and logs once',
   await clock.settle()
   expect(logged.some((line) => line.startsWith('agent usage failed'))).toBe(true)
 })
+
+test('a subagent that ends drops its steps, so the same agentId starts with an empty list', async ($, on) => {
+  const { writes, clock } = world(on)
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(JSON.parse(writes[AGENT_FILE]).steps).toHaveLength(1)
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await clock.settle()
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(JSON.parse(writes[AGENT_FILE]).steps).toHaveLength(1)
+})
