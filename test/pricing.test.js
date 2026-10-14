@@ -387,6 +387,8 @@ test('validateRow accepts a sound longPrompt and refuses a malformed one', () =>
     { over: 100000, input: 0, output: 2.5 },
     { over: 100000, input: 0.5, output: -1 },
     { over: 100000, input: 0.5 },
+    { over: 100000, input: 0.5, output: 0.5 },
+    { over: 100000, input: 0.5, output: 0.4 },
     'long',
   ]) {
     assert.match(validateRow({ ...HAIKU_55, longPrompt: bad }), /longPrompt/, JSON.stringify(bad));
@@ -435,4 +437,11 @@ test('the built-in table has Haiku 5.5 with its tier and Sonnet 5.5 at 0.05x cac
   assert.strictEqual(priceFor('claude-sonnet-5').cacheReadMult, undefined, 'sonnet-5 keeps its own row');
   // A sample Haiku 5.5 request: 1,000 input and 200 output tokens is a short prompt.
   closeTo(costForUsage({ input_tokens: 1000, output_tokens: 200 }, 'claude-haiku-5-5').cost, (1000 * 0.10 + 200 * 0.50) / 1e6, 'short Haiku 5.5 request');
+});
+
+test('a mixed-case Claude name is recorded as unmatched with its original spelling', () => {
+  clearUnmatched();
+  assert.strictEqual(priceFor('Claude-Opus-9').match, 'opus', 'the bare opus row prices it');
+  assert.deepStrictEqual(unmatchedModels(), ['Claude-Opus-9']);
+  clearUnmatched();
 });
