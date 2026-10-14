@@ -633,7 +633,7 @@ public/session-groups.mjs  Groups the Today table's rows by claude launch, then 
 public/state.mjs       The tab, the Analysis range and the hidden panels, shared by the modules
 public/stats.mjs       median, percentile, dayTotals, busiestDay, rollingWeek; server.js and lib/efficiency.js also require it
 public/sticky-poll.mjs  What the sticky poll fetches: today's summary and the plan limits
-public/visibility.js   Parses the hidden panel list and decides which requests hidden panels still need
+public/visibility.mjs  Parses the hidden panel list and decides which requests hidden panels still need
 public/charts/axes.mjs Chart size constants and the y axis shared by the bar and line charts, the signed y axis for charts with negative values, and the Setup changes y axis with a 0 label and headroom
 public/charts/bar.mjs  drawBarChart (one series of bars) and drawCumulativeChart (running cost line)
 public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and rtk commands

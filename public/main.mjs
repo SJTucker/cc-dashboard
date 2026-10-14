@@ -13,6 +13,7 @@ import { escapeHtml } from './format.mjs';
 import { spinnerNode } from './dom.mjs';
 
 import { formatStatus } from './hud.mjs';
+import { neededRequests } from './visibility.mjs';
 import { renderAttribution } from './panels/attribution.mjs';
 import { renderCards } from './panels/cards.mjs';
 import { ensureChanges, loadChanges, redrawChanges } from './panels/changes.mjs';
@@ -201,7 +202,7 @@ async function fetchAll({ busy = false } = {}) {
   // rendered (loadPanels keeps that order).
   const summaryRequest = getJson(`/api/summary?days=${state.currentDays}`);
   // A request whose every panel is hidden is skipped (see neededRequests in
-  // visibility.js), and its panels render from null, as on a failed request.
+  // visibility.mjs), and its panels render from null, as on a failed request.
   const needed = neededRequests(state.hiddenKeys, state.currentDays);
   const rtkRequest = needed.has('rtk')
     ? getJson(`/api/rtk?days=${state.currentDays}`, { optional: true })

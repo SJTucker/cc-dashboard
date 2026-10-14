@@ -9,6 +9,7 @@ import {
   WEEK_MS, markerDate, markerIcon, timeDomain, drawMetricChart, drawMetricLegend,
 } from '../charts/setup-changes.mjs';
 import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
+import { neededRequests } from '../visibility.mjs';
 
 // Days of history the setup charts show for each range picker value. Today and 7d
 // show 14 days, since a day or a week holds too few sessions to read a trend.

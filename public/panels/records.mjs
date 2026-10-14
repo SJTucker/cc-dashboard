@@ -2,6 +2,7 @@
 import { getJson } from '../api.mjs';
 import { formatCost, formatTokens, shortDate, localDateStr } from '../format.mjs';
 import { state } from '../state.mjs';
+import { neededRequests } from '../visibility.mjs';
 import { busiestDay, rollingWeek } from '../stats.mjs';
 import { createSequence } from '../guards.mjs';
 

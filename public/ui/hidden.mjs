@@ -1,6 +1,7 @@
 // Any panel or summary card can be hidden, and shown again from the ☰ menu.
 import { el } from '../dom.mjs';
 import { state } from '../state.mjs';
+import { parseHidden } from '../visibility.mjs';
 
 // Set by setupHiding. onWidthChange runs after one panel of a pair is hidden;
 // onResume runs after panels are shown (see showKeys).

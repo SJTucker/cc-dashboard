@@ -2,6 +2,7 @@
 import { el } from '../dom.mjs';
 import { localDateStr } from '../format.mjs';
 import { state } from '../state.mjs';
+import { neededRequests } from '../visibility.mjs';
 
 // Runs after Apply succeeds. main.mjs passes reloadAll, because costs are
 // computed in the server's scan and the server has just dropped that scan.
