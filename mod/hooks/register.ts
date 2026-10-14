@@ -195,13 +195,17 @@ function note($: EngineInterface, text: string) {
 async function callScript($: EngineInterface, name: string, args: string[], stdin: string, timeoutMs: number): Promise<unknown> {
   const label = [name, ...args.slice(0, 1)].join(' ')
   const { exitCode, stdout, stderr } = await $.process.run([await scriptPath($, name), ...args], { stdin, timeoutMs })
-  if (exitCode !== 0) throw new Error(`${label} failed (exit ${exitCode}): ${stderr.trim().split('\n')[0] ?? ''}`)
+  // The name holds only the label and the exit code, so errorName() can log it
+  // without quoting stderr, which may hold transcript text.
+  if (exitCode !== 0) {
+    throw Object.assign(new Error(`${label} failed (exit ${exitCode}): ${stderr.trim().split('\n')[0] ?? ''}`), { name: `${label} exit ${exitCode}` })
+  }
   // A JSON.parse error message can quote the start of its input, which here may be
   // transcript text, so the message is replaced.
   try {
     return JSON.parse(stdout)
   } catch {
-    throw new Error(`${label} printed invalid JSON`)
+    throw Object.assign(new Error(`${label} printed invalid JSON`), { name: `${label} invalid JSON` })
   }
 }
 

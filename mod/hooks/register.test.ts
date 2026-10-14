@@ -1946,8 +1946,8 @@ test('no transcript arms nothing and logs nothing', async ($, on) => {
 })
 
 for (const [name, state, reason] of [
-  ['fails', { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }, 'Error'],
-  ['prints invalid JSON', { exitCode: 0, stdout: 'nope' }, 'Error'],
+  ['fails', { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }, 'cache-state exit 1'],
+  ['prints invalid JSON', { exitCode: 0, stdout: 'nope' }, 'cache-state invalid JSON'],
 ] as const) {
   test(`a cache-state that ${name} arms nothing and logs the error name`, async ($, on) => {
     const { forked, logged, clock } = world(on, timed({ cacheState: state }))
