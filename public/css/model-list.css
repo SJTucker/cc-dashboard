@@ -43,6 +43,7 @@
 .model-table tbody tr:hover { background: var(--surface-hover); }
 
 .model-table .cost-cell { color: var(--money); text-shadow: var(--money-glow); }
+.model-table .family-rate { color: var(--text-secondary); text-shadow: none; }
 
 .model-table tr:last-child td { border-bottom: none; }
 

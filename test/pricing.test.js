@@ -392,3 +392,37 @@ test('validateRow accepts a sound longPrompt and refuses a malformed one', () =>
     assert.match(validateRow({ ...HAIKU_55, longPrompt: bad }), /longPrompt/, JSON.stringify(bad));
   }
 });
+
+// ---- unmatched models and family rates -------------------------------------
+const { unmatchedModels, clearUnmatched } = require('../lib/pricing');
+
+test('priceFor records a name that matches nothing or only a bare-family row, and not a versioned match', () => {
+  clearUnmatched();
+  priceFor('claude-sonnet-4-6-20260115');
+  priceFor('claude-opus-5');
+  priceFor('claude-opus-5-5');
+  assert.deepStrictEqual(unmatchedModels(), []);
+  priceFor('claude-zeta-9');
+  priceFor('claude-opus-9');
+  priceFor('claude-haiku-9');
+  assert.deepStrictEqual(unmatchedModels(), ['claude-haiku-9', 'claude-opus-9', 'claude-zeta-9']);
+  clearUnmatched();
+  assert.deepStrictEqual(unmatchedModels(), []);
+});
+
+test('synthetic, empty and non-Anthropic model names are never recorded as unmatched', () => {
+  clearUnmatched();
+  priceFor('<synthetic>');
+  priceFor('');
+  priceFor(null);
+  priceFor(undefined);
+  costForUsage({ input_tokens: 10 }, '<synthetic>');
+  costForUsage({ input_tokens: 10 }, 'gpt-4o');
+  assert.deepStrictEqual(unmatchedModels(), []);
+});
+
+test('costForUsage reports familyRate for a bare-family match only', () => {
+  assert.strictEqual(costForUsage({ input_tokens: 1000 }, 'claude-opus-9').familyRate, true);
+  assert.strictEqual(costForUsage({ input_tokens: 1000 }, 'claude-opus-5').familyRate, false);
+  assert.deepStrictEqual(costForUsage({ input_tokens: 1000 }, 'claude-zeta-9'), { cost: 0, priced: false });
+});

@@ -389,6 +389,25 @@ test('models[] marks a model with no known price as unpriced', async () => {
   assert.strictEqual(byName['claude-sonnet-4-6-20260115'].priced, true);
 });
 
+test('models[] marks a model priced by a bare-family row as familyRate', async () => {
+  const base = makeFixture();
+  const iso = atHourToday(12).toISOString();
+  writeSession(base, 'family-rate', [
+    modelLine(iso, { id: 'o', model: 'claude-opus-9', input: 1000 }),
+    modelLine(iso, { id: 's', model: 'claude-sonnet-4-6-20260115', input: 1000 }),
+    modelLine(iso, { id: 'z', model: 'claude-zeta-9', input: 1000 }),
+  ]);
+
+  const { scanUsage } = loadScan(base);
+  const data = await scanUsage({ days: 'today' });
+  const byName = Object.fromEntries(data.models.map((m) => [m.model, m]));
+
+  assert.strictEqual(byName['claude-opus-9'].priced, true);
+  assert.strictEqual(byName['claude-opus-9'].familyRate, true);
+  assert.strictEqual(byName['claude-sonnet-4-6-20260115'].familyRate, undefined);
+  assert.strictEqual(byName['claude-zeta-9'].familyRate, undefined, 'an unpriced model is not a family rate');
+});
+
 test('a line whose timestamp will not parse is skipped, not fatal', async () => {
   const base = makeFixture();
   const good = usageLine(atHourToday(12).toISOString(), { id: 'ok', input: 400 });
