@@ -772,7 +772,8 @@ test('an error thrown in an /api route is logged and answered as a JSON 500', as
 test('a malformed /api request body is a JSON 400 and is not logged', async (t) => {
   const { url } = await startServer(t);
   const err = t.mock.method(console, 'error', () => {});
-  const res = await fetch(`${url}/api/prices/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{nope' });
+  // The dismiss route is the one /api route that parses a JSON body.
+  const res = await fetch(dismissUrl(url, 'sess-a', 0), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{nope' });
   assert.strictEqual(res.status, 400);
   assert.ok((await res.json()).error);
   assert.strictEqual(err.mock.callCount(), 0);
