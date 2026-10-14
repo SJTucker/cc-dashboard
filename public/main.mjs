@@ -214,7 +214,7 @@ async function fetchAll({ busy = false } = {}) {
   // its Today scan.
   const sessionsRequest = needed.has('sessions') ? requestSessions() : Promise.resolve(null);
   const mark = reviewsMark();
-  const reviewsRequest = needed.has('reviews') ? requestReviews() : Promise.resolve(null);
+  const reviewsRequest = needed.has('reviews') ? requestReviews(state.currentDays) : Promise.resolve(null);
 
   // The range rule runs before the first draw of this load.
   applyRangeRule();

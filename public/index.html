@@ -221,7 +221,16 @@
           </div>
           <p class="review-empty" id="reviewsStatus" role="status" hidden></p>
           <ul class="reviews-list" id="reviewsList"></ul>
-          <div id="reviewsMore" class="show-all-box"></div>
+          <div class="reviews-footer">
+            <div id="reviewsMore" class="show-all-box"></div>
+            <div id="reviewsClosedToggle" class="reviews-closed-toggle"></div>
+          </div>
+          <section class="reviews-closed" id="reviewsClosed" aria-labelledby="reviewsClosedHeading" hidden>
+            <h3 class="reviews-closed-heading" id="reviewsClosedHeading">Closed</h3>
+            <ul class="reviews-list" id="reviewsClosedList"></ul>
+            <p class="review-empty" id="reviewsClosedStatus" role="status" hidden></p>
+            <div class="reviews-closed-more" id="reviewsClosedMore"></div>
+          </section>
         </section>
 
         <div class="panel-row even">
