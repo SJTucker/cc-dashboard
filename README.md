@@ -412,7 +412,9 @@ their own rows unless they belong to a launch group.
 
 The Session timeline panel, above Live sessions, shows the same sessions by time on
 the Now tab. Each session has one lane, ordered by when it started working
-today. A session that `/clear` started sits directly under the session it replaced,
+today. Sessions running now (live, or waiting on the user) sit at the top, and the other sessions sit
+below a divider labelled "Earlier today". The divider shows only when both groups have a session. A `/clear` chain
+moves as one block when any session in it is running. Each group keeps start order. A session that `/clear` started sits directly under the session it replaced,
 with `↳` before its title and a curve from the old session's last bar to its first
 bar. This needs the mod, which records which session each `/clear` ended.
 A bar covers a stretch of activity: it is built from the times of the session's calls
