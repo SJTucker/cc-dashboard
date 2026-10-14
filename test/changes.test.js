@@ -1,5 +1,8 @@
 'use strict';
 
+// Day and hour buckets use local time, so the zone is set before any Date is made.
+process.env.TZ = 'America/New_York';
+
 const test = require('node:test');
 const helpers = require('./helpers');
 const assert = require('node:assert');
