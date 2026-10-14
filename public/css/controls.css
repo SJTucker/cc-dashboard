@@ -67,7 +67,7 @@
 .hide-btn:hover { color: var(--text-primary); }
 .hide-btn:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
 /* A touch screen has no hover, so the buttons always show there. */
-@media (hover: none) { .hide-btn, .row-controls { opacity: 1; } }
+@media (hover: none) { .hide-btn { opacity: 1; } }
 
 /* A row's handle and toggle show while the pointer is over the row or focus is
    inside it. A collapsed row keeps its toggle in view, so it can be opened again. */
@@ -85,6 +85,8 @@
 .row-collapsed .row-controls { opacity: 1; }
 .row-controls .row-toggle,
 .row-controls .row-handle { padding: 0 var(--sp-1); }
+/* Must follow the .row-controls base rule: same specificity, so the later rule wins. */
+@media (hover: none) { .row-controls { opacity: 1; } }
 
 /* The ☰ button sits at the right end of the title row. */
 .menu-btn { margin-left: auto; padding: var(--sp-1) var(--sp-2); font-size: var(--fs-title); }

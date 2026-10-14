@@ -749,6 +749,13 @@ test('a session with a 1-hour write before today and only a read today has a 1-h
   assert.strictEqual(row.cache.expiresAt, NOW - 60_000 + TTL_1H);
 });
 
+test('a waiting session asks cacheCallsOf for its transcript calls once', () => {
+  const asked = [];
+  const cacheCallsOf = (id) => { asked.push(id); return [cacheCall({ t: NOW - 60_000, write5m: 100_000 })]; };
+  buildLiveSessions([snapshot()], [], NOW, {}, {}, [], waitingMap(), { cacheCallsOf });
+  assert.deepStrictEqual(asked, ['s1']);
+});
+
 test('a session with no transcript calls falls back to the Today calls for its cache', () => {
   const calls = [cacheCall({ t: NOW - 60_000, write5m: 100_000 })];
   const row = buildLiveSessions([snapshot()], calls, NOW, {}, {}, [], waitingMap(), { cacheCallsOf: () => [] }).sessions[0];

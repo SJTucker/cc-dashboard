@@ -1946,10 +1946,10 @@ test('no transcript arms nothing and logs nothing', async ($, on) => {
 })
 
 for (const [name, state, reason] of [
-  ['fails', { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }, 'cache-state failed (exit 1): cache-state: boom'],
-  ['prints invalid JSON', { exitCode: 0, stdout: 'nope' }, 'cache-state printed invalid JSON'],
+  ['fails', { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }, 'cache-state exit 1'],
+  ['prints invalid JSON', { exitCode: 0, stdout: 'nope' }, 'cache-state invalid JSON'],
 ] as const) {
-  test(`a cache-state that ${name} arms nothing and logs the reason`, async ($, on) => {
+  test(`a cache-state that ${name} arms nothing and logs the error name`, async ($, on) => {
     const { forked, logged, clock } = world(on, timed({ cacheState: state }))
     await idleTurn($)
     await clock.set(EXPIRES)
@@ -2318,4 +2318,16 @@ test('a subagent that ends drops its in-memory steps, and a later step re-reads 
   await clock.settle()
   expect(readLog).toContain(AGENT_FILE)
   expect(JSON.parse(writes[AGENT_FILE]).steps).toHaveLength(2)
+})
+
+test('a step queued after a subagent ends but before its chain settles is dropped too', async ($, on) => {
+  const { clock, readLog } = world(on, { writeMs: [100, 100] })
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.advance(300)
+  readLog.length = 0
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.advance(300)
+  expect(readLog).toContain(AGENT_FILE)
 })

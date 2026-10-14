@@ -478,7 +478,6 @@ test('the warning adds nothing to the extracted rows', async (t) => {
   const file = writeTranscript([untagged('hello')]);
   const rows = await extractFile(file);
   assert.deepStrictEqual(rows.prompts, []);
-  assert.strictEqual(EXTRACT_VERSION, 5);
 });
 
 test('a slash command line is a command row with its name, keyed like a prompt row', async () => {
@@ -550,8 +549,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 5', () => {
-  assert.strictEqual(EXTRACT_VERSION, 5);
+test('EXTRACT_VERSION is 6', () => {
+  assert.strictEqual(EXTRACT_VERSION, 6);
 });
 
 // Two tool_use blocks without an id, one per line as Claude Code writes them.

@@ -256,8 +256,21 @@ function createServer(config) {
       // A waiting session's cache TTL depends on its newest cache write, which can
       // be before midnight. The row store holds the whole transcript, so the Today
       // scan's calls are not used for it (as bin/cache-state does).
-      const entries = getRowStore().entries();
-      const transcriptCalls = (sessionId) => cacheCallsOf(entries.filter((e) => path.basename(e.path) === `${sessionId}.jsonl`).flatMap((e) => e.rows.calls || []));
+      // The index maps each file name to its row-store entries and is built on the
+      // first waiting session, so a poll with none never copies and sorts the
+      // entries. Only the requested session's calls are concatenated.
+      let entriesByFile = null;
+      const transcriptCalls = (sessionId) => {
+        if (!entriesByFile) {
+          entriesByFile = new Map();
+          for (const e of getRowStore().entries()) {
+            const name = path.basename(e.path);
+            if (!entriesByFile.has(name)) entriesByFile.set(name, []);
+            entriesByFile.get(name).push(e);
+          }
+        }
+        return cacheCallsOf((entriesByFile.get(`${sessionId}.jsonl`) || []).flatMap((e) => e.rows.calls || []));
+      };
       res.json(buildLiveSessions(readSessions(getSessionsDir(config.configDir)), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(getActivityDir(config.configDir)), {
         branchesBySession: efficiency.branchesBySession,
         branchBySession: efficiency.branchBySession,
@@ -381,7 +394,10 @@ function createServer(config) {
   // Express's default handler.
   app.use('/api', (err, req, res, next) => {
     if (res.headersSent) return next(err);
-    res.status(err.status || 500).json({ error: err.message });
+    const status = err.status || 500;
+    // Express's default handler printed err.stack. A 4xx is the client's error, so only 5xx is logged.
+    if (status >= 500) console.error(`[server] ${req.method} ${req.baseUrl}${req.path} failed:`, err);
+    res.status(status).json({ error: err.message });
   });
 
   const server = http.createServer(app);
