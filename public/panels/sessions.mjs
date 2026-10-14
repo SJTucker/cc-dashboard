@@ -286,7 +286,7 @@ function drawSessions(live) {
 // session that switched branch, every branch in order. A review has a branch but no
 // branches list. extra is text appended at the end, such as a review's end time.
 export function contextLine(item, extra = '') {
-  const parts = [document.createTextNode(item.project || '—')];
+  const parts = [el('span', { class: 'session-project', text: item.project || '—' })];
   if (item.branch) {
     const branches = item.branches || [];
     const tip = branches.length > 1 ? `${item.branch}\nbranches: ${branches.join(' → ')}` : item.branch;

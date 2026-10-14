@@ -43,6 +43,24 @@
   vertical-align: bottom;
 }
 
+/* A session with no title shows the project and branch as its main text. That line
+   gets the title's 28ch cap, so a long worktree name does not widen the Session
+   column. The project and the branch both shrink, each with its own ellipsis.
+   white-space: pre keeps the spaces around the · separator, which a flex item
+   would otherwise trim. */
+.session-hex + .session-context {
+  display: inline-flex;
+  max-width: 28ch;
+  white-space: pre;
+  vertical-align: bottom;
+}
+.session-hex + .session-context > .session-project,
+.session-hex + .session-context > .session-branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 /* Live sessions panel (renderSessions in public/panels/sessions.mjs). */
 .sessions-table {
   width: 100%;
