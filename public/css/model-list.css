@@ -105,25 +105,4 @@
 .prices-foot .panel-note { margin: 0; }
 .prices-check { margin-top: var(--sp-3); }
 .prices-check .panel-note { margin: var(--sp-1) 0 0; }
-.prices-error { color: var(--text-primary); }
 
-.prices-apply {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: var(--sp-2);
-  margin-top: var(--sp-2);
-  font-size: var(--fs-body);
-  color: var(--text-secondary);
-}
-
-.prices-apply input[type="date"] {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  color: var(--text-primary);
-  border-radius: var(--radius-m);
-  padding: var(--sp-1) var(--sp-2);
-  font-family: var(--font-data);
-  font-size: var(--fs-body);
-  color-scheme: dark;
-}

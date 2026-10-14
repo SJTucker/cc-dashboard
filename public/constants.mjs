@@ -15,3 +15,7 @@ export const REVIEW_DAYS = 7;
 // The limits banner shows once a plan window reaches this percent. The server
 // has no matching constant.
 export const LIMIT_WARN_PERCENT = 75;
+
+// Cache read price as a multiple of the input rate when a price row has no
+// cacheReadMult. lib/pricing.js DEFAULT_CACHE_READ_MULT.
+export const DEFAULT_CACHE_READ_MULT = 0.1;
