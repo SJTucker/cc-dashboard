@@ -52,3 +52,7 @@ test('PORT is not validated here, so a bad value cannot stop the bin/ recorders'
 test('with no argument loadConfig reads process.env', () => {
   assert.deepStrictEqual(loadConfig(), loadConfig(process.env));
 });
+
+test('an empty PORT counts as unset', () => {
+  assert.strictEqual(loadConfig({ PORT: '' }).port, null);
+});
