@@ -61,7 +61,7 @@ test('a worker that exits mid-task resolves its file as failed rows, and the fil
     assert.deepStrictEqual(await pool.extract('/x/d.jsonl'), failedRows(), 'a file asked for after the last worker stopped does not wait');
   }, worker('exit-worker.js'));
   assert.strictEqual(warn.mock.calls.length, 1);
-  assert.match(warn.mock.calls[0].arguments[0], /A worker stopped \(exit code 3\)\. Its file \/x\/a\.jsonl counts as unreadable/);
+  assert.match(warn.mock.calls[0].arguments[0], /^\[extract-pool\] A worker stopped \(exit code 3\) while reading \/x\/a\.jsonl\.$/);
 });
 
 test('a pool whose workers all die after one answer has started, so its failed files stay failed', async (t) => {
