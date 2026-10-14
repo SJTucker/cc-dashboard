@@ -755,6 +755,27 @@ test('GET /api/limits adds today\'s share of the weekly limit', async (t) => {
   assert.strictEqual(body.today.share, 4);
 });
 
+test('an error thrown in an /api route is logged and answered as a JSON 500', async (t) => {
+  const { url } = await startServer(t);
+  // The route's own res.json throws once. The error handler's res.json then runs the real one.
+  t.mock.method(require('express').response, 'json', function () { throw new Error('boom'); }, { times: 1 });
+  const err = t.mock.method(console, 'error', () => {});
+  const res = await fetch(`${url}/api/prices`);
+  assert.strictEqual(res.status, 500);
+  assert.deepStrictEqual(await res.json(), { error: 'boom' });
+  assert.strictEqual(err.mock.callCount(), 1);
+  assert.strictEqual(err.mock.calls[0].arguments[0], '[server] GET /api/prices failed:');
+});
+
+test('a malformed /api request body is a JSON 400 and is not logged', async (t) => {
+  const { url } = await startServer(t);
+  const err = t.mock.method(console, 'error', () => {});
+  const res = await fetch(`${url}/api/prices/apply`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{nope' });
+  assert.strictEqual(res.status, 400);
+  assert.ok((await res.json()).error);
+  assert.strictEqual(err.mock.callCount(), 0);
+});
+
 test('every GET /api route refuses a cross-site or same-site request', async (t) => {
   const { url: base } = await startServer(t);
 
