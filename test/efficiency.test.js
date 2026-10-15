@@ -72,6 +72,7 @@ test('windowStats on an empty window returns nulls', () => {
   assert.deepStrictEqual(w, {
     sessions: 0, sessionStart: null, bashN: 0, bashMedian: null, bashP90: null,
     prompts: 0, costPerPrompt: null, callsPerPrompt: null, callN: 0, cacheHit: null, thinkingN: 0, thinkingShare: null,
+    turnN: 0, turnDuration: null,
   });
 });
 
@@ -111,12 +112,13 @@ test('dailySeries gives each row its value and count per local day', () => {
     callsPerPrompt: [{ date: '2026-09-11', n: 1, value: 4 }],
     cacheHit: [{ date: '2026-09-10', n: 1, value: 0.9 }, { date: '2026-09-11', n: 1, value: 0.5 }],
     thinkingShare: [],
+    turnDuration: [],
   });
 });
 
 test('dailySeries on no records gives every row an empty series', () => {
   const empty = dailySeries({ starts: [], deltas: [], prompts: [], calls: [] });
-  assert.deepStrictEqual(Object.keys(empty).sort(), ['bashMedian', 'bashP90', 'cacheHit', 'callsPerPrompt', 'costPerPrompt', 'sessionStart', 'thinkingShare']);
+  assert.deepStrictEqual(Object.keys(empty).sort(), ['bashMedian', 'bashP90', 'cacheHit', 'callsPerPrompt', 'costPerPrompt', 'sessionStart', 'thinkingShare', 'turnDuration']);
   for (const series of Object.values(empty)) assert.deepStrictEqual(series, []);
 });
 
@@ -238,4 +240,25 @@ test('dailySeries gives the thinking share per day with its call count', () => {
     calls: [call(T0, { output: 100, thinking: 40 }), call(T0 + 1, { output: 60, thinking: 0 }), call(T0 + 24 * H, { output: 10 })],
   });
   assert.deepStrictEqual(series.thinkingShare, [{ date: '2026-09-10', n: 2, value: 0.25 }]);
+});
+
+test('stats gives the median turn duration and the turn count', () => {
+  const s = stats({ starts: [], deltas: [], prompts: [], calls: [], turns: [{ t: 1, durationMs: 1000 }, { t: 2, durationMs: 5000 }, { t: 3, durationMs: 60000 }] });
+  assert.strictEqual(s.turnN, 3);
+  assert.strictEqual(s.turnDuration, 5000);
+});
+
+test('stats without a turns list counts no turns', () => {
+  const s = stats({ starts: [], deltas: [], prompts: [], calls: [] });
+  assert.strictEqual(s.turnN, 0);
+  assert.strictEqual(s.turnDuration, null);
+});
+
+test('buildReport gives a daily turn duration series and a before and after value', () => {
+  const day = new Date(2026, 8, 10, 12).getTime();
+  const turns = [{ t: day, sessionId: 's1', durationMs: 4000 }, { t: day + 1, sessionId: 's1', durationMs: 8000 }];
+  const report = buildReport({ calls: [], prompts: [], turns }, [{ t: day + WEEK_MS / 2 }], null, null);
+  assert.deepStrictEqual(report.daily.turnDuration, [{ date: '2026-09-10', n: 2, value: 6000 }]);
+  assert.strictEqual(report.markers[0].before.turnDuration, 6000);
+  assert.strictEqual(report.markers[0].after.turnN, 0);
 });
