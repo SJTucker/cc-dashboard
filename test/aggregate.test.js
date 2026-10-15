@@ -549,6 +549,13 @@ test('contextFillers counts a result copied into a resumed session once', () => 
   assert.deepStrictEqual(data.contextFillers.rows.map((r) => [r.group, r.calls, r.chars]), [['sed -n', 1, 40]]);
 });
 
+test('contextFillers takes the group from a later copy when the first copy has none', () => {
+  const use = { key: 'toolu_1', t: at(0), name: 'Bash', detail: 'sed', model: null };
+  const results = [{ toolUseId: 'toolu_1', t: at(0), sessionId: 's1', chars: 40 }];
+  const data = run([rowSet({ toolUses: [use], results }), rowSet({ toolUses: [{ ...use, group: 'sed -n' }], results })]);
+  assert.strictEqual(data.contextFillers.rows[0].group, 'sed -n');
+});
+
 test('contextFillers leaves out results before the range', () => {
   const toolUses = [{ key: 'toolu_1', t: at(10), name: 'Read', detail: '/a', model: null }];
   const results = [{ toolUseId: 'toolu_1', t: at(10), sessionId: 's1', chars: 40 }];

@@ -290,7 +290,7 @@ function drawSummaryPanels(data) {
     lastSummarySignature = null;
     return;
   }
-  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models]);
+  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, data.longestTurns, data.contextFillers?.totals]);
   if (signature === lastSummarySignature) return;
   renderMetaBanner(data.meta);
   const panels = summaryPanelsFor(state.tab);
