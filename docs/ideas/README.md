@@ -24,4 +24,5 @@ then on.
 | [Plan limit band below the prompt](limit-band-below-prompt.md) | Open: no mod render slot sits between the prompt and the status line; a `bin/limit-line` in the statusline script is the likely route; dismissing and shared band logic open |
 | [README screenshots after the design pass](readme-screenshots-after-design-pass.md) | Open: every screenshot predates the tabs, the sticky bar and the new legends; which to retake and how to scrub them open |
 | [Subagent status line in Doing now](subagent-status-in-doing-now.md) | Open: show each subagent's status text instead of "1 subagent"; `meta.json` has the spawn description, and whether the live status line is readable anywhere is open |
+| [High score tab](high-score-tab.md) | Open: a third tab listing all-time records (token, cost and prompt days, top session) in an arcade style; which records, top 1 or top 10, and the look open |
 | [Record day confetti](record-day-confetti.md) | Open: confetti when today becomes the record day; what triggers it, once per day, and reduced motion open |
