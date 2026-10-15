@@ -555,3 +555,16 @@ test('contextFillers leaves out results before the range', () => {
   const data = run([rowSet({ toolUses, results, maxT: at(10) })], { days: 7 });
   assert.deepStrictEqual(data.contextFillers.rows, []);
 });
+
+test('a turn copied into a resumed session counts once, and efficiency.turns is sorted by time', () => {
+  const turns = [
+    { id: 'td2', t: at(0, 11), sessionId: 's1', durationMs: 5000 },
+    { id: 'td1', t: at(0, 10), sessionId: 's1', durationMs: 9000 },
+  ];
+  const data = run([rowSet({ turns }), rowSet({ turns })]);
+  assert.deepStrictEqual(data.efficiency.turns, [
+    { t: at(0, 10), sessionId: 's1', durationMs: 9000 },
+    { t: at(0, 11), sessionId: 's1', durationMs: 5000 },
+  ]);
+  assert.deepStrictEqual(data.longestTurns.map((x) => x.durationMs), [9000, 5000]);
+});
