@@ -41,6 +41,17 @@ export const TOKENS = {
   seriesNeutral: '#6b86ad',
 };
 
+// The Lines of code chart's repos in rank order, and the style of Other. The four
+// colours are TOKEN_SERIES's, already validated against the panel surface. Dash is
+// the identity channel, as on the token chart, so every style has its own.
+export const REPO_SERIES = [
+  { color: '#3987e5', dash: null },
+  { color: '#c98500', dash: '9 4' },
+  { color: '#d55181', dash: '2 4' },
+  { color: '#9085e9', dash: '9 4 2 4' },
+];
+export const REPO_OTHER = { color: TOKENS.seriesNeutral, dash: '14 4' };
+
 // The payload carries the family key on every models[] entry and uses it for the
 // byModel keys, so the matching rules live only in lib/pricing.js.
 export function modelColor(family) {
