@@ -468,9 +468,10 @@ deleted take the model of the response before them.
 
 Under the breakdown, What fills the context ranks tool results by the characters
 they put into the context, top 20. A row is one file for Read, Edit and Write, and
-one command group for Bash: the program and its first argument, such as `sed -n` or
-`git diff`, after any leading `cd <dir> &&`. Other tools group by their detail or
-their name. Sessions counts the sessions a row appears in, so a file read in every
+one command group for Bash: the program, plus the next word when that word is a word
+or a flag (such as `sed -n` or `git diff`), after any leading `cd <dir> &&`. Other
+tools group by the WebFetch host, the Skill name or the subagent type, else by the
+tool name. Sessions counts the sessions a row appears in, so a file read in every
 session stands out. Re-reads counts Reads of a file that the same thread (the main
 loop or one subagent) had already read with no edit of it in between. A re-read of
 another part of the file counts too. Sizes are characters of the result text the
@@ -478,7 +479,7 @@ model saw, subagent results included. A result Claude Code saved to a separate f
 counts only the preview it left in the transcript. Transcripts Claude Code deleted
 before sizes were stored have no sizes.
 
-Beside it, Longest turns lists the 15 longest main-loop turns in the range, from the
+Beside What fills the context, Longest turns lists the 15 longest main-loop turns in the range, from the
 `turn_duration` line Claude Code writes when a turn ends. Each row shows the session,
 when the turn started, its duration, and the API calls and cost from the prompt to
 the end of the turn. A turn's duration includes tool time and time spent waiting on
@@ -571,9 +572,8 @@ Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default). 
 dashboard stores the usage rows of each transcript last modified before today's local
 midnight in `~/.claude/cc-dashboard/transcripts.db`. The stored rows hold each tool
 result's length in characters and each turn's duration, but no result text. The All
-range, the sticky bar's Record day
-and these before/after windows keep the history of every transcript the
-dashboard stored before Claude Code deleted it. A transcript deleted on the day it was
+range, the sticky bar's Record day and these before/after windows keep the history
+of every transcript the dashboard stored before Claude Code deleted it. A transcript deleted on the day it was
 written is never stored. History starts at the first stored transcript. A
 before/after needs history on both sides of a change, so a change less than 7 days
 newer than your oldest stored row has no "before" window to compare and gets no
