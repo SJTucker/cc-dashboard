@@ -33,6 +33,12 @@ test('readAgentSteps takes the agent id from the file name and keeps each step',
   assert.strictEqual(Object.getPrototypeOf(rows.sessions), null);
 });
 
+test('a step file row set has empty results and turns', async () => {
+  const rows = await readAgentSteps(writeStepFile(JSON.stringify({ agentId: 'a1', steps: [] })));
+  assert.deepStrictEqual(rows.results, []);
+  assert.deepStrictEqual(rows.turns, []);
+});
+
 test('readAgentSteps of a file that does not parse is not ok, so the row store reads it again', async () => {
   for (const text of ['', '{"agentId":"a1","steps":[{"t":1', 'null']) {
     const rows = await readAgentSteps(writeStepFile(text));

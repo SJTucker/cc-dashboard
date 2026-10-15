@@ -272,7 +272,7 @@ test('tool uses on later lines of a group are kept, with detail and a fallback k
   const rows = await extractFile(file);
 
   assert.deepStrictEqual(rows.toolUses, [
-    { key: 'toolu_1', t: Date.parse(T1), name: 'Bash', detail: 'git', model: 'claude-sonnet-4-6' },
+    { key: 'toolu_1', t: Date.parse(T1), name: 'Bash', detail: 'git', model: 'claude-sonnet-4-6', group: 'git status' },
     { key: 'm1:r1:0', t: Date.parse(T1), name: 'Read', detail: '/a.js', model: 'claude-sonnet-4-6' },
   ]);
 });
@@ -586,8 +586,61 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 8', () => {
-  assert.strictEqual(EXTRACT_VERSION, 8);
+test('EXTRACT_VERSION is 9', () => {
+  assert.strictEqual(EXTRACT_VERSION, 9);
+});
+
+function toolResultLine({ id = 'toolu_1', content = 'hello', agentId = null, min = 1 } = {}) {
+  return {
+    type: 'user', sessionId: 's1', timestamp: atMin(min), uuid: `u-${id}`,
+    ...(agentId ? { agentId, isSidechain: true } : {}),
+    message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content }] },
+  };
+}
+
+test('every tool_result becomes a result row with the length of its text', async () => {
+  const rows = await extractFile(writeTranscript([
+    toolResultLine({ id: 'toolu_1', content: 'hello' }),
+    toolResultLine({ id: 'toolu_2', content: [{ type: 'text', text: 'abc' }, { type: 'text', text: 'de' }], agentId: 'a7' }),
+  ]));
+  assert.deepStrictEqual(rows.results, [
+    { toolUseId: 'toolu_1', t: Date.parse(atMin(1)), sessionId: 's1', chars: 5 },
+    { toolUseId: 'toolu_2', t: Date.parse(atMin(1)), sessionId: 's1', chars: 6, agentId: 'a7' },
+  ]);
+});
+
+test('a main-thread turn_duration line becomes a turn row', async () => {
+  const line = { type: 'system', subtype: 'turn_duration', durationMs: 30_800, messageCount: 495, timestamp: atMin(5), uuid: 'td1', sessionId: 's1', isSidechain: false };
+  const rows = await extractFile(writeTranscript([line]));
+  assert.deepStrictEqual(rows.turns, [{ id: 'td1', t: Date.parse(atMin(5)), sessionId: 's1', durationMs: 30_800 }]);
+  assert.strictEqual(rows.maxT, Date.parse(atMin(5)));
+});
+
+test('a turn_duration line on a sidechain or without a duration adds no turn', async () => {
+  const base = { type: 'system', subtype: 'turn_duration', timestamp: atMin(5), sessionId: 's1' };
+  const rows = await extractFile(writeTranscript([
+    { ...base, uuid: 'a', durationMs: 10, isSidechain: true },
+    { ...base, uuid: 'b' },
+    { ...base, uuid: 'c', durationMs: -1 },
+  ]));
+  assert.deepStrictEqual(rows.turns, []);
+  assert.deepStrictEqual(rows.calls, []);
+});
+
+test('a Bash tool use carries its command group and a Read does not', async () => {
+  const usage = { input_tokens: 1, output_tokens: 1 };
+  const line = (id, name, input) => ({
+    type: 'assistant', sessionId: 's1', timestamp: atMin(0), requestId: `r-${id}`,
+    message: { id: `m-${id}`, model: 'claude-opus-5-5', stop_reason: 'tool_use', usage, content: [{ type: 'tool_use', id, name, input }] },
+  });
+  const rows = await extractFile(writeTranscript([
+    line('toolu_b', 'Bash', { command: 'cd /r && sed -n 1,9p a.js' }),
+    line('toolu_r', 'Read', { file_path: '/r/a.js' }),
+  ]));
+  const [bash, read] = rows.toolUses;
+  assert.strictEqual(bash.group, 'sed -n');
+  assert.strictEqual(bash.detail, 'sed');
+  assert.strictEqual('group' in read, false);
 });
 
 // Two tool_use blocks without an id, one per line as Claude Code writes them.
