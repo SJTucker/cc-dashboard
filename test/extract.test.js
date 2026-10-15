@@ -304,7 +304,28 @@ test('an edit row counts added and removed lines for the line sessionId', async 
   ]);
   const rows = await extractFile(file);
 
-  assert.deepStrictEqual(rows.edits, [{ toolUseId: 'toolu_1', t: Date.parse(T1), sessionId: 's1', added: 2, removed: 1 }]);
+  assert.deepStrictEqual(rows.edits, [{ toolUseId: 'toolu_1', t: Date.parse(T1), sessionId: 's1', added: 2, removed: 1, repo: null }]);
+});
+
+test('an edit row carries the repo of the edited file, and falls back to cwd only without a filePath', async () => {
+  const root = fs.realpathSync(helpers.tmpDir(null, 'extract-repo'));
+  const app = path.join(root, 'app');
+  const other = path.join(root, 'other');
+  fs.mkdirSync(path.join(app, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(other, '.git'), { recursive: true });
+  const result = (id, extra) => ({
+    type: 'user', timestamp: T1, sessionId: 's1', cwd: other,
+    message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] },
+    toolUseResult: { structuredPatch: [{ lines: ['+a'] }], ...extra },
+  });
+  const file = writeTranscript([
+    result('toolu_1', { filePath: path.join(app, 'src', 'a.js') }),
+    result('toolu_2', {}),
+    result('toolu_3', { filePath: path.join(root, 'loose.txt') }),
+  ]);
+  const rows = await extractFile(file);
+
+  assert.deepStrictEqual(rows.edits.map((e) => e.repo), [app, other, null]);
 });
 
 const typed = (text, extra = {}) => ({ type: 'user', origin: { kind: 'human' }, promptSource: 'typed', sessionId: 's1', message: { content: text }, ...extra });
@@ -586,8 +607,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 9', () => {
-  assert.strictEqual(EXTRACT_VERSION, 9);
+test('EXTRACT_VERSION is 10', () => {
+  assert.strictEqual(EXTRACT_VERSION, 10);
 });
 
 function toolResultLine({ id = 'toolu_1', content = 'hello', agentId = null, min = 1 } = {}) {
