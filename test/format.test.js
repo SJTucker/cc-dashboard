@@ -144,3 +144,12 @@ test('thinkingNote gives 0% when the server sends no thinkingCalls', async () =>
   const { thinkingNote } = await load();
   assert.equal(thinkingNote({ apiCalls: 10, thinkingCost: 0 }), '0% of calls report it');
 });
+
+test('formatAxisDuration keeps the seconds and minutes a gridline needs', async () => {
+  const { formatAxisDuration } = await load();
+  const cases = [
+    [0, '0s'], [30_000, '30s'], [50_000, '50s'], [60_000, '1m'], [90_000, '1m 30s'], [100_000, '1m 40s'],
+    [150_000, '2m 30s'], [3_600_000, '1h'], [3_900_000, '1h 5m'],
+  ];
+  for (const [ms, label] of cases) assert.equal(formatAxisDuration(ms), label, String(ms));
+});

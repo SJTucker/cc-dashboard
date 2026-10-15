@@ -26,4 +26,5 @@ subagent run.
   doesn't do" would need to say so.
 - Whether a prompt's cost includes the subagent calls it started.
 - How far the drill-down goes: calls only, or each tool call with its result size
-  (which needs [What fills the context](context-fillers.md) first).
+  (each tool result's size is stored since extract version 9, see the What fills
+  the context table in the Tool calls panel).

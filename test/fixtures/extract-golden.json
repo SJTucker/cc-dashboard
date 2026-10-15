@@ -179,7 +179,8 @@
         "t": 1791464460000,
         "name": "Bash",
         "detail": "git",
-        "model": "claude-sonnet-4-6-20260115"
+        "model": "claude-sonnet-4-6-20260115",
+        "group": "git status"
       },
       {
         "key": "m-a1:r-a1:0",
@@ -221,7 +222,8 @@
         "t": 1791464640000,
         "name": "Bash",
         "detail": "sed",
-        "model": "claude-sonnet-4-6-20260115"
+        "model": "claude-sonnet-4-6-20260115",
+        "group": "sed -i"
       },
       {
         "key": "toolu_a7",
@@ -284,14 +286,16 @@
         "t": 1791468000000,
         "name": "Bash",
         "detail": "ls",
-        "model": "claude-sonnet-4-6-20260115"
+        "model": "claude-sonnet-4-6-20260115",
+        "group": "ls"
       },
       {
         "key": "undefined:undefined:0",
         "t": 1791471660000,
         "name": "Bash",
         "detail": "ls",
-        "model": "claude-sonnet-4-6-20260115"
+        "model": "claude-sonnet-4-6-20260115",
+        "group": "ls"
       }
     ],
     "errors": [
@@ -361,6 +365,99 @@
         "removed": 0
       }
     ],
+    "results": [
+      {
+        "toolUseId": "toolu_a1",
+        "t": 1791464580000,
+        "sessionId": "sess-a",
+        "chars": 80
+      },
+      {
+        "toolUseId": "toolu_a2",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "chars": 2
+      },
+      {
+        "toolUseId": "toolu_a3",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "chars": 7
+      },
+      {
+        "toolUseId": "toolu_a4",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "chars": 7
+      },
+      {
+        "toolUseId": "toolu_a5",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "chars": 7
+      },
+      {
+        "toolUseId": "toolu_a6",
+        "t": 1791464760000,
+        "sessionId": "sess-a",
+        "chars": 4
+      },
+      {
+        "toolUseId": "toolu_a7",
+        "t": 1791464760000,
+        "sessionId": "sess-a",
+        "chars": 9
+      },
+      {
+        "toolUseId": "toolu_a8",
+        "t": 1791464760000,
+        "sessionId": "sess-a",
+        "chars": 3
+      },
+      {
+        "toolUseId": "toolu_a9",
+        "t": 1791468060000,
+        "sessionId": "sess-a",
+        "chars": 449
+      },
+      {
+        "toolUseId": "toolu_a10",
+        "t": 1791468060000,
+        "sessionId": "sess-a",
+        "chars": 66
+      },
+      {
+        "toolUseId": "toolu_a11",
+        "t": 1791468060000,
+        "sessionId": "sess-a",
+        "chars": 52
+      },
+      {
+        "toolUseId": "toolu_a12",
+        "t": 1791468120000,
+        "sessionId": "sess-a",
+        "chars": 12000
+      },
+      {
+        "toolUseId": "toolu_a13",
+        "t": 1791468120000,
+        "sessionId": "sess-a",
+        "chars": 37
+      },
+      {
+        "toolUseId": "toolu_a14",
+        "t": 1791468120000,
+        "sessionId": "sess-a",
+        "chars": 41
+      },
+      {
+        "toolUseId": "toolu_a15",
+        "t": 1791468120000,
+        "sessionId": "sess-a",
+        "chars": 27
+      }
+    ],
+    "turns": [],
     "prompts": [
       {
         "id": "u-a1",
@@ -514,7 +611,8 @@
         "t": 1791464460000,
         "name": "Bash",
         "detail": "git",
-        "model": "claude-sonnet-4-6-20260115"
+        "model": "claude-sonnet-4-6-20260115",
+        "group": "git status"
       },
       {
         "key": "m-a1:r-a1:0",
@@ -556,7 +654,8 @@
         "t": 1791464640000,
         "name": "Bash",
         "detail": "sed",
-        "model": "claude-sonnet-4-6-20260115"
+        "model": "claude-sonnet-4-6-20260115",
+        "group": "sed -i"
       },
       {
         "key": "toolu_a7",
@@ -594,6 +693,27 @@
         "removed": 1
       }
     ],
+    "results": [
+      {
+        "toolUseId": "toolu_a1",
+        "t": 1791464580000,
+        "sessionId": "sess-a",
+        "chars": 80
+      },
+      {
+        "toolUseId": "toolu_a2",
+        "t": 1791464700000,
+        "sessionId": "sess-a",
+        "chars": 2
+      },
+      {
+        "toolUseId": "toolu_a1",
+        "t": 1791464880000,
+        "sessionId": "sess-a",
+        "chars": 44
+      }
+    ],
+    "turns": [],
     "prompts": [
       {
         "id": "u-a1",
@@ -686,6 +806,21 @@
         "removed": 0
       }
     ],
+    "results": [
+      {
+        "toolUseId": "toolu_c1",
+        "t": 1788012120000,
+        "sessionId": "sess-c",
+        "chars": 26
+      },
+      {
+        "toolUseId": "toolu_c1",
+        "t": 1788012120000,
+        "sessionId": "sess-c",
+        "chars": 2
+      }
+    ],
+    "turns": [],
     "prompts": [
       {
         "id": "u-c1",
@@ -749,6 +884,8 @@
     "toolUses": [],
     "errors": [],
     "edits": [],
+    "results": [],
+    "turns": [],
     "prompts": [],
     "commands": [],
     "sessions": {
@@ -839,7 +976,8 @@
         "t": 1790578800000,
         "name": "Bash",
         "detail": "npm",
-        "model": "claude-sonnet-4-6-20260115"
+        "model": "claude-sonnet-4-6-20260115",
+        "group": "npm test"
       },
       {
         "key": "toolu_e2",
@@ -853,7 +991,8 @@
         "t": 1791001800000,
         "name": "Bash",
         "detail": "npm",
-        "model": "claude-sonnet-4-6-20260115"
+        "model": "claude-sonnet-4-6-20260115",
+        "group": "npm run"
       },
       {
         "key": "toolu_e4",
@@ -889,6 +1028,33 @@
         "removed": 1
       }
     ],
+    "results": [
+      {
+        "toolUseId": "toolu_e1",
+        "t": null,
+        "sessionId": "sess-e",
+        "chars": 30
+      },
+      {
+        "toolUseId": "toolu_e3",
+        "t": 1791001860000,
+        "sessionId": "sess-e",
+        "chars": 23
+      },
+      {
+        "toolUseId": "toolu_e4",
+        "t": null,
+        "sessionId": "sess-e",
+        "chars": 20
+      },
+      {
+        "toolUseId": "toolu_e2",
+        "t": null,
+        "sessionId": "sess-e",
+        "chars": 2
+      }
+    ],
+    "turns": [],
     "prompts": [],
     "commands": [],
     "sessions": {},
@@ -901,6 +1067,8 @@
     "toolUses": [],
     "errors": [],
     "edits": [],
+    "results": [],
+    "turns": [],
     "prompts": [],
     "commands": [],
     "sessions": {
@@ -922,6 +1090,8 @@
     "toolUses": [],
     "errors": [],
     "edits": [],
+    "results": [],
+    "turns": [],
     "prompts": [],
     "commands": [],
     "sessions": {},

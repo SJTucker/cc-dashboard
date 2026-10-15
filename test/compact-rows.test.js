@@ -155,3 +155,13 @@ test('compactRows keeps agentId and noFinal on a call row, and shares the agentI
   assert.equal(a.calls[0].agentId, 'a1');
   assert.equal(intern.get('a1'), a.calls[0].agentId);
 });
+
+test('compactRows shares the strings of results, turns and Bash groups', () => {
+  const intern = new Map();
+  const a = compactRows({ ...emptyRows(), toolUses: [{ key: 'k1', name: 'Bash', detail: 'sed', model: null, group: 'sed ' + '-n' }], results: [{ toolUseId: 'k1', t: 1, sessionId: 's' + '1', chars: 3, agentId: 'a' + '1' }], turns: [{ id: 't', t: 1, sessionId: 's' + '1', durationMs: 5 }] }, intern);
+  const b = compactRows({ ...emptyRows(), toolUses: [{ key: 'k2', name: 'Bash', detail: 'sed', model: null, group: 'sed -n' }], results: [{ toolUseId: 'k2', t: 1, sessionId: 's1', chars: 3, agentId: 'a1' }], turns: [] }, intern);
+  assert.strictEqual(intern.get('sed -n'), 'sed -n');
+  assert.ok(intern.has('s1') && intern.has('a1'));
+  assert.strictEqual(a.results[0].chars, 3);
+  assert.strictEqual(b.results[0].sessionId, 's1');
+});

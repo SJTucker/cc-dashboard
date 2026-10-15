@@ -33,7 +33,7 @@ test('put then loadAll round-trips an entry, and put replaces the same path', ()
 
   const loaded = store.loadAll().sort((a, b) => (a.path < b.path ? -1 : 1));
   assert.strictEqual(loaded.length, 2);
-  assert.deepStrictEqual(loaded[0], { path: '/p/one.jsonl', size: 20, mtimeMs: 1234.5, version: 1, minT: 100, maxT: 200, onDisk: true, rows: rowsOf({ calls: [{ key: 'k2' }], commands: [] }) });
+  assert.deepStrictEqual(loaded[0], { path: '/p/one.jsonl', size: 20, mtimeMs: 1234.5, version: 1, minT: 100, maxT: 200, onDisk: true, rows: rowsOf({ calls: [{ key: 'k2' }], commands: [], results: [], turns: [] }) });
   assert.strictEqual(loaded[1].onDisk, false);
   store.close();
 });
@@ -183,6 +183,17 @@ test('migration 4 to 5 leaves a call without noFinal as it is', () => {
 test('migration 6 to 7 leaves rows as they are, with no recap on their sessions', () => {
   const old = rowsOf({ sessions: { s1: { title: 't' } } });
   assert.deepStrictEqual(MIGRATIONS[6](old), old);
+});
+
+test('migration 8 to 9 adds empty results and turns and keeps what is there', () => {
+  const old = rowsOf({ calls: [{ key: 'k' }] });
+  const out = MIGRATIONS[8](old);
+  assert.deepStrictEqual(out.results, []);
+  assert.deepStrictEqual(out.turns, []);
+  assert.deepStrictEqual(out.calls, old.calls);
+  const kept = MIGRATIONS[8]({ ...old, results: [{ toolUseId: 'x' }], turns: [{ id: 'y' }] });
+  assert.deepStrictEqual(kept.results, [{ toolUseId: 'x' }]);
+  assert.deepStrictEqual(kept.turns, [{ id: 'y' }]);
 });
 
 test('upgradeRows takes a version 1 row set to EXTRACT_VERSION', () => {

@@ -28,6 +28,7 @@ import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
 import { renderTimeline, resetTimeline } from './panels/timeline.mjs';
 import { renderTools } from './panels/tools.mjs';
+import { renderContextFillers, renderLongestTurns } from './panels/fillers.mjs';
 import { renderUsageCharts } from './panels/usage.mjs';
 
 import { setupCollapsibleRows, setupUsageGroupToggles } from './ui/collapse.mjs';
@@ -289,7 +290,7 @@ function drawSummaryPanels(data) {
     lastSummarySignature = null;
     return;
   }
-  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models]);
+  const signature = JSON.stringify([data.meta, data.summary, data.daily, data.models, data.longestTurns, data.contextFillers?.totals]);
   if (signature === lastSummarySignature) return;
   renderMetaBanner(data.meta);
   const panels = summaryPanelsFor(state.tab);
@@ -298,7 +299,11 @@ function drawSummaryPanels(data) {
   if (panels.includes('models')) renderModelsPanel(data);
   if (panels.includes('modelDaily')) renderModelDailyCharts(data);
   if (panels.includes('attribution')) renderAttribution(data);
-  if (panels.includes('tools') && shown('tools')) renderTools(data.tools || [], data.toolTotals);
+  if (panels.includes('tools') && shown('tools')) {
+    renderTools(data.tools || [], data.toolTotals);
+    renderContextFillers(data.contextFillers);
+    renderLongestTurns(data.longestTurns);
+  }
   lastSummarySignature = signature;
 }
 

@@ -541,3 +541,37 @@ test('cacheCost parts sum to totalCost over main, subagent and unpriced calls', 
   assert.ok(cacheRead > 0 && cacheWrite > 0 && input > 0 && output > 0 && saved > 0);
   close(cacheRead + cacheWrite + input + output, out.summary.totalCost, 'cacheCost sums to totalCost');
 });
+
+test('contextFillers counts a result copied into a resumed session once', () => {
+  const toolUses = [{ key: 'toolu_1', t: at(0), name: 'Bash', detail: 'sed', model: null, group: 'sed -n' }];
+  const results = [{ toolUseId: 'toolu_1', t: at(0), sessionId: 's1', chars: 40 }];
+  const data = run([rowSet({ toolUses, results }), rowSet({ toolUses, results })]);
+  assert.deepStrictEqual(data.contextFillers.rows.map((r) => [r.group, r.calls, r.chars]), [['sed -n', 1, 40]]);
+});
+
+test('contextFillers takes the group from a later copy when the first copy has none', () => {
+  const use = { key: 'toolu_1', t: at(0), name: 'Bash', detail: 'sed', model: null };
+  const results = [{ toolUseId: 'toolu_1', t: at(0), sessionId: 's1', chars: 40 }];
+  const data = run([rowSet({ toolUses: [use], results }), rowSet({ toolUses: [{ ...use, group: 'sed -n' }], results })]);
+  assert.strictEqual(data.contextFillers.rows[0].group, 'sed -n');
+});
+
+test('contextFillers leaves out results before the range', () => {
+  const toolUses = [{ key: 'toolu_1', t: at(10), name: 'Read', detail: '/a', model: null }];
+  const results = [{ toolUseId: 'toolu_1', t: at(10), sessionId: 's1', chars: 40 }];
+  const data = run([rowSet({ toolUses, results, maxT: at(10) })], { days: 7 });
+  assert.deepStrictEqual(data.contextFillers.rows, []);
+});
+
+test('a turn copied into a resumed session counts once, and efficiency.turns is sorted by time', () => {
+  const turns = [
+    { id: 'td2', t: at(0, 11), sessionId: 's1', durationMs: 5000 },
+    { id: 'td1', t: at(0, 10), sessionId: 's1', durationMs: 9000 },
+  ];
+  const data = run([rowSet({ turns }), rowSet({ turns })]);
+  assert.deepStrictEqual(data.efficiency.turns, [
+    { t: at(0, 10), sessionId: 's1', durationMs: 9000 },
+    { t: at(0, 11), sessionId: 's1', durationMs: 5000 },
+  ]);
+  assert.deepStrictEqual(data.longestTurns.map((x) => x.durationMs), [9000, 5000]);
+});

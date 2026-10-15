@@ -33,6 +33,14 @@ Same machine, a copy of the real database over 44.5 days: 2,022 transcripts on d
 
 Compaction (`lib/compact-rows.js`) replaces each call's raw `usage` object with the seven fields `lib/aggregate.js` and `lib/pricing.js` read, and shares one string instance per repeated session id, model, version and tool name. `loadAll()` in `lib/store.js` and `persist()` in `lib/rowstore.js` apply it to rows in memory. The database keeps the full `usage` object, because it is the only copy once Claude Code deletes a transcript. `lib/extract.js` is unchanged and `EXTRACT_VERSION` did not change.
 
+## Measured on 2026-10-15, extract version 9
+
+Extract version 9 adds `results` rows (the length in characters of each tool result) and `turns` rows (each main-loop turn's duration).
+
+- Each `results` row adds about 240 bytes after `compactRows`. At 70,000 tool results that is about 17 MB, about 45% more than the 37.4 MB of loaded rows measured on 2026-10-11.
+- That is still far below the 400 MB loaded row heap threshold.
+- `toolUseId` in a `results` row is a separate string from the `key` of the matching tool use. Sharing one string instance would save about 3.5 MB.
+
 ## Second trigger: the stat pass on each refresh
 
 `statPass()` in `lib/rowstore.js` calls `fs.statSync` on every transcript that

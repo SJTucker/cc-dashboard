@@ -514,6 +514,215 @@
         }
       ]
     },
+    "contextFillers": {
+      "rows": [
+        {
+          "tool": "Agent",
+          "group": "Explore",
+          "calls": 1,
+          "chars": 12000,
+          "max": 12000,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 12000
+        },
+        {
+          "tool": "Edit",
+          "group": "/repo/b.js",
+          "calls": 1,
+          "chars": 449,
+          "max": 449,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 449
+        },
+        {
+          "tool": "Bash",
+          "group": "git status",
+          "calls": 1,
+          "chars": 80,
+          "max": 80,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 80
+        },
+        {
+          "tool": "WebFetch",
+          "group": "example.com",
+          "calls": 1,
+          "chars": 66,
+          "max": 66,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 66
+        },
+        {
+          "tool": "WebFetch",
+          "group": "WebFetch",
+          "calls": 1,
+          "chars": 52,
+          "max": 52,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 52
+        },
+        {
+          "tool": "unknown",
+          "group": "unknown",
+          "calls": 1,
+          "chars": 41,
+          "max": 41,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 41
+        },
+        {
+          "tool": "Skill",
+          "group": "tdd",
+          "calls": 1,
+          "chars": 37,
+          "max": 37,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 37
+        },
+        {
+          "tool": "Bash",
+          "group": "npm test",
+          "calls": 1,
+          "chars": 30,
+          "max": 30,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 30
+        },
+        {
+          "tool": "Bash",
+          "group": "ls",
+          "calls": 1,
+          "chars": 27,
+          "max": 27,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 27
+        },
+        {
+          "tool": "Edit",
+          "group": "/old/c.js",
+          "calls": 1,
+          "chars": 26,
+          "max": 26,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 26
+        },
+        {
+          "tool": "Bash",
+          "group": "npm run",
+          "calls": 1,
+          "chars": 23,
+          "max": 23,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 23
+        },
+        {
+          "tool": "Read",
+          "group": "/e.md",
+          "calls": 1,
+          "chars": 20,
+          "max": 20,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 20
+        },
+        {
+          "tool": "Edit",
+          "group": "Edit",
+          "calls": 1,
+          "chars": 9,
+          "max": 9,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 9
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/new.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/empty.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/two.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Bash",
+          "group": "sed -i",
+          "calls": 1,
+          "chars": 4,
+          "max": 4,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 4
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/odd.txt",
+          "calls": 1,
+          "chars": 3,
+          "max": 3,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 3
+        },
+        {
+          "tool": "Edit",
+          "group": "/repo/a.js",
+          "calls": 1,
+          "chars": 2,
+          "max": 2,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 2
+        },
+        {
+          "tool": "Edit",
+          "group": "/e.js",
+          "calls": 1,
+          "chars": 2,
+          "max": 2,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 2
+        }
+      ],
+      "totals": {
+        "chars": 12892,
+        "results": 20
+      }
+    },
+    "longestTurns": [],
     "summary": {
       "totalCost": 0.18534,
       "totalTokens": 273192,
@@ -2678,6 +2887,7 @@
           "sessionId": "sess-c"
         }
       ],
+      "turns": [],
       "linesBySession": {
         "sess-a": {
           "added": 6,
@@ -3237,6 +3447,205 @@
         }
       ]
     },
+    "contextFillers": {
+      "rows": [
+        {
+          "tool": "Agent",
+          "group": "Explore",
+          "calls": 1,
+          "chars": 12000,
+          "max": 12000,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 12000
+        },
+        {
+          "tool": "Edit",
+          "group": "/repo/b.js",
+          "calls": 1,
+          "chars": 449,
+          "max": 449,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 449
+        },
+        {
+          "tool": "Bash",
+          "group": "git status",
+          "calls": 1,
+          "chars": 80,
+          "max": 80,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 80
+        },
+        {
+          "tool": "WebFetch",
+          "group": "example.com",
+          "calls": 1,
+          "chars": 66,
+          "max": 66,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 66
+        },
+        {
+          "tool": "WebFetch",
+          "group": "WebFetch",
+          "calls": 1,
+          "chars": 52,
+          "max": 52,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 52
+        },
+        {
+          "tool": "unknown",
+          "group": "unknown",
+          "calls": 1,
+          "chars": 41,
+          "max": 41,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 41
+        },
+        {
+          "tool": "Skill",
+          "group": "tdd",
+          "calls": 1,
+          "chars": 37,
+          "max": 37,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 37
+        },
+        {
+          "tool": "Bash",
+          "group": "npm test",
+          "calls": 1,
+          "chars": 30,
+          "max": 30,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 30
+        },
+        {
+          "tool": "Bash",
+          "group": "ls",
+          "calls": 1,
+          "chars": 27,
+          "max": 27,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 27
+        },
+        {
+          "tool": "Bash",
+          "group": "npm run",
+          "calls": 1,
+          "chars": 23,
+          "max": 23,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 23
+        },
+        {
+          "tool": "Read",
+          "group": "/e.md",
+          "calls": 1,
+          "chars": 20,
+          "max": 20,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 20
+        },
+        {
+          "tool": "Edit",
+          "group": "Edit",
+          "calls": 1,
+          "chars": 9,
+          "max": 9,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 9
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/new.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/empty.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/two.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Bash",
+          "group": "sed -i",
+          "calls": 1,
+          "chars": 4,
+          "max": 4,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 4
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/odd.txt",
+          "calls": 1,
+          "chars": 3,
+          "max": 3,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 3
+        },
+        {
+          "tool": "Edit",
+          "group": "/repo/a.js",
+          "calls": 1,
+          "chars": 2,
+          "max": 2,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 2
+        },
+        {
+          "tool": "Edit",
+          "group": "/e.js",
+          "calls": 1,
+          "chars": 2,
+          "max": 2,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 2
+        }
+      ],
+      "totals": {
+        "chars": 12866,
+        "results": 19
+      }
+    },
+    "longestTurns": [],
     "summary": {
       "totalCost": 0.18129,
       "totalTokens": 272202,
@@ -4986,6 +5395,7 @@
           "sessionId": "sess-b"
         }
       ],
+      "turns": [],
       "linesBySession": {
         "sess-a": {
           "added": 6,
@@ -5536,6 +5946,185 @@
         }
       ]
     },
+    "contextFillers": {
+      "rows": [
+        {
+          "tool": "Agent",
+          "group": "Explore",
+          "calls": 1,
+          "chars": 12000,
+          "max": 12000,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 12000
+        },
+        {
+          "tool": "Edit",
+          "group": "/repo/b.js",
+          "calls": 1,
+          "chars": 449,
+          "max": 449,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 449
+        },
+        {
+          "tool": "Bash",
+          "group": "git status",
+          "calls": 1,
+          "chars": 80,
+          "max": 80,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 80
+        },
+        {
+          "tool": "WebFetch",
+          "group": "example.com",
+          "calls": 1,
+          "chars": 66,
+          "max": 66,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 66
+        },
+        {
+          "tool": "WebFetch",
+          "group": "WebFetch",
+          "calls": 1,
+          "chars": 52,
+          "max": 52,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 52
+        },
+        {
+          "tool": "unknown",
+          "group": "unknown",
+          "calls": 1,
+          "chars": 41,
+          "max": 41,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 41
+        },
+        {
+          "tool": "Skill",
+          "group": "tdd",
+          "calls": 1,
+          "chars": 37,
+          "max": 37,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 37
+        },
+        {
+          "tool": "Bash",
+          "group": "ls",
+          "calls": 1,
+          "chars": 27,
+          "max": 27,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 27
+        },
+        {
+          "tool": "Bash",
+          "group": "npm run",
+          "calls": 1,
+          "chars": 23,
+          "max": 23,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 23
+        },
+        {
+          "tool": "Read",
+          "group": "/e.md",
+          "calls": 1,
+          "chars": 20,
+          "max": 20,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 20
+        },
+        {
+          "tool": "Edit",
+          "group": "Edit",
+          "calls": 1,
+          "chars": 9,
+          "max": 9,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 9
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/new.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/empty.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/two.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Bash",
+          "group": "sed -i",
+          "calls": 1,
+          "chars": 4,
+          "max": 4,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 4
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/odd.txt",
+          "calls": 1,
+          "chars": 3,
+          "max": 3,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 3
+        },
+        {
+          "tool": "Edit",
+          "group": "/repo/a.js",
+          "calls": 1,
+          "chars": 2,
+          "max": 2,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 2
+        }
+      ],
+      "totals": {
+        "chars": 12834,
+        "results": 17
+      }
+    },
+    "longestTurns": [],
     "summary": {
       "totalCost": 0.17976,
       "totalTokens": 271828,
@@ -7152,6 +7741,7 @@
           "sessionId": "sess-b"
         }
       ],
+      "turns": [],
       "linesBySession": {
         "sess-a": {
           "added": 6,
@@ -7660,6 +8250,165 @@
         }
       ]
     },
+    "contextFillers": {
+      "rows": [
+        {
+          "tool": "Agent",
+          "group": "Explore",
+          "calls": 1,
+          "chars": 12000,
+          "max": 12000,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 12000
+        },
+        {
+          "tool": "Edit",
+          "group": "/repo/b.js",
+          "calls": 1,
+          "chars": 449,
+          "max": 449,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 449
+        },
+        {
+          "tool": "Bash",
+          "group": "git status",
+          "calls": 1,
+          "chars": 80,
+          "max": 80,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 80
+        },
+        {
+          "tool": "WebFetch",
+          "group": "example.com",
+          "calls": 1,
+          "chars": 66,
+          "max": 66,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 66
+        },
+        {
+          "tool": "WebFetch",
+          "group": "WebFetch",
+          "calls": 1,
+          "chars": 52,
+          "max": 52,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 52
+        },
+        {
+          "tool": "unknown",
+          "group": "unknown",
+          "calls": 1,
+          "chars": 41,
+          "max": 41,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 41
+        },
+        {
+          "tool": "Skill",
+          "group": "tdd",
+          "calls": 1,
+          "chars": 37,
+          "max": 37,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 37
+        },
+        {
+          "tool": "Bash",
+          "group": "ls",
+          "calls": 1,
+          "chars": 27,
+          "max": 27,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 27
+        },
+        {
+          "tool": "Edit",
+          "group": "Edit",
+          "calls": 1,
+          "chars": 9,
+          "max": 9,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 9
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/new.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/empty.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/two.txt",
+          "calls": 1,
+          "chars": 7,
+          "max": 7,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 7
+        },
+        {
+          "tool": "Bash",
+          "group": "sed -i",
+          "calls": 1,
+          "chars": 4,
+          "max": 4,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 4
+        },
+        {
+          "tool": "Write",
+          "group": "/repo/odd.txt",
+          "calls": 1,
+          "chars": 3,
+          "max": 3,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 3
+        },
+        {
+          "tool": "Edit",
+          "group": "/repo/a.js",
+          "calls": 1,
+          "chars": 2,
+          "max": 2,
+          "rereads": 0,
+          "sessions": 1,
+          "median": 2
+        }
+      ],
+      "totals": {
+        "chars": 12791,
+        "results": 15
+      }
+    },
+    "longestTurns": [],
     "summary": {
       "totalCost": 0.15165,
       "totalTokens": 218585,
@@ -9432,6 +10181,7 @@
           "sessionId": "sess-a"
         }
       ],
+      "turns": [],
       "linesBySession": {
         "sess-a": {
           "added": 6,

@@ -14,8 +14,6 @@ then on.
 | [Same-week model comparison](same-week-model-comparison.md) | Open: compare two models used in one week; minimum calls, mixed-model prompts and where it shows open |
 | [Measure the earlier-suggestions prompt](measure-earlier-suggestions.md) | Open: check around 2026-10-27 whether sending earlier suggestions cut repeats without cutting useful suggestions |
 | [Setup changes: long-history labels](setup-changes-long-history-labels.md) | Open: Monday date labels collide below about 2.3px per day and weekly lane counts below about 3.5px per day; a month-start step and month cells are the possible fix |
-| [Where the time goes](turn-durations.md) | Open: read the unused `turn_duration` lines for model hours per day and turn length; subagent coverage and tool time open |
-| [What fills the context](context-fillers.md) | Open: largest tool results and repeated reads across the range; result size storage and grouping open |
 | [Cost by plugin](plugin-cost-rows.md) | Open: a Plugins list in Where usage goes from the unused `attributionPlugin` field, and MCP servers from `attributionMcpServer`; invocation counts and subagent calls open |
 | [Costliest prompts](costliest-prompts.md) | Open: rank prompts by cost with a drill-down; storing prompt text open |
 | [Guard: rows when a transcript loses lines](transcript-rewrites.md) | Open: the rewrite report was not reproduced on Claude Code 2.1.296; the server logs a warning when a re-read file loses stored call keys; whether to merge rows open |
