@@ -4,6 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { aggregate } = require('../lib/aggregate');
 const { outputRate, costForUsage } = require('../lib/pricing');
+const { localDateStr } = require('../lib/dates');
 
 // A fixed "now" in local time, so a range's cutoff does not depend on when the suite runs.
 const NOW = new Date(2026, 9, 8, 12, 0, 0).getTime();
@@ -574,4 +575,41 @@ test('a turn copied into a resumed session counts once, and efficiency.turns is 
     { t: at(0, 11), sessionId: 's1', durationMs: 5000 },
   ]);
   assert.deepStrictEqual(data.longestTurns.map((x) => x.durationMs), [9000, 5000]);
+});
+
+test('edits add their lines to their day, per repo, with unknown for no repo', () => {
+  const entry = rowSet({
+    edits: [
+      { toolUseId: 'a', t: at(1), sessionId: 's1', added: 5, removed: 2, repo: '/r/one' },
+      { toolUseId: 'b', t: at(1, 15), sessionId: 's1', added: 1, removed: 0, repo: '/r/two' },
+      { toolUseId: 'c', t: at(0), sessionId: 's1', added: 3, removed: 4, repo: null },
+      { toolUseId: 'd', t: at(0), sessionId: 's1', added: 1, removed: 1 },
+    ],
+  });
+  const byDate = Object.fromEntries(run([entry], { days: 7 }).daily.map((d) => [d.date, d]));
+
+  const yesterday = byDate[localDateStr(new Date(at(1)))];
+  assert.deepStrictEqual([yesterday.linesAdded, yesterday.linesRemoved], [6, 2]);
+  assert.deepStrictEqual(yesterday.linesByRepo, { '/r/one': { added: 5, removed: 2 }, '/r/two': { added: 1, removed: 0 } });
+  const today = byDate[localDateStr(new Date(at(0)))];
+  assert.deepStrictEqual(today.linesByRepo, { unknown: { added: 4, removed: 5 } });
+});
+
+test('a day with edits and no calls gets a bucket, and filled days have zero lines', () => {
+  const entry = rowSet({ edits: [{ toolUseId: 'a', t: at(2), sessionId: 's1', added: 1, removed: 0, repo: '/r' }] });
+  const daily = run([entry], { days: 7 }).daily;
+
+  assert.strictEqual(daily[0].date, localDateStr(new Date(at(2))));
+  assert.strictEqual(daily[0].linesAdded, 1);
+  assert.deepStrictEqual(daily.at(-1).linesByRepo, {});
+  assert.strictEqual(daily.at(-1).linesAdded, 0);
+});
+
+test('an edit with no timestamp counts for its session but adds no bucket', () => {
+  const entry = rowSet({ edits: [{ toolUseId: 'a', t: null, sessionId: 's1', added: 2, removed: 0, repo: '/r' }] });
+  const data = run([entry], { days: 7 });
+
+  assert.deepStrictEqual(data.efficiency.linesBySession.s1, { added: 2, removed: 0 });
+  assert.ok(data.daily.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date)));
+  assert.strictEqual(data.daily.reduce((sum, d) => sum + d.linesAdded, 0), 0);
 });
