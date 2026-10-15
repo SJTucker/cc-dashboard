@@ -102,3 +102,19 @@ test('projectFolderOf takes the folder under projects, for main and subagent tra
   assert.strictEqual(projectFolderOf('/u/.claude/projects/-u-code-app/abc/subagents/agent-1.jsonl'), '-u-code-app');
   assert.strictEqual(projectFolderOf('/u/elsewhere/abc.jsonl'), null);
 });
+
+test('findRepo does not remember a null, so a folder that later gets a .git resolves', (t) => {
+  const root = base(t);
+  const folder = path.join(root, 'fresh');
+  fs.mkdirSync(folder);
+  assert.strictEqual(findRepo(folder), null);
+  fs.mkdirSync(path.join(folder, '.git'));
+  assert.strictEqual(findRepo(folder), folder);
+});
+
+test('findRepo maps a deleted worktrunk folder of a repo whose name has a dot', (t) => {
+  const root = base(t);
+  const repo = path.join(root, 'code', 'next.js');
+  fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+  assert.strictEqual(findRepo(path.join(root, 'code', 'next.js.feature', 'src')), repo);
+});
