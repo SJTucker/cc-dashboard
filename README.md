@@ -13,7 +13,7 @@ and when you click Check prices. The optional Claude Code mod in `mod/` also fet
 Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
 does and doesn't do" below.
 
-The page has two tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline, Live sessions and Models. The Analysis tab shows 7d, 30d, 90d and All, picked with the range picker. The URL hash `#now` or `#analysis` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on both tabs. Cost today and Tokens today each add a 7d total.
+The page has two tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline, Live sessions and Models. The Analysis tab shows 7d, 30d, 90d and All, picked with the range picker, with panels that include Lines of code. The URL hash `#now` or `#analysis` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on both tabs. Cost today and Tokens today each add a 7d total.
 
 ![The Now tab: Plan usage, Where usage goes and Session timeline](docs/screenshots/overview.png)
 
@@ -47,6 +47,8 @@ Daily cost, daily tokens, cumulative cost, and daily tokens split into input, ou
 cache write and cache read:
 
 ![Daily cost, Daily tokens, Cumulative cost and Daily tokens by type charts over 30 days](docs/screenshots/usage-charts.png)
+
+Lines of code, below those charts on the Analysis tab, draws the lines added above a zero line and the lines deleted below it, per day. Each of the 4 repos with the most lines changed in the range gets one line for added and one for deleted. Each repo's two lines share its colour and dash pattern, and each repo has its own dash pattern. The end label of the added line is in the repo's colour. The other repos are summed into Other. A worktree counts as its main checkout. Edits to files outside any repo, and edits from deleted transcripts whose repo cannot be found, show as No repo. The panel counts the lines added and removed by Edit and Write results, subagents included. A Write of a new file counts all its lines as added. A Write over an existing file counts only the lines that differ. Edits made through Bash, such as `sed -i`, are not counted.
 
 The Models panel, at the bottom of the Now tab, shows today's share bar of each model's tokens or cost (the Tokens and Cost buttons in its head pick the measure), with the model table below it: tokens, share, dollars per million tokens and the thinking share of output. Under every chart a legend row shows each series with an icon drawn like its mark. A long list shows its first rows and a Show all button in place, so no panel scrolls inside the page.
 
@@ -653,6 +655,7 @@ lib/price-fetch.js     Fetches and parses Anthropic's pricing page (merging the 
 lib/price-check.js     One price check: fetch, parse, compare, apply, and date the change
 lib/price-store.js     Applied price history and the last check date in prices.json
 lib/pricing.js         Built-in price table, dated price versions, cost calculation
+lib/repo.js            Resolves a file path to the main checkout of the repo it sits in, so a worktree counts as its repo
 lib/review-db.js       Opens transcripts.db for reviews and imports the old review files once
 lib/review.js          Session reviews: transcript digest, Haiku prompt and reply parsing, claims and results in transcripts.db
 lib/rowstore.js        Keeps each transcript's rows in memory, re-reads a transcript when it changes or `EXTRACT_VERSION` changes (newest first, on worker threads when many are out of date), lets a range wait only for the files it needs, and stores settled ones
@@ -698,6 +701,7 @@ public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and r
 public/charts/heatmap.mjs  drawActivityHeatmap: cost by weekday and hour
 public/charts/legend.mjs  legendRow and its icons: the one legend pattern, each icon drawn like its mark
 public/charts/line.mjs The four token types on a log-axis line chart, and the token legend
+public/charts/mirror-line.mjs  drawMirroredLineChart: added lines above a zero line and deleted lines below it, one dashed pair per repo, with end labels; and drawLinesLegend
 public/charts/palette.mjs  Series colours and textures, and the SVG pattern definitions
 public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, window bar, daily metric chart with session dots, and its legend
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar, and drawShareBar, the share bar the Models panel also uses
@@ -709,6 +713,7 @@ public/panels/cards.mjs  The Analysis tab's summary cards: two rows of cards: mo
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
 public/panels/fillers.mjs  The What fills the context and Longest turns tables in the Tool calls panel
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
+public/panels/lines.mjs  The Lines of code panel: repoSeries picks the top repos and sums the rest into Other, repoLabels names them, renderLinesChart draws the chart and legend
 public/panels/models.mjs  The Models panel (share bar and table) and the model daily charts
 public/panels/prices.mjs  The prices note in the Models panel and the Check prices button; uses the /api/prices routes
 public/price-lines.mjs  Text for the prices note and the lines a price check prints

@@ -30,6 +30,7 @@ import { renderTimeline, resetTimeline } from './panels/timeline.mjs';
 import { renderTools } from './panels/tools.mjs';
 import { renderContextFillers, renderLongestTurns } from './panels/fillers.mjs';
 import { renderUsageCharts } from './panels/usage.mjs';
+import { renderLinesChart } from './panels/lines.mjs';
 
 import { setupCollapsibleRows, setupUsageGroupToggles } from './ui/collapse.mjs';
 import { setupHiding } from './ui/hidden.mjs';
@@ -296,6 +297,7 @@ function drawSummaryPanels(data) {
   const panels = summaryPanelsFor(state.tab);
   if (panels.includes('cards')) renderCards(data);
   if (panels.includes('usage')) renderUsageCharts(data);
+  if (panels.includes('lines')) renderLinesChart(data);
   if (panels.includes('models')) renderModelsPanel(data);
   if (panels.includes('modelDaily')) renderModelDailyCharts(data);
   if (panels.includes('attribution')) renderAttribution(data);

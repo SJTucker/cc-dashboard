@@ -341,28 +341,32 @@
         "t": 1791464700000,
         "sessionId": "sess-a",
         "added": 2,
-        "removed": 1
+        "removed": 1,
+        "repo": null
       },
       {
         "toolUseId": "toolu_a3",
         "t": 1791464700000,
         "sessionId": "sess-a",
         "added": 2,
-        "removed": 0
+        "removed": 0,
+        "repo": null
       },
       {
         "toolUseId": "toolu_a4",
         "t": 1791464700000,
         "sessionId": "sess-a",
         "added": 0,
-        "removed": 0
+        "removed": 0,
+        "repo": null
       },
       {
         "toolUseId": "toolu_a5",
         "t": 1791464700000,
         "sessionId": "sess-a",
         "added": 2,
-        "removed": 0
+        "removed": 0,
+        "repo": null
       }
     ],
     "results": [
@@ -690,7 +694,8 @@
         "t": 1791464700000,
         "sessionId": "sess-a",
         "added": 2,
-        "removed": 1
+        "removed": 1,
+        "repo": null
       }
     ],
     "results": [
@@ -803,7 +808,8 @@
         "t": 1788012120000,
         "sessionId": "sess-c",
         "added": 1,
-        "removed": 0
+        "removed": 0,
+        "repo": null
       }
     ],
     "results": [
@@ -1025,7 +1031,8 @@
         "t": null,
         "sessionId": "sess-e",
         "added": 1,
-        "removed": 1
+        "removed": 1,
+        "repo": null
       }
     ],
     "results": [

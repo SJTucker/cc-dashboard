@@ -8,6 +8,7 @@ const path = require('path');
 const { openStore, upgradeRows, MIGRATIONS } = require('../lib/store');
 const { getStorePath, SCHEMA_VERSION, openDatabase, isBusy } = require('../lib/db');
 const sqlite = require('../lib/sqlite');
+const { encodeFolder } = require('../lib/repo');
 
 const tmpDir = () => helpers.tmpDir(null, 'store');
 
@@ -194,6 +195,32 @@ test('migration 8 to 9 adds empty results and turns and keeps what is there', ()
   const kept = MIGRATIONS[8]({ ...old, results: [{ toolUseId: 'x' }], turns: [{ id: 'y' }] });
   assert.deepStrictEqual(kept.results, [{ toolUseId: 'x' }]);
   assert.deepStrictEqual(kept.turns, [{ id: 'y' }]);
+});
+
+test('migration 9 to 10 gives edit rows without a repo the repo of their transcript folder', (t) => {
+  const root = fs.realpathSync(helpers.tmpDir(t, 'store-repo'));
+  const main = path.join(root, 'code', 'app');
+  fs.mkdirSync(path.join(main, '.git'), { recursive: true });
+  const folder = encodeFolder(path.join(main, '.claude', 'worktrees', 'gone'));
+  const transcript = path.join(root, 'cfg', 'projects', folder, 'abc.jsonl');
+  const old = rowsOf({ edits: [{ toolUseId: 'a', t: 1, sessionId: 's', added: 1, removed: 0 }, { toolUseId: 'b', t: 2, sessionId: 's', added: 2, removed: 0, repo: '/kept' }] });
+
+  const out = MIGRATIONS[9](old, transcript);
+
+  assert.deepStrictEqual(out.edits.map((e) => e.repo), [main, '/kept']);
+  assert.ok(!('repo' in old.edits[0]), 'the input is not changed');
+});
+
+test('migration 9 to 10 gives a null repo when the transcript path has no projects folder', () => {
+  const old = rowsOf({ edits: [{ toolUseId: 'a', t: 1, sessionId: 's', added: 1, removed: 0 }] });
+  assert.deepStrictEqual(MIGRATIONS[9](old, '/nowhere/abc.jsonl').edits[0].repo, null);
+});
+
+test('upgradeRows passes the stored path to each migration', () => {
+  const { EXTRACT_VERSION } = require('../lib/extract');
+  const seen = [];
+  upgradeRows({ ok: true }, EXTRACT_VERSION - 1, { [EXTRACT_VERSION - 1]: (rows, p) => (seen.push(p), rows) }, '/x/projects/f/a.jsonl');
+  assert.deepStrictEqual(seen, ['/x/projects/f/a.jsonl']);
 });
 
 test('upgradeRows takes a version 1 row set to EXTRACT_VERSION', () => {

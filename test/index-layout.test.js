@@ -47,7 +47,7 @@ test('the Analysis tab holds the analysis panels in the spec order', () => {
   assert.deepStrictEqual(headings(tabMarkup('tabAnalysis')), [
     'Session reviews',
     'Daily cost', 'Daily tokens',
-    'Cumulative cost', 'Daily tokens by type · log',
+    'Cumulative cost', 'Daily tokens by type · log', 'Lines of code',
     'Daily tokens by model', 'Daily cost by model',
     'When usage happens',
     'Tool calls',
