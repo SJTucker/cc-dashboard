@@ -264,7 +264,7 @@ test('GET /api/changes returns sessions and before/after windows per marker', as
   assert.strictEqual(m.before.rtk, null, 'no rtk database in the fixture');
   assert.deepStrictEqual(
     Object.keys(data.daily).sort(),
-    ['bashMedian', 'bashP90', 'cacheHit', 'callsPerPrompt', 'costPerPrompt', 'sessionStart', 'thinkingShare'],
+    ['bashMedian', 'bashP90', 'cacheHit', 'callsPerPrompt', 'costPerPrompt', 'sessionStart', 'thinkingShare', 'turnDuration'],
     'no rtk database in the fixture, so no rtk series'
   );
   assert.deepStrictEqual(data.daily.sessionStart.map((d) => d.value), [30000, 40000, 50000]);
