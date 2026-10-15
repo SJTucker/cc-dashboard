@@ -48,7 +48,7 @@ cache write and cache read:
 
 ![Daily cost, Daily tokens, Cumulative cost and Daily tokens by type charts over 30 days](docs/screenshots/usage-charts.png)
 
-Lines of code, below those charts on the Analysis tab, draws the lines added above a zero line and the lines deleted below it, per day. Each of the 4 repos with the most lines changed in the range gets one line for added and one for deleted. Each repo's two lines share its colour and dash pattern, and each repo has its own dash pattern. The end label of the added line is in the repo's colour. The other repos are summed into Other. A worktree counts as its main checkout. Edits to files outside any repo, and edits from deleted transcripts whose repo cannot be found, show as No repo. The panel counts the lines added and removed by Edit and Write results, subagents included. A Write of a new file counts all its lines as added. A Write over an existing file counts only the lines that differ. Edits made through Bash, such as `sed -i`, are not counted.
+Lines of code, below those charts on the Analysis tab, draws the lines added above a zero line and the lines deleted below it, per day. Each of the 4 repos with the most lines changed in the range gets one line for added and one for deleted. Each repo's two lines share its colour and dash pattern, and each repo has its own dash pattern. The other repos are summed into Other. A worktree counts as its main checkout. Edits to files outside any repo, and edits from deleted transcripts whose repo cannot be found, show as No repo. The panel counts the lines added and removed by Edit and Write results, subagents included. A Write of a new file counts all its lines as added. A Write over an existing file counts only the lines that differ. Edits made through Bash, such as `sed -i`, are not counted. Edits to session scratchpad files, memory files and the global `CLAUDE.md` are not counted.
 
 The Models panel, at the bottom of the Now tab, shows today's share bar of each model's tokens or cost (the Tokens and Cost buttons in its head pick the measure), with the model table below it: tokens, share, dollars per million tokens and the thinking share of output. Under every chart a legend row shows each series with an icon drawn like its mark. A long list shows its first rows and a Show all button in place, so no panel scrolls inside the page.
 
@@ -130,7 +130,8 @@ recently. It makes no network request of its own.
   started yesterday shows fewer prompts, less cost and fewer lines than over its
   whole life. Lines counts the lines added and removed by Edit and Write calls,
   subagents included. Edits made through Bash, such as `sed -i`, are not counted.
-  Hover a Cost today value to see the snapshot's own counter, "Session total since
+  Edits to session scratchpad files, memory files and the global `CLAUDE.md` are not
+  counted. Hover a Cost today value to see the snapshot's own counter, "Session total since
   it started". That counter is Claude Code's own and includes calls that write no
   transcript line, such as session titles. So it is usually the higher of the two.
   Cost today can be higher while subagents run. Subagent calls reach the
@@ -701,7 +702,7 @@ public/charts/hbars.mjs  Horizontal bar lists for skills, subagents, tools and r
 public/charts/heatmap.mjs  drawActivityHeatmap: cost by weekday and hour
 public/charts/legend.mjs  legendRow and its icons: the one legend pattern, each icon drawn like its mark
 public/charts/line.mjs The four token types on a log-axis line chart, and the token legend
-public/charts/mirror-line.mjs  drawMirroredLineChart: added lines above a zero line and deleted lines below it, one dashed pair per repo, with end labels; and drawLinesLegend
+public/charts/mirror-line.mjs  drawMirroredLineChart: added lines above a zero line and deleted lines below it, one dashed pair per repo; and drawLinesLegend
 public/charts/palette.mjs  Series colours and textures, and the SVG pattern definitions
 public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, window bar, daily metric chart with session dots, and its legend
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar, and drawShareBar, the share bar the Models panel also uses
