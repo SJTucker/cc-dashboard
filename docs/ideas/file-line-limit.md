@@ -67,7 +67,8 @@ up and removed), `README.md` (121), `public/style.css` (113, since split up),
   `Read` calls by `file_path`, including the subagent transcripts under
   `<session id>/subagents/`, plus `sed -n`, `cat` and `head` runs in `Bash`. A first
   count over the main transcripts alone found few Reads, because most reads happen
-  in subagents or through `sed`. The [What fills the context](context-fillers.md)
-  idea covers repeated reads too and may share the work.
+  in subagents or through `sed`. The What fills the context table in the Tool calls panel now ranks Read results
+  per file and `sed -n` runs as one command group, subagents included, with a
+  Sessions and a Re-reads column.
 - **Order.** Rank by reads × size once reads are counted. Until then, start with
   `register.ts` (`style.css` is already split into `public/css/`), which is large and often edited.

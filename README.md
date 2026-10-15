@@ -466,6 +466,24 @@ model ran in. Hover it for the count per cause. A model with fewer than 20 calls
 shows "–" for both rates. Tool calls stored from transcripts Claude Code has since
 deleted take the model of the response before them.
 
+Under the breakdown, What fills the context ranks tool results by the characters
+they put into the context, top 20. A row is one file for Read, Edit and Write, and
+one command group for Bash: the program and its first argument, such as `sed -n` or
+`git diff`, after any leading `cd <dir> &&`. Other tools group by their detail or
+their name. Sessions counts the sessions a row appears in, so a file read in every
+session stands out. Re-reads counts Reads of a file that the same thread (the main
+loop or one subagent) had already read with no edit of it in between. A re-read of
+another part of the file counts too. Sizes are characters of the result text the
+model saw, subagent results included. A result Claude Code saved to a separate file
+counts only the preview it left in the transcript. Transcripts Claude Code deleted
+before sizes were stored have no sizes.
+
+Beside it, Longest turns lists the 15 longest main-loop turns in the range, from the
+`turn_duration` line Claude Code writes when a turn ends. Each row shows the session,
+when the turn started, its duration, and the API calls and cost from the prompt to
+the end of the turn. A turn's duration includes tool time and time spent waiting on
+you. It leaves out a background subagent that kept running after the turn ended.
+
 ![Tool calls panel with calls per tool, Bash commands, error causes and the model table](docs/screenshots/tool-calls.png)
 
 ### Hiding panels
@@ -521,6 +539,9 @@ windows, so its numbers do not change with the range.
   CLAUDE.md, skill list, hook output). Bars are the daily median and dots are
   sessions, shaped by model. The task barely affects this number, so a step up or
   down points to a setup change or a Claude Code release.
+- **Turn duration, median.** The median length of a main-loop turn, from Claude
+  Code's `turn_duration` lines: prompt to turn end, tool time and waits on you
+  included. A median per turn is not affected by sessions that run at the same time.
 
 Plugin installs, the first use of a new model, Claude Code releases that could
 change usage, and edits to your setup files are marked automatically. The releases
@@ -548,7 +569,9 @@ days either side, the panel lists it, and the numbers cover both.
 
 Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default). The
 dashboard stores the usage rows of each transcript last modified before today's local
-midnight in `~/.claude/cc-dashboard/transcripts.db`. The All range, the sticky bar's Record day
+midnight in `~/.claude/cc-dashboard/transcripts.db`. The stored rows hold each tool
+result's length in characters and each turn's duration, but no result text. The All
+range, the sticky bar's Record day
 and these before/after windows keep the history of every transcript the
 dashboard stored before Claude Code deleted it. A transcript deleted on the day it was
 written is never stored. History starts at the first stored transcript. A
@@ -618,11 +641,12 @@ lib/changes.js         Setup change markers: plugin installs, new models, Claude
 lib/config-dir.js      loadConfig: reads CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB and PORT for the server and the bin/ scripts (server.js reads CC_DASHBOARD_PRICE_CHECK itself, in priceCheckOn)
 lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
 lib/db.js              Opens transcripts.db: schema, WAL mode, busy timeouts, and the server's one shared handle
-lib/efficiency.js      Session start, Bash result and per-prompt statistics per time window, for the Setup changes panel
+lib/efficiency.js      Session start, Bash result, per-prompt and turn duration statistics per time window, for the Setup changes panel
 lib/extract-pool.js    Runs extractFile on worker threads, and reports whether the threads could start
 lib/extract-worker.js  The body of one pool worker thread
-lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, edits, prompts, slash commands and per-session summaries, and tags the calls that rebuilt the prompt cache (markRebuilds)
+lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, tool result sizes, edits, prompts, turns, slash commands and per-session summaries, and tags the calls that rebuilt the prompt cache (markRebuilds)
 lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
+lib/fillers.js         What fills the context: tool results grouped by file or command, with sessions and re-reads
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
 lib/net-guard.js       Host-header check and security headers
 lib/price-fetch.js     Fetches and parses Anthropic's pricing page (merging the prompt-length rows), and compares it with the current prices
@@ -640,6 +664,7 @@ lib/sqlite.js          Loads node:sqlite without its experimental-feature warnin
 lib/stdin.js           readStdin: a whole stream as UTF-8 text, for bin/judge-updates and bin/review-session
 lib/store.js           The transcript database, transcripts.db, through node:sqlite
 lib/transcript-files.js  Finds the transcripts: getProjectsDir (<config dir>/projects) and findJsonlFiles
+lib/turns.js           The longest turns in a range, with their calls and cost
 lib/updates.js         Verdicts on Claude Code releases: parses the changelog, lists versions in transcripts, writes updates.json
 bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
 bin/record-session-end Marks a session snapshot ended, from the mod's session-end JSON on stdin
@@ -682,6 +707,7 @@ public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loa
 public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, the cache split of cost, skill and subagent lists with invocation counts
 public/panels/cards.mjs  The Analysis tab's summary cards: two rows of cards: money (total cost, cost per day, 30-day projection, Claude Code's reported cost) over usage (tokens, cache, thinking share, tool calls)
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
+public/panels/fillers.mjs  The What fills the context and Longest turns tables in the Tool calls panel
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
 public/panels/models.mjs  The Models panel (share bar and table) and the model daily charts
 public/panels/prices.mjs  The prices note in the Models panel and the Check prices button; uses the /api/prices routes

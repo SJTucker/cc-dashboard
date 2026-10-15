@@ -36,6 +36,7 @@ CLAUDE_CONFIG_DIR=$F RTK_DB=$F/none.db CC_DASHBOARD_PRICE_CHECK=off CC_DASHBOARD
 ```
 
 `RTK_DB` (also read in `lib/config-dir.js`) stops the server reading the real rtk history. An empty `CLAUDE_CONFIG_DIR` gives the empty-state view. To copy real data instead, copy `~/.claude/cc-dashboard/transcripts.db` into `$F/cc-dashboard/` (one earlier session did this with `sqlite3 ... ".backup"`).
+When `$F/projects` links or copies the real transcripts, the stored rows still name `~/.claude/projects/...`, so the server treats every stored file as deleted and reads each transcript again under its new path, and the old rows win where rows are deduplicated. Rewrite the stored paths after the copy: `sqlite3 $F/cc-dashboard/transcripts.db "update files set path = replace(path, '$HOME/.claude/projects', '$F/projects')"`.
 
 ## 3. Load the page and read the console
 
