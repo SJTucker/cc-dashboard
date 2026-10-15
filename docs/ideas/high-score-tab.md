@@ -29,7 +29,7 @@ the dashboard already has:
   and from call rows grouped by `sessionId`.
 - Lines added and removed come from the `edits` rows `collectEdits` in
   `lib/extract.js` writes for each Edit and Write result (`{ toolUseId, t, sessionId,
-  added, removed }`). `addEdits` in `lib/aggregate.js` sums them per session
+  added, removed, repo }`). `addEdits` in `lib/aggregate.js` sums them per session
   (`linesBySession`). Each `daily` bucket also has `linesAdded`, `linesRemoved` and
   `linesByRepo`.
 - [Record day confetti](record-day-confetti.md) plays when today sets a new record.

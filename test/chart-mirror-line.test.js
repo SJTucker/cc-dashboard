@@ -61,3 +61,26 @@ test('drawLinesLegend lists each series with its totals, and Other names its rep
   assert.strictEqual(items[0].getAttribute('title'), null);
   assert.strictEqual(items[1].getAttribute('title'), 'b, c');
 });
+
+test('spreadLabels shifts the stack up when it would pass the bottom, never above the top', async () => {
+  const { spreadLabels } = await load();
+  assert.deepStrictEqual(spreadLabels([100, 101, 102], 11, 8, 105), [83, 94, 105]);
+  assert.deepStrictEqual(spreadLabels([20, 21, 22], 11, 8, 25), [8, 19, 30], 'the stack stops at the top');
+  assert.deepStrictEqual(spreadLabels([5, 6], 11, 8, 10), [8, 19], 'the top limit wins over the bottom');
+});
+
+test('drawMirroredLineChart labels the zero line, added above it and deleted below it', async () => {
+  const { drawMirroredLineChart } = await load();
+  const node = container();
+  drawMirroredLineChart(node, ['2026-10-13', '2026-10-14', '2026-10-15'], [series()]);
+  const texts = find(node, 'text');
+  const named = (s) => texts.find((n) => n.textContent === s);
+  const zero = named('0');
+  const added = named('added');
+  const deleted = named('deleted');
+  assert.ok(zero && added && deleted);
+  const zeroY = Number(zero.getAttribute('y')) - 3;
+  assert.ok(Number(added.getAttribute('y')) < zeroY);
+  assert.ok(Number(deleted.getAttribute('y')) > zeroY);
+  assert.strictEqual(added.getAttribute('text-anchor'), 'start');
+});

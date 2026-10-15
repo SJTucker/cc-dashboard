@@ -17,14 +17,20 @@ const shortLabel = (label) => (label.length > LABEL_CHARS ? `${label.slice(0, LA
 
 // The y of each end label, given the y of its line's last point. Labels are placed
 // top to bottom, each at least `gap` below the one above and none above `top`, so
-// two lines ending close together keep readable names. The result keeps the input
-// order.
-export function spreadLabels(ys, gap = 11, top = 8) {
+// two lines ending close together keep readable names. When the last label would
+// be below `bottom`, the whole stack moves up by the overflow, but not above `top`.
+// The result keeps the input order.
+export function spreadLabels(ys, gap = 11, top = 8, bottom = Infinity) {
   const out = new Array(ys.length);
   let previous = -Infinity;
   for (const [y, i] of ys.map((y, i) => [y, i]).sort((a, b) => a[0] - b[0])) {
     out[i] = Math.max(y, previous + gap, top);
     previous = out[i];
+  }
+  const overflow = Math.max(0, previous - bottom);
+  if (overflow) {
+    const shift = Math.min(overflow, Math.min(...out) - top);
+    for (let i = 0; i < out.length; i++) out[i] -= shift;
   }
   return out;
 }
@@ -52,6 +58,15 @@ export function drawMirroredLineChart(container, dates, series) {
   const rawMin = -Math.max(1, ...series.flatMap((s) => s.removed));
   const { zeroY, yOf } = drawSignedYAxis(svg, rawMin, rawMax, plotRight, (v) => axisTokens(Math.abs(v)));
   svg.appendChild(svgEl('line', { x1: CHART_PAD_LEFT, x2: plotRight, y1: zeroY, y2: zeroY, stroke: 'var(--border)', 'stroke-width': 1 }));
+  // drawSignedYAxis labels no tick at zero, so the 0 and the two half names are added here.
+  const zeroLabel = svgEl('text', { class: 'axis-label', x: CHART_PAD_LEFT - 6, y: zeroY + 3, 'text-anchor': 'end' });
+  zeroLabel.textContent = '0';
+  svg.appendChild(zeroLabel);
+  for (const [name, y] of [['added', zeroY - 4], ['deleted', zeroY + 11]]) {
+    const half = svgEl('text', { class: 'axis-label', x: CHART_PAD_LEFT + 4, y, 'text-anchor': 'start' });
+    half.textContent = name;
+    svg.appendChild(half);
+  }
 
   const step = (plotRight - CHART_PAD_LEFT) / Math.max(dates.length - 1, 1);
   const xAt = (i) => CHART_PAD_LEFT + i * step;
@@ -69,7 +84,7 @@ export function drawMirroredLineChart(container, dates, series) {
   }
 
   const last = dates.length - 1;
-  const ys = spreadLabels(series.map((s) => yOf(s.added[last]) + 3));
+  const ys = spreadLabels(series.map((s) => yOf(s.added[last]) + 3), 11, 8, plotHeight);
   series.forEach((s, i) => {
     const label = svgEl('text', { class: 'axis-label line-end-label', x: xAt(last) + 6, y: ys[i], style: `fill:${s.color}` });
     label.textContent = shortLabel(s.label);
