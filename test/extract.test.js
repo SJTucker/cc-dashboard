@@ -328,6 +328,41 @@ test('an edit row carries the repo of the edited file, and falls back to cwd onl
   assert.deepStrictEqual(rows.edits.map((e) => e.repo), [app, other, null]);
 });
 
+// An Edit result for `filePath`, one added line.
+const editAt = (id, filePath) => ({
+  type: 'user', timestamp: T1, sessionId: 's1',
+  message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] },
+  toolUseResult: { structuredPatch: [{ lines: ['+a'] }], filePath },
+});
+
+test('no edit row for a scratchpad file, a memory file or the global CLAUDE.md', async () => {
+  const root = fs.realpathSync(helpers.tmpDir(null, 'extract-excluded'));
+  const folder = path.join(root, 'cfg', 'projects', '-x');
+  fs.mkdirSync(folder, { recursive: true });
+  const file = path.join(folder, 's.jsonl');
+  const lines = [
+    editAt('toolu_1', path.join(root, 'tmp', 'claude-502', '-x', 'sid', 'scratchpad', 'plan.md')),
+    editAt('toolu_2', path.join(folder, 'memory', 'MEMORY.md')),
+    editAt('toolu_3', path.join(root, 'cfg', 'CLAUDE.md')),
+    editAt('toolu_4', path.join(root, 'code', 'app', 'CLAUDE.md')),
+  ];
+  fs.writeFileSync(file, lines.map((l) => JSON.stringify(l)).join('\n') + '\n');
+  const rows = await extractFile(file);
+
+  assert.deepStrictEqual(rows.edits.map((e) => e.toolUseId), ['toolu_4']);
+});
+
+test('a transcript outside any projects folder still drops scratchpad edits', async () => {
+  const file = writeTranscript([
+    editAt('toolu_1', '/private/tmp/claude-502/-x/sid/scratchpad/plan.md'),
+    editAt('toolu_2', '/private/tmp/claude-502/-x/sid/other/plan.md'),
+    editAt('toolu_3', '/u/.claude/CLAUDE.md'),
+  ]);
+  const rows = await extractFile(file);
+
+  assert.deepStrictEqual(rows.edits.map((e) => e.toolUseId), ['toolu_2', 'toolu_3']);
+});
+
 const typed = (text, extra = {}) => ({ type: 'user', origin: { kind: 'human' }, promptSource: 'typed', sessionId: 's1', message: { content: text }, ...extra });
 
 test('a typed prompt is a row with its uuid, or sessionId:timestamp when it has none', async () => {
@@ -607,8 +642,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 10', () => {
-  assert.strictEqual(EXTRACT_VERSION, 10);
+test('EXTRACT_VERSION is 11', () => {
+  assert.strictEqual(EXTRACT_VERSION, 11);
 });
 
 function toolResultLine({ id = 'toolu_1', content = 'hello', agentId = null, min = 1 } = {}) {

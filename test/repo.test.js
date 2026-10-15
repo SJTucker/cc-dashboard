@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const helpers = require('./helpers');
-const { encodeFolder, findRepo, repoFromProjectFolder, projectFolderOf } = require('../lib/repo');
+const { encodeFolder, findRepo, repoFromProjectFolder, projectFolderOf, configDirOf } = require('../lib/repo');
 
 // os.tmpdir() on macOS sits under /var, a symlink to /private/var. The folder walk
 // skips symlinks, so fixtures live under the real path.
@@ -117,4 +117,10 @@ test('findRepo maps a deleted worktrunk folder of a repo whose name has a dot', 
   const repo = path.join(root, 'code', 'next.js');
   fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
   assert.strictEqual(findRepo(path.join(root, 'code', 'next.js.feature', 'src')), repo);
+});
+
+test('configDirOf takes the folder above projects, for main and subagent transcripts', () => {
+  assert.strictEqual(configDirOf('/u/.claude/projects/-u-code-app/abc.jsonl'), '/u/.claude');
+  assert.strictEqual(configDirOf('/u/.claude/projects/-u-code-app/abc/subagents/agent-1.jsonl'), '/u/.claude');
+  assert.strictEqual(configDirOf('/u/elsewhere/abc.jsonl'), null);
 });
