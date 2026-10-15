@@ -6,8 +6,9 @@ arcade high-score style. Asked for on 2026-10-15.
 ## What it lists
 
 The examples given were the highest token day, the highest cost day, the highest
-prompt day and the highest session. Other records that come from data the dashboard
-already has:
+prompt day and the highest session. Added on 2026-10-15: the most lines of code added
+in one day and the most lines deleted in one day. Other records that come from data
+the dashboard already has:
 
 - Most sessions in one day.
 - The most expensive single session and the longest session.
@@ -26,6 +27,11 @@ already has:
 - Daily buckets in `lib/aggregate.js` hold tokens and cost per day. Prompt counts per
   day come from `efficiency.prompts`. Session totals come from the session snapshots
   and from call rows grouped by `sessionId`.
+- Lines added and removed come from the `edits` rows `collectEdits` in
+  `lib/extract.js` writes for each Edit and Write result (`{ toolUseId, t, sessionId,
+  added, removed }`). `addEdits` in `lib/aggregate.js` sums them per session only
+  (`linesBySession`), so a per-day total is new work. The
+  [Lines of code over time](lines-over-time.md) idea needs the same daily sums.
 - [Record day confetti](record-day-confetti.md) plays when today sets a new record.
   The two ideas share the "new record" rule.
 
