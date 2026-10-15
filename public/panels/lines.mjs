@@ -1,5 +1,7 @@
 // The Lines of code panel: lines added and deleted per day, one line pair per repo.
 import { REPO_SERIES, REPO_OTHER } from '../charts/palette.mjs';
+import { shown } from '../state.mjs';
+import { drawMirroredLineChart, drawLinesLegend } from '../charts/mirror-line.mjs';
 
 const NO_REPO = 'unknown';
 
@@ -43,4 +45,12 @@ export function repoSeries(daily, limit = REPO_SERIES.length) {
   const rest = ranked.slice(limit);
   if (rest.length) series.push(build('other', rest, REPO_OTHER, 'Other', rest.map((repo) => labels.get(repo))));
   return series;
+}
+
+export function renderLinesChart(data) {
+  if (!shown('lines')) return;
+  const daily = data.daily || [];
+  const series = repoSeries(daily);
+  drawMirroredLineChart(document.getElementById('linesChart'), daily.map((d) => d.date), series);
+  drawLinesLegend(document.getElementById('linesLegend'), series);
 }
