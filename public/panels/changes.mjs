@@ -2,7 +2,7 @@
 // comparison for a picked change.
 import { getJson } from '../api.mjs';
 import { el, spinnerNode, hideTooltip, focusedRowName } from '../dom.mjs';
-import { formatCost, formatPercent, formatTokens, localDateStr, axisTokens, axisCost, formatDuration } from '../format.mjs';
+import { formatCost, formatPercent, formatTokens, localDateStr, axisTokens, axisCost, formatDuration, formatAxisDuration } from '../format.mjs';
 import { state, shown } from '../state.mjs';
 import { createSequence } from '../guards.mjs';
 import {
@@ -36,7 +36,7 @@ const BA_ROWS = [
   { name: 'Bash result, p90', key: 'bashP90', n: 'bashN', unit: 'Bash calls', unitOne: 'Bash call', fmt: tokensCell, axis: axisTokens, title: '90th percentile Bash result on the main thread, tokens per day' },
   { name: 'Cost per prompt, median', key: 'costPerPrompt', n: 'prompts', unit: 'prompts', unitOne: 'prompt', fmt: formatCost, axis: axisCost, title: 'Median cost per prompt, per day' },
   { name: 'API calls per prompt, median', key: 'callsPerPrompt', n: 'prompts', unit: 'prompts', unitOne: 'prompt', fmt: axisCount, axis: axisCount, title: 'Median API calls per prompt, per day' },
-  { name: 'Turn duration, median', key: 'turnDuration', n: 'turnN', unit: 'turns', unitOne: 'turn', fmt: formatDuration, axis: formatDuration, title: 'Median main-loop turn duration, per day' },
+  { name: 'Turn duration, median', key: 'turnDuration', n: 'turnN', unit: 'turns', unitOne: 'turn', fmt: formatDuration, axis: formatAxisDuration, title: 'Median main-loop turn duration, per day' },
   { name: 'Cache hit rate', key: 'cacheHit', n: 'callN', unit: 'API calls', unitOne: 'API call', fmt: formatPercent, axis: axisPercent, points: true, title: 'Cache hit rate, per day' },
   { name: 'Thinking share of output', key: 'thinkingShare', n: 'thinkingN', unit: 'calls that report thinking', unitOne: 'call that reports thinking', fmt: formatPercent, axis: axisPercent, points: true, title: 'Thinking share of output, per day' },
 ];

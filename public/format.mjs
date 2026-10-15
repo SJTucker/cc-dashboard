@@ -52,6 +52,17 @@ export function formatDuration(ms) {
   return `${Math.floor(m / 60)}h ${m % 60}m`;
 }
 
+// Y-axis labels for gridlines at 1, 2 or 5 times a power of ten of ms. Unlike
+// formatDuration, it keeps the seconds of a minute and the minutes of an hour,
+// so 100 s and 150 s do not both read as whole minutes.
+export function formatAxisDuration(ms) {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  if (s < 3600) return s % 60 === 0 ? `${s / 60}m` : `${Math.floor(s / 60)}m ${s % 60}s`;
+  const m = Math.floor(s / 60);
+  return m % 60 === 0 ? `${m / 60}h` : `${Math.floor(m / 60)}h ${m % 60}m`;
+}
+
 // How long ago a session last wrote to its transcript. After an hour the clock
 // time reads better than "137m ago".
 export function formatAgo(ms, now = Date.now()) {
