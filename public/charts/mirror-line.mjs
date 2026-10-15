@@ -1,39 +1,13 @@
 // Lines added above a zero line and lines deleted below it, one line pair per series,
 // on a linear axis. The Lines of code panel draws one series per repo. A series'
-// two lines share its colour and dash, and the series is named once, at the right
-// end of its added line.
+// two lines share its colour and dash. The legend names each series.
 import { el, svgEl, showTooltip, hideTooltip, chartWidth } from '../dom.mjs';
 import { shortDate, fullDate, axisTokens, escapeHtml } from '../format.mjs';
 import { CHART_HEIGHT, CHART_PAD_LEFT, CHART_PAD_BOTTOM, drawSignedYAxis } from './axes.mjs';
 import { legendRow, lineIcon } from './legend.mjs';
 import { labelStep } from '../chart-geometry.mjs';
 
-// Room right of the plot for the end labels, which are cut to LABEL_CHARS.
-const LABEL_GUTTER = 84;
-const LABEL_CHARS = 12;
-
 const count = (n) => n.toLocaleString('en-US');
-const shortLabel = (label) => (label.length > LABEL_CHARS ? `${label.slice(0, LABEL_CHARS - 1)}…` : label);
-
-// The y of each end label, given the y of its line's last point. Labels are placed
-// top to bottom, each at least `gap` below the one above and none above `top`, so
-// two lines ending close together keep readable names. When the last label would
-// be below `bottom`, the whole stack moves up by the overflow, but not above `top`.
-// The result keeps the input order.
-export function spreadLabels(ys, gap = 11, top = 8, bottom = Infinity) {
-  const out = new Array(ys.length);
-  let previous = -Infinity;
-  for (const [y, i] of ys.map((y, i) => [y, i]).sort((a, b) => a[0] - b[0])) {
-    out[i] = Math.max(y, previous + gap, top);
-    previous = out[i];
-  }
-  const overflow = Math.max(0, previous - bottom);
-  if (overflow) {
-    const shift = Math.min(overflow, Math.min(...out) - top);
-    for (let i = 0; i < out.length; i++) out[i] -= shift;
-  }
-  return out;
-}
 
 function strokeOf(s) {
   return { fill: 'none', stroke: s.color, ...(s.dash ? { 'stroke-dasharray': s.dash } : {}) };
@@ -48,7 +22,7 @@ export function drawMirroredLineChart(container, dates, series) {
   }
 
   const width = chartWidth(container);
-  const plotRight = width - LABEL_GUTTER;
+  const plotRight = width;
   const plotHeight = CHART_HEIGHT - CHART_PAD_BOTTOM;
   const svg = svgEl('svg', { viewBox: `0 0 ${width} ${CHART_HEIGHT}`, height: CHART_HEIGHT });
 
@@ -82,14 +56,6 @@ export function drawMirroredLineChart(container, dates, series) {
       svg.appendChild(svgEl('path', { class: 'log-line', d, ...strokeOf(s) }));
     }
   }
-
-  const last = dates.length - 1;
-  const ys = spreadLabels(series.map((s) => yOf(s.added[last]) + 3), 11, 8, plotHeight);
-  series.forEach((s, i) => {
-    const label = svgEl('text', { class: 'axis-label line-end-label', x: xAt(last) + 6, y: ys[i], style: `fill:${s.color}` });
-    label.textContent = shortLabel(s.label);
-    svg.appendChild(label);
-  });
 
   const crosshair = svgEl('line', { class: 'crosshair', y1: 0, y2: plotHeight, visibility: 'hidden' });
   svg.appendChild(crosshair);
