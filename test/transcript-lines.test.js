@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { bashGroup, toolDetail } = require('../lib/transcript-lines');
+const { bashGroup, toolDetail, handoffTitle, handoffHeading, handoffPromptPath } = require('../lib/transcript-lines');
 
 test('bashGroup keeps the program and its first word or flag', () => {
   const cases = [
@@ -29,4 +29,32 @@ test('bashGroup returns null when there is no command', () => {
 
 test('toolDetail still names the Bash program alone', () => {
   assert.strictEqual(toolDetail('Bash', { command: 'cd /r && /usr/bin/git -C /r diff' }), 'git');
+});
+
+test('handoffTitle cuts at the earliest separator and capitalises', () => {
+  const cases = [
+    ['PR #296 (refactor/split-entity-inspector) — review follow-ups, Sonar fix', 'PR #296'],
+    ['Audit how stale the f-forge architecture atlas is, then automate keeping it in sync', 'Audit how stale the f-forge architecture atlas is'],
+    ['fix the post-merge Deploy failure on master; PR open', 'Fix the post-merge Deploy failure on master'],
+    ['Fix the deploy', 'Fix the deploy'],
+  ];
+  for (const [heading, want] of cases) assert.strictEqual(handoffTitle(heading), want);
+});
+
+test('handoffTitle caps a long heading like promptPreview', () => {
+  const out = handoffTitle('word '.repeat(40));
+  assert.strictEqual(out.length, 80);
+  assert.ok(out.endsWith('…'));
+});
+
+test('handoffHeading strips the line-number prefix and ignores other lines', () => {
+  assert.strictEqual(handoffHeading('     1\t# Handoff: fix it\n     2\tbody'), 'fix it');
+  assert.strictEqual(handoffHeading('     1\t# Something else'), null);
+});
+
+test('handoffPromptPath returns the .claude/handoffs tail of an absolute or relative path', () => {
+  assert.strictEqual(handoffPromptPath('Read /a/b/.claude/handoffs/x.md, check Preconditions'), '.claude/handoffs/x.md');
+  assert.strictEqual(handoffPromptPath('Read .claude/handoffs/x.md, check'), '.claude/handoffs/x.md');
+  assert.strictEqual(handoffPromptPath('Read notes/x.md, check'), null);
+  assert.strictEqual(handoffPromptPath('fix the bug'), null);
 });

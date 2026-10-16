@@ -31,13 +31,15 @@ const SLUG_MAX = 60
 // ask for the document as the reply instead of a file write.
 const INSTRUCTIONS = `Write a handoff document that lets an agent with zero conversation history resume the work in this conversation. The reader has the repo and nothing else, and cannot ask you questions.
 
-You have no tools in this reply. Write from what you already know from this conversation. Do not paste diffs. Reply with the document only, in Markdown, starting with the line "# Handoff: <task in one line>". Write no preamble and no code fence around the reply.
+You have no tools in this reply. Write from what you already know from this conversation. Do not paste diffs. Reply with the document only, in Markdown, starting with the line "# Handoff: <the task, in at most 6 words>". Write no preamble and no code fence around the reply.
 
 If the Worktree root step failed, this is not a git repo. Leave out the Git state section and describe the changed files from the conversation. Another failed step means only that its output is missing.
 
 Use this structure. Leave out any section that would be empty.
 
-# Handoff: <task in one line>
+The heading names the task in at most 6 words. The dashboard shows it as the title of the session that picks up the handoff. Put status, PR numbers in flight and what is waiting under "## Status", not in the heading.
+
+# Handoff: <the task, in at most 6 words>
 
 **Written:** <timestamp from the repo state>
 

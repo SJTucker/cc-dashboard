@@ -359,6 +359,7 @@ function createServer(config) {
         branchesBySession: efficiency.branchesBySession,
         branchBySession: efficiency.branchBySession,
         firstPromptBySession: efficiency.firstPromptBySession,
+        handoffTitleBySession: efficiency.handoffTitleBySession,
         recapBySession: efficiency.recapBySession,
         cacheCallsOf: transcriptCalls,
       }));
