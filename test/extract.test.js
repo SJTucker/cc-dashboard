@@ -642,8 +642,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 11', () => {
-  assert.strictEqual(EXTRACT_VERSION, 11);
+test('EXTRACT_VERSION is 12', () => {
+  assert.strictEqual(EXTRACT_VERSION, 12);
 });
 
 function toolResultLine({ id = 'toolu_1', content = 'hello', agentId = null, min = 1 } = {}) {
@@ -722,3 +722,43 @@ for (const [label, extra] of [['apiBlockIndex on each line', (i) => ({ apiBlockI
     assert.ok(!('idlessUses' in rows));
   });
 }
+
+// A handoff pickup: the typed resume prompt, a Read tool_use, and its tool_result.
+const HANDOFF_FILE = '/Users/me/code/app/.claude/handoffs/2026-09-08-142310-feat-auth-refresh.md';
+const handoffLines = ({ prompt, readPath = HANDOFF_FILE, result }) => [
+  typed(prompt, { timestamp: T0 }),
+  { type: 'assistant', sessionId: 's1', message: { content: [{ type: 'tool_use', id: 'toolu_1', name: 'Read', input: { file_path: readPath } }] } },
+  { type: 'user', sessionId: 's1', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: result }] } },
+];
+const HANDOFF_TEXT = '     1\t# Handoff: Fix the deploy failure (PR #319 open)\n     2\t\n     3\t## Status';
+
+test('a mod-style resume prompt takes its title from the handoff heading, shortened', async () => {
+  const prompt = `Read ${HANDOFF_FILE}, check Preconditions, then continue from "Next steps".`;
+  const rows = await extractFile(writeTranscript(handoffLines({ prompt, result: HANDOFF_TEXT })));
+  assert.strictEqual(rows.sessions.s1.handoffTitle, 'Fix the deploy failure');
+});
+
+test('a skill-style relative resume prompt matches the absolute Read path', async () => {
+  const prompt = 'Read .claude/handoffs/2026-09-08-142310-feat-auth-refresh.md, check Preconditions, then continue.';
+  const rows = await extractFile(writeTranscript(handoffLines({ prompt, result: HANDOFF_TEXT })));
+  assert.strictEqual(rows.sessions.s1.handoffTitle, 'Fix the deploy failure');
+});
+
+test('a tool_result given as an array of text blocks is read', async () => {
+  const prompt = `Read ${HANDOFF_FILE}, check Preconditions`;
+  const result = [{ type: 'text', text: HANDOFF_TEXT }];
+  const rows = await extractFile(writeTranscript(handoffLines({ prompt, result })));
+  assert.strictEqual(rows.sessions.s1.handoffTitle, 'Fix the deploy failure');
+});
+
+test('a Read of another file leaves handoffTitle null', async () => {
+  const prompt = `Read ${HANDOFF_FILE}, check Preconditions`;
+  const readPath = '/Users/me/code/app/.claude/handoffs/2026-01-01-000000-other.md';
+  const rows = await extractFile(writeTranscript(handoffLines({ prompt, readPath, result: HANDOFF_TEXT })));
+  assert.strictEqual(rows.sessions.s1.handoffTitle, null);
+});
+
+test('a first prompt that is not a resume prompt leaves handoffTitle null even if a handoff is read later', async () => {
+  const rows = await extractFile(writeTranscript(handoffLines({ prompt: 'fix the deploy', result: HANDOFF_TEXT })));
+  assert.strictEqual(rows.sessions.s1.handoffTitle, null);
+});

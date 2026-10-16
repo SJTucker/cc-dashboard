@@ -31,3 +31,8 @@ test('at most TURN_LIMIT turns are returned', () => {
   assert.strictEqual(out.length, TURN_LIMIT);
   assert.strictEqual(out[0].durationMs, TURN_LIMIT + 3);
 });
+
+test('a handoff title beats the ai-title and the first prompt', () => {
+  const out = longestTurns([turn(5, 5)], [], new Map([['s1', 'ai']]), new Map([['s1', 'prompt']]), new Map([['s1', 'Fix the deploy failure']]));
+  assert.strictEqual(out[0].title, 'Fix the deploy failure');
+});

@@ -587,6 +587,12 @@ test('buildLiveSessions takes the title from the ai-title, else the first prompt
   assert.deepStrictEqual([none.title, none.titleSource], [null, null]);
 });
 
+test('buildLiveSessions lets a handoff title beat the ai-title and the first prompt', () => {
+  const meta = { firstPromptBySession: { s1: 'Read .claude/handoffs/x.md' }, handoffTitleBySession: { s1: 'Fix the deploy failure' } };
+  const s = buildLiveSessions([snapshot()], [], NOW, {}, { s1: 'Handoff master continuation' }, [], new Map(), meta).sessions[0];
+  assert.deepStrictEqual([s.title, s.titleSource], ['Fix the deploy failure', 'handoff']);
+});
+
 test('buildLiveSessions turns a session\'s call times into spans, splitting at a gap over LIVE_WINDOW_MS', () => {
   const t0 = NOW - 3 * 60 * 60 * 1000;
   const calls = [
