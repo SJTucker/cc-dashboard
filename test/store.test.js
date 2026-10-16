@@ -216,6 +216,11 @@ test('migration 9 to 10 gives a null repo when the transcript path has no projec
   assert.deepStrictEqual(MIGRATIONS[9](old, '/nowhere/abc.jsonl').edits[0].repo, null);
 });
 
+test('migration 12 to 13 changes nothing', () => {
+  const old = rowsOf({});
+  assert.strictEqual(MIGRATIONS[12](old), old);
+});
+
 test('migration 11 to 12 changes nothing', () => {
   const old = rowsOf({});
   assert.strictEqual(MIGRATIONS[11](old), old);

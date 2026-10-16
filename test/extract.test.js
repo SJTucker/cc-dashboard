@@ -380,6 +380,19 @@ test('a typed prompt is a row with its uuid, or sessionId:timestamp when it has 
   assert.strictEqual(rows.sessions.s1.firstPrompt, 'first');
 });
 
+test('a typed prompt with a pasted image counts, titles the session with its text, and its isMeta image companion does not count', async () => {
+  const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
+  const file = writeTranscript([
+    typed([{ type: 'text', text: 'seeing a lot of these errors in logs - investigate [Image #3]' }, image], { uuid: 'u1', timestamp: T0 }),
+    typed([{ type: 'text', text: '[Image: source: /tmp/3.png]' }], { uuid: 'u2', timestamp: T1, isMeta: true, turnCompanion: true }),
+    { type: 'user', sessionId: 's1', uuid: 'u3', timestamp: T2, message: { content: [{ type: 'tool_result', tool_use_id: 'x', content: 'ok' }] } },
+  ]);
+  const rows = await extractFile(file);
+
+  assert.deepStrictEqual(rows.prompts, [{ id: 'u1', t: Date.parse(T0), sessionId: 's1' }]);
+  assert.strictEqual(rows.sessions.s1.firstPrompt, 'seeing a lot of these errors in logs - investigate [Image #3]');
+});
+
 // A forked skill (a /skill typed by the user) is written with origin human and no promptSource key.
 const forked = (text, extra = {}) => ({ type: 'user', origin: { kind: 'human' }, sessionId: 's1', message: { content: text }, ...extra });
 
@@ -530,6 +543,11 @@ test('a file whose prompts carry no origin prints one warning, once per process'
   assert.ok(stderr.includes(`[extract] ${first} has user prompts without origin or promptSource. Prompt counts and session reviews leave them out.`), stderr);
 });
 
+test('an untagged prompt with text and image content prints the warning', () => {
+  const file = writeTranscript([{ ...untagged('x'), message: { role: 'user', content: [{ type: 'text', text: 'hi' }, { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } }] } }]);
+  assert.ok(extractInChild([file]).includes('[extract]'));
+});
+
 test('subagent task prompts, commands and meta lines print nothing', () => {
   const file = writeTranscript([
     { ...untagged('do the task'), origin: null, isSidechain: true },
@@ -642,8 +660,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 12', () => {
-  assert.strictEqual(EXTRACT_VERSION, 12);
+test('EXTRACT_VERSION is 13', () => {
+  assert.strictEqual(EXTRACT_VERSION, 13);
 });
 
 function toolResultLine({ id = 'toolu_1', content = 'hello', agentId = null, min = 1 } = {}) {

@@ -55,6 +55,17 @@ test('digestTranscript lists prompts, replies, tools, errors, large output and c
   });
 });
 
+test('digestTranscript counts a typed prompt with a pasted image and skips its isMeta companion', async () => {
+  const base = tmpDir();
+  const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
+  const file = writeTranscript(base, [
+    typed([{ type: 'text', text: 'investigate [Image #3]' }, image]),
+    { ...typed([{ type: 'text', text: '[Image: source: /tmp/3.png]' }]), isMeta: true, turnCompanion: true },
+    toolResult('t1', 'ok'),
+  ]);
+  assert.deepStrictEqual(await review.digestTranscript(file), { prompts: 1, text: 'USER: investigate [Image #3]' });
+});
+
 test('digestTranscript skips subagent lines, slash commands and repeated tool_use blocks', async () => {
   const base = tmpDir();
   const file = writeTranscript(base, [

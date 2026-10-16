@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { bashGroup, toolDetail, handoffTitle, handoffHeading, handoffPromptPath } = require('../lib/transcript-lines');
+const { bashGroup, toolDetail, handoffTitle, handoffHeading, handoffPromptPath, promptText, isTypedPrompt, isUntaggedPrompt } = require('../lib/transcript-lines');
 
 test('bashGroup keeps the program and its first word or flag', () => {
   const cases = [
@@ -57,4 +57,36 @@ test('handoffPromptPath returns the .claude/handoffs tail of an absolute or rela
   assert.strictEqual(handoffPromptPath('Read .claude/handoffs/x.md, check'), '.claude/handoffs/x.md');
   assert.strictEqual(handoffPromptPath('Read notes/x.md, check'), null);
   assert.strictEqual(handoffPromptPath('fix the bug'), null);
+});
+
+const imageBlock = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
+const typedLine = (content, extra = {}) => ({ type: 'user', origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content }, ...extra });
+
+test('promptText returns a string as is, joins the text blocks of text and image content, and returns null for anything else', () => {
+  assert.strictEqual(promptText('hello'), 'hello');
+  assert.strictEqual(promptText([{ type: 'text', text: 'look [Image #1]' }, imageBlock]), 'look [Image #1]');
+  assert.strictEqual(promptText([{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }]), 'a\nb');
+  assert.strictEqual(promptText([imageBlock]), null);
+  assert.strictEqual(promptText([{ type: 'tool_result', tool_use_id: 't', content: 'x' }]), null);
+  assert.strictEqual(promptText([{ type: 'text', text: 'a' }, { type: 'tool_result', tool_use_id: 't', content: 'x' }]), null);
+  assert.strictEqual(promptText(undefined), null);
+});
+
+test('a typed prompt with a pasted image is a typed prompt', () => {
+  assert.strictEqual(isTypedPrompt(typedLine([{ type: 'text', text: 'investigate [Image #3]' }, imageBlock])), true);
+});
+
+test('the isMeta companion line that names the image path is not a typed prompt', () => {
+  const companion = typedLine([{ type: 'text', text: '[Image: source: /tmp/3.png]' }], { isMeta: true, turnCompanion: true });
+  assert.strictEqual(isTypedPrompt(companion), false);
+});
+
+test('a tool_result array line is not a typed prompt or an untagged prompt', () => {
+  const line = { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 't', content: 'ok' }] } };
+  assert.strictEqual(isTypedPrompt({ ...line, origin: { kind: 'human' }, promptSource: 'typed' }), false);
+  assert.strictEqual(isUntaggedPrompt(line), false);
+});
+
+test('an untagged line with text and image content is an untagged prompt', () => {
+  assert.strictEqual(isUntaggedPrompt({ type: 'user', message: { content: [{ type: 'text', text: 'hi' }, imageBlock] } }), true);
 });
