@@ -1,6 +1,7 @@
 // Pure text formatting for the High scores boards. It touches no DOM, so the
 // tests run it under Node.
 import { BOARDS } from './boards.mjs';
+import { formatCost } from '../format.mjs';
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
@@ -33,7 +34,7 @@ function turnText(ms) {
 // The score of one entry as the board shows it.
 function scoreText(key, entry) {
   const n = entry.score;
-  if (key === 'cost' || key === 'session') return `$${n.toFixed(2)}`;
+  if (key === 'cost' || key === 'session') return formatCost(n);
   if (key === 'linesAdded') return `+${grouped(n)}`;
   if (key === 'linesRemoved') return `−${grouped(n)}`;
   if (key === 'turn') return turnText(n);

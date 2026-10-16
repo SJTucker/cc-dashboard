@@ -27,6 +27,11 @@ test('mergeToday adds today to a day board, marks it and re-ranks', () => {
   assert.deepEqual(m.tokens.map((x) => [x.id, x.today === true]), [['2026-10-16', true], ['2026-10-15', false]]);
 });
 
+test('mergeToday ignores a live block from an earlier date', () => {
+  const p = payload({ tokens: [e('2026-10-15', 100, 1)] });
+  assert.deepEqual(B.mergeToday(p, live({ date: '2026-10-15', tokens: 900 }), '2026-10-16'), p.boards);
+});
+
 test('mergeToday returns null for a payload built on an earlier date', () => {
   assert.equal(B.mergeToday(payload({}, { date: '2026-10-15' }), live(), '2026-10-16'), null);
 });

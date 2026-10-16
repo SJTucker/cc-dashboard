@@ -49,6 +49,20 @@ test('the fx files name no game or character', () => {
   }
 });
 
+test('the fx files and the fx CSS block use no abbreviated game names', () => {
+  const pub = path.join(__dirname, '..', 'public');
+  const css = fs.readFileSync(path.join(pub, 'css', 'header.css'), 'utf8');
+  const sources = {
+    'sprites.mjs': fs.readFileSync(path.join(pub, 'fx', 'sprites.mjs'), 'utf8'),
+    'record-fx.mjs': fs.readFileSync(path.join(pub, 'fx', 'record-fx.mjs'), 'utf8'),
+    'header.css': css,
+  };
+  for (const [name, src] of Object.entries(sources)) {
+    assert.doesNotMatch(src, /\b(mk|cod)\b/i, name);
+    assert.doesNotMatch(src, /mortal|kombat|sub-?zero|call of duty|fonts\.googleapis/i, name);
+  }
+});
+
 test('playRecordFx falls back to text when the canvas has no 2d context', async () => {
   const made = [];
   const el = (tag) => {

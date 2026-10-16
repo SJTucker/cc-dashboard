@@ -14,6 +14,8 @@ test('dayLabel adds the year only outside the current year', () => {
 test('scoreText formats each board', () => {
   assert.equal(V.scoreText('tokens', { score: 1292566482 }), '1,292,566,482');
   assert.equal(V.scoreText('cost', { score: 466.0929 }), '$466.09');
+  assert.equal(V.scoreText('cost', { score: 1234.56 }), '$1,234.56');
+  assert.equal(V.scoreText('session', { score: 12345.6 }), '$12,345.60');
   assert.equal(V.scoreText('linesAdded', { score: 8412 }), '+8,412');
   assert.equal(V.scoreText('linesRemoved', { score: 5120 }), '−5,120');
   assert.equal(V.scoreText('turn', { score: 2832000 }), '47m 12s');

@@ -3,12 +3,12 @@
 // are merged in from every today summary the sticky bar polls (onTodaySummary).
 import { getJson } from '../api.mjs';
 import { el } from '../dom.mjs';
-import { localDateStr } from '../format.mjs';
+import { formatCost, localDateStr } from '../format.mjs';
 import { createSequence } from '../guards.mjs';
 import { BOARDS, BOARD_SIZE, mergeToday, todayFirstKeys } from '../highscores/boards.mjs';
 import { boardRows, hallRows, scoreText } from '../highscores/view.mjs';
 import { step, readCelebrated, writeCelebrated } from '../highscores/watch.mjs';
-import { playRecordFx } from '../fx/record-fx.mjs';
+import { playRecordFx, isPlaying } from '../fx/record-fx.mjs';
 import { buildScene } from '../highscores/scene.mjs';
 
 const CYCLE_MS = 6000;
@@ -69,9 +69,9 @@ function buildSides() {
 
   nodes.date = el('span');
   nodes.clock = el('span');
-  const panel = el('div', { class: 'panel' });
+  const panel = el('div', { class: 'hs-panel' });
   fillLines(panel, [`PORT ${location.port || '80'}`, 'LOCALHOST', '']);
-  panel.append(nodes.date, document.createElement('br'), nodes.clock, el('div', { class: 'bar-wrap' }, [el('div', { class: 'bar' })]));
+  panel.append(nodes.date, document.createElement('br'), nodes.clock, el('div', { class: 'bar-wrap' }, [el('div', { class: 'hs-bar' })]));
   const tr = el('div', { class: 'side side-tr' }, [panel]);
   const trList = el('div', { class: 'tr-list' });
   fillLines(trList, ['TOKENS', 'COST', 'CACHE', 'REPEAT', '>>>']);
@@ -181,7 +181,7 @@ function tick() {
 
 // CREDITS shows today's cost from the latest today summary, a dash before the first.
 function drawCredits() {
-  nodes.credits.textContent = lastLive ? `CREDITS $${lastLive.cost.toFixed(2)}` : 'CREDITS —';
+  nodes.credits.textContent = lastLive ? `CREDITS ${formatCost(lastLive.cost)}` : 'CREDITS —';
 }
 
 // Moves to screen `i` (wrapping) and restarts the 6 s cycle, so a manual switch
@@ -257,7 +257,12 @@ export function setupHighscores() {
 export function refreshHighscores() {
   const isLatest = loads.next();
   return getJson('/api/highscores', { optional: true }).then((data) => {
-    if (!isLatest() || !data?.boards) return;
+    if (!isLatest()) return;
+    if (!data?.boards) {
+      // A failed refetch clears the once-per-date mark, so the next poll (5 s) retries.
+      staleRequestedFor = null;
+      return;
+    }
     payload = data;
     remerge();
     if (isVisible()) draw();
@@ -287,9 +292,19 @@ export function resetWatch() {
 
 // Compares this poll's first places with the last poll's and plays the header
 // animation for each board that today just took. localStorage is read on every
-// call so a play in another browser tab is seen. A rejected animation is ignored.
+// call so a play in another browser tab is seen. The property itself is read in a
+// try, because blocked site data makes the getter throw; the watch then runs with
+// no stored state. While an animation plays the step is skipped, so `prev` keeps
+// the old state and a board that flips meanwhile is seen on the first poll after.
+// A rejected animation is ignored.
 function watchRecords(today) {
-  const storage = globalThis.localStorage;
+  if (isPlaying()) return;
+  let storage = null;
+  try {
+    storage = globalThis.localStorage;
+  } catch {
+    // blocked site data
+  }
   const result = step(prev, todayFirstKeys(lastMerged), today, readCelebrated(storage));
   prev = result.state;
   if (!result.play.length) return;
@@ -304,7 +319,14 @@ function watchRecords(today) {
 export function onTodaySummary(data) {
   lastLive = data.todayRecords ?? null;
   const merged = remerge();
-  if (merged) watchRecords(merged);
+  if (merged) {
+    // A fault in the watch or the animation must not stop the drawing below or the sticky bar.
+    try {
+      watchRecords(merged);
+    } catch (err) {
+      console.error(err);
+    }
+  }
   if (built) {
     drawCredits();
     if (isVisible()) draw();

@@ -312,12 +312,12 @@
 .record-fx .fx-canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
 .record-fx .fx-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
 .record-fx .fx { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; opacity: 0; line-height: 1; text-transform: uppercase; }
-.fx-mk { font-family: 'Metal Mania', serif; -webkit-text-stroke: 1px #1a0000; background-clip: text; -webkit-background-clip: text; color: transparent; filter: drop-shadow(2px 2px 0 #000); }
+.fx-metal { font-family: 'Metal Mania', serif; -webkit-text-stroke: 1px #1a0000; background-clip: text; -webkit-background-clip: text; color: transparent; filter: drop-shadow(2px 2px 0 #000); }
 .fx-finish { font-size: 38px; background-image: linear-gradient(#ffe14f 0%, #ff8a1f 45%, #e0161b 100%); }
 .fx-fatality { font-size: 50px; letter-spacing: .04em; background-image: linear-gradient(#ffd0c0 0%, #ff3b1f 40%, #8a0000 100%); }
 .fx-gold { font-size: 32px; letter-spacing: .03em; background-image: linear-gradient(#fff8d0 0%, #ffe14f 45%, #c98a00 100%); filter: drop-shadow(0 0 8px rgba(255, 225, 79, .6)) drop-shadow(2px 2px 0 #000); }
 .fx-gold.fx-text { max-width: 96%; white-space: normal; text-align: center; line-height: 1.15; font-size: 26px; }
-.fx-cod { font-family: 'Black Ops One', sans-serif; color: #fff; }
+.fx-ops { font-family: 'Black Ops One', sans-serif; color: #fff; }
 .fx-headshot { font-size: 36px; letter-spacing: .06em; text-shadow: 0 0 10px rgba(255, 214, 90, .9), 0 0 2px #fff, 2px 2px 0 #000; }
 .record-fx .fx-killfeed { left: auto; right: 18px; top: 10px; transform: none; font-size: 13px; background: rgba(0, 0, 0, .55); padding: 4px 10px; display: flex; gap: 8px; align-items: center; letter-spacing: .05em; }
 .fx-attacker { color: #7fc4ff; }

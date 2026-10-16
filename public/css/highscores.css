@@ -124,9 +124,9 @@
   filter: drop-shadow(0 0 6px rgba(255, 79, 216, .6));
 }
 .arcade .logo-k { color: #ff8be6; font-size: 16px; letter-spacing: .2em; margin: 2px 0 12px; text-shadow: 0 0 6px #ff4fd8; }
-.arcade .panel { border: 2px solid #ff4fd8; padding: 8px 10px; color: #ff8be6; text-shadow: 0 0 4px #ff4fd8; box-shadow: 0 0 10px rgba(255, 79, 216, .35); background: transparent; border-radius: 0; }
+.arcade .hs-panel { border: 2px solid #ff4fd8; padding: 8px 10px; color: #ff8be6; text-shadow: 0 0 4px #ff4fd8; box-shadow: 0 0 10px rgba(255, 79, 216, .35); background: transparent; border-radius: 0; }
 .arcade .bar-wrap { border: 1px solid #ff4fd855; }
-.arcade .bar { height: 6px; margin-top: 6px; background: repeating-linear-gradient(90deg, #ff4fd8 0 4px, transparent 4px 6px); width: 78%; }
+.arcade .hs-bar { height: 6px; margin-top: 6px; background: repeating-linear-gradient(90deg, #ff4fd8 0 4px, transparent 4px 6px); width: 78%; }
 
 /* Below 900px the side text and the neon signs would crowd the table. */
 @media (max-width: 899px) {

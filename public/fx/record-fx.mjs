@@ -260,14 +260,14 @@ function buildCues(overlay, kind) {
   const el = { flash: make('div', 'fx-flash') };
   overlay.append(el.flash);
   if (kind === 'fatality') {
-    el.finish = make('div', 'fx fx-mk fx-finish', 'FINISH HIM!');
-    el.fatality = make('div', 'fx fx-mk fx-fatality', 'FATALITY');
-    el.record = make('div', 'fx fx-mk fx-gold', '', 'NEW RECORD · <span class="fx-name"></span> · <span class="fx-score"></span>');
+    el.finish = make('div', 'fx fx-metal fx-finish', 'FINISH HIM!');
+    el.fatality = make('div', 'fx fx-metal fx-fatality', 'FATALITY');
+    el.record = make('div', 'fx fx-metal fx-gold', '', 'NEW RECORD · <span class="fx-name"></span> · <span class="fx-score"></span>');
     overlay.append(el.finish, el.fatality, el.record);
   } else {
-    el.killfeed = make('div', 'fx fx-cod fx-killfeed', '', `<span class="fx-attacker">SOLDIER</span>${RIFLE_ICON}<span class="fx-victim">CLAUDE</span>`);
-    el.headshot = make('div', 'fx fx-cod fx-headshot', 'HEADSHOT');
-    el.record = make('div', 'fx fx-cod fx-rankup', '', `${RANK_ICON}<div class="fx-rank-text"><small>NEW RECORD</small><b><span class="fx-name"></span> · <span class="fx-score"></span></b><div class="fx-xp"><i></i></div></div>`);
+    el.killfeed = make('div', 'fx fx-ops fx-killfeed', '', `<span class="fx-attacker">SOLDIER</span>${RIFLE_ICON}<span class="fx-victim">CLAUDE</span>`);
+    el.headshot = make('div', 'fx fx-ops fx-headshot', 'HEADSHOT');
+    el.record = make('div', 'fx fx-ops fx-rankup', '', `${RANK_ICON}<div class="fx-rank-text"><small>NEW RECORD</small><b><span class="fx-name"></span> · <span class="fx-score"></span></b><div class="fx-xp"><i></i></div></div>`);
     overlay.append(el.killfeed, el.headshot, el.record);
     el.xp = el.record.querySelector('.fx-xp i');
   }
@@ -277,7 +277,7 @@ function buildCues(overlay, kind) {
 // Shows the gold NEW RECORD text only: 4 s for one record, 1.5 s each for several.
 // Calls done when the last record has been shown.
 function runText(overlay, records, done) {
-  const line = make('div', 'fx fx-mk fx-gold fx-text');
+  const line = make('div', 'fx fx-metal fx-gold fx-text');
   line.style.opacity = 1;
   overlay.append(line);
   let i = 0;
@@ -289,6 +289,11 @@ function runText(overlay, records, done) {
     setTimeout(step, ms);
   };
   step();
+}
+
+// True while an animation is on screen.
+export function isPlaying() {
+  return playing !== null;
 }
 
 // Plays the animation inside topbar and resolves once the overlay is removed. A
@@ -349,7 +354,8 @@ export function playRecordFx(topbar, records, { random = Math.random, reducedMot
         }
         draw(t, g);
         requestAnimationFrame(frame);
-      } catch {
+      } catch (err) {
+        console.error(err);
         finish();
       }
     };

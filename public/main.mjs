@@ -149,9 +149,11 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     livePoller.stop();
     stickyPoller.stop();
+    syncHighscores();
     return;
   }
   resetWatch();
+  refreshHighscores();
   if (!loadInFlight) {
     if (state.tab === 'now') runLoad();
     else loadStickyToday();

@@ -42,7 +42,7 @@ function rankEntries(entries) {
 // into the same payload on every poll.
 function mergeToday(payload, live, todayStr) {
   if (payload.date !== todayStr) return null;
-  if (!live) return payload.boards;
+  if (!live || live.date !== todayStr) return payload.boards;
   const midnight = Date.parse(todayStr + 'T00:00:00');
   const out = {};
   for (const { key, kind } of BOARDS) {
