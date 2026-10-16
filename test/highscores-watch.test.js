@@ -32,3 +32,7 @@ test('storage that throws reads null and writes nothing', () => {
 test('a malformed stored value reads null', () => {
   assert.equal(W.readCelebrated({ getItem: () => '{"date":1}' }), null);
 });
+test('a streak flip never plays, alone or with another board', () => {
+  assert.deepEqual(W.step({ day: '2026-10-16', first: [] }, S('streak', 'cost'), '2026-10-16', null).play, ['cost']);
+  assert.deepEqual(W.step({ day: '2026-10-16', first: [] }, S('streak'), '2026-10-16', null).play, []);
+});
