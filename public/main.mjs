@@ -22,6 +22,7 @@ import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits
 import { renderModelDailyCharts, renderModelsPanel, setupModelMixToggle } from './panels/models.mjs';
 import { loadPricesSource, setupPrices } from './panels/prices.mjs';
 import { refreshRecords } from './panels/records.mjs';
+import { setupHighscores, refreshHighscores, syncHighscores } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
@@ -155,6 +156,7 @@ document.addEventListener('visibilitychange', () => {
     else loadStickyToday();
   }
   setPolling(state.tab === 'now');
+  syncHighscores();
 });
 
 // Every today summary draws the sticky bar and the status strip through here: the
@@ -415,6 +417,8 @@ function enterTab(tab) {
   resetTimeline();
   lastPayload = null;
   setPolling(tab === 'now');
+  syncHighscores();
+  if (tab === 'highscores') refreshHighscores();
   const after = neededRequests(state.hiddenKeys, state.currentDays);
   if (after.has('changes') && !before.has('changes')) ensureChanges();
   if (after.has('prices') && !before.has('prices')) loadPricesSource();
@@ -427,6 +431,7 @@ function enterTab(tab) {
 function reloadAll() {
   clearSignatures();
   refreshRecords();
+  refreshHighscores();
   runLoad({ busy: true });
   loadChanges();
 }
@@ -469,7 +474,10 @@ window.addEventListener('resize', () => {
 // sessions and reviews come from fetchAll, and lastPayload holds null for a
 // skipped one, so when one of those resumes, redrawCharts loads the page again.
 function resumeRequests(resumed) {
-  if (resumed('records')) refreshRecords();
+  if (resumed('records')) {
+    refreshRecords();
+    refreshHighscores();
+  }
   if (resumed('prices')) loadPricesSource();
   // loadChanges renders the Setup changes panel itself when it finishes.
   if (resumed('changes')) loadChanges();
@@ -490,5 +498,7 @@ setupUsageGroupToggles();
 setupModelMixToggle();
 setupPrices({ onApplied: reloadAll });
 refreshRecords();
+setupHighscores();
+refreshHighscores();
 // Runs enterTab once for the hash the page opened with, then on each hash change.
 setupTabs(enterTab);

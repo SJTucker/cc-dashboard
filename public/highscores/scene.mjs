@@ -62,7 +62,7 @@ function signText(x, y, fill, size, family, text) {
 
 // The two neon signs, one on each side of the skyline.
 function buildSigns() {
-  const g = svgEl('g', { filter: `url(#${PREFIX}glow)` });
+  const g = svgEl('g', { class: 'hs-signs', filter: `url(#${PREFIX}glow)` });
   g.appendChild(svgEl('rect', { x: 70, y: 330, width: 70, height: 200, fill: '#0b0419', stroke: '#4fd8ff', 'stroke-width': 3 }));
   ['夢', 'は', '終', '無'].forEach((ch, i) => g.appendChild(signText(105, 370 + i * 40, '#4fd8ff', 30, 'sans-serif', ch)));
   g.appendChild(svgEl('rect', { x: 1265, y: 490, width: 120, height: 125, fill: '#0b0419', stroke: '#ff4fd8', 'stroke-width': 3 }));

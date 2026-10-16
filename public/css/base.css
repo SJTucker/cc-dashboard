@@ -1,12 +1,15 @@
 /* ---------- Base ---------- */
 
-/* Oxanium, Saira Condensed and JetBrains Mono are SIL OFL fonts, served from
-   public/fonts/ with their licences beside them. Oxanium and JetBrains Mono are
-   variable fonts, so one file covers every weight. */
+/* Oxanium, Saira Condensed, JetBrains Mono, Press Start 2P and VT323 are SIL OFL
+   fonts, served from public/fonts/ with their licences beside them. Oxanium and
+   JetBrains Mono are variable fonts, so one file covers every weight. Press Start
+   2P and VT323 are the latin subsets, for the High scores tab. */
 @font-face { font-family: 'Oxanium'; src: url('/fonts/Oxanium.woff2') format('woff2'); font-weight: 200 800; font-display: swap; }
 @font-face { font-family: 'Saira Condensed'; src: url('/fonts/SairaCondensed-500.woff2') format('woff2'); font-weight: 500; font-display: swap; }
 @font-face { font-family: 'Saira Condensed'; src: url('/fonts/SairaCondensed-600.woff2') format('woff2'); font-weight: 600; font-display: swap; }
 @font-face { font-family: 'JetBrains Mono'; src: url('/fonts/JetBrainsMono.woff2') format('woff2'); font-weight: 100 800; font-display: swap; }
+@font-face { font-family: 'Press Start 2P'; src: url('/fonts/PressStart2P.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'VT323'; src: url('/fonts/VT323.woff2') format('woff2'); font-weight: 400; font-display: swap; }
 
 :root {
   --bg: #05070d;

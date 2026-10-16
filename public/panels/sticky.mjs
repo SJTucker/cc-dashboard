@@ -2,6 +2,7 @@
 // 7 days, and the record day. They show today on both tabs and every range.
 import { formatCost, formatTokens, unpricedNote } from '../format.mjs';
 import { renderWeekTotals, renderRecord } from './records.mjs';
+import { onTodaySummary } from './highscores.mjs';
 
 // data is an /api/summary?days=today payload.
 export function renderSticky(data) {
@@ -12,4 +13,6 @@ export function renderSticky(data) {
   document.getElementById('stickyTokens').textContent = formatTokens(s.totalTokens);
   renderWeekTotals(s);
   renderRecord(data.daily);
+  // The High scores tab merges today's records into its boards on every poll.
+  onTodaySummary(data);
 }
