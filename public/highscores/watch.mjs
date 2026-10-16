@@ -12,8 +12,9 @@ const NO_FX = ['streak'];
 // { day, first } or null, `firstKeys` the boards where today now holds first
 // place, `celebrated` the stored { date, boards } or null. `play` lists, in
 // BOARDS order, the boards that just flipped to today-first and were not
-// already celebrated today. Boards in NO_FX never play. The first poll, and a poll after the day changed,
-// only record the state, so a load or a midnight rollover never plays.
+// already celebrated today. Boards in NO_FX never play. The first poll, and a
+// poll after the day changed, only record the state, so a load or a midnight
+// rollover never plays.
 export function step(prev, firstKeys, todayStr, celebrated) {
   const state = { day: todayStr, first: [...firstKeys] };
   const done = celebrated && celebrated.date === todayStr ? celebrated.boards : [];
