@@ -11,7 +11,9 @@ const css = fs.readdirSync(cssDir).sort().map((f) => fs.readFileSync(path.join(c
 // The High scores screen (highscores.css) has its own pixel-font type sizes, letter
 // spacing and phone breakpoint, drawn to match the approved mockup. The type scale
 // checks below cover every other stylesheet.
-const scaleCss = fs.readdirSync(cssDir).sort().filter((f) => f !== 'highscores.css').map((f) => fs.readFileSync(path.join(cssDir, f), 'utf8')).join('\n');
+// The record animation styles, at the end of header.css, are drawn at fixed pixel sizes
+// in two display fonts, so the scale checks stop at their marker comment.
+const scaleCss = fs.readdirSync(cssDir).sort().filter((f) => f !== 'highscores.css').map((f) => fs.readFileSync(path.join(cssDir, f), 'utf8').split('/* ---------- Record animation')[0]).join('\n');
 const token = (name) => (css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`)) || [])[1];
 
 // An SVG <pattern>'s paint cannot read a CSS custom property, so palette.mjs
