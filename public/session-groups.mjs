@@ -1,4 +1,4 @@
-const GROUP_SUMS = ['costUsd', 'costTodayUsd', 'durationMs', 'linesAdded', 'linesRemoved', 'tokens', 'prompts'];
+const GROUP_SUMS = ['costUsd', 'costTodayUsd', 'linesAdded', 'linesRemoved', 'tokens', 'prompts'];
 
 // Cost today of a row of the Live sessions table: a plain session or a group.
 function itemCost(item) {
@@ -9,12 +9,14 @@ function lastActive(item) {
   return item.type === 'group' ? item.lastActiveAt : item.session.lastActiveAt;
 }
 
-// Sums, the newest lastActiveAt and the end counts of a group's sessions. cleared
+// Sums, the summed Length (null when no session has one), the newest lastActiveAt and the end counts of a group's sessions. cleared
 // counts sessions ended by /clear, and ended every other end. An open session of a
 // launch group is in neither.
 function groupFields(sessions) {
   const fields = {};
   for (const key of GROUP_SUMS) fields[key] = sessions.reduce((sum, s) => sum + s[key], 0);
+  const lengths = sessions.map((s) => s.durationMs).filter((d) => typeof d === 'number');
+  fields.durationMs = lengths.length ? lengths.reduce((a, b) => a + b, 0) : null;
   fields.lastActiveAt = Math.max(...sessions.map((s) => s.lastActiveAt));
   fields.cleared = sessions.filter((s) => s.ended === 'clear').length;
   fields.ended = sessions.filter((s) => s.ended && s.ended !== 'clear').length;

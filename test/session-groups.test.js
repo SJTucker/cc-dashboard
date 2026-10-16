@@ -52,6 +52,13 @@ test('group fields sum the sessions and take the newest lastActiveAt', () => {
   assert.strictEqual(g.lastActiveAt, 20);
 });
 
+test('a group Length is null when no session has one, else the sum of the numbers', () => {
+  const [none] = groupSessions([session('a', 20, { durationMs: null }), session('a', 10, { durationMs: null })]);
+  assert.strictEqual(none.durationMs, null);
+  const [mixed] = groupSessions([session('a', 20, { durationMs: null }), session('a', 10, { durationMs: 700 })]);
+  assert.strictEqual(mixed.durationMs, 700);
+});
+
 test('rows are sorted by Cost today, highest first, and a group counts by its summed cost', () => {
   const items = groupSessions([
     session('a', 50, { ended: null, live: true, costTodayUsd: 0.4 }),

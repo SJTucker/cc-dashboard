@@ -124,8 +124,9 @@ recently. It makes no network request of its own.
   session's cost and duration, in
   `~/.claude/cc-dashboard/sessions/` (or `$CLAUDE_CONFIG_DIR/cc-dashboard/sessions/`).
   The Live sessions panel reads them. Snapshots older than a day are deleted on the
-  next write. The panel's Length column comes from that
-  snapshot, so it covers the whole session from whenever it started. Its Prompts,
+  next write. The panel's Length column runs from the
+  session's first typed prompt to its last activity, read from the transcript, and
+  shows — before the first prompt. Its Prompts,
   Cost today and Lines columns come from today's transcripts instead. A session that
   started yesterday shows fewer prompts, less cost and fewer lines than over its
   whole life. Lines counts the lines added and removed by Edit and Write calls,
