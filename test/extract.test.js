@@ -762,3 +762,17 @@ test('a first prompt that is not a resume prompt leaves handoffTitle null even i
   const rows = await extractFile(writeTranscript(handoffLines({ prompt: 'fix the deploy', result: HANDOFF_TEXT })));
   assert.strictEqual(rows.sessions.s1.handoffTitle, null);
 });
+
+test('a Bash cat of the handoff file, with an unprefixed result, gives the title', async () => {
+  const prompt = `Read ${HANDOFF_FILE}, check Preconditions`;
+  const lines = handoffLines({ prompt, result: '# Handoff: collapse the comment-rule stack (#316–#3\n\n## Status' });
+  lines[1].message.content[0] = { type: 'tool_use', id: 'toolu_1', name: 'Bash', input: { command: `cat ${HANDOFF_FILE}` } };
+  const rows = await extractFile(writeTranscript(lines));
+  assert.strictEqual(rows.sessions.s1.handoffTitle, 'Collapse the comment-rule stack');
+});
+
+test('a Read result prefixed 1<tab> with no leading spaces gives the title', async () => {
+  const prompt = `Read ${HANDOFF_FILE}, check Preconditions`;
+  const rows = await extractFile(writeTranscript(handoffLines({ prompt, result: '1\t# Handoff: fix the deploy failure\n2\t' })));
+  assert.strictEqual(rows.sessions.s1.handoffTitle, 'Fix the deploy failure');
+});
