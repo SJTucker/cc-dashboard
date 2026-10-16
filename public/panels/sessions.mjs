@@ -94,6 +94,9 @@ function drawSessions(live) {
   const titleParts = (s, live, lead = []) => [
     ...lead,
     el('span', { class: 'session-hex', 'aria-hidden': 'true', text: live ? '⬢' : '⬡' }),
+    ...(s.title && s.titleSource === 'handoff'
+      ? [el('span', { class: 'handoff-mark', title: 'Picked up from a handoff', text: '↪' })]
+      : []),
     ...(s.title
       ? [el('span', { class: s.titleSource === 'prompt' ? 'session-title from-prompt' : 'session-title', title: titleTooltip(s), text: s.title })]
       : []),

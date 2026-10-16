@@ -21,6 +21,11 @@
   font-style: italic;
 }
 
+.handoff-mark {
+  color: var(--text-secondary);
+  margin-right: 0.25em;
+}
+
 /* Under a title the context line is a second, smaller line. With no title it is the
    row's main text and keeps the normal size. */
 .session-title ~ .session-context {
