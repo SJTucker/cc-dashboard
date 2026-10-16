@@ -16,6 +16,8 @@ const REQUEST_CONSUMERS = {
 // Analysis tab is every other range (public/ui/tabs.mjs), so the range names the tab.
 const NOW_REQUESTS = ['sessions', 'records', 'prices'];
 const ANALYSIS_REQUESTS = ['changes', 'rtk', 'reviews', 'records'];
+// The High scores tab has range 'highscores'. Only the sticky bar's records show.
+const HIGHSCORES_REQUESTS = ['records'];
 
 // The hidden keys saved in localStorage. Anything that is not a JSON list gives
 // an empty list, and entries that are not strings are dropped.
@@ -31,7 +33,9 @@ function parseHidden(raw) {
 // The optional requests the open tab still needs: those whose panels are on the tab
 // and not all hidden.
 function neededRequests(hidden, range) {
-  const onTab = range === 'today' ? NOW_REQUESTS : ANALYSIS_REQUESTS;
+  let onTab = ANALYSIS_REQUESTS;
+  if (range === 'today') onTab = NOW_REQUESTS;
+  else if (range === 'highscores') onTab = HIGHSCORES_REQUESTS;
   const needed = new Set();
   for (const request of onTab) {
     const keys = REQUEST_CONSUMERS[request];

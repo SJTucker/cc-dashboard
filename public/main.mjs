@@ -361,6 +361,15 @@ function reportDrawError(err) {
 // rejected run would end the live poll chain. reportDrawError only writes text
 // to #statusBanner and never throws, so the catch cannot throw.
 function runLoad(options) {
+  // The High scores tab has no range summary to load or draw. A load from the
+  // previous tab still in flight is made stale, so it draws nothing, and it can no
+  // longer clear the busy state or loadInFlight, so they are cleared here.
+  if (state.currentDays === 'highscores') {
+    loads.next();
+    loadInFlight = false;
+    setBusy(false);
+    return Promise.resolve();
+  }
   return fetchAll(options).catch(reportDrawError);
 }
 
@@ -406,7 +415,7 @@ function enterTab(tab) {
   const after = neededRequests(state.hiddenKeys, state.currentDays);
   if (after.has('changes') && !before.has('changes')) ensureChanges();
   if (after.has('prices') && !before.has('prices')) loadPricesSource();
-  if (tab === 'analysis') loadStickyToday();
+  if (tab !== 'now') loadStickyToday();
   runLoad({ busy: true });
 }
 
@@ -431,6 +440,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 // request. It loads instead when there is no payload yet, or when resumeRequests
 // passes refetch because a request skipped at the last load is needed again.
 function redrawCharts({ changes = true, refetch = false } = {}) {
+  if (state.currentDays === 'highscores') return; // no charts on the High scores tab
   clearSignatures(); // the width changed, so the same data still needs redrawing
   resetTimeline();
   if (refetch || !lastPayload || loadInFlight) {

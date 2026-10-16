@@ -30,3 +30,11 @@ test('summaryPanelsFor: each tab draws only its own summary panels', async () =>
   assert.deepEqual(summaryPanelsFor('analysis'), ['cards', 'usage', 'lines', 'modelDaily', 'tools']);
   assert.deepEqual(summaryPanelsFor('nope'), ['attribution', 'models']);
 });
+
+test('the High scores tab has its own hash and range', async () => {
+  const { tabFromHash, rangeForTab, summaryPanelsFor, TABS } = await load();
+  assert.deepEqual(TABS, ['now', 'analysis', 'highscores']);
+  assert.equal(tabFromHash('#highscores'), 'highscores');
+  assert.equal(rangeForTab('highscores', 30), 'highscores');
+  assert.deepEqual(summaryPanelsFor('highscores'), []);
+});

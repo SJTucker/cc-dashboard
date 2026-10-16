@@ -56,3 +56,7 @@ test('keys that feed no request change nothing', () => {
   assert.deepStrictEqual(needed(['dailyCost', 'tools', 'card-files', 'gone'], 'today'), NOW);
   assert.deepStrictEqual(needed(['dailyCost', 'tools', 'card-files', 'gone'], 7), ANALYSIS);
 });
+
+test('the High scores tab needs only /api/records', () => {
+  assert.deepEqual(needed([], 'highscores'), ['records']);
+});

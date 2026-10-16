@@ -68,3 +68,8 @@ test('Models is one panel on the Now tab, last, that keeps the Cost by model hid
   assert.doesNotMatch(html, /modelMixPanel|modelMixChart/);
   assert.match(html, /<div class="mix-measure" id="mixMeasure"/);
 });
+
+test('the header has a High scores tab and its container starts hidden', () => {
+  assert.match(html, /<button[^>]*data-tab="highscores"[^>]*>High scores<\/button>/);
+  assert.match(html, /<div class="tab" id="tabHighscores" hidden>\s*<section class="arcade" id="arcade"><\/section>/);
+});
