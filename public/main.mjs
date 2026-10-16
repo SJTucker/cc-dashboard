@@ -175,6 +175,9 @@ function loadStickyToday() {
     if (state.currentDays === 'today') return;
     drawSticky(summary);
     renderLimitsBanner(limits);
+    // No summary draw runs on the High scores tab, so the first sticky poll ends
+    // the "Loading…" lines (.first-load) that drawSummary ends on other tabs.
+    if (state.currentDays === 'highscores') document.body.classList.remove('first-load');
   });
 }
 
