@@ -1028,6 +1028,15 @@ test('GET /api/reviews lists finished reviews with suggestion state', async (t) 
   });
 });
 
+test('GET /api/reviews and /api/reviews/closed accept days=today', async (t) => {
+  const { url } = await startServer(t);
+  const open = await fetch(`${url}/api/reviews?days=today`);
+  assert.strictEqual(open.status, 200);
+  assert.deepStrictEqual(await open.json(), { reviews: [], closedCount: 0 });
+  const closed = await fetch(`${url}/api/reviews/closed?days=today`);
+  assert.strictEqual(closed.status, 200);
+});
+
 test('GET /api/reviews answers an empty list before any review exists', async (t) => {
   const { url } = await startServer(t);
   const res = await fetch(`${url}/api/reviews?days=7`);
@@ -1088,7 +1097,7 @@ const suggestionState = async (base, id) => {
 test('the reviews routes answer 400 for a missing or bad days, limit or before', async (t) => {
   const { url } = await startServer(t);
   for (const route of [
-    '/api/reviews', '/api/reviews?days=', '/api/reviews?days=today', '/api/reviews?days=14', '/api/reviews?days=7&days=30',
+    '/api/reviews', '/api/reviews?days=', '/api/reviews?days=14', '/api/reviews?days=7&days=30',
     '/api/reviews/closed', '/api/reviews/closed?days=abc', '/api/reviews/closed?days=7&limit=0', '/api/reviews/closed?days=7&limit=x',
     '/api/reviews/closed?days=7&before=nope', `/api/reviews/closed?days=7&before=${encodeURIComponent('12:../x')}`,
   ]) {

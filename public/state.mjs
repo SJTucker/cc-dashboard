@@ -4,9 +4,10 @@ export const state = {
   // The range the page loads: 'today' on the Now tab, else state.analysisDays.
   currentDays: 'today',
   // The tab shown: 'now' or 'analysis' (public/ui/tabs.mjs). currentDays is
-  // 'today' on Now and analysisDays on Analysis.
+  // 'today' on Now and analysisDays on Analysis. Panels and requests that belong to
+  // a tab key on this, because Analysis can be on 'today' too.
   tab: 'now',
-  // The range picked on the Analysis tab: 7, 30, 90 or 'all'.
+  // The range picked on the Analysis tab: 'today', 7, 30, 90 or 'all'.
   analysisDays: 7,
   // The data-hide-key values (index.html) of the hidden panels and cards.
   // Filled from localStorage when the page starts.

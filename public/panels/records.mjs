@@ -35,7 +35,7 @@ const recordsLoads = createSequence();
 // neededRequests always includes it. The check stays as the one place that decides
 // what the page fetches.
 export function refreshRecords() {
-  if (!neededRequests(state.hiddenKeys, state.currentDays).has('records')) return;
+  if (!neededRequests(state.hiddenKeys, state.tab).has('records')) return;
   const day = localDateStr(new Date());
   recordsDay = day;
   const isLatest = recordsLoads.next();

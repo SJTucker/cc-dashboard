@@ -277,7 +277,7 @@ const changesLoads = createSequence();
 // not from the newest request is dropped, whether it succeeded or failed, because
 // the newest request draws the panel when it settles.
 export async function loadChanges() {
-  if (!neededRequests(state.hiddenKeys, state.currentDays).has('changes')) return;
+  if (!neededRequests(state.hiddenKeys, state.tab).has('changes')) return;
   const isLatest = changesLoads.next();
   showChangesLoading();
   const report = await getJson('/api/changes');

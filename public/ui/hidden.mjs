@@ -83,11 +83,11 @@ function hideKey(key) {
 // for a request that was skipped because all its panels were hidden and that is
 // needed now. onResume decides what to load again.
 function showKeys(keys) {
-  const before = neededRequests(state.hiddenKeys, state.currentDays);
+  const before = neededRequests(state.hiddenKeys, state.tab);
   for (const key of keys) state.hiddenKeys.delete(key);
   saveHidden();
   applyHidden();
-  const after = neededRequests(state.hiddenKeys, state.currentDays);
+  const after = neededRequests(state.hiddenKeys, state.tab);
   onResume((request) => after.has(request) && !before.has(request));
 }
 

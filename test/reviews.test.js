@@ -32,6 +32,11 @@ test('rangePhrase and rangeShort name each range', () => {
   assert.deepStrictEqual(['7', '30', '90', 'all'].map(h.rangeShort), ['7d', '30d', '90d', 'All']);
 });
 
+test('rangePhrase and rangeShort name the today range', () => {
+  assert.strictEqual(h.rangePhrase('today'), 'today');
+  assert.strictEqual(h.rangeShort('today'), 'Today');
+});
+
 test('countWithOpen counts reviews that still have an open suggestion', () => {
   assert.strictEqual(h.countWithOpen([review('a', 1, [open(0)]), review('b', 1, [closed(0, 'done')])]), 1);
 });

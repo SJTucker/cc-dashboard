@@ -14,7 +14,7 @@ export function tabFromHash(hash) {
 }
 
 // The range a tab loads. Now is always Today. Analysis keeps the range last picked
-// on it in this page view.
+// on it (Today included) in this page view.
 export function rangeForTab(tab, analysisDays) {
   return tab === 'now' ? 'today' : analysisDays;
 }

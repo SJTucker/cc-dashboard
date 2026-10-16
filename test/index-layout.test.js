@@ -29,12 +29,14 @@ test('the Now tab row keeps the key Plan usage', () => {
   assert.equal(headings(tabMarkup('tabNow'))[0], 'Plan usage');
 });
 
-test('the Analysis tab starts with the range picker and the cards, with no Today button', () => {
+test('the Analysis tab starts with the range picker and the cards, and the picker lists Today, 7d, 30d, 90d and All', () => {
   const analysis = tabMarkup('tabAnalysis');
   assert.ok(analysis.indexOf('id="rangePicker"') < analysis.indexOf('id="summaryCards"'));
   assert.ok(analysis.indexOf('id="summaryCards"') < analysis.indexOf('<section class="panel"'));
-  assert.doesNotMatch(analysis, /data-days="today"/);
-  assert.match(analysis, /<button data-days="7" class="active">/);
+  const picker = analysis.slice(analysis.indexOf('id="rangePicker"'), analysis.indexOf('id="summaryCards"'));
+  assert.deepStrictEqual([...picker.matchAll(/data-days="([^"]+)"/g)].map((m) => m[1]), ['today', '7', '30', '90', 'all']);
+  assert.match(picker, /<button data-days="7" class="active">/);
+  assert.doesNotMatch(picker, /data-days="today" class="active"/);
 });
 
 test('the Analysis cards list the money cards, then the usage cards', () => {

@@ -93,13 +93,15 @@ function parseDays(raw) {
   return RANGE_DAYS.has(n) ? { days: n } : { error: INVALID_DAYS(raw) };
 }
 
-// The days query of the reviews routes, as { days } or { error }. days is 7, 30 or
-// 90, or null for All. The panel is on the Analysis tab only and always sends its
-// range, so a missing value and 'today' are errors too.
+// The days query of the reviews routes, as { days } or { error }. days is 'today',
+// 7, 30 or 90, or null for All. The panel is on the Analysis tab only and always
+// sends its range, so a missing value is an error. lib/review.js starts 'today' at
+// local midnight.
 function parseReviewDays(raw) {
+  if (raw === 'today') return { days: 'today' };
   if (raw === 'all') return { days: null };
   if (raw === '7' || raw === '30' || raw === '90') return { days: Number(raw) };
-  return { error: `Invalid days: ${String(raw)}. Use 7, 30, 90 or 'all'.` };
+  return { error: `Invalid days: ${String(raw)}. Use 'today', 7, 30, 90 or 'all'.` };
 }
 
 // The limit query of /api/reviews/closed: CLOSED_PAGE_SIZE when missing, else a whole

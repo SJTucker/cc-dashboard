@@ -13,10 +13,12 @@ const dismissalText = (s) => DISMISSAL_TEXT[s.reason] ?? 'Marked not useful';
 const REASON_LABEL = { done: 'Done', duplicate: 'Duplicate', not_useful: 'Not useful', expired: 'Expired' };
 const reasonLabel = (s) => REASON_LABEL[s.reason] ?? s.reason;
 
-// The range picker's value ('7', '30', '90' or 'all') in a sentence and in the
-// panel note.
-const rangePhrase = (days) => (days === 'all' ? 'in all time' : `in the last ${days} days`);
-const rangeShort = (days) => (days === 'all' ? 'All' : `${days}d`);
+// The range picker's value ('today', '7', '30', '90' or 'all') in a sentence and in
+// the panel note.
+const RANGE_PHRASE = { all: 'in all time', today: 'today' };
+const RANGE_SHORT = { all: 'All', today: 'Today' };
+const rangePhrase = (days) => RANGE_PHRASE[days] ?? `in the last ${days} days`;
+const rangeShort = (days) => RANGE_SHORT[days] ?? `${days}d`;
 
 // Newest first. The open list sorts by session end. The closed list sorts by the
 // server's cursor: reviewedAt, then session id descending. SQLite compares session

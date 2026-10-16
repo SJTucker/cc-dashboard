@@ -19,7 +19,7 @@ export async function postJson(url) {
 }
 
 export async function loadPricesSource() {
-  if (!neededRequests(state.hiddenKeys, state.currentDays).has('prices')) return;
+  if (!neededRequests(state.hiddenKeys, state.tab).has('prices')) return;
   const note = document.getElementById('pricesSource');
   // /api/prices answers 200 with an error field when prices.json was ignored.
   // That field is a warning to show, so this request does not use getJson.

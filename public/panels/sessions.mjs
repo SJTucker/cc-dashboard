@@ -74,7 +74,7 @@ const collapsedBands = loadCollapsedBands();
 // now table hides when no session is live.
 export function renderSessions(live) {
   const panel = document.getElementById('sessionsPanel');
-  panel.hidden = !live || !live.sessions.length || state.currentDays !== 'today';
+  panel.hidden = !live || !live.sessions.length || state.tab !== 'now';
   if (panel.hidden) return;
   lastLiveSessions = live;
   // expandedGroups and collapsedBands are in the key, so a toggle's own call redraws.

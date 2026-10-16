@@ -29,9 +29,10 @@ function parseHidden(raw) {
 }
 
 // The optional requests the open tab still needs: those whose panels are on the tab
-// and not all hidden.
-function neededRequests(hidden, range) {
-  const onTab = range === 'today' ? NOW_REQUESTS : ANALYSIS_REQUESTS;
+// and not all hidden. The tab picks the set, not the range, because Analysis can
+// be on the Today range too.
+function neededRequests(hidden, tab) {
+  const onTab = tab === 'now' ? NOW_REQUESTS : ANALYSIS_REQUESTS;
   const needed = new Set();
   for (const request of onTab) {
     const keys = REQUEST_CONSUMERS[request];
