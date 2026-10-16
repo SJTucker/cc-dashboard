@@ -79,9 +79,39 @@ test('playRecordFx falls back to text when the canvas has no 2d context', async 
     timers.shift().fn();
     await p;
     assert.ok(overlay.removed, 'overlay removed');
-    assert.notStrictEqual(F.playRecordFx(bar, [{ title: 'A', score: '1' }], { reducedMotion: true }), p);
+    const next = F.playRecordFx(bar, [{ title: 'A', score: '1' }], { reducedMotion: true });
+    assert.notStrictEqual(next, p);
+    timers.shift().fn();
+    await next;
   } finally {
     global.document = savedDoc;
     global.setTimeout = savedTimeout;
+  }
+});
+
+test('playRecordFx finishes when drawing throws, and a later call starts fresh', async () => {
+  const ctx = new Proxy({}, { get: (_, k) => (k === 'fillRect' ? () => { throw new Error('boom'); } : () => {}), set: () => true });
+  const el = () => ({
+    style: {}, className: '', textContent: '', clientWidth: 1200, clientHeight: 76,
+    setAttribute() {}, append() {}, remove() { this.removed = true; },
+    querySelector: () => el(), querySelectorAll: () => [],
+    getBoundingClientRect: () => ({ width: 1200, height: 76 }),
+    getContext: () => ctx,
+  });
+  const saved = [global.document, global.requestAnimationFrame];
+  global.document = { createElement: el };
+  const frames = [];
+  global.requestAnimationFrame = (fn) => frames.push(fn);
+  try {
+    const bar = el();
+    const p = F.playRecordFx(bar, [{ title: 'A', score: '1' }], { random: () => 0.1, reducedMotion: false });
+    frames.shift()(0);
+    await p;
+    const q = F.playRecordFx(bar, [{ title: 'A', score: '1' }], { random: () => 0.1, reducedMotion: false });
+    assert.notStrictEqual(q, p);
+    frames.shift()(0);
+    await q;
+  } finally {
+    [global.document, global.requestAnimationFrame] = saved;
   }
 });

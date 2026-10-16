@@ -309,7 +309,10 @@ export function playRecordFx(topbar, records, { random = Math.random, reducedMot
   topbar.append(overlay);
 
   playing = new Promise((resolve) => {
+    let done = false;
     const finish = () => {
+      if (done) return;
+      done = true;
       overlay.remove();
       playing = null;
       resolve();
@@ -330,20 +333,25 @@ export function playRecordFx(topbar, records, { random = Math.random, reducedMot
     const draw = kind === 'fatality' ? fatality : headshot;
     let start = null;
     const frame = (now) => {
-      if (start === null) start = now;
-      const t = now - start;
-      if (t >= g.end) return finish();
-      const w = topbar.clientWidth, h = topbar.clientHeight, d = globalThis.devicePixelRatio || 1;
-      if (w !== g.W || h !== g.H) {
-        g.W = w;
-        g.H = h;
-        canvas.width = w * d;
-        canvas.height = h * d;
-        ctx.setTransform(d, 0, 0, d, 0, 0);
-        ctx.imageSmoothingEnabled = false;
+      // Any drawing error ends the animation, so the promise resolves and the overlay goes.
+      try {
+        if (start === null) start = now;
+        const t = now - start;
+        if (t >= g.end) return finish();
+        const w = topbar.clientWidth, h = topbar.clientHeight, d = globalThis.devicePixelRatio || 1;
+        if (w !== g.W || h !== g.H) {
+          g.W = w;
+          g.H = h;
+          canvas.width = w * d;
+          canvas.height = h * d;
+          ctx.setTransform(d, 0, 0, d, 0, 0);
+          ctx.imageSmoothingEnabled = false;
+        }
+        draw(t, g);
+        requestAnimationFrame(frame);
+      } catch {
+        finish();
       }
-      draw(t, g);
-      requestAnimationFrame(frame);
     };
     requestAnimationFrame(frame);
   });
