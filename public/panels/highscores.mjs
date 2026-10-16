@@ -5,8 +5,10 @@ import { getJson } from '../api.mjs';
 import { el } from '../dom.mjs';
 import { localDateStr } from '../format.mjs';
 import { createSequence } from '../guards.mjs';
-import { BOARDS, BOARD_SIZE, mergeToday } from '../highscores/boards.mjs';
-import { boardRows, hallRows } from '../highscores/view.mjs';
+import { BOARDS, BOARD_SIZE, mergeToday, todayFirstKeys } from '../highscores/boards.mjs';
+import { boardRows, hallRows, scoreText } from '../highscores/view.mjs';
+import { step, readCelebrated, writeCelebrated } from '../highscores/watch.mjs';
+import { playRecordFx } from '../fx/record-fx.mjs';
 import { buildScene } from '../highscores/scene.mjs';
 
 const CYCLE_MS = 6000;
@@ -17,6 +19,7 @@ const SCREENS = BOARDS.length + 1;
 let payload = null; // the last good /api/highscores body
 let lastLive = null; // the latest todayRecords block
 let lastMerged = null; // payload boards with today merged in, null when none yet or stale
+let prev = null; // the last poll's { day, first } for the record animation, null until one merge
 let staleRequestedFor = null; // the date a refetch was already started for
 let screen = 0;
 let cycleTimer = null;
@@ -266,20 +269,42 @@ export function refreshHighscores() {
 // started per date, and lastMerged is null so nothing downstream compares today
 // against boards that lack yesterday.
 function remerge() {
-  if (!payload) return;
+  if (!payload) return null;
   const today = localDateStr(new Date());
   lastMerged = mergeToday(payload, lastLive, today);
   if (lastMerged === null && staleRequestedFor !== today) {
     staleRequestedFor = today;
     refreshHighscores();
   }
+  return lastMerged === null ? null : today;
+}
+
+// Forgets the last poll's state, so the next poll only records. Called when the
+// browser tab is shown again, so a record set while hidden does not play.
+export function resetWatch() {
+  prev = null;
+}
+
+// Compares this poll's first places with the last poll's and plays the header
+// animation for each board that today just took. localStorage is read on every
+// call so a play in another browser tab is seen. A rejected animation is ignored.
+function watchRecords(today) {
+  const storage = globalThis.localStorage;
+  const result = step(prev, todayFirstKeys(lastMerged), today, readCelebrated(storage));
+  prev = result.state;
+  if (!result.play.length) return;
+  writeCelebrated(storage, result.celebrated);
+  const records = result.play.map((k) => ({ title: BOARDS.find((b) => b.key === k).title, score: scoreText(k, lastMerged[k][0]) }));
+  const reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+  playRecordFx(document.querySelector('.topbar'), records, { reducedMotion })?.catch(() => {});
 }
 
 // Called by renderSticky with every today summary, on every tab. It keeps the
 // live values and the merged boards current, and redraws only while the tab shows.
 export function onTodaySummary(data) {
   lastLive = data.todayRecords ?? null;
-  remerge();
+  const merged = remerge();
+  if (merged) watchRecords(merged);
   if (built) {
     drawCredits();
     if (isVisible()) draw();

@@ -22,7 +22,7 @@ import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits
 import { renderModelDailyCharts, renderModelsPanel, setupModelMixToggle } from './panels/models.mjs';
 import { loadPricesSource, setupPrices } from './panels/prices.mjs';
 import { refreshRecords } from './panels/records.mjs';
-import { setupHighscores, refreshHighscores, syncHighscores } from './panels/highscores.mjs';
+import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
@@ -151,6 +151,7 @@ document.addEventListener('visibilitychange', () => {
     stickyPoller.stop();
     return;
   }
+  resetWatch();
   if (!loadInFlight) {
     if (state.tab === 'now') runLoad();
     else loadStickyToday();
