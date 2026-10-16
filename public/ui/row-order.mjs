@@ -14,7 +14,9 @@ const ROW_ORDER_KEY = 'cc-dashboard:row-order';
 function assignRowKeys() {
   for (const row of document.querySelectorAll(ROW_SELECTOR)) {
     const heading = row.querySelector('.panel-head h2');
-    if (heading) row.dataset.rowKey = heading.textContent;
+    // A heading swapped to its hourly text (syncBucketText in main.mjs) keeps the
+    // daily text in data-daily, so a row's key is the same on every range.
+    if (heading) row.dataset.rowKey = heading.dataset.daily ?? heading.textContent;
   }
 }
 

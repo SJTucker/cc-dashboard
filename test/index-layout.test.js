@@ -35,8 +35,15 @@ test('the Analysis tab starts with the range picker and the cards, and the picke
   assert.ok(analysis.indexOf('id="summaryCards"') < analysis.indexOf('<section class="panel"'));
   const picker = analysis.slice(analysis.indexOf('id="rangePicker"'), analysis.indexOf('id="summaryCards"'));
   assert.deepStrictEqual([...picker.matchAll(/data-days="([^"]+)"/g)].map((m) => m[1]), ['today', '7', '30', '90', 'all']);
-  assert.match(picker, /<button data-days="7" class="active">/);
-  assert.doesNotMatch(picker, /data-days="today" class="active"/);
+  assert.deepStrictEqual([...picker.matchAll(/data-days="([^"]+)" class="active"/g)].map((m) => m[1]), ['today']);
+});
+
+test('every Analysis heading that says Daily has an hourly title for the Today range', () => {
+  // syncBucketText in public/main.mjs swaps a data-hourly heading's text on Today.
+  const analysis = tabMarkup('tabAnalysis');
+  const daily = [...analysis.matchAll(/<h2([^>]*)>Daily [^<]*<\/h2>/g)];
+  assert.ok(daily.length > 0);
+  for (const [tag, attrs] of daily) assert.match(attrs, /data-hourly="Hourly /, tag);
 });
 
 test('the Analysis cards list the money cards, then the usage cards', () => {

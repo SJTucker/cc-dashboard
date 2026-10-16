@@ -368,6 +368,22 @@ function syncRangeButtons() {
   for (const b of document.querySelectorAll('#rangePicker button')) {
     b.classList.toggle('active', b.dataset.days === String(state.analysisDays));
   }
+  syncBucketText();
+}
+
+// On Today the Analysis charts have hourly buckets, so a title or chart label that
+// says daily swaps to its data-hourly or data-hourly-label text (index.html). The
+// daily text is kept in data-daily and data-daily-label on the first swap.
+function syncBucketText() {
+  const hourly = state.analysisDays === 'today';
+  for (const el of document.querySelectorAll('[data-hourly]')) {
+    el.dataset.daily ??= el.textContent;
+    el.textContent = hourly ? el.dataset.hourly : el.dataset.daily;
+  }
+  for (const el of document.querySelectorAll('[data-hourly-label]')) {
+    el.dataset.dailyLabel ??= el.getAttribute('aria-label');
+    el.setAttribute('aria-label', hourly ? el.dataset.hourlyLabel : el.dataset.dailyLabel);
+  }
 }
 
 // The range picker is on the Analysis tab only. 'today' stays a string, like 'all'.

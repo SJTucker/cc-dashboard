@@ -13,7 +13,7 @@ and when you click Check prices. The optional Claude Code mod in `mod/` also fet
 Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
 does and doesn't do" below.
 
-The page has two tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline, Live sessions and Models. The Analysis tab shows 7d, 30d, 90d and All, picked with the range picker, with panels that include Lines of code. The URL hash `#now` or `#analysis` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on both tabs. Cost today and Tokens today each add a 7d total.
+The page has two tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline, Live sessions and Models. The Analysis tab shows Today, 7d, 30d, 90d and All, picked with the range picker, with panels that include Lines of code. It opens on Today, where its charts have hourly buckets and their titles say Hourly. The URL hash `#now` or `#analysis` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on both tabs. Cost today and Tokens today each add a 7d total.
 
 ![The Now tab: Plan usage, Where usage goes and Session timeline](docs/screenshots/overview.png)
 
@@ -228,7 +228,7 @@ to three changes. The kinds are a CLAUDE.md rule that would have prevented a
 correction, a skill or hook for repeated steps, token waste such as large tool output
 or repeated reads, and a change to how the session was run. "No suggestions" is a
 normal result. The Session reviews panel lists reviews that still have an open
-suggestion, from the range picked on the Analysis tab (7d, 30d, 90d or All). A review
+suggestion, from the range picked on the Analysis tab (Today, 7d, 30d, 90d or All). A review
 with no suggestions, or whose Haiku call failed, is not listed. An open suggestion
 closes as expired 14 days after its review. Each review shows the session's title
 (Claude Code's last `ai-title` line, when the transcript has one), the project and
@@ -518,7 +518,7 @@ computed from the stored rows on each request, so no separate cache file exists.
 ## Setup changes
 
 One panel at the bottom shows whether a change to your setup moved the numbers. It
-follows the Analysis tab's range picker. 7d shows the last 14 days, 30d and 90d their own
+follows the Analysis tab's range picker. Today and 7d show the last 14 days, 30d and 90d their own
 span, and All shows everything. The before/after table always uses the full 7-day
 windows, so its numbers do not change with the range.
 

@@ -8,7 +8,7 @@ export const state = {
   // a tab key on this, because Analysis can be on 'today' too.
   tab: 'now',
   // The range picked on the Analysis tab: 'today', 7, 30, 90 or 'all'.
-  analysisDays: 7,
+  analysisDays: 'today',
   // The data-hide-key values (index.html) of the hidden panels and cards.
   // Filled from localStorage when the page starts.
   hiddenKeys: new Set(),
