@@ -3,15 +3,16 @@
 /* A synthwave arcade screen, after the approved mockup. Every rule is scoped under
    .arcade so nothing reaches the other tabs. The screen fills the tab area under
    the sticky bar and grows when the table needs more room. */
+#tabHighscores { container-type: inline-size; }
 .arcade {
   --hi: #ffe14f;
   --hi-core: #fff8d0;
   --td: #ff8be6;
   position: relative;
-  /* The scene is drawn for 1440x900, so a wide screen keeps that ratio and the
-     side text lines up with the signs. Content that needs more room grows it. */
-  aspect-ratio: 1440 / 900;
-  min-height: 640px;
+  /* The scene is drawn for 1440x900, so the screen is at least 5/8 of the tab's
+     width tall (62.5cqw, a container query unit of #tabHighscores) and the side
+     text lines up with the signs. Content that needs more room grows the box. */
+  min-height: max(640px, 62.5cqw);
   overflow: hidden;
   background: #05020c;
   color: #7ff6ff;
@@ -42,7 +43,7 @@
   font-family: 'Press Start 2P', monospace;
   font-weight: 400;
   text-align: center;
-  font-size: clamp(22px, 5vw, 54px);
+  font-size: clamp(22px, 4.2vw, 54px);
   line-height: 1.1;
   background: linear-gradient(#7ff6ff 0%, #a9c8ff 45%, #ff4fd8 100%);
   -webkit-background-clip: text;
@@ -130,7 +131,7 @@
 /* Below 900px the side text and the neon signs would crowd the table. */
 @media (max-width: 899px) {
   .arcade .side, .arcade .hs-signs { display: none; }
-  .arcade { aspect-ratio: auto; min-height: calc(100vh - 140px); }
+  .arcade { min-height: calc(100vh - 140px); }
   .arcade .center { padding: 16px 0 24px; }
   .arcade .kana { font-size: 18px; }
   .arcade .rule { letter-spacing: .25em; font-size: 16px; }
