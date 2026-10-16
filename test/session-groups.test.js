@@ -286,6 +286,14 @@ test('splitBands keeps a session waiting on you after it stops being live', () =
   assert.strictEqual(bands.earlier.length, 3);
 });
 
+test('splitBands puts sessions waiting on you below the other running sessions', () => {
+  const waitOld = session('wait-old', 10, { ended: null, live: true, spans: [[100, 200]], activity: { state: 'waiting' } });
+  const workNew = session('work-new', 20, { ended: null, live: true, spans: [[300, 400]], activity: { state: 'working' } });
+  const waitNew = session('wait-new', 30, { ended: null, live: false, spans: [[500, 600]], activity: { state: 'waiting' } });
+  const workOld = session('work-old', 40, { ended: null, live: true, spans: [[50, 60]], activity: { state: 'working' } });
+  assert.deepStrictEqual(runningNames(splitBands(groupSessions([waitOld, workNew, waitNew, workOld]))), ['work-old', 'work-new', 'wait-old', 'wait-new']);
+});
+
 test('splitBands returns a launch group whose newest session is running, with that session', () => {
   const newest = session('a', 30, { ended: null, live: true, launchId: 'L1', spans: [[10, 30]] });
   const bands = splitBands(groupSessions([newest, session('a', 20, { launchId: 'L1' }), session('a', 10, { launchId: 'L1' })]));
