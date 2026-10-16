@@ -8,6 +8,12 @@ const path = require('node:path');
 // Every file under public/css/, so the checks below cover the whole stylesheet.
 const cssDir = path.join(__dirname, '..', 'public', 'css');
 const css = fs.readdirSync(cssDir).sort().map((f) => fs.readFileSync(path.join(cssDir, f), 'utf8')).join('\n');
+// The High scores screen (highscores.css) has its own pixel-font type sizes, letter
+// spacing and phone breakpoint, drawn to match the approved mockup. The type scale
+// checks below cover every other stylesheet.
+// The record animation styles, at the end of header.css, are drawn at fixed pixel sizes
+// in two display fonts, so the scale checks stop at their marker comment.
+const scaleCss = fs.readdirSync(cssDir).sort().filter((f) => f !== 'highscores.css').map((f) => fs.readFileSync(path.join(cssDir, f), 'utf8').split('/* ---------- Record animation')[0]).join('\n');
 const token = (name) => (css.match(new RegExp(`--${name}:\\s*(#[0-9a-fA-F]{6})`)) || [])[1];
 
 // An SVG <pattern>'s paint cannot read a CSS custom property, so palette.mjs
@@ -43,18 +49,18 @@ test('gridlines are solid', () => {
 
 // Every font-size is a token, except 0, which .first-load uses to hide the dash.
 test('font sizes come from the type scale', () => {
-  const sizes = [...css.matchAll(/font-size:\s*([^;}]+)/g)].map((m) => m[1].trim());
+  const sizes = [...scaleCss.matchAll(/font-size:\s*([^;}]+)/g)].map((m) => m[1].trim());
   const loose = sizes.filter((v) => v !== '0' && !/^var\(--fs-(caption|body|prose|title|stat)\)$/.test(v));
   assert.deepStrictEqual(loose, []);
 });
 
 test('letter-spacing is the label token or 0', () => {
-  const values = [...css.matchAll(/letter-spacing:\s*([^;}]+)/g)].map((m) => m[1].trim());
+  const values = [...scaleCss.matchAll(/letter-spacing:\s*([^;}]+)/g)].map((m) => m[1].trim());
   assert.deepStrictEqual(values.filter((v) => !['var(--ls-label)', '0', 'inherit'].includes(v)), []);
 });
 
 test('media queries use the known breakpoints', () => {
-  const widths = [...css.matchAll(/@media[^{]*?(max|min)-width:\s*(\d+)px/g)].map((m) => `${m[1]}-${m[2]}`);
+  const widths = [...scaleCss.matchAll(/@media[^{]*?(max|min)-width:\s*(\d+)px/g)].map((m) => `${m[1]}-${m[2]}`);
   assert.deepStrictEqual(widths.filter((w) => !['max-480', 'max-720', 'min-721', 'max-900', 'min-901', 'max-1240'].includes(w)), []);
 });
 

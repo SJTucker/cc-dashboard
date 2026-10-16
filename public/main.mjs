@@ -22,6 +22,7 @@ import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits
 import { renderModelDailyCharts, renderModelsPanel, setupModelMixToggle } from './panels/models.mjs';
 import { loadPricesSource, setupPrices } from './panels/prices.mjs';
 import { refreshRecords } from './panels/records.mjs';
+import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
@@ -148,13 +149,17 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     livePoller.stop();
     stickyPoller.stop();
+    syncHighscores();
     return;
   }
+  resetWatch();
+  refreshHighscores();
   if (!loadInFlight) {
     if (state.tab === 'now') runLoad();
     else loadStickyToday();
   }
   setPolling(state.tab === 'now');
+  syncHighscores();
 });
 
 // Every today summary draws the sticky bar and the status strip through here: the
@@ -175,6 +180,9 @@ function loadStickyToday() {
     if (state.tab === 'now') return;
     drawSticky(summary);
     renderLimitsBanner(limits);
+    // No summary draw runs on the High scores tab, so the first sticky poll ends
+    // the "Loading…" lines (.first-load) that drawSummary ends on other tabs.
+    if (state.currentDays === 'highscores') document.body.classList.remove('first-load');
   });
 }
 
@@ -361,6 +369,15 @@ function reportDrawError(err) {
 // rejected run would end the live poll chain. reportDrawError only writes text
 // to #statusBanner and never throws, so the catch cannot throw.
 function runLoad(options) {
+  // The High scores tab has no range summary to load or draw. A load from the
+  // previous tab still in flight is made stale, so it draws nothing, and it can no
+  // longer clear the busy state or loadInFlight, so they are cleared here.
+  if (state.currentDays === 'highscores') {
+    loads.next();
+    loadInFlight = false;
+    setBusy(false);
+    return Promise.resolve();
+  }
   return fetchAll(options).catch(reportDrawError);
 }
 
@@ -419,10 +436,12 @@ function enterTab(tab) {
   resetTimeline();
   lastPayload = null;
   setPolling(tab === 'now');
+  syncHighscores();
+  if (tab === 'highscores') refreshHighscores();
   const after = neededRequests(state.hiddenKeys, state.tab);
   if (after.has('changes') && !before.has('changes')) ensureChanges();
   if (after.has('prices') && !before.has('prices')) loadPricesSource();
-  if (tab === 'analysis') loadStickyToday();
+  if (tab !== 'now') loadStickyToday();
   runLoad({ busy: true });
 }
 
@@ -431,6 +450,7 @@ function enterTab(tab) {
 function reloadAll() {
   clearSignatures();
   refreshRecords();
+  refreshHighscores();
   runLoad({ busy: true });
   loadChanges();
 }
@@ -447,6 +467,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 // request. It loads instead when there is no payload yet, or when resumeRequests
 // passes refetch because a request skipped at the last load is needed again.
 function redrawCharts({ changes = true, refetch = false } = {}) {
+  if (state.currentDays === 'highscores') return; // no charts on the High scores tab
   clearSignatures(); // the width changed, so the same data still needs redrawing
   resetTimeline();
   if (refetch || !lastPayload || loadInFlight) {
@@ -472,7 +493,10 @@ window.addEventListener('resize', () => {
 // sessions and reviews come from fetchAll, and lastPayload holds null for a
 // skipped one, so when one of those resumes, redrawCharts loads the page again.
 function resumeRequests(resumed) {
-  if (resumed('records')) refreshRecords();
+  if (resumed('records')) {
+    refreshRecords();
+    refreshHighscores();
+  }
   if (resumed('prices')) loadPricesSource();
   // loadChanges renders the Setup changes panel itself when it finishes.
   if (resumed('changes')) loadChanges();
@@ -493,5 +517,7 @@ setupUsageGroupToggles();
 setupModelMixToggle();
 setupPrices({ onApplied: reloadAll });
 refreshRecords();
+setupHighscores();
+refreshHighscores();
 // Runs enterTab once for the hash the page opened with, then on each hash change.
 setupTabs(enterTab);

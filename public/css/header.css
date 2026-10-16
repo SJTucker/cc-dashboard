@@ -293,3 +293,37 @@
    which waits for hover. */
 .limits-banner { position: relative; padding-right: calc(var(--sp-4) * 2 + 1em); }
 .limits-banner > .banner-close { position: absolute; top: var(--sp-2); right: var(--sp-2); opacity: 1; }
+
+/* ---------- Record animation ---------- */
+
+/* The fonts for the header animation: Metal Mania for one animation, Black Ops One
+   for the other. Both are latin subsets. */
+@font-face { font-family: 'Metal Mania'; src: url('/fonts/MetalMania.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+@font-face { font-family: 'Black Ops One'; src: url('/fonts/BlackOpsOne.woff2') format('woff2'); font-weight: 400; font-display: swap; }
+
+/* The overlay fills the bar's current box and covers its stats. It takes no clicks.
+   The type sizes here are fixed pixels because the animation is drawn at one scale. */
+.record-fx { position: absolute; inset: 0; z-index: 1; pointer-events: none; opacity: 0; }
+.record-fx.fatality { background: linear-gradient(#12052a 0%, #2a0b4a 62%, #3a0d55 64%, #14061f 100%); }
+.record-fx.headshot { background: linear-gradient(#14161c 0%, #2e2a30 62%, #3a0d55 64%, #14061f 100%); }
+.record-fx-text { background: color-mix(in srgb, var(--bg) 88%, transparent); }
+.record-fx.fatality::before, .record-fx.headshot::before { content: ''; position: absolute; left: 0; right: 0; bottom: 0; height: 12px; background: repeating-linear-gradient(90deg, rgba(255, 79, 216, .35) 0 1px, transparent 1px 28px); }
+.record-fx.headshot::after { content: ''; position: absolute; inset: 6px; border: 2px solid transparent; border-image: linear-gradient(90deg, rgba(255, 255, 255, .5) 0 16px, transparent 16px calc(100% - 16px), rgba(255, 255, 255, .5) calc(100% - 16px)) 1; }
+.record-fx .fx-canvas { position: absolute; inset: 0; width: 100%; height: 100%; image-rendering: pixelated; }
+.record-fx .fx-flash { position: absolute; inset: 0; background: #fff; opacity: 0; }
+.record-fx .fx { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); white-space: nowrap; opacity: 0; line-height: 1; text-transform: uppercase; }
+.fx-metal { font-family: 'Metal Mania', serif; -webkit-text-stroke: 1px #1a0000; background-clip: text; -webkit-background-clip: text; color: transparent; filter: drop-shadow(2px 2px 0 #000); }
+.fx-finish { font-size: 38px; background-image: linear-gradient(#ffe14f 0%, #ff8a1f 45%, #e0161b 100%); }
+.fx-fatality { font-size: 50px; letter-spacing: .04em; background-image: linear-gradient(#ffd0c0 0%, #ff3b1f 40%, #8a0000 100%); }
+.fx-gold { font-size: 32px; letter-spacing: .03em; background-image: linear-gradient(#fff8d0 0%, #ffe14f 45%, #c98a00 100%); filter: drop-shadow(0 0 8px rgba(255, 225, 79, .6)) drop-shadow(2px 2px 0 #000); }
+.fx-gold.fx-text { max-width: 96%; white-space: normal; text-align: center; line-height: 1.15; font-size: 26px; }
+.fx-ops { font-family: 'Black Ops One', sans-serif; color: #fff; }
+.fx-headshot { font-size: 36px; letter-spacing: .06em; text-shadow: 0 0 10px rgba(255, 214, 90, .9), 0 0 2px #fff, 2px 2px 0 #000; }
+.record-fx .fx-killfeed { left: auto; right: 18px; top: 10px; transform: none; font-size: 13px; background: rgba(0, 0, 0, .55); padding: 4px 10px; display: flex; gap: 8px; align-items: center; letter-spacing: .05em; }
+.fx-attacker { color: #7fc4ff; }
+.fx-victim { color: #ff9a6b; }
+.fx-rankup { display: flex; align-items: center; gap: 14px; }
+.fx-rank-text small { display: block; font-size: 12px; letter-spacing: .3em; color: #ffd65a; margin-bottom: 3px; }
+.fx-rank-text b { font-weight: normal; font-size: 24px; letter-spacing: .04em; text-shadow: 0 0 8px rgba(255, 214, 90, .5), 2px 2px 0 #000; }
+.fx-xp { height: 4px; margin-top: 5px; background: rgba(255, 255, 255, .15); }
+.fx-xp i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #ffd65a, #fff3b0); box-shadow: 0 0 6px #ffd65a; }

@@ -1,0 +1,147 @@
+/* ---------- High scores tab ---------- */
+
+/* A synthwave arcade screen, after the approved mockup. Every rule is scoped under
+   .arcade so nothing reaches the other tabs. The screen fills the tab area under
+   the sticky bar and grows when the table needs more room. */
+#tabHighscores { container-type: inline-size; }
+.arcade {
+  --hi: #ffe14f;
+  --hi-core: #fff8d0;
+  --td: #ff8be6;
+  position: relative;
+  /* The scene is drawn for 1440x900, so the screen is at least 5/8 of the tab's
+     width tall (62.5cqw, a container query unit of #tabHighscores) and the side
+     text lines up with the signs. Content that needs more room grows the box. */
+  min-height: max(640px, 62.5cqw);
+  overflow: hidden;
+  background: #05020c;
+  color: #7ff6ff;
+  font-family: 'VT323', monospace;
+}
+.arcade::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  background: repeating-linear-gradient(to bottom, rgba(255, 255, 255, .035) 0 1px, transparent 1px 3px),
+    radial-gradient(ellipse at 50% 50%, transparent 55%, rgba(0, 0, 0, .75) 100%);
+}
+.arcade svg.bg { position: absolute; inset: 0; width: 100%; height: 100%; z-index: 0; }
+
+.arcade .center { position: relative; z-index: 2; width: min(680px, 92%); margin: 0 auto; padding: 36px 0 64px; }
+.arcade .center::before {
+  content: '';
+  position: absolute;
+  inset: -10px -40px;
+  z-index: -1;
+  background: radial-gradient(ellipse at 50% 45%, rgba(8, 3, 22, .82) 40%, rgba(8, 3, 22, 0) 75%);
+}
+.arcade .kana { text-align: center; color: #ff8be6; letter-spacing: .6em; font-size: 22px; text-shadow: 0 0 6px #ff4fd8; }
+.arcade .hs-title {
+  margin: 0;
+  font-family: 'Press Start 2P', monospace;
+  font-weight: 400;
+  text-align: center;
+  font-size: clamp(22px, 4.2vw, 54px);
+  line-height: 1.1;
+  background: linear-gradient(#7ff6ff 0%, #a9c8ff 45%, #ff4fd8 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 8px rgba(255, 79, 216, .55)) drop-shadow(0 0 2px rgba(127, 246, 255, .8));
+}
+.arcade .rule { display: flex; align-items: center; gap: 12px; color: #c9b6ff; letter-spacing: .45em; font-size: 18px; margin: 6px 0 14px; }
+.arcade .rule::before, .arcade .rule::after { content: ''; flex: 1; height: 2px; background: linear-gradient(90deg, transparent, #4fd8ff); }
+.arcade .rule::after { background: linear-gradient(90deg, #4fd8ff, transparent); }
+
+.arcade .board { display: flex; justify-content: center; align-items: center; gap: 14px; margin-bottom: 8px; font-size: 22px; }
+.arcade .board button { background: none; border: 0; color: #4fd8ff; font: inherit; font-size: 26px; cursor: pointer; text-shadow: 0 0 6px #4fd8ff; padding: 0 6px; }
+.arcade .board button:hover { color: #fff; }
+.arcade .board .name { color: #fff; letter-spacing: .15em; text-shadow: 0 0 8px #ff4fd8; flex: 0 1 340px; min-width: 0; text-align: center; }
+.arcade .dots { text-align: center; margin: -2px 0 8px; letter-spacing: 6px; color: #4fd8ff55; font-size: 14px; }
+.arcade .dots .on { color: #ff8be6; text-shadow: 0 0 6px #ff4fd8; }
+
+.arcade table.hs { margin: 0 auto; border-collapse: collapse; font-size: 26px; width: 100%; }
+.arcade table.hs th { color: #4fd8ff; font-weight: normal; letter-spacing: .12em; padding: 2px 14px; text-align: left; white-space: nowrap; }
+.arcade table.hs th.n, .arcade table.hs td.n { text-align: right; white-space: nowrap; }
+.arcade table.hs td { padding: 2px 14px; color: #7ff6ff; text-shadow: 0 0 5px rgba(127, 246, 255, .55); white-space: nowrap; }
+/* A title cell takes the leftover width and cuts its text with an ellipsis. */
+.arcade table.hs th.ttl, .arcade table.hs td.ttl { width: 40%; max-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.arcade .crown { display: inline-block; width: 1.2em; }
+.arcade .crown.off { visibility: hidden; }
+
+/* First place wears --hi, today wears --td. */
+.arcade table.hs tr.first { box-shadow: 0 0 24px color-mix(in srgb, var(--hi) 80%, transparent), 0 0 52px color-mix(in srgb, var(--hi) 40%, transparent), inset 0 0 20px color-mix(in srgb, var(--hi) 40%, transparent); }
+.arcade table.hs tr.first td {
+  color: var(--hi-core);
+  background: color-mix(in srgb, var(--hi) 18%, transparent);
+  border-top: 2px solid var(--hi-core);
+  border-bottom: 2px solid var(--hi-core);
+  text-shadow: 0 0 2px #fff, 0 0 8px var(--hi), 0 0 16px var(--hi), 0 0 30px var(--hi);
+}
+.arcade table.hs tr.first td:first-child { border-left: 2px solid var(--hi-core); }
+.arcade table.hs tr.first td:last-child { border-right: 2px solid var(--hi-core); }
+.arcade table.hs tr.today td { color: var(--td); text-shadow: 0 0 7px var(--td); }
+.arcade table.hs tr.today.first td { color: var(--hi-core); text-shadow: 0 0 2px #fff, 0 0 8px var(--hi), 0 0 16px var(--hi), 0 0 30px var(--hi); }
+.arcade table.hs tr.today td:first-child::after { content: ' ◀'; font-size: 18px; }
+
+.arcade .press { display: flex; justify-content: center; align-items: center; gap: 18px; margin-top: 18px; color: #4fd8ff; font-size: 22px; }
+.arcade .press .box {
+  border: 2px solid #ff4fd8;
+  padding: 10px 26px;
+  font-family: 'Press Start 2P', monospace;
+  font-size: 14px;
+  color: #ff8be6;
+  letter-spacing: .35em;
+  text-shadow: 0 0 6px #ff4fd8;
+  box-shadow: 0 0 10px rgba(255, 79, 216, .4), inset 0 0 10px rgba(255, 79, 216, .25);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .arcade .cursor { animation: arcade-blink 1s steps(2) infinite; }
+}
+@keyframes arcade-blink { 50% { opacity: 0; } }
+
+/* Side text, set against the corners of the screen. */
+.arcade .side { position: absolute; z-index: 3; font-size: 17px; line-height: 1.05; color: #7ff6ff; text-shadow: 0 0 4px rgba(127, 246, 255, .6); letter-spacing: .08em; }
+.arcade .side-tl { top: 28px; left: 32px; }
+.arcade .side-tr { top: 28px; right: 32px; text-align: left; }
+.arcade .tr-list { margin-top: 14px; }
+.arcade .side-bl { bottom: 22px; left: 32px; font-size: 20px; }
+.arcade .side-br { bottom: 22px; right: 32px; font-size: 20px; }
+.arcade .side-bc { bottom: 22px; left: 50%; transform: translateX(-50%); color: #ff8be6; font-size: 20px; text-shadow: 0 0 6px #ff4fd8; }
+.arcade .vert { top: 300px; right: 40px; writing-mode: vertical-rl; font-size: 30px; color: #ff8be6; text-shadow: 0 0 8px #ff4fd8; letter-spacing: .1em; }
+.arcade .logo {
+  font-family: 'Press Start 2P', monospace;
+  font-style: italic;
+  transform: skewX(-10deg);
+  font-size: 22px;
+  line-height: 1.15;
+  background: linear-gradient(90deg, #7ff6ff, #ff4fd8);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  filter: drop-shadow(0 0 6px rgba(255, 79, 216, .6));
+}
+.arcade .logo-k { color: #ff8be6; font-size: 16px; letter-spacing: .2em; margin: 2px 0 12px; text-shadow: 0 0 6px #ff4fd8; }
+.arcade .hs-panel { border: 2px solid #ff4fd8; padding: 8px 10px; color: #ff8be6; text-shadow: 0 0 4px #ff4fd8; box-shadow: 0 0 10px rgba(255, 79, 216, .35); background: transparent; border-radius: 0; }
+.arcade .bar-wrap { border: 1px solid #ff4fd855; }
+.arcade .hs-bar { height: 6px; margin-top: 6px; background: repeating-linear-gradient(90deg, #ff4fd8 0 4px, transparent 4px 6px); width: 78%; }
+
+/* Below 900px the side text and the neon signs would crowd the table. */
+@media (max-width: 899px) {
+  .arcade .side, .arcade .hs-signs { display: none; }
+  .arcade { min-height: calc(100vh - 140px); }
+  .arcade .center { padding: 16px 0 24px; }
+  .arcade .kana { font-size: 18px; }
+  .arcade .rule { letter-spacing: .25em; font-size: 16px; }
+  .arcade .board { gap: 6px; font-size: 20px; }
+  .arcade .board .name { flex-basis: 220px; letter-spacing: .08em; }
+  .arcade .center { width: 96%; }
+  .arcade table.hs { font-size: 17px; }
+  .arcade table.hs th, .arcade table.hs td { padding: 2px 3px; }
+  .arcade .crown { width: 1em; }
+  .arcade table.hs th { letter-spacing: .04em; }
+  .arcade .press .box { padding: 8px 12px; font-size: 11px; letter-spacing: .2em; }
+  .arcade .press { gap: 8px; }
+}

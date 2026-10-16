@@ -13,11 +13,15 @@ and when you click Check prices. The optional Claude Code mod in `mod/` also fet
 Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
 does and doesn't do" below.
 
-The page has two tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline, Live sessions and Models. The Analysis tab shows Today, 7d, 30d, 90d and All, picked with the range picker, with panels that include Lines of code. It opens on Today, where its charts have hourly buckets and their titles say Hourly. The URL hash `#now` or `#analysis` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on both tabs. Cost today and Tokens today each add a 7d total.
+The page has three tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline, Live sessions and Models. The Analysis tab shows Today, 7d, 30d, 90d and All, picked with the range picker, with panels that include Lines of code. It opens on Today, where its charts have hourly buckets and their titles say Hourly. The High scores tab lists the records of all time. The URL hash `#now`, `#analysis` or `#highscores` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on every tab. Cost today and Tokens today each add a 7d total.
 
 ![The Now tab: Plan usage, Where usage goes and Session timeline](docs/screenshots/overview.png)
 
 Session titles, project names, branches and review text in the screenshots are placeholders.
+
+## High scores
+
+The High scores tab lists the records of all time on nine boards: tokens, cost, prompts, sessions, lines added and lines deleted in one day, the biggest session by cost, the longest turn and the longest streak of days. Each board shows the top 10 entries. The boards change every 6 seconds, and the ◀ and ▶ buttons or the left and right arrow keys switch them by hand. HALL OF FAME shows first place on each board. First place is gold. An entry from today is pink with a ◀ mark, and it updates on every live poll, so a day that passes an old record moves up the board while you watch. The tab has no range picker.
 
 ## Run it
 
@@ -343,7 +347,7 @@ transcript's figure.
 ### What the panels show
 
 When either window reaches 75%, a warning banner at the top of the page shows on
-both tabs, with the percentage and the reset time.
+every tab, with the percentage and the reset time.
 
 The panel also shows today's share of the weekly limit: the weekly percent now minus
 the weekly percent when the day started. `bin/record-statusline` keeps that
@@ -651,6 +655,7 @@ lib/extract-worker.js  The body of one pool worker thread
 lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, tool result sizes, edits, prompts, turns, slash commands and per-session summaries, and tags the calls that rebuilt the prompt cache (markRebuilds)
 lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
 lib/fillers.js         What fills the context: tool results grouped by file or command, with sessions and re-reads
+lib/highscores.js      Builds the all-time boards for the High scores tab and today's record values
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
 lib/net-guard.js       Host-header check and security headers
 lib/price-fetch.js     Fetches and parses Anthropic's pricing page (merging the prompt-length rows), and compares it with the current prices
@@ -708,12 +713,17 @@ public/charts/palette.mjs  Series colours and textures, and the SVG pattern defi
 public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, window bar, daily metric chart with session dots, and its legend
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar, and drawShareBar, the share bar the Models panel also uses
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
-public/css/            All styling, one file per panel (base.css first, then header, cards, charts, model-list, activity, attribution, sessions, timeline, reviews, setup-changes, tool-errors, plan-usage and controls). public/index.html loads them in that order, and the order decides which rule wins between two rules of equal specificity. base.css holds the custom properties and the @font-face rules for public/fonts/
-public/fonts/          Oxanium, Saira Condensed and JetBrains Mono as woff2, loaded by css/base.css, with their SIL OFL licence files
+public/css/            All styling, one file per panel (base.css first, then header, cards, charts, model-list, activity, attribution, sessions, timeline, reviews, setup-changes, tool-errors, plan-usage, controls and highscores). public/index.html loads them in that order, and the order decides which rule wins between two rules of equal specificity. base.css holds the custom properties and the @font-face rules for public/fonts/
+public/fonts/          Oxanium, Saira Condensed, JetBrains Mono, Press Start 2P and VT323 as woff2, loaded by css/base.css, with their SIL OFL licence files
+public/highscores/boards.mjs  The nine boards, their ranking and tie rules, and how today merges into them; the server uses it too
+public/highscores/scene.mjs  The synthwave background of the High scores tab
+public/highscores/view.mjs  Row and score formatting for the boards
+public/highscores/watch.mjs  Tracks which boards today leads
 public/panels/attribution.mjs  Where usage goes: main thread or subagents, context over or under the threshold, the cache split of cost, skill and subagent lists with invocation counts
 public/panels/cards.mjs  The Analysis tab's summary cards: two rows of cards: money (total cost, cost per day, 30-day projection, Claude Code's reported cost) over usage (tokens, cache, thinking share, tool calls)
 public/panels/changes.mjs  The Setup changes panel: picked change, day list and before/after table; fetches /api/changes
 public/panels/fillers.mjs  The What fills the context and Longest turns tables in the Tool calls panel
+public/panels/highscores.mjs  The High scores screen: board cycle, arrow keys, Hall of fame; fetches /api/highscores
 public/panels/limits.mjs  The Plan usage panel and the limits banner; fetches /api/limits
 public/panels/lines.mjs  The Lines of code panel: repoSeries picks the top repos and sums the rest into Other, repoLabels names them, renderLinesChart draws the chart and legend
 public/panels/models.mjs  The Models panel (share bar and table) and the model daily charts
@@ -732,5 +742,5 @@ public/ui/hidden.mjs   Hides a panel or card with its x button, shows it again f
 public/ui/panel-light.mjs  Lights the border of the panel under the pointer
 public/ui/row-order.mjs  Drag to reorder rows of panels; the order is saved in localStorage
 public/ui/show-all.mjs  Show all for long lists, in place of inner scrolling
-public/ui/tabs.mjs     The Now and Analysis tabs and the URL hash that picks one
+public/ui/tabs.mjs     The Now, Analysis and High scores tabs and the URL hash that picks one
 ```

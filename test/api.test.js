@@ -442,6 +442,34 @@ test('GET /api/records writes no records.json, and nothing in cc-dashboard/ but 
   assert.ok(fs.readdirSync(dir).every((name) => name.startsWith('transcripts.db')), fs.readdirSync(dir).join(', '));
 });
 
+test('GET /api/highscores returns nine boards without today, and the date', async (t) => {
+  const { url } = await startServer(t);
+  const day = localDateStr(new Date());
+  const data = await (await fetch(`${url}/api/highscores`)).json();
+  if (localDateStr(new Date()) !== day) return t.skip('crossed local midnight');
+  assert.equal(data.date, day);
+  assert.equal(Object.keys(data.boards).length, 9);
+  assert.deepEqual(data.boards.tokens, []); // the fixture's only call is today
+});
+
+test('GET /api/summary?days=today carries todayRecords; days=7 does not', async (t) => {
+  const { url } = await startServer(t);
+  const today = await (await fetch(`${url}/api/summary?days=today`)).json();
+  assert.equal(today.todayRecords.tokens, 1200);
+  assert.equal(today.todayRecords.sessions, 1);
+  const week = await (await fetch(`${url}/api/summary?days=7`)).json();
+  assert.equal(week.todayRecords, undefined);
+});
+
+test('GET /api/highscores writes nothing in cc-dashboard/ but the transcript database', async (t) => {
+  const { url, config } = await startServer(t);
+
+  await fetch(`${url}/api/highscores`);
+
+  const dir = path.join(config.configDir, 'cc-dashboard');
+  assert.ok(fs.readdirSync(dir).every((name) => name.startsWith('transcripts.db')), fs.readdirSync(dir).join(', '));
+});
+
 // A three-day-old transcript, old by content and by mtime so the row store persists it
 // on the first refresh. It is an assistant line with a session id, so /api/changes lists
 // it as a session too.
