@@ -80,7 +80,7 @@ test('the prompt holds every step\'s label and output, and marks failures', asyn
   for (const step of REPO_STEPS) expect(prompt).toContain(`### ${step.label}`)
   expect(prompt).toContain('feat/Handoff X')
   expect(prompt).toContain('(failed) fatal: bad stash')
-  expect(prompt).toContain('# Handoff: <task in one line>')
+  expect(prompt).toContain('# Handoff: <the task, in at most 6 words>')
   expect(prompt).toContain('You have no tools in this reply.')
 })
 
