@@ -66,6 +66,25 @@ test('digestTranscript counts a typed prompt with a pasted image and skips its i
   assert.deepStrictEqual(await review.digestTranscript(file), { prompts: 1, text: 'USER: investigate [Image #3]' });
 });
 
+test('digestTranscript counts a prompt typed mid-turn and skips task notifications, peer hand-backs and sidechain ones', async () => {
+  const base = tmpDir();
+  const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
+  const queued = (prompt, extra = {}, attachment = {}) => ({
+    type: 'attachment',
+    isSidechain: false,
+    attachment: { type: 'queued_command', commandMode: 'prompt', origin: { kind: 'human' }, prompt, ...attachment },
+    ...extra,
+  });
+  const file = writeTranscript(base, [
+    queued('also fix the tests'),
+    queued([{ type: 'text', text: 'error here [Image #7]' }, image]),
+    queued('done', {}, { commandMode: 'task-notification' }),
+    queued('result', {}, { origin: { kind: 'peer' }, isMeta: true }),
+    queued('sub', { isSidechain: true }),
+  ]);
+  assert.deepStrictEqual(await review.digestTranscript(file), { prompts: 2, text: 'USER: also fix the tests\nUSER: error here [Image #7]' });
+});
+
 test('digestTranscript skips subagent lines, slash commands and repeated tool_use blocks', async () => {
   const base = tmpDir();
   const file = writeTranscript(base, [
