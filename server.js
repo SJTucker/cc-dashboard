@@ -24,6 +24,7 @@ const { readReviews, readClosedPage, parseCursor, suggestionReason, setDismissal
 const { createReviewDbGetter, legacyReviewsDir } = require('./lib/review-db');
 const { createServerDb, getStorePath, isBusy } = require('./lib/db');
 const { busiestDay, dayTotals } = require('./public/stats.mjs');
+const { buildHighscores, todayRecords } = require('./lib/highscores');
 const { loadPriceFile, pricesSource, getPricesPath } = require('./lib/price-store');
 const { fetchPricingPage } = require('./lib/price-fetch');
 const { createPriceChecker } = require('./lib/price-check');
@@ -250,7 +251,10 @@ function createServer(config) {
     }
     try {
       const data = days === 'today' ? await scan('today', 'hour') : await scan(days);
-      res.json(publicSummary(data));
+      // publicSummary strips efficiency, so the record values are taken first.
+      const summary = publicSummary(data);
+      if (days === 'today') summary.todayRecords = todayRecords(data, localDateStr(new Date()));
+      res.json(summary);
       if (config.priceCheck && priceChecker.newUnmatched().length && !attemptedLastHour()) checkInBackground();
     } catch (err) {
       console.error('[API] /api/summary failed:', err);
@@ -324,6 +328,28 @@ function createServer(config) {
       res.json({ allTime, recentDays });
     } catch (err) {
       console.error('[API] /api/records failed:', err);
+      res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
+    }
+  });
+
+  // The High scores boards: the top 10 of nine records from the all-time aggregate,
+  // without today's entries (the browser merges today in from the Today summary's
+  // todayRecords). The payload is memoised per all-time scan object and date: scan()
+  // returns the same object until the row store changes, and the date decides which
+  // entries count as today.
+  const boardsMemo = new WeakMap();
+  app.get('/api/highscores', async (req, res) => {
+    try {
+      const todayStr = localDateStr(new Date());
+      const data = await scan(null);
+      let memo = boardsMemo.get(data);
+      if (!memo || memo.day !== todayStr) {
+        memo = { day: todayStr, payload: buildHighscores(data, todayStr) };
+        boardsMemo.set(data, memo);
+      }
+      res.json(memo.payload);
+    } catch (err) {
+      console.error('[API] /api/highscores failed:', err);
       res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });
     }
   });
