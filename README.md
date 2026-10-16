@@ -654,7 +654,7 @@ lib/extract-worker.js  The body of one pool worker thread
 lib/extract.js         Turns one transcript into rows: calls, tool uses, tool errors, tool result sizes, edits, prompts, turns, slash commands and per-session summaries, and tags the calls that rebuilt the prompt cache (markRebuilds)
 lib/files.js           writeFileAtomic (write a temporary file, then rename it) and readJson
 lib/fillers.js         What fills the context: tool results grouped by file or command, with sessions and re-reads
-lib/highscores.js     Builds the all-time boards for the High scores tab and today's record values
+lib/highscores.js      Builds the all-time boards for the High scores tab and today's record values
 lib/limits.js          Plan usage limits from the .claude.json usage cache and the statusline rate-limits file
 lib/net-guard.js       Host-header check and security headers
 lib/price-fetch.js     Fetches and parses Anthropic's pricing page (merging the prompt-length rows), and compares it with the current prices
@@ -712,7 +712,7 @@ public/charts/palette.mjs  Series colours and textures, and the SVG pattern defi
 public/charts/setup-changes.mjs  The Setup changes timeline: change lanes, window bar, daily metric chart with session dots, and its legend
 public/charts/split.mjs  drawSplitBar: two shares of one whole as a single bar, and drawShareBar, the share bar the Models panel also uses
 public/charts/stacked.mjs  drawModelDailyChart: stacked daily bars, one segment per model family, in tokens or dollars
-public/css/            All styling, one file per panel (base.css first, then header, cards, charts, model-list, activity, attribution, sessions, timeline, reviews, setup-changes, tool-errors, plan-usage, highscores and controls). public/index.html loads them in that order, and the order decides which rule wins between two rules of equal specificity. base.css holds the custom properties and the @font-face rules for public/fonts/
+public/css/            All styling, one file per panel (base.css first, then header, cards, charts, model-list, activity, attribution, sessions, timeline, reviews, setup-changes, tool-errors, plan-usage, controls and highscores). public/index.html loads them in that order, and the order decides which rule wins between two rules of equal specificity. base.css holds the custom properties and the @font-face rules for public/fonts/
 public/fonts/          Oxanium, Saira Condensed, JetBrains Mono, Press Start 2P and VT323 as woff2, loaded by css/base.css, with their SIL OFL licence files
 public/highscores/boards.mjs  The nine boards, their ranking and tie rules, and how today merges into them; the server uses it too
 public/highscores/scene.mjs  The synthwave background of the High scores tab
