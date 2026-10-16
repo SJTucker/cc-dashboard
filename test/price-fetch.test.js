@@ -81,6 +81,13 @@ test('a footnote marker on a model name is stripped', () => {
   assert.strictEqual(row.name, 'Claude Haiku 4.5');
 });
 
+// The live page's Fast mode table wrote "$8 USD / MTok" from October 2026.
+test('a price written with USD reads the same as one without', () => {
+  const page = PAGE.replace(/(\$[\d.]+) \/ MTok/g, '$1 USD / MTok');
+  assert.notStrictEqual(page, PAGE, 'the fixture prices were found');
+  assert.deepStrictEqual(parsePricingPage(page), parsePricingPage(PAGE));
+});
+
 test('a model from an unknown family is skipped, not refused', () => {
   const page = PAGE.replace(
     '| Claude Fable 5.1 ',
