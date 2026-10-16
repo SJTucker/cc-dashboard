@@ -36,3 +36,22 @@ test('a streak flip never plays, alone or with another board', () => {
   assert.deepEqual(W.step({ day: '2026-10-16', first: [] }, S('streak', 'cost'), '2026-10-16', null).play, ['cost']);
   assert.deepEqual(W.step({ day: '2026-10-16', first: [] }, S('streak'), '2026-10-16', null).play, []);
 });
+
+const T = '2026-10-16';
+const e = (date, today) => [{ date, today: !!today, score: 1 }];
+test('latestRecords: the latest date wins over older ones', () => {
+  assert.deepEqual(W.latestRecords({ tokens: e('2026-10-10'), cost: e('2026-10-12') }, T), ['cost']);
+});
+test('latestRecords: boards on the same latest date come back in BOARDS order', () => {
+  assert.deepEqual(W.latestRecords({ turn: e('2026-10-12'), cost: e('2026-10-12'), tokens: e('2026-10-01') }, T), ['cost', 'turn']);
+});
+test('latestRecords: streak is left out even when it is the latest', () => {
+  assert.deepEqual(W.latestRecords({ streak: e(T, true), cost: e('2026-10-01') }, T), ['cost']);
+});
+test('latestRecords: a today entry with an older date counts as today', () => {
+  assert.deepEqual(W.latestRecords({ session: e('2026-10-15', true), cost: e('2026-10-15') }, T), ['session']);
+});
+test('latestRecords: empty or missing boards give []', () => {
+  assert.deepEqual(W.latestRecords({}, T), []);
+  assert.deepEqual(W.latestRecords({ cost: [], tokens: undefined }, T), []);
+});

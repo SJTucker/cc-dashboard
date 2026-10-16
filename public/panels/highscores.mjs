@@ -7,7 +7,7 @@ import { formatCost, localDateStr } from '../format.mjs';
 import { createSequence } from '../guards.mjs';
 import { BOARDS, BOARD_SIZE, mergeToday, todayFirstKeys } from '../highscores/boards.mjs';
 import { boardRows, hallRows, scoreText } from '../highscores/view.mjs';
-import { step, readCelebrated, writeCelebrated } from '../highscores/watch.mjs';
+import { step, latestRecords, readCelebrated, writeCelebrated } from '../highscores/watch.mjs';
 import { playRecordFx, isPlaying } from '../fx/record-fx.mjs';
 import { buildScene } from '../highscores/scene.mjs';
 
@@ -234,6 +234,7 @@ export function syncHighscores() {
 export function setupHighscores() {
   const root = document.getElementById('arcade');
   if (!root || built) return;
+  document.querySelector('.topbar .title-logo')?.addEventListener('click', replayLatest);
   root.append(buildScene(), ...buildSides(), buildCenter());
   built = true;
   nodes.prev.addEventListener('click', () => goTo(screen - 1));
@@ -309,9 +310,29 @@ function watchRecords(today) {
   prev = result.state;
   if (!result.play.length) return;
   writeCelebrated(storage, result.celebrated);
-  const records = result.play.map((k) => ({ title: BOARDS.find((b) => b.key === k).title, score: scoreText(k, lastMerged[k][0]) }));
+  playRecords(result.play, lastMerged);
+}
+
+// Plays the header animation for the boards in `keys`, one record per board.
+function playRecords(keys, boards) {
+  const records = keys.map((k) => ({ title: BOARDS.find((b) => b.key === k).title, score: scoreText(k, boards[k][0]) }));
   const reducedMotion = !!globalThis.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
   playRecordFx(document.querySelector('.topbar'), records, { reducedMotion })?.catch(() => {});
+}
+
+// Replays the most recent record when the header icon is clicked. It uses the
+// merged boards, or the payload's boards before a merge, and does nothing with
+// no payload. It writes no storage and leaves `prev` alone, so the watch is
+// unaffected. A throw is logged and never leaves the handler.
+function replayLatest() {
+  try {
+    const boards = lastMerged ?? payload?.boards;
+    if (!boards) return;
+    const keys = latestRecords(boards, localDateStr(new Date()));
+    if (keys.length) playRecords(keys, boards);
+  } catch (err) {
+    console.error(err);
+  }
 }
 
 // Called by renderSticky with every today summary, on every tab. It keeps the

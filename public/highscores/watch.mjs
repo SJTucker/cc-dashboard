@@ -22,6 +22,20 @@ export function step(prev, firstKeys, todayStr, celebrated) {
   return { state, play, celebrated: { date: todayStr, boards: [...done, ...play] } };
 }
 
+// Returns the keys, in BOARDS order, of the boards whose first place was set on
+// the latest date, so the header icon can replay the most recent record. An
+// entry counts as set on `todayStr` when it has today: true (a session that
+// started yesterday can set a record today), else on its own date. Boards in
+// NO_FX and empty or missing boards are left out. No boards gives [].
+export function latestRecords(boards, todayStr) {
+  const dated = BOARDS.filter((b) => !NO_FX.includes(b.key) && boards[b.key]?.[0]).map((b) => {
+    const first = boards[b.key][0];
+    return { key: b.key, set: first.today ? todayStr : first.date };
+  });
+  const latest = dated.reduce((m, d) => (d.set > m ? d.set : m), '');
+  return dated.filter((d) => d.set === latest).map((d) => d.key);
+}
+
 // Reads the celebrated record from `storage`, or null when it is missing,
 // malformed or unreadable (a private window can throw).
 export function readCelebrated(storage) {
