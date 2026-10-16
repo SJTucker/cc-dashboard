@@ -27,9 +27,17 @@
 }
 
 /* Under a title the context line is a second, smaller line. With no title it is the
-   row's main text and keeps the normal size. */
+   row's main text and keeps the normal size. Under a title it is capped near the
+   title's width (28ch at --fs-body is about 30ch at --fs-caption), so a long project
+   or branch name does not widen the Session column. It is a flex row so the project
+   and the branch each shrink with their own ellipsis. white-space: pre keeps the
+   spaces around the · separator, which a flex item would otherwise trim.
+   content-box keeps the indent rules below from eating into the cap. */
 .session-title ~ .session-context {
-  display: block;
+  display: flex;
+  box-sizing: content-box;
+  max-width: 30ch;
+  white-space: pre;
   font-size: var(--fs-caption);
   color: var(--text-tertiary);
 }
@@ -59,8 +67,8 @@
   white-space: pre;
   vertical-align: bottom;
 }
-.session-hex + .session-context > .session-project,
-.session-hex + .session-context > .session-branch {
+.session-context > .session-project,
+.session-context > .session-branch {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
