@@ -393,6 +393,40 @@ test('a typed prompt with a pasted image counts, titles the session with its tex
   assert.strictEqual(rows.sessions.s1.firstPrompt, 'seeing a lot of these errors in logs - investigate [Image #3]');
 });
 
+const midTurn = (prompt, extra = {}, attachment = {}) => ({
+  type: 'attachment',
+  isSidechain: false,
+  sessionId: 's1',
+  attachment: { type: 'queued_command', commandMode: 'prompt', origin: { kind: 'human' }, humanTurn: true, prompt, ...attachment },
+  ...extra,
+});
+
+test('a prompt typed mid-turn (queued_command attachment) counts, as a string or text and image array, and is the first prompt when it comes first', async () => {
+  const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
+  const file = writeTranscript([
+    midTurn('first typed mid-turn', { uuid: 'u1', timestamp: T0 }),
+    midTurn([{ type: 'text', text: 'second [Image #7]' }, image], { uuid: 'u2', timestamp: T1 }),
+  ]);
+  const rows = await extractFile(file);
+
+  assert.deepStrictEqual(rows.prompts, [
+    { id: 'u1', t: Date.parse(T0), sessionId: 's1' },
+    { id: 'u2', t: Date.parse(T1), sessionId: 's1' },
+  ]);
+  assert.strictEqual(rows.sessions.s1.firstPrompt, 'first typed mid-turn');
+});
+
+test('a task-notification, a peer hand-back with isMeta and a sidechain queued_command attachment do not count', async () => {
+  const file = writeTranscript([
+    midTurn('<task-notification>done</task-notification>', { uuid: 'u1', timestamp: T0 }, { commandMode: 'task-notification' }),
+    midTurn('subagent result', { uuid: 'u2', timestamp: T1 }, { origin: { kind: 'peer' }, isMeta: true }),
+    midTurn('sidechain', { uuid: 'u3', timestamp: T2, isSidechain: true }),
+  ]);
+  const rows = await extractFile(file);
+
+  assert.deepStrictEqual(rows.prompts, []);
+});
+
 // A forked skill (a /skill typed by the user) is written with origin human and no promptSource key.
 const forked = (text, extra = {}) => ({ type: 'user', origin: { kind: 'human' }, sessionId: 's1', message: { content: text }, ...extra });
 
@@ -660,8 +694,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 13', () => {
-  assert.strictEqual(EXTRACT_VERSION, 13);
+test('EXTRACT_VERSION is 14', () => {
+  assert.strictEqual(EXTRACT_VERSION, 14);
 });
 
 function toolResultLine({ id = 'toolu_1', content = 'hello', agentId = null, min = 1 } = {}) {

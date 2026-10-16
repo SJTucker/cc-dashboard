@@ -1,7 +1,7 @@
 // The charts of tokens and cost over the range: daily cost, daily tokens,
 // cumulative cost, token types, and activity by weekday and hour.
 import { formatCost, formatTokens, fullDate } from '../format.mjs';
-import { state, shown } from '../state.mjs';
+import { shown } from '../state.mjs';
 import { drawBarChart, drawCumulativeChart } from '../charts/bar.mjs';
 import { drawLogLineChart, drawTokenLegend } from '../charts/line.mjs';
 import { drawActivityHeatmap } from '../charts/heatmap.mjs';
@@ -39,8 +39,6 @@ export function renderUsageCharts(data) {
     drawTokenLegend(document.getElementById('tokenTypeLegend'), data.daily, [...TOKEN_SERIES].reverse());
     drawLogLineChart(document.getElementById('tokenTypeChart'), data.daily, TOKEN_SERIES);
   }
-  // Like the model daily charts, the heatmap shows on multi-day ranges only.
-  const multiDay = state.currentDays !== 'today';
-  document.getElementById('activityPanel').hidden = !multiDay;
-  if (multiDay && shown('activity')) drawActivityHeatmap(document.getElementById('activityHeatmap'), data.activity);
+  document.getElementById('activityPanel').hidden = false;
+  if (shown('activity')) drawActivityHeatmap(document.getElementById('activityHeatmap'), data.activity);
 }

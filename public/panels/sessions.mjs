@@ -74,7 +74,7 @@ const collapsedBands = loadCollapsedBands();
 // now table hides when no session is live.
 export function renderSessions(live) {
   const panel = document.getElementById('sessionsPanel');
-  panel.hidden = !live || !live.sessions.length || state.currentDays !== 'today';
+  panel.hidden = !live || !live.sessions.length || state.tab !== 'now';
   if (panel.hidden) return;
   lastLiveSessions = live;
   // expandedGroups and collapsedBands are in the key, so a toggle's own call redraws.
@@ -152,7 +152,7 @@ function drawSessions(live) {
     sessionCell(s),
     stateCell(running),
     cell(String(s.prompts), 'num'),
-    cell(formatDuration(s.durationMs), 'num'),
+    cell(s.durationMs === null ? '—' : formatDuration(s.durationMs), 'num'),
     cell(lines(s.linesAdded, s.linesRemoved), 'num'),
     costCell(s.costTodayUsd, `Session total since it started: ${formatCost(s.costUsd)}`, s.costTodayUsd),
     // A waiting session can be past its live window, so only live rows get is-live.
@@ -195,7 +195,7 @@ function drawSessions(live) {
       first,
       stateCell(running),
       cell(String(g.prompts), 'num'),
-      cell(formatDuration(g.durationMs), 'num'),
+      cell(g.durationMs === null ? '—' : formatDuration(g.durationMs), 'num'),
       cell(lines(g.linesAdded, g.linesRemoved), 'num'),
       costCell(
         g.costTodayUsd,

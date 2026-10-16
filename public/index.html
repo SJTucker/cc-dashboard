@@ -175,7 +175,8 @@
       <div class="tab" id="tabAnalysis" hidden>
         <div class="tab-toolbar">
           <div class="range-picker" id="rangePicker" role="group" aria-label="Date range">
-            <button data-days="7" class="active">7d</button>
+            <button data-days="today" class="active">Today</button>
+            <button data-days="7">7d</button>
             <button data-days="30">30d</button>
             <button data-days="90">90d</button>
             <button data-days="all">All</button>
@@ -244,16 +245,16 @@
         <div class="panel-row even">
           <section class="panel" data-hide-key="dailyCost">
             <div class="panel-head">
-              <h2>Daily cost</h2>
+              <h2 data-hourly="Hourly cost">Daily cost</h2>
             </div>
-            <div id="costChart" class="chart" aria-label="Bar chart of daily cost"></div>
+            <div id="costChart" class="chart" aria-label="Bar chart of daily cost" data-hourly-label="Bar chart of hourly cost"></div>
           </section>
 
           <section class="panel" data-hide-key="dailyTokens">
             <div class="panel-head">
-              <h2>Daily tokens</h2>
+              <h2 data-hourly="Hourly tokens">Daily tokens</h2>
             </div>
-            <div id="tokenChart" class="chart" aria-label="Bar chart of daily total tokens"></div>
+            <div id="tokenChart" class="chart" aria-label="Bar chart of daily total tokens" data-hourly-label="Bar chart of hourly total tokens"></div>
           </section>
         </div>
 
@@ -267,10 +268,10 @@
 
           <section class="panel" data-hide-key="tokenTypes">
             <div class="panel-head">
-              <h2>Daily tokens by type · log</h2>
+              <h2 data-hourly="Hourly tokens by type · log">Daily tokens by type · log</h2>
             </div>
             <div class="chart-with-legend">
-              <div id="tokenTypeChart" class="chart" aria-label="Line chart of daily input, output, cache-write and cache-read tokens on a logarithmic scale"></div>
+              <div id="tokenTypeChart" class="chart" aria-label="Line chart of daily input, output, cache-write and cache-read tokens on a logarithmic scale" data-hourly-label="Line chart of hourly input, output, cache-write and cache-read tokens on a logarithmic scale"></div>
               <div class="chart-side" id="tokenTypeLegend"></div>
             </div>
           </section>
@@ -282,7 +283,7 @@
             <span class="panel-meta">added above the line, deleted below, per repo</span>
           </div>
           <div class="chart-with-legend">
-            <div id="linesChart" class="chart" aria-label="Line chart of lines of code added and deleted per day, one pair of lines per repo"></div>
+            <div id="linesChart" class="chart" aria-label="Line chart of lines of code added and deleted per day, one pair of lines per repo" data-hourly-label="Line chart of lines of code added and deleted per hour, one pair of lines per repo"></div>
             <div class="chart-side" id="linesLegend"></div>
           </div>
         </section>
@@ -290,16 +291,16 @@
         <div class="panel-row even">
         <section class="panel" id="modelDailyPanel" data-hide-key="modelDaily" hidden>
           <div class="panel-head">
-            <h2>Daily tokens by model</h2>
+            <h2 data-hourly="Hourly tokens by model">Daily tokens by model</h2>
           </div>
-          <div id="modelDailyChart" class="chart" aria-label="Stacked bar chart of daily tokens by model"></div>
+          <div id="modelDailyChart" class="chart" aria-label="Stacked bar chart of daily tokens by model" data-hourly-label="Stacked bar chart of hourly tokens by model"></div>
         </section>
 
         <section class="panel" id="modelCostDailyPanel" data-hide-key="modelCostDaily" hidden>
           <div class="panel-head">
-            <h2>Daily cost by model</h2>
+            <h2 data-hourly="Hourly cost by model">Daily cost by model</h2>
           </div>
-          <div id="modelCostDailyChart" class="chart" aria-label="Stacked bar chart of daily cost by model"></div>
+          <div id="modelCostDailyChart" class="chart" aria-label="Stacked bar chart of daily cost by model" data-hourly-label="Stacked bar chart of hourly cost by model"></div>
         </section>
         </div>
 
@@ -350,7 +351,7 @@
             <h2>Output rtk kept out of context</h2>
           </div>
           <p class="panel-note">Estimated tokens rtk kept out of the model's context. Not in cost.</p>
-          <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk kept out of context per day"></div>
+          <div id="rtkDailyChart" class="chart" aria-label="Bar chart of tokens rtk kept out of context per day" data-hourly-label="Bar chart of tokens rtk kept out of context per hour"></div>
         </section>
 
         <section class="panel" id="rtkCommandPanel" data-hide-key="rtkCommands" hidden>

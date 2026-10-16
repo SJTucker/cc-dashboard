@@ -1,4 +1,4 @@
-const GROUP_SUMS = ['costUsd', 'costTodayUsd', 'durationMs', 'linesAdded', 'linesRemoved', 'tokens', 'prompts'];
+const GROUP_SUMS = ['costUsd', 'costTodayUsd', 'linesAdded', 'linesRemoved', 'tokens', 'prompts'];
 
 // Cost today of a row of the Live sessions table: a plain session or a group.
 function itemCost(item) {
@@ -9,12 +9,14 @@ function lastActive(item) {
   return item.type === 'group' ? item.lastActiveAt : item.session.lastActiveAt;
 }
 
-// Sums, the newest lastActiveAt and the end counts of a group's sessions. cleared
+// Sums, the summed Length (null when no session has one), the newest lastActiveAt and the end counts of a group's sessions. cleared
 // counts sessions ended by /clear, and ended every other end. An open session of a
 // launch group is in neither.
 function groupFields(sessions) {
   const fields = {};
   for (const key of GROUP_SUMS) fields[key] = sessions.reduce((sum, s) => sum + s[key], 0);
+  const lengths = sessions.map((s) => s.durationMs).filter((d) => typeof d === 'number');
+  fields.durationMs = lengths.length ? lengths.reduce((a, b) => a + b, 0) : null;
   fields.lastActiveAt = Math.max(...sessions.map((s) => s.lastActiveAt));
   fields.cleared = sessions.filter((s) => s.ended === 'clear').length;
   fields.ended = sessions.filter((s) => s.ended && s.ended !== 'clear').length;
@@ -142,13 +144,16 @@ function isRunning(s) {
 // Splits the items of groupSessions into the two bands of the Live sessions table.
 // running is { item, session } for every item that holds a live session or one
 // waiting on the user, where session is that running session (the item's newest
-// running one). It is ordered by the session's first span start, so rows do not
-// move while they run. A session with no span today goes last, and equal starts
-// fall back to the newest lastActiveAt. earlier is every other item, in the order
-// it came in.
+// running one). Sessions waiting on the user go below the others, so the working
+// sessions stay at the top. Within each of those two parts, rows are ordered by the
+// session's first span start, so a row moves only when its state changes. A session
+// with no span today goes last, and equal starts fall back to the newest
+// lastActiveAt. earlier is every other item, in the order it came in.
 function splitBands(items) {
   const start = (s) => (s.spans?.length ? s.spans[0][0] : Infinity);
-  const byStart = (a, b) => {
+  const waits = (s) => (s.activity?.state === 'waiting' ? 1 : 0);
+  const byOrder = (a, b) => {
+    if (waits(a) !== waits(b)) return waits(a) - waits(b);
     const sa = start(a);
     const sb = start(b);
     if (sa === sb) return b.lastActiveAt - a.lastActiveAt;
@@ -158,11 +163,11 @@ function splitBands(items) {
   const earlier = [];
   for (const item of items) {
     const held = item.type === 'group' ? item.sessions : [item.session];
-    const [session] = held.filter(isRunning).sort(byStart);
+    const [session] = held.filter(isRunning).sort(byOrder);
     if (session) running.push({ item, session });
     else earlier.push(item);
   }
-  running.sort((a, b) => byStart(a.session, b.session));
+  running.sort((a, b) => byOrder(a.session, b.session));
   return { running, earlier };
 }
 

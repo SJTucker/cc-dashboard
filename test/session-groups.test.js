@@ -52,6 +52,13 @@ test('group fields sum the sessions and take the newest lastActiveAt', () => {
   assert.strictEqual(g.lastActiveAt, 20);
 });
 
+test('a group Length is null when no session has one, else the sum of the numbers', () => {
+  const [none] = groupSessions([session('a', 20, { durationMs: null }), session('a', 10, { durationMs: null })]);
+  assert.strictEqual(none.durationMs, null);
+  const [mixed] = groupSessions([session('a', 20, { durationMs: null }), session('a', 10, { durationMs: 700 })]);
+  assert.strictEqual(mixed.durationMs, 700);
+});
+
 test('rows are sorted by Cost today, highest first, and a group counts by its summed cost', () => {
   const items = groupSessions([
     session('a', 50, { ended: null, live: true, costTodayUsd: 0.4 }),
@@ -277,6 +284,14 @@ test('splitBands keeps a session waiting on you after it stops being live', () =
   const bands = splitBands(groupSessions([stale, approval, working, waiting]));
   assert.deepStrictEqual(runningNames(bands), ['waiting']);
   assert.strictEqual(bands.earlier.length, 3);
+});
+
+test('splitBands puts sessions waiting on you below the other running sessions', () => {
+  const waitOld = session('wait-old', 10, { ended: null, live: true, spans: [[100, 200]], activity: { state: 'waiting' } });
+  const workNew = session('work-new', 20, { ended: null, live: true, spans: [[300, 400]], activity: { state: 'working' } });
+  const waitNew = session('wait-new', 30, { ended: null, live: false, spans: [[500, 600]], activity: { state: 'waiting' } });
+  const workOld = session('work-old', 40, { ended: null, live: true, spans: [[50, 60]], activity: { state: 'working' } });
+  assert.deepStrictEqual(runningNames(splitBands(groupSessions([waitOld, workNew, waitNew, workOld]))), ['work-old', 'work-new', 'wait-old', 'wait-new']);
 });
 
 test('splitBands returns a launch group whose newest session is running, with that session', () => {

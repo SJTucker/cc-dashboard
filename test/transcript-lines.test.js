@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { bashGroup, toolDetail, handoffTitle, handoffHeading, handoffPromptPath, promptText, isTypedPrompt, isUntaggedPrompt } = require('../lib/transcript-lines');
+const { bashGroup, toolDetail, handoffTitle, handoffHeading, handoffPromptPath, promptText, isTypedPrompt, isUntaggedPrompt, midTurnPromptText } = require('../lib/transcript-lines');
 
 test('bashGroup keeps the program and its first word or flag', () => {
   const cases = [
@@ -89,4 +89,26 @@ test('a tool_result array line is not a typed prompt or an untagged prompt', () 
 
 test('an untagged line with text and image content is an untagged prompt', () => {
   assert.strictEqual(isUntaggedPrompt({ type: 'user', message: { content: [{ type: 'text', text: 'hi' }, imageBlock] } }), true);
+});
+
+const midTurn = (prompt, extra = {}, attachment = {}) => ({
+  type: 'attachment',
+  isSidechain: false,
+  attachment: { type: 'queued_command', commandMode: 'prompt', origin: { kind: 'human' }, humanTurn: true, prompt, ...attachment },
+  ...extra,
+});
+
+test('midTurnPromptText returns the text of a human prompt-mode queued_command attachment, string or text and image array', () => {
+  assert.strictEqual(midTurnPromptText(midTurn('also fix the tests')), 'also fix the tests');
+  assert.strictEqual(midTurnPromptText(midTurn([{ type: 'text', text: 'error here [Image #7]' }, imageBlock])), 'error here [Image #7]');
+});
+
+test('midTurnPromptText returns null for a task notification, a peer hand-back with isMeta, a sidechain line and other attachments', () => {
+  assert.strictEqual(midTurnPromptText(midTurn('done', {}, { commandMode: 'task-notification' })), null);
+  assert.strictEqual(midTurnPromptText(midTurn('result', {}, { origin: { kind: 'peer' }, isMeta: true })), null);
+  assert.strictEqual(midTurnPromptText(midTurn('meta', {}, { isMeta: true })), null);
+  assert.strictEqual(midTurnPromptText(midTurn('sub', { isSidechain: true })), null);
+  assert.strictEqual(midTurnPromptText(midTurn('x', {}, { type: 'hook_success' })), null);
+  assert.strictEqual(midTurnPromptText(midTurn(undefined)), null);
+  assert.strictEqual(midTurnPromptText({ type: 'user', message: { content: 'x' } }), null);
 });

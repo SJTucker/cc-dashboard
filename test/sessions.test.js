@@ -354,6 +354,25 @@ test('buildLiveSessions lists each session\'s cache rebuilds, oldest first', () 
   assert.deepStrictEqual(sessions.map((s) => s.rebuilds.length).sort(), [0, 2]);
 });
 
+test('buildLiveSessions measures Length from the first prompt to the last activity', () => {
+  const snaps = [snapshot({ sessionId: 's1', lastActiveAt: NOW - 60_000, durationMs: 99_000_000 })];
+  const { sessions } = buildLiveSessions(snaps, [], NOW, {}, {}, [], new Map(), { firstPromptAtOf: () => NOW - 360_000 });
+  assert.strictEqual(sessions[0].durationMs, 300_000);
+});
+
+test('buildLiveSessions ends Length at the newest call when it is later than the snapshot', () => {
+  const snaps = [snapshot({ sessionId: 's1', lastActiveAt: NOW - 60_000 })];
+  const calls = [{ sessionId: 's1', t: NOW - 20_000, main: true, context: 1, output: 1, cost: 0.1 }];
+  const { sessions } = buildLiveSessions(snaps, calls, NOW, {}, {}, [], new Map(), { firstPromptAtOf: () => NOW - 120_000 });
+  assert.strictEqual(sessions[0].durationMs, 100_000);
+});
+
+test('buildLiveSessions leaves Length null with no first prompt or no firstPromptAtOf', () => {
+  const snaps = [snapshot({ sessionId: 's1' })];
+  assert.strictEqual(buildLiveSessions(snaps, [], NOW, {}, {}, [], new Map(), { firstPromptAtOf: () => null }).sessions[0].durationMs, null);
+  assert.strictEqual(buildLiveSessions(snaps, [], NOW).sessions[0].durationMs, null);
+});
+
 test('buildLiveSessions puts the session recap on each row, null without one', () => {
   const { sessions } = buildLiveSessions([snapshot({ sessionId: 'a' }), snapshot({ sessionId: 'b' })], [], NOW, {}, {}, [], new Map(), { recapBySession: { a: 'Goal was X.' } });
   assert.deepStrictEqual(sessions.map((s) => s.recap), ['Goal was X.', null]);

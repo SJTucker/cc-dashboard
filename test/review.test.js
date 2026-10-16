@@ -66,6 +66,25 @@ test('digestTranscript counts a typed prompt with a pasted image and skips its i
   assert.deepStrictEqual(await review.digestTranscript(file), { prompts: 1, text: 'USER: investigate [Image #3]' });
 });
 
+test('digestTranscript counts a prompt typed mid-turn and skips task notifications, peer hand-backs and sidechain ones', async () => {
+  const base = tmpDir();
+  const image = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };
+  const queued = (prompt, extra = {}, attachment = {}) => ({
+    type: 'attachment',
+    isSidechain: false,
+    attachment: { type: 'queued_command', commandMode: 'prompt', origin: { kind: 'human' }, prompt, ...attachment },
+    ...extra,
+  });
+  const file = writeTranscript(base, [
+    queued('also fix the tests'),
+    queued([{ type: 'text', text: 'error here [Image #7]' }, image]),
+    queued('done', {}, { commandMode: 'task-notification' }),
+    queued('result', {}, { origin: { kind: 'peer' }, isMeta: true }),
+    queued('sub', { isSidechain: true }),
+  ]);
+  assert.deepStrictEqual(await review.digestTranscript(file), { prompts: 2, text: 'USER: also fix the tests\nUSER: error here [Image #7]' });
+});
+
 test('digestTranscript skips subagent lines, slash commands and repeated tool_use blocks', async () => {
   const base = tmpDir();
   const file = writeTranscript(base, [
@@ -453,6 +472,19 @@ function seed(review, db, id, fields = {}, suggestions = [], at = NOW - HOUR) {
   if (fields.transcript !== undefined || fields.title !== undefined || fields.branch !== undefined) review.updateReview(db, id, fields);
   review.finishReview(db, id, { status: fields.status ?? 'done', suggestions, error: fields.error, reason: fields.reason }, at);
 }
+
+test('the today range starts at local midnight for reviewed_at, in both lists', () => {
+  const { review, db, projects } = fixture();
+  const now = new Date(2026, 5, 10, 15).getTime();
+  const at = (day, hour) => new Date(2026, 5, day, hour).getTime();
+  seed(review, db, 'morning', { endedAt: at(10, 9) }, [{ kind: 'workflow', text: 'a' }], at(10, 10));
+  review.setDismissal(db, 'morning', 0, 'done', at(10, 11));
+  seed(review, db, 'late', { endedAt: at(9, 22) }, [{ kind: 'workflow', text: 'b' }], at(9, 23));
+  review.setDismissal(db, 'late', 0, 'done', at(9, 23));
+  seed(review, db, 'open', { endedAt: at(10, 12) }, [{ kind: 'workflow', text: 'c' }], at(10, 13));
+  assert.deepStrictEqual(review.readReviews(db, projects, { days: 'today', now }).reviews.map((r) => r.sessionId), ['open']);
+  assert.deepStrictEqual(review.readClosedPage(db, projects, { days: 'today', limit: 10, now }).reviews.map((r) => r.sessionId), ['morning']);
+});
 
 test('readReviews lists done reviews in the range with only their open suggestions, and counts the closed ones', () => {
   const { review, db, projects } = fixture();

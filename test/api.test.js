@@ -631,6 +631,26 @@ test('GET /api/sessions/live joins today\'s snapshots with scanned tokens', asyn
   assert.strictEqual(body.sessions[0].prompts, 0);
 });
 
+test('GET /api/sessions/live measures Length from the transcript\'s first typed prompt', async (t) => {
+  const { url, config } = await startServer(t);
+  const base = config.configDir;
+  const at = (h, m) => { const d = new Date(); d.setHours(h, m, 0, 0); return d.toISOString(); };
+  const typed = (uuid, timestamp) => JSON.stringify({
+    type: 'user', uuid, timestamp, sessionId: 'sess-len', origin: { kind: 'human' }, promptSource: 'typed',
+    message: { role: 'user', content: 'do the thing' },
+  });
+  fs.writeFileSync(path.join(base, 'projects', 'demo', 'sess-len.jsonl'), [typed('u2', at(10, 40)), typed('u1', at(10, 0))].join('\n') + '\n');
+  writeSnapshot(base, {
+    sessionId: 'sess-len', lastActiveAt: Date.parse(at(10, 30)), project: 'demo', model: 'Sonnet 4.6',
+    costUsd: 0.1, durationMs: 99_000_000, apiDurationMs: 5_000, linesAdded: 0, linesRemoved: 0,
+  });
+
+  const res = await fetch(`${url}/api/sessions/live`);
+  const [row] = (await res.json()).sessions;
+  // First prompt 10:00 to last activity 10:30, not the snapshot's 99,000,000 ms.
+  assert.strictEqual(row.durationMs, 30 * 60_000);
+});
+
 test('GET /api/sessions/live marks a session that ended', async (t) => {
   const { url, config } = await startServer(t);
   writeSnapshot(config.configDir, {
@@ -1036,6 +1056,15 @@ test('GET /api/reviews lists finished reviews with suggestion state', async (t) 
   });
 });
 
+test('GET /api/reviews and /api/reviews/closed accept days=today', async (t) => {
+  const { url } = await startServer(t);
+  const open = await fetch(`${url}/api/reviews?days=today`);
+  assert.strictEqual(open.status, 200);
+  assert.deepStrictEqual(await open.json(), { reviews: [], closedCount: 0 });
+  const closed = await fetch(`${url}/api/reviews/closed?days=today`);
+  assert.strictEqual(closed.status, 200);
+});
+
 test('GET /api/reviews answers an empty list before any review exists', async (t) => {
   const { url } = await startServer(t);
   const res = await fetch(`${url}/api/reviews?days=7`);
@@ -1096,7 +1125,7 @@ const suggestionState = async (base, id) => {
 test('the reviews routes answer 400 for a missing or bad days, limit or before', async (t) => {
   const { url } = await startServer(t);
   for (const route of [
-    '/api/reviews', '/api/reviews?days=', '/api/reviews?days=today', '/api/reviews?days=14', '/api/reviews?days=7&days=30',
+    '/api/reviews', '/api/reviews?days=', '/api/reviews?days=14', '/api/reviews?days=7&days=30',
     '/api/reviews/closed', '/api/reviews/closed?days=abc', '/api/reviews/closed?days=7&limit=0', '/api/reviews/closed?days=7&limit=x',
     '/api/reviews/closed?days=7&before=nope', `/api/reviews/closed?days=7&before=${encodeURIComponent('12:../x')}`,
   ]) {

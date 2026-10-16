@@ -94,13 +94,15 @@ function parseDays(raw) {
   return RANGE_DAYS.has(n) ? { days: n } : { error: INVALID_DAYS(raw) };
 }
 
-// The days query of the reviews routes, as { days } or { error }. days is 7, 30 or
-// 90, or null for All. The panel is on the Analysis tab only and always sends its
-// range, so a missing value and 'today' are errors too.
+// The days query of the reviews routes, as { days } or { error }. days is 'today',
+// 7, 30 or 90, or null for All. The panel is on the Analysis tab only and always
+// sends its range, so a missing value is an error. lib/review.js starts 'today' at
+// local midnight.
 function parseReviewDays(raw) {
+  if (raw === 'today') return { days: 'today' };
   if (raw === 'all') return { days: null };
   if (raw === '7' || raw === '30' || raw === '90') return { days: Number(raw) };
-  return { error: `Invalid days: ${String(raw)}. Use 7, 30, 90 or 'all'.` };
+  return { error: `Invalid days: ${String(raw)}. Use 'today', 7, 30, 90 or 'all'.` };
 }
 
 // The limit query of /api/reviews/closed: CLOSED_PAGE_SIZE when missing, else a whole
@@ -366,11 +368,12 @@ function createServer(config) {
       // A waiting session's cache TTL depends on its newest cache write, which can
       // be before midnight. The row store holds the whole transcript, so the Today
       // scan's calls are not used for it (as bin/cache-state does).
-      // The index maps each file name to its row-store entries and is built on the
-      // first waiting session, so a poll with none never copies and sorts the
-      // entries. Only the requested session's calls are concatenated.
+      // The index maps each file name to its row-store entries. It is built on the
+      // first lookup, so a poll with no waiting session and no session to measure
+      // never copies and sorts the entries. A lookup reads only the requested
+      // session's entries.
       let entriesByFile = null;
-      const transcriptCalls = (sessionId) => {
+      const entriesOf = (sessionId) => {
         if (!entriesByFile) {
           entriesByFile = new Map();
           for (const e of getRowStore().entries()) {
@@ -379,7 +382,19 @@ function createServer(config) {
             entriesByFile.get(name).push(e);
           }
         }
-        return cacheCallsOf((entriesByFile.get(`${sessionId}.jsonl`) || []).flatMap((e) => e.rows.calls || []));
+        return entriesByFile.get(`${sessionId}.jsonl`) || [];
+      };
+      const transcriptCalls = (sessionId) => cacheCallsOf(entriesOf(sessionId).flatMap((e) => e.rows.calls || []));
+      // The time of the session's first typed prompt over the whole transcript, or
+      // null. Unlike efficiency.prompts, it is not limited to today.
+      const firstPromptAt = (sessionId) => {
+        let first = null;
+        for (const e of entriesOf(sessionId)) {
+          for (const p of e.rows.prompts || []) {
+            if (p.sessionId === sessionId && (first === null || p.t < first)) first = p.t;
+          }
+        }
+        return first;
       };
       res.json(buildLiveSessions(readSessions(getSessionsDir(config.configDir)), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(getActivityDir(config.configDir)), {
         branchesBySession: efficiency.branchesBySession,
@@ -388,6 +403,7 @@ function createServer(config) {
         handoffTitleBySession: efficiency.handoffTitleBySession,
         recapBySession: efficiency.recapBySession,
         cacheCallsOf: transcriptCalls,
+        firstPromptAtOf: firstPromptAt,
       }));
     } catch (err) {
       console.error('[API] /api/sessions/live failed:', err);

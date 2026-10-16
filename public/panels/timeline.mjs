@@ -349,7 +349,7 @@ function drawTimeline(container, sessions, width, now) {
 
 export function renderTimeline(live) {
   const panel = document.getElementById('timelinePanel');
-  panel.hidden = !live || !live.sessions.some((s) => s.spans.length) || state.currentDays !== 'today';
+  panel.hidden = !live || !live.sessions.some((s) => s.spans.length) || state.tab !== 'now';
   if (panel.hidden) {
     timelineSignature = null;
     return;

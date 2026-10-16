@@ -14,8 +14,8 @@ export function tabFromHash(hash) {
 }
 
 // The range a tab loads. Now is always Today. Analysis keeps the range last picked
-// on it in this page view. High scores returns 'highscores', which no summary
-// request accepts, so callers skip the range summary on it.
+// on it (Today included) in this page view. High scores returns 'highscores',
+// which no summary request accepts, so callers skip the range summary on it.
 export function rangeForTab(tab, analysisDays) {
   if (tab === 'highscores') return 'highscores';
   return tab === 'now' ? 'today' : analysisDays;

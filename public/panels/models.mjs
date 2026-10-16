@@ -122,13 +122,11 @@ export function renderModelsPanel(data) {
   }
 }
 
-// The daily-by-model charts. Drawn on the Analysis tab. An hourly model split is
-// noise, so the over-time view is multi-day only.
+// The daily-by-model charts. Drawn on the Analysis tab, on every range including
+// Today (hourly buckets).
 export function renderModelDailyCharts(data) {
-  const multiDay = state.currentDays !== 'today';
-  document.getElementById('modelDailyPanel').hidden = !multiDay;
-  document.getElementById('modelCostDailyPanel').hidden = !multiDay;
-  if (!multiDay) return;
+  document.getElementById('modelDailyPanel').hidden = false;
+  document.getElementById('modelCostDailyPanel').hidden = false;
   if (shown('modelDaily')) drawModelDailyChart(document.getElementById('modelDailyChart'), data.daily, data.models);
   if (shown('modelCostDaily')) drawModelDailyChart(document.getElementById('modelCostDailyChart'), data.daily, data.models, 'cost');
 }

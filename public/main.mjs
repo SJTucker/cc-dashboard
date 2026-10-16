@@ -173,11 +173,11 @@ function drawSticky(data) {
 
 // The sticky poll's run: today's summary for the bar, and /api/limits for the
 // warning in it. createPoller requires a promise that never rejects, and neither
-// request rejects (public/api.mjs). The range check drops a response that lands
-// after a switch to Today, where the full load draws both.
+// request rejects (public/api.mjs). The tab check drops a response that lands
+// after a switch to the Now tab, where the full load draws both.
 function loadStickyToday() {
   return loadStickyData({ getJson, requestLimits }).then(({ summary, limits }) => {
-    if (state.currentDays === 'today') return;
+    if (state.tab === 'now') return;
     drawSticky(summary);
     renderLimitsBanner(limits);
     // No summary draw runs on the High scores tab, so the first sticky poll ends
@@ -214,7 +214,7 @@ async function fetchAll({ busy = false } = {}) {
   const summaryRequest = getJson(`/api/summary?days=${state.currentDays}`);
   // A request whose every panel is hidden is skipped (see neededRequests in
   // visibility.mjs), and its panels render from null, as on a failed request.
-  const needed = neededRequests(state.hiddenKeys, state.currentDays);
+  const needed = neededRequests(state.hiddenKeys, state.tab);
   const rtkRequest = needed.has('rtk')
     ? getJson(`/api/rtk?days=${state.currentDays}`, { optional: true })
     : Promise.resolve(null);
@@ -248,11 +248,11 @@ async function fetchAll({ busy = false } = {}) {
   });
 }
 
-// Plan usage, the sessions and the timeline show on Today only. Their renderers set
-// that, but a hidden panel's renderer is skipped, so the range rule is applied here
+// Plan usage, the sessions and the timeline show on the Now tab only. Their renderers
+// set that, but a hidden panel's renderer is skipped, so the tab rule is applied here
 // too.
 function applyRangeRule() {
-  if (state.currentDays === 'today') return;
+  if (state.tab === 'now') return;
   for (const id of ['limitsPanel', 'sessionsPanel', 'timelinePanel']) document.getElementById(id).hidden = true;
 }
 
@@ -318,11 +318,11 @@ function drawSummaryPanels(data) {
 }
 
 // The summary request's draw. The first one of the page's life, a failure included,
-// ends the "Loading…" lines (.first-load in css/base.css). On Today the summary is
-// today's, so it draws the sticky bar too.
+// ends the "Loading…" lines (.first-load in css/base.css). On the Now tab the summary
+// is today's, so it draws the sticky bar too. The Analysis tab's sticky poll draws it.
 function drawSummary(data) {
   document.body.classList.remove('first-load');
-  if (state.currentDays === 'today') drawSticky(data);
+  if (state.tab === 'now') drawSticky(data);
   drawSummaryPanels(data);
 }
 
@@ -385,14 +385,30 @@ function syncRangeButtons() {
   for (const b of document.querySelectorAll('#rangePicker button')) {
     b.classList.toggle('active', b.dataset.days === String(state.analysisDays));
   }
+  syncBucketText();
 }
 
-// The range picker is on the Analysis tab only, so a pick never means Today.
+// On Today the Analysis charts have hourly buckets, so a title or chart label that
+// says daily swaps to its data-hourly or data-hourly-label text (index.html). The
+// daily text is kept in data-daily and data-daily-label on the first swap.
+function syncBucketText() {
+  const hourly = state.analysisDays === 'today';
+  for (const el of document.querySelectorAll('[data-hourly]')) {
+    el.dataset.daily ??= el.textContent;
+    el.textContent = hourly ? el.dataset.hourly : el.dataset.daily;
+  }
+  for (const el of document.querySelectorAll('[data-hourly-label]')) {
+    el.dataset.dailyLabel ??= el.getAttribute('aria-label');
+    el.setAttribute('aria-label', hourly ? el.dataset.hourlyLabel : el.dataset.dailyLabel);
+  }
+}
+
+// The range picker is on the Analysis tab only. 'today' stays a string, like 'all'.
 document.getElementById('rangePicker').addEventListener('click', (evt) => {
   const btn = evt.target.closest('button[data-days]');
   if (!btn) return;
   const value = btn.dataset.days;
-  state.analysisDays = value === 'all' ? value : Number(value);
+  state.analysisDays = value === 'all' || value === 'today' ? value : Number(value);
   state.currentDays = state.analysisDays;
   syncRangeButtons();
   clearSignatures(); // the bucket keys change, so force a redraw
@@ -410,7 +426,7 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
 // no old tab: state starts on Now's range, which would hide Now's own requests.
 let tabEntered = false;
 function enterTab(tab) {
-  const before = tabEntered ? neededRequests(state.hiddenKeys, state.currentDays) : new Set();
+  const before = tabEntered ? neededRequests(state.hiddenKeys, state.tab) : new Set();
   tabEntered = true;
   state.tab = tab;
   state.currentDays = rangeForTab(tab, state.analysisDays);
@@ -422,7 +438,7 @@ function enterTab(tab) {
   setPolling(tab === 'now');
   syncHighscores();
   if (tab === 'highscores') refreshHighscores();
-  const after = neededRequests(state.hiddenKeys, state.currentDays);
+  const after = neededRequests(state.hiddenKeys, state.tab);
   if (after.has('changes') && !before.has('changes')) ensureChanges();
   if (after.has('prices') && !before.has('prices')) loadPricesSource();
   if (tab !== 'now') loadStickyToday();

@@ -105,7 +105,7 @@ function dailyShareRow(today) {
 
 export function renderLimits(limits) {
   const panel = document.getElementById('limitsPanel');
-  panel.hidden = !limits || state.currentDays !== 'today';
+  panel.hidden = !limits || state.tab !== 'now';
   if (panel.hidden) return;
   limitsGuard.draw(limits, () => drawLimits(limits));
 }
