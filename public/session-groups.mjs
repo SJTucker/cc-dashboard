@@ -197,9 +197,10 @@ function activityLabel(activity) {
 function cacheLine(cache, formatUsd) {
   if (!cache) return null;
   const cost = cache.rebuildUsd == null ? null : formatUsd(cache.rebuildUsd);
-  if (cache.minutesLeft < 0) return cost ? `cache expired · next reply pays ${cost} to rebuild` : 'cache expired';
-  const left = cache.minutesLeft === 0 ? 'cache expires in under 1 min' : `cache ${cache.minutesLeft} min left`;
-  return cost ? `${left} · ${cost} to rebuild after` : left;
+  let left = `cache ${cache.minutesLeft} min`;
+  if (cache.minutesLeft < 0) left = 'cache expired';
+  else if (cache.minutesLeft === 0) left = 'cache <1 min';
+  return cost ? `${left} · rebuild ${cost}` : left;
 }
 
 // Second part of the State cell: the running tool's name, then the subagent count. Null when

@@ -217,20 +217,20 @@ before(async () => { ({ cacheLine } = await import('../public/session-groups.mjs
 const usd = (n) => '$' + n.toFixed(2);
 
 test('cacheLine shows minutes left and the rebuild cost', () => {
-  assert.strictEqual(cacheLine({ minutesLeft: 4, rebuildUsd: 0.38 }, usd), 'cache 4 min left · $0.38 to rebuild after');
+  assert.strictEqual(cacheLine({ minutesLeft: 4, rebuildUsd: 0.38 }, usd), 'cache 4 min · rebuild $0.38');
 });
 
 test('cacheLine says under 1 min when no whole minute is left', () => {
-  assert.strictEqual(cacheLine({ minutesLeft: 0, rebuildUsd: 0.38 }, usd), 'cache expires in under 1 min · $0.38 to rebuild after');
+  assert.strictEqual(cacheLine({ minutesLeft: 0, rebuildUsd: 0.38 }, usd), 'cache <1 min · rebuild $0.38');
 });
 
 test('cacheLine says expired when minutesLeft is negative', () => {
-  assert.strictEqual(cacheLine({ minutesLeft: -1, rebuildUsd: 0.38 }, usd), 'cache expired · next reply pays $0.38 to rebuild');
+  assert.strictEqual(cacheLine({ minutesLeft: -1, rebuildUsd: 0.38 }, usd), 'cache expired · rebuild $0.38');
 });
 
 test('cacheLine drops the cost clause when rebuildUsd is null', () => {
-  assert.strictEqual(cacheLine({ minutesLeft: 4, rebuildUsd: null }, usd), 'cache 4 min left');
-  assert.strictEqual(cacheLine({ minutesLeft: 0, rebuildUsd: null }, usd), 'cache expires in under 1 min');
+  assert.strictEqual(cacheLine({ minutesLeft: 4, rebuildUsd: null }, usd), 'cache 4 min');
+  assert.strictEqual(cacheLine({ minutesLeft: 0, rebuildUsd: null }, usd), 'cache <1 min');
   assert.strictEqual(cacheLine({ minutesLeft: -3, rebuildUsd: null }, usd), 'cache expired');
 });
 
