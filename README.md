@@ -36,6 +36,9 @@ npm start
 
 Then open **http://localhost:3600**.
 
+To keep the server running after the terminal closes, run `bin/server start`.
+`bin/server stop`, `bin/server restart` and `bin/server status` manage it.
+
 While editing the code, run `npm run watch`. Node's `--watch` flag restarts
 the server when `server.js` or any file under `lib/` changes. Files under
 `public/` are read from disk on each request, so a page reload picks them up

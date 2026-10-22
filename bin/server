@@ -1,0 +1,105 @@
+#!/bin/sh
+# Runs the server in the background, detached from the terminal, until it is
+# stopped or the machine restarts. Usage: bin/server start|stop|restart|status.
+# Arguments after start or restart go to server.js, such as --port 3601.
+# The pid and the server's output go in <cfg>/cc-dashboard/. Each start empties
+# the log.
+
+set -u
+unset CDPATH
+
+clone=$(cd "$(dirname "$0")/.." && pwd -P)
+
+# <cfg> as lib/config-dir.js resolves it: a leading ~ is expanded, empty is unset.
+case "${CLAUDE_CONFIG_DIR:-}" in
+  '') cfg="$HOME/.claude" ;;
+  '~'*) cfg="$HOME${CLAUDE_CONFIG_DIR#\~}" ;;
+  *) cfg="$CLAUDE_CONFIG_DIR" ;;
+esac
+dir="$cfg/cc-dashboard"
+pidfile="$dir/server.pid"
+log="$dir/server.log"
+
+# Sets pid and succeeds when the pid file names a live server.js from this clone.
+# A pid whose process has exited, or that now belongs to another program, fails.
+running() {
+  [ -f "$pidfile" ] || return 1
+  pid=$(cat "$pidfile")
+  case "$pid" in '' | *[!0-9]*) return 1 ;; esac
+  ps -p "$pid" -o command= 2>/dev/null | grep -qF "$clone/server.js"
+}
+
+url() { grep -o 'http://localhost:[0-9]*' "$log" 2>/dev/null | head -n 1; }
+
+start() {
+  if running; then
+    echo "Already running (pid $pid) at $(url). Log: $log"
+    return 0
+  fi
+  command -v node >/dev/null 2>&1 || { echo "node is not on PATH." >&2; return 1; }
+  mkdir -p "$dir" || return 1
+  nohup node "$clone/server.js" "$@" >"$log" 2>&1 </dev/null &
+  pid=$!
+  echo "$pid" >"$pidfile"
+  # server.js prints its URL once it listens. Wait up to 10 seconds for that line.
+  i=0
+  while [ "$i" -lt 50 ]; do
+    if [ -n "$(url)" ]; then
+      echo "Started (pid $pid) at $(url). Log: $log"
+      return 0
+    fi
+    if ! kill -0 "$pid" 2>/dev/null; then
+      rm -f "$pidfile"
+      echo "The server exited. Its output:" >&2
+      cat "$log" >&2
+      return 1
+    fi
+    sleep 0.2
+    i=$((i + 1))
+  done
+  echo "Started (pid $pid), but it is not listening after 10 seconds. Check $log" >&2
+  return 1
+}
+
+stop() {
+  if ! running; then
+    rm -f "$pidfile"
+    echo "Not running."
+    return 0
+  fi
+  # SIGTERM closes open connections and checkpoints transcripts.db before exiting.
+  kill "$pid" || return 1
+  i=0
+  while kill -0 "$pid" 2>/dev/null; do
+    if [ "$i" -ge 50 ]; then
+      echo "pid $pid has not exited after 10 seconds. Check $log, or run kill -9 $pid." >&2
+      return 1
+    fi
+    sleep 0.2
+    i=$((i + 1))
+  done
+  rm -f "$pidfile"
+  echo "Stopped (pid $pid)."
+}
+
+status() {
+  if running; then
+    echo "Running (pid $pid) at $(url). Log: $log"
+  else
+    echo "Not running."
+    return 1
+  fi
+}
+
+command=${1:-}
+[ $# -gt 0 ] && shift
+case "$command" in
+  start) start "$@" ;;
+  stop) stop ;;
+  restart) stop && start "$@" ;;
+  status) status ;;
+  *)
+    echo "Usage: bin/server start|stop|restart|status [server.js arguments]" >&2
+    exit 2
+    ;;
+esac

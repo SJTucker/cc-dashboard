@@ -54,6 +54,12 @@ Then open **http://localhost:3600**.
 - `npm run dev` also opens the browser.
 - `npm run watch` restarts the server when `server.js` or a file under `lib/`
   changes.
+- `bin/server start` runs the server in the background, detached from the
+  terminal, until `bin/server stop` or a reboot. `bin/server restart` stops it and
+  starts it again, and `bin/server status` prints its pid and URL. Arguments after
+  `start` or `restart` go to `server.js`, such as `bin/server start --port 3601`.
+  The pid goes in `<cfg>/cc-dashboard/server.pid` and the server's output in
+  `<cfg>/cc-dashboard/server.log`, which each start empties.
 
 The first page load reads every transcript under `~/.claude/projects` and stores the
 rows, and the session reviews, in `~/.claude/cc-dashboard/transcripts.db`. Later
@@ -197,6 +203,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
+| `<cfg>/cc-dashboard/server.pid`, `<cfg>/cc-dashboard/server.log` | `CLAUDE_CONFIG_DIR` | `bin/server`. `bin/server stop` removes the pid file. Each `bin/server start` empties the log. |
 | `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
 | `<cfg>/cc-dashboard/prices.json` | `CLAUDE_CONFIG_DIR` | the server's price check: daily, when a Claude model with no price of its own appears that the last successful check did not already look for, and when you click Check prices. It holds the dated price changes and the date of the last check. |
 | `<cfg>/cc-dashboard/usage-refresh/` | `CLAUDE_CONFIG_DIR` | the server. It is the working folder of the headless `/usage` runs and stays empty. Claude Code also creates a matching empty project folder under `<cfg>/projects/`. The runs write no transcript. |
