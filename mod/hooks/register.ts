@@ -721,7 +721,7 @@ function armFire($: EngineInterface, id: string, { wait, expiresAt }: { wait: nu
 // happens here.
 async function fireHandoff($: EngineInterface, id: string, expiresAt: number, fire: Timer) {
   if ((await $.clock.now()) >= expiresAt) {
-    handoffTimers.delete(id)
+    if (handoffTimers.get(id) === fire) handoffTimers.delete(id)
     return
   }
   const renewed = await handoffWait($, id)
