@@ -793,6 +793,29 @@ test('a session with no transcript calls falls back to the Today calls for its c
   assert.strictEqual(row.cache.minutesLeft, 4);
 });
 
+// Claude Code's keep-alive moves the expiry with no transcript line. bin/cache-line
+// saves the moved expiry, and cacheStateOf hands it in. T is the newest main call.
+const KEPT_T = NOW - 400_000;
+function keptCache(saved) {
+  const calls = [cacheCall({ t: KEPT_T, write5m: 100_000 })];
+  return buildLiveSessions([snapshot()], calls, NOW, {}, {}, [], waitingMap(), { cacheStateOf: () => saved }).sessions[0].cache;
+}
+
+test('a saved expiry newer than the last main call replaces the transcript expiry', () => {
+  const cache = keptCache({ ttl: '5m', expiresAt: KEPT_T + 600_000, at: KEPT_T + 300_000 });
+  assert.strictEqual(cache.expiresAt, KEPT_T + 600_000);
+  assert.strictEqual(cache.minutesLeft, 3);
+});
+
+test('a saved expiry older than the last main call is ignored', () => {
+  const cache = keptCache({ ttl: '5m', expiresAt: KEPT_T + 900_000, at: KEPT_T - 1 });
+  assert.strictEqual(cache.expiresAt, KEPT_T + TTL_5M);
+});
+
+test('a session with no saved expiry keeps the transcript expiry', () => {
+  assert.strictEqual(keptCache(null).expiresAt, KEPT_T + TTL_5M);
+});
+
 test('an expired cache has a negative minutesLeft', () => {
   const t = NOW - 6 * 60_000;
   const cache = liveCache([cacheCall({ t, write5m: 100_000 })]);

@@ -18,6 +18,7 @@ const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits, readUsageFetchedAt, readDailyShare, getRateLimitsPath } = require('./lib/limits');
 const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = require('./lib/sessions');
+const { readCacheState, getCacheDir } = require('./lib/cache');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
 const { readActivity, getActivityDir } = require('./lib/activity');
 const { readReviews, readClosedPage, parseCursor, suggestionReason, setDismissal, DISMISS_REASONS, CLOSED_PAGE_SIZE, CLOSED_PAGE_MAX } = require('./lib/review');
@@ -403,6 +404,7 @@ function createServer(config) {
         handoffTitleBySession: efficiency.handoffTitleBySession,
         recapBySession: efficiency.recapBySession,
         cacheCallsOf: transcriptCalls,
+        cacheStateOf: (sessionId) => readCacheState(getCacheDir(config.configDir), sessionId),
         firstPromptAtOf: firstPromptAt,
       }));
     } catch (err) {
