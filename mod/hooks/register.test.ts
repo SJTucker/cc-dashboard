@@ -1140,12 +1140,15 @@ test('a failing write from the throttle timer is logged and does not throw', asy
 })
 
 test('an ask verdict leaves the state at working, because the mod cannot tell whether a dialog opens', async ($, on) => {
-  const { writes, writeLog, clock } = world(on, { toolMs: 1000, verdict: 'ask' })
+  // The call starts under allow. On Claude Code 2.1.310 the test engine's tool.call
+  // runs tool.check itself and denies an ask at once, as no user can answer it.
+  const { writes, writeLog, state, clock } = world(on, { toolMs: 1000 })
   await $.turn.start({ text: 'hi', turnId: 't1' })
   await clock.advance(300)
   const call = $.tool.call({ tool: 'Bash', command: 'rm x', tool_use_id: 'tu1' } as never)
   await clock.settle()
   const before = writeLog.length
+  state.verdict = 'ask'
   await $.tool.check({ tool: 'Bash', input: { command: 'rm x' }, tool_use_id: 'tu1' } as never)
   await clock.advance(300)
   expect(writeLog.length).toBe(before)
