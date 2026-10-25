@@ -146,7 +146,9 @@ fi
 
 Claude Code reruns the statusline after each reply and when a warm cache expires,
 but not while a session sits idle. To keep the minutes counting down, add
-`refreshInterval`, in seconds, to `statusLine` in `~/.claude/settings.json`:
+`refreshInterval`, in seconds, to `statusLine` in `~/.claude/settings.json`.
+Without it, the saved expiry also stops moving while the session waits on a
+subagent, and the dashboard counts from the transcript instead:
 
 ```json
 "statusLine": { "type": "command", "command": "~/.claude/statusline.sh", "refreshInterval": 15 }
