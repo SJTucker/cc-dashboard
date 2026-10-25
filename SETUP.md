@@ -112,7 +112,10 @@ cache expired · rebuild $0.38
 
 It reads the `prompt_cache` block Claude Code sends the statusline, which needs
 Claude Code 2.1.251 or later. It prints nothing before the session's first reply.
-It reads and writes no files and always exits 0.
+It also saves the session's cache expiry to
+`<cfg>/cc-dashboard/cache/<session id>.json`. Claude Code renews the cache while a
+subagent runs and writes nothing to the transcript, so the Live sessions panel and
+the handoff timer read the renewed expiry from there. It always exits 0.
 
 Add two lines to the statusline script that `statusLine.command` in
 `~/.claude/settings.json` points at, after the lines it already prints. They read
@@ -198,6 +201,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, run by the mod |
 | `<cfg>/skills/cc-dashboard` (a symlink to the clone's `mod/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
+| `<cfg>/cc-dashboard/cache/` | `CLAUDE_CONFIG_DIR` | `bin/cache-line`, one `<session id>.json` per session holding the cache TTL, its expiry and when that expiry was first seen. `bin/cache-line` deletes files older than a day. |
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod. The server deletes files older than a day when the page shows the Today range. |
 | `<cfg>/cc-dashboard/agent-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per subagent. Each holds the agent id and, for each model request the subagent made, its time, model, turn id, step index and four token counts. The server reads them into `transcripts.db` and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
