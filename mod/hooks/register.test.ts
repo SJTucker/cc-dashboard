@@ -2042,6 +2042,8 @@ test("turn.start during the timer's re-check forks nothing and arms nothing", as
   await $.turn.start({ text: 'more', turnId: 't2' })
   await clock.set(EXPIRES + 600_000)
   expect(forked).toEqual([])
+  // A timer re-armed after turn.start would fire and run bin/cache-state again.
+  expect(cacheRan.length).toBe(2)
 })
 
 test('a failing re-check logs the error and forks nothing', async ($, on) => {
