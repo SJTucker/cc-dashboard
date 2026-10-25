@@ -293,7 +293,9 @@ of them.
   the current date. It writes no transcript line, so the dashboard's totals leave out
   its cost. To find the cache's lifetime and expiry, the mod runs `bin/cache-state`
   after each main-thread turn in an interactive session with at least 50,000 tokens
-  of context, which reads the session's transcript. The timer does not run in
+  of context, and again when the timer fires. It reads the session's transcript and
+  the expiry `bin/cache-line` saved, so a cache Claude Code renewed while a subagent
+  ran moves the timer later. The timer does not run in
   sessions without a terminal (Agent SDK, `-p`). Turning off idle compaction
   (`"idleCompaction": false`, `"autoCompactEnabled": false`, `DISABLE_AUTO_COMPACT=1`
   or `DISABLE_COMPACT=1`) does not turn off the handoff.
