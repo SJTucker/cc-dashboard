@@ -4,10 +4,14 @@
 // Run by the mod's turn.complete hook (mod/hooks/register.ts), which pipes
 // {"transcript": "<path>"} on stdin. Prints {"ttl": "1h" | "5m", "expiresAt": <ms>}
 // for the main thread's prompt cache, from cacheOf in lib/sessions.js, so the mod
-// arms its handoff timer from the same TTL the dashboard shows. Prints {} when the
+// arms its handoff timer from the same TTL the dashboard shows. Like the dashboard,
+// it passes cacheOf the expiry bin/cache-line saved for the transcript's session. Prints {} when the
 // transcript is missing or has no main-thread call. Stdin that is not JSON with a
 // transcript path prints the reason on stderr and exits 1, and the mod logs it.
 
+const path = require('path');
+const { loadConfig } = require('../lib/config-dir');
+const { readCacheState, getCacheDir } = require('../lib/cache');
 const { extractFile } = require('../lib/extract');
 const { cacheOf, cacheCallsOf } = require('../lib/sessions');
 const { readStdin } = require('../lib/stdin');
@@ -31,7 +35,8 @@ readStdin()
     const transcript = transcriptOf(input);
     if (transcript === null) return fail('stdin is not JSON with a transcript path');
     const { calls } = await extractFile(transcript);
-    const cache = cacheOf(cacheCallsOf(calls), Date.now());
+    const saved = readCacheState(getCacheDir(loadConfig().configDir), path.basename(transcript, '.jsonl'));
+    const cache = cacheOf(cacheCallsOf(calls), Date.now(), saved);
     process.stdout.write(JSON.stringify(cache ? { ttl: cache.ttl, expiresAt: cache.expiresAt } : {}) + '\n');
   })
   .catch((err) => fail(err.message));

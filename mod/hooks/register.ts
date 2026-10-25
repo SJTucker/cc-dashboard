@@ -643,7 +643,9 @@ function startHandoff($: EngineInterface, id: string) {
 // turn, armHandoff waits HANDOFF_ARM_DELAY_MS, so the turn.complete hook returns first
 // and the transcript holds the turn's last call. The fire timer then runs
 // HANDOFF_LEAD_MS before a 1h cache expires, the point Claude Code's idle compaction
-// uses. A session's entry in handoffTimers is the arming timer, then the fire timer.
+// uses. When it fires, it runs bin/cache-state again, because Claude Code's keep-alive
+// can move the expiry later while a subagent runs, and re-arms for a later expiry.
+// A session's entry in handoffTimers is the arming timer, then the fire timer.
 // turn.start and forgetSession cancel it. A reload cancels every timer and empties the
 // map, so an idle gap that spans a reload gets no timer handoff. The timer arms only
 // in sessions with a terminal, as idle compaction does. If the machine sleeps through
@@ -670,11 +672,7 @@ function armHandoff($: EngineInterface, id: string) {
         if (handoffTimers.get(id) !== arming) return
         handoffTimers.delete(id)
         if (armed === null) return
-        const { wait, expiresAt } = armed
-        const fire = $.clock.after(wait, () => {
-          fireHandoff($, id, expiresAt).catch((err) => fail($, `handoff timer failed (${errorName(err)})`))
-        })
-        handoffTimers.set(id, fire)
+        armFire($, id, armed)
       })
       .catch((err) => {
         if (handoffTimers.get(id) === arming) handoffTimers.delete(id)
@@ -703,12 +701,36 @@ async function handoffWait($: EngineInterface, id: string): Promise<{ wait: numb
   return wait === null ? null : { wait, expiresAt }
 }
 
+// Sets the session's fire timer for an armed wait.
+function armFire($: EngineInterface, id: string, { wait, expiresAt }: { wait: number; expiresAt: number }) {
+  const fire: Timer = $.clock.after(wait, () => {
+    fireHandoff($, id, expiresAt, fire).catch((err) => {
+      if (handoffTimers.get(id) === fire) handoffTimers.delete(id)
+      fail($, `handoff timer failed (${errorName(err)})`)
+    })
+  })
+  handoffTimers.set(id, fire)
+}
+
 // The same checks as the session.compact trigger: the session is between turns and
 // has no handoff in this idle gap. A fork after the cache expired would start cold, so
 // it is skipped when the clock has reached expiresAt, as after the machine slept.
-async function fireHandoff($: EngineInterface, id: string, expiresAt: number) {
+// Claude Code's keep-alive can renew the cache after the timer was armed, so the
+// expiry is read again first. A later expiry re-arms the timer for it. A turn.start,
+// /clear or newer turn during that read replaces or cancels fire, and then nothing
+// happens here.
+async function fireHandoff($: EngineInterface, id: string, expiresAt: number, fire: Timer) {
+  if ((await $.clock.now()) >= expiresAt) {
+    handoffTimers.delete(id)
+    return
+  }
+  const renewed = await handoffWait($, id)
+  if (handoffTimers.get(id) !== fire) return
+  if (renewed !== null && renewed.expiresAt > expiresAt) {
+    armFire($, id, renewed)
+    return
+  }
   handoffTimers.delete(id)
-  if ((await $.clock.now()) >= expiresAt) return
   if (activities.get(id)?.state === 'waiting' && !handoffs.has(id)) startHandoff($, id)
 }
 

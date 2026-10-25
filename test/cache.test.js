@@ -89,3 +89,73 @@ test('cacheStatusLine is null before any caching and without prompt_cache', () =
 test('cacheStatusLine is null for a warm cache with no expires_at', () => {
   assert.strictEqual(cacheStatusLine(statusInput(warm(120_000, { expires_at: undefined })), NOW), null);
 });
+
+const fs = require('fs');
+const path = require('path');
+const { tmpDir } = require('./helpers');
+const { recordCacheState, readCacheState } = require('../lib/cache');
+
+// A statusLine JSON with a warm cache. `over` replaces prompt_cache fields.
+const SAVED_AT = 1_792_761_700_000;
+function savedInput(over = {}, sessionId = 's1') {
+  return {
+    session_id: sessionId,
+    prompt_cache: { caching_observed: true, warm: true, ttl: '5m', expires_at: 1_792_762_000, ...over },
+  };
+}
+
+test('recordCacheState saves the expiry in ms with the time it was first seen', (t) => {
+  const dir = path.join(tmpDir(t, 'cache-state'), 'cache');
+  assert.strictEqual(recordCacheState(savedInput(), dir, SAVED_AT), true);
+  assert.deepStrictEqual(readCacheState(dir, 's1'), { ttl: '5m', expiresAt: 1_792_762_000_000, at: SAVED_AT });
+});
+
+test('recordCacheState keeps the first-seen time while the expiry is unchanged', (t) => {
+  const dir = path.join(tmpDir(t, 'cache-state'), 'cache');
+  recordCacheState(savedInput(), dir, SAVED_AT);
+  assert.strictEqual(recordCacheState(savedInput(), dir, SAVED_AT + 15_000), false);
+  assert.strictEqual(readCacheState(dir, 's1').at, SAVED_AT);
+});
+
+test('recordCacheState rewrites the file when a keep-alive moves the expiry', (t) => {
+  const dir = path.join(tmpDir(t, 'cache-state'), 'cache');
+  recordCacheState(savedInput(), dir, SAVED_AT);
+  assert.strictEqual(recordCacheState(savedInput({ expires_at: 1_792_762_030 }), dir, SAVED_AT + 30_000), true);
+  assert.deepStrictEqual(readCacheState(dir, 's1'), { ttl: '5m', expiresAt: 1_792_762_030_000, at: SAVED_AT + 30_000 });
+});
+
+test('recordCacheState saves nothing for a cold cache, a null expiry, no caching or a bad session id', (t) => {
+  const dir = path.join(tmpDir(t, 'cache-state'), 'cache');
+  for (const input of [
+    savedInput({ warm: false }),
+    savedInput({ expires_at: null }),
+    savedInput({ caching_observed: false }),
+    savedInput({}, '../x'),
+  ]) {
+    assert.strictEqual(recordCacheState(input, dir, SAVED_AT), false, JSON.stringify(input));
+  }
+  assert.deepStrictEqual(fs.existsSync(dir) ? fs.readdirSync(dir) : [], []);
+});
+
+test('recordCacheState leaves an earlier file alone when the cache goes cold', (t) => {
+  const dir = path.join(tmpDir(t, 'cache-state'), 'cache');
+  recordCacheState(savedInput(), dir, SAVED_AT);
+  recordCacheState(savedInput({ warm: false, expires_at: null }), dir, SAVED_AT + 400_000);
+  assert.deepStrictEqual(readCacheState(dir, 's1'), { ttl: '5m', expiresAt: 1_792_762_000_000, at: SAVED_AT });
+});
+
+test('readCacheState returns null for a missing file, bad JSON or a malformed record', (t) => {
+  const dir = tmpDir(t, 'cache-state');
+  assert.strictEqual(readCacheState(dir, 'missing'), null);
+  assert.strictEqual(readCacheState(dir, '../x'), null);
+  fs.writeFileSync(path.join(dir, 'bad.json'), '{"ttl":');
+  assert.strictEqual(readCacheState(dir, 'bad'), null);
+  for (const [id, record] of [
+    ['ttl', { ttl: '10m', expiresAt: 1, at: 1 }],
+    ['exp', { ttl: '5m', expiresAt: null, at: 1 }],
+    ['at', { ttl: '1h', expiresAt: 1, at: 'soon' }],
+  ]) {
+    fs.writeFileSync(path.join(dir, `${id}.json`), JSON.stringify(record));
+    assert.strictEqual(readCacheState(dir, id), null, id);
+  }
+});

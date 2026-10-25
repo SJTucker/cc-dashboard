@@ -2,12 +2,15 @@
 'use strict';
 
 // Piped the statusLine JSON on stdin by a user's statusline script. Prints the
-// prompt cache line (cacheStatusLine in lib/cache.js), or nothing. A statusline
-// script that fails goes blank, so this exits 0 whatever stdin contains. It sets
-// process.exitCode instead of calling process.exit(), because a pipe write is
-// asynchronous on macOS and process.exit() can drop the line.
+// prompt cache line (cacheStatusLine in lib/cache.js), or nothing. After the line,
+// it saves the cache expiry to <cfg>/cc-dashboard/cache/ (recordCacheState), because
+// Claude Code's keep-alive moves that expiry without writing to the transcript. A
+// statusline script that fails goes blank, so this exits 0 whatever stdin contains.
+// It sets process.exitCode instead of calling process.exit(), because a pipe write
+// is asynchronous on macOS and process.exit() can drop the line.
 
-const { cacheStatusLine } = require('../lib/cache');
+const { loadConfig } = require('../lib/config-dir');
+const { cacheStatusLine, recordCacheState, getCacheDir } = require('../lib/cache');
 
 let input = '';
 process.stdin.on('data', (chunk) => {
@@ -17,11 +20,14 @@ process.stdin.on('error', () => {
   process.exitCode = 0;
 });
 process.stdin.on('end', () => {
+  let parsed;
   try {
-    const line = cacheStatusLine(JSON.parse(input), Date.now());
+    parsed = JSON.parse(input);
+    const line = cacheStatusLine(parsed, Date.now());
     if (line) process.stdout.write(line + '\n');
   } catch {
     // Bad JSON: print nothing.
   }
+  if (parsed !== undefined) recordCacheState(parsed, getCacheDir(loadConfig().configDir), Date.now()); // never throws
   process.exitCode = 0;
 });

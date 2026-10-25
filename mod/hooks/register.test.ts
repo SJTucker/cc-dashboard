@@ -2007,6 +2007,55 @@ test('a timer that fires after the cache expired writes no handoff', async ($, o
   expect(forked).toEqual([])
 })
 
+// Claude Code's keep-alive can move the expiry after the timer is armed, so the
+// timer runs bin/cache-state again when it fires.
+test('a timer whose cache was renewed meanwhile re-arms for the new expiry', async ($, on) => {
+  const { forked, cacheRan, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  state.cacheState = cache('1h', EXPIRES + 600_000)
+  await clock.set(FIRE)
+  expect(forked).toEqual([])
+  expect(cacheRan.length).toBe(2)
+  await clock.set(FIRE + 600_000 - 1)
+  expect(forked).toEqual([])
+  await clock.set(FIRE + 600_000)
+  expect(forked.length).toBe(1)
+})
+
+test('a timer whose expiry is unchanged forks as before', async ($, on) => {
+  const { forked, cacheRan, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.set(FIRE)
+  expect(forked.length).toBe(1)
+  expect(cacheRan.length).toBe(2)
+})
+
+test("turn.start during the timer's re-check forks nothing and arms nothing", async ($, on) => {
+  const { forked, cacheRan, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  state.cacheMs = 500
+  state.cacheState = cache('1h', EXPIRES + 600_000)
+  await clock.set(FIRE)
+  expect(cacheRan.length).toBe(2)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.set(EXPIRES + 600_000)
+  expect(forked).toEqual([])
+  // A timer re-armed after turn.start would fire and run bin/cache-state again.
+  expect(cacheRan.length).toBe(2)
+})
+
+test('a failing re-check logs the error and forks nothing', async ($, on) => {
+  const { forked, logged, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  state.cacheState = { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }
+  await clock.set(FIRE)
+  expect(forked).toEqual([])
+  expect(logged).toEqual(['handoff timer failed (cache-state exit 1)'])
+})
+
 test('an idle turn in a session with no terminal runs no script and arms no timer', async ($, on) => {
   const { forked, cacheRan, clock } = world(on, timed({ surfaces: [] }))
   await idleTurn($)

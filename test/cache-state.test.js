@@ -40,8 +40,19 @@ function transcript(t, lines) {
   return file;
 }
 
-function run(stdin) {
-  return spawnSync(process.execPath, [SCRIPT], { input: stdin, encoding: 'utf8' });
+// CLAUDE_CONFIG_DIR points at configDir, so the script never reads the real
+// ~/.claude/cc-dashboard/cache.
+function run(stdin, configDir = tmpDir(null, 'cache-state-cfg')) {
+  return spawnSync(process.execPath, [SCRIPT], { input: stdin, encoding: 'utf8', env: { ...process.env, CLAUDE_CONFIG_DIR: configDir } });
+}
+
+// Writes the expiry bin/cache-line saves for session abc.
+function savedState(t, saved) {
+  const configDir = tmpDir(t, 'cache-state-cfg');
+  const dir = path.join(configDir, 'cc-dashboard', 'cache');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'abc.json'), JSON.stringify(saved));
+  return configDir;
 }
 
 test('cache-state gives the TTL and expiry of the main thread, ignoring sidechain calls and repeated lines', (t) => {
@@ -82,4 +93,20 @@ test('cache-state exits 1 with a reason for stdin that is not JSON or has no tra
     assert.match(result.stderr, /^cache-state: /, `stdin ${JSON.stringify(stdin)}`);
     assert.strictEqual(result.stdout, '', `stdin ${JSON.stringify(stdin)}`);
   }
+});
+
+test('cache-state gives the saved expiry when it is newer than the last main call', (t) => {
+  const file = transcript(t, [line({ t: T, id: 'm1', req: 'r1', w1h: 50_000 })]);
+  const configDir = savedState(t, { ttl: '1h', expiresAt: T + 30 * 60_000 + HOUR, at: T + 30 * 60_000 });
+  const result = run(JSON.stringify({ transcript: file }), configDir);
+  assert.strictEqual(result.status, 0, result.stderr);
+  assert.deepStrictEqual(JSON.parse(result.stdout), { ttl: '1h', expiresAt: T + 30 * 60_000 + HOUR });
+});
+
+test('cache-state ignores a saved expiry older than the last main call', (t) => {
+  const file = transcript(t, [line({ t: T, id: 'm1', req: 'r1', w1h: 50_000 })]);
+  const configDir = savedState(t, { ttl: '1h', expiresAt: T + 2 * HOUR, at: T - 1 });
+  const result = run(JSON.stringify({ transcript: file }), configDir);
+  assert.strictEqual(result.status, 0, result.stderr);
+  assert.deepStrictEqual(JSON.parse(result.stdout), { ttl: '1h', expiresAt: T + HOUR });
 });
