@@ -613,3 +613,85 @@ test('an edit with no timestamp counts for its session but adds no bucket', () =
   assert.ok(data.daily.every((d) => /^\d{4}-\d{2}-\d{2}$/.test(d.date)));
   assert.strictEqual(data.daily.reduce((sum, d) => sum + d.linesAdded, 0), 0);
 });
+
+// Non-interactive (claude -p) usage: counted everywhere usage is summed, absent from everything that lists sessions.
+const niSession = (nonInteractive) => ({ branches: [], newestBranch: null, title: 'T', handoffTitle: null, recap: null, firstPrompt: 'P', reportedCost: 5, ...(nonInteractive === undefined ? {} : { nonInteractive }) });
+const headlessSet = (sid, calls) => rowSet({ headless: true, calls, sessions: { [sid]: niSession(true) }, minT: Math.min(...calls.map((c) => c.t)), maxT: Math.max(...calls.map((c) => c.t)) });
+const hcall = (sid, extra = {}) => call({ key: `headless:${sid}:main:t:0:1`, sessionId: sid, ...extra });
+
+test('headless calls count in total cost, tokens, daily, models and activity', () => {
+  const data = run([headlessSet('h1', [hcall('h1')])]);
+  assert.ok(data.summary.totalCost > 0);
+  assert.strictEqual(data.summary.totalTokens, 150);
+  assert.strictEqual(data.summary.apiCalls, 1);
+  assert.strictEqual(data.daily.reduce((a, d) => a + d.cost, 0), data.summary.totalCost);
+  assert.strictEqual(data.models[0].tokens, 150);
+  assert.strictEqual(data.activity.reduce((a, c) => a + c.calls, 0), 1);
+});
+
+test('headless and non-interactive calls add no session and no efficiency.calls entry', () => {
+  const transcript = rowSet({ calls: [call({ key: 'a:b', sessionId: 'sdk', usage: { input_tokens: 10, output_tokens: 10 } })], sessions: { sdk: niSession(true) } });
+  const data = run([headlessSet('h1', [hcall('h1')]), transcript]);
+  assert.strictEqual(data.summary.sessions, 0);
+  assert.strictEqual(data.efficiency.calls.length, 0);
+  assert.strictEqual(data.summary.apiCalls, 2);
+});
+
+test('non-interactive calls still count in threads and context, so totalCost equals their sum', () => {
+  const data = run([headlessSet('h1', [hcall('h1'), hcall('h1', { key: 'headless:h1:ag:t:1:1', sidechain: true })])]);
+  assert.ok(Math.abs(data.threads.main + data.threads.subagent - data.summary.totalCost) < 1e-12);
+  assert.ok(data.threads.main > 0 && data.threads.subagent > 0);
+  assert.ok(Math.abs(data.context.under + data.context.over - data.summary.totalCost) < 1e-12);
+});
+
+test('a non-interactive session adds no title, prompt, turn or reported cost', () => {
+  const sdk = rowSet({
+    calls: [call({ sessionId: 'sdk' })],
+    prompts: [{ id: 'p1', t: at(0), sessionId: 'sdk' }],
+    turns: [{ id: 'u1', t: at(0), sessionId: 'sdk', durationMs: 5 }],
+    sessions: { sdk: niSession(true) },
+  });
+  const data = run([sdk]);
+  assert.deepEqual(data.efficiency.prompts, []);
+  assert.deepEqual(data.efficiency.turns, []);
+  assert.deepEqual(data.efficiency.titleBySession, {});
+  assert.deepEqual(data.efficiency.firstPromptBySession, {});
+  assert.strictEqual(data.summary.reportedSessions, 0);
+});
+
+test('a session marked non-interactive in one file and interactive in another is interactive', () => {
+  const a = rowSet({ calls: [call({ key: 'a:1', sessionId: 's9' })], sessions: { s9: niSession(true) } });
+  const b = rowSet({ calls: [call({ key: 'a:2', sessionId: 's9' })], sessions: { s9: niSession(false) } });
+  const data = run([a, b]);
+  assert.strictEqual(data.summary.sessions, 1);
+  assert.strictEqual(data.efficiency.calls.length, 2);
+  assert.strictEqual(data.summary.reportedSessions, 1);
+});
+
+test('a headless row set for a session that also has a transcript adds nothing', () => {
+  const transcript = rowSet({ calls: [call({ key: 'a:1', sessionId: 's9' })], sessions: { s9: niSession(true) } });
+  const alone = run([transcript]);
+  const both = run([headlessSet('s9', [hcall('s9')]), transcript]);
+  assert.strictEqual(both.summary.totalCost, alone.summary.totalCost);
+  assert.strictEqual(both.summary.apiCalls, 1);
+});
+
+test('a session with one sdk-cli file and one subagent file with no entrypoint is non-interactive', () => {
+  const main = rowSet({ calls: [call({ key: 'a:1', sessionId: 's9' })], sessions: { s9: niSession(true) } });
+  const sub = rowSet({ calls: [call({ key: 'a:2', sessionId: 's9' })], sessions: { s9: niSession() } });
+  const data = run([main, sub]);
+  assert.strictEqual(data.summary.sessions, 0);
+  assert.strictEqual(data.efficiency.calls.length, 0);
+  assert.strictEqual(data.summary.apiCalls, 2);
+});
+
+test('a headless row set is not counted in scannedFiles', () => {
+  const data = run([headlessSet('h1', [hcall('h1')]), rowSet({ ok: false })], { projectsDir: '/x' });
+  assert.strictEqual(data.meta.scannedFiles, 1);
+  assert.strictEqual(data.meta.unreadableFiles, 1);
+});
+
+test('a headless row set before the cutoff is skipped by maxT', () => {
+  const data = run([headlessSet('h1', [hcall('h1', { t: at(20) })])], { days: 7 });
+  assert.strictEqual(data.summary.apiCalls, 0);
+});

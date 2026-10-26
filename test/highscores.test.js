@@ -103,3 +103,20 @@ test('todayRecords sums today and lists session costs and turns', () => {
   assert.deepEqual(live.sessionCosts[0], { sessionId: 'cross', cost: 6, at: at(2026, 10, 16, 1), title: 'a prompt' });
   assert.equal(live.turns[0].title, 'a prompt');
 });
+
+test('a headless session changes day cost and tokens but not the session board or session counts', () => {
+  const { aggregate } = require('../lib/aggregate');
+  const t = at(2026, 10, 15, 9);
+  const rows = (headless) => ({
+    ok: true, toolUses: [], errors: [], edits: [], prompts: [], commands: [], minT: t, maxT: t,
+    calls: [{ key: 'k', t, sessionId: 'h1', sidechain: false, model: 'claude-sonnet-4-6', usage: { input_tokens: 1000, output_tokens: 500 }, tools: [] }],
+    sessions: { h1: { branches: [], newestBranch: null, title: null, handoffTitle: null, recap: null, firstPrompt: null, reportedCost: null, nonInteractive: true } },
+    ...(headless ? { headless: true } : {}),
+  });
+  const data = aggregate([rows(true)], { days: null, now: at(2026, 10, 16, 12) });
+  const p = buildHighscores(data, TODAY);
+  assert.equal(p.boards.tokens[0].score, 1500);
+  assert.ok(p.boards.cost[0].score > 0);
+  assert.deepEqual(p.boards.sessions, []);
+  assert.deepEqual(p.boards.session, []);
+});
