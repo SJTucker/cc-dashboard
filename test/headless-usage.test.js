@@ -69,3 +69,16 @@ test('findHeadlessFiles lists *.json in the folder, and nothing for a missing on
   assert.strictEqual(isHeadlessFile(file, path.join(dir, 'other')), false);
   assert.strictEqual(getHeadlessUsageDir('/c'), path.join('/c', 'cc-dashboard', 'headless-usage'));
 });
+
+test('a row set has no agentSteps key, so aggregate and the row store treat it as transcript rows', async (t) => {
+  const rows = await readHeadlessUsage(write(t, STEPS));
+  assert.equal('agentSteps' in rows, false);
+  assert.equal('agentSteps' in (await readHeadlessUsage(write(t, null, '{'))), false);
+});
+
+test('a cost-only file with no steps is ok, with no calls and null minT and maxT', async (t) => {
+  const rows = await readHeadlessUsage(write(t, []));
+  assert.strictEqual(rows.ok, true);
+  assert.deepStrictEqual(rows.calls, []);
+  assert.deepStrictEqual([rows.minT, rows.maxT], [null, null]);
+});

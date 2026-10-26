@@ -1720,6 +1720,18 @@ test('headless files are listed and read through extractFile', async () => {
   assert.deepStrictEqual(entry.rows.calls.map((c) => [c.sessionId, c.agentId]), [['s1', 'a1']]);
 });
 
+test('a cost-only headless file is stored and aggregated without error', async () => {
+  const { base, dir } = makeProjects();
+  const headlessDir = path.join(base, 'cc-dashboard', 'headless-usage');
+  writeSteps(headlessDir, 's1', [], 2 * DAY_MS);
+  const store = openStore(tmpDb());
+  const { rows, refresh } = harness(dir, { store, headlessUsageDir: headlessDir });
+  await refresh();
+  const data = aggregate(rows.entries().map((e) => e.rows), { days: 1 });
+  assert.strictEqual(data.summary.totalOutput, 0);
+  store.close();
+});
+
 test('a persisted headless file older than a day is deleted and its rows kept', async () => {
   const { base, dir } = makeProjects();
   const headlessDir = path.join(base, 'cc-dashboard', 'headless-usage');
