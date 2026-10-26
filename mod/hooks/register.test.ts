@@ -1,6 +1,7 @@
 import type { AgentInfo, EngineInterface, On, SessionRateLimit, UsageUnit } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
 import { snapshotName } from './setup'
+import { rateLimitsInput } from './statusline'
 
 type Ran = { argv: readonly string[]; stdin: unknown; timeoutMs: number | undefined }
 type Entry = { name: string; kind: 'file' | 'dir' | 'other'; size: number; mtimeMs: number; isLink: boolean }
@@ -90,6 +91,8 @@ const CONTRACT = {
     { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
     { "script": "cache-state", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl" } },
     { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
+    { "script": "record-statusline", "args": [], "stdin": {
+      "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 } }, "fetched_at_ms": 61000 } },
     { "script": "record-statusline", "args": [], "stdin": {
       "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "cleared_from": "prev-1", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
       "model": { "display_name": "Opus 5.5 (1M context)" }, "cost": { "total_cost_usd": 0.42, "total_duration_ms": 60000 },
@@ -901,6 +904,10 @@ test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) 
   // Only a measure after a /clear sends cleared_from, so the one measure here follows one.
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
   state.id = 's2'
+  await $.session.measure(measure([FIVE, WEEK]))
+  // A non-interactive session's measure sends rate limits only.
+  state.id = 's3'
+  await $.session.start({ ...start, isInteractive: false })
   await $.session.measure(measure([FIVE, WEEK]))
   await clock.settle()
   const made = [...ran, ...reviewRan, ...cacheRan].map((r) =>
@@ -2382,4 +2389,58 @@ test('a step queued after a subagent ends but before its chain settles is droppe
   await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
   await clock.advance(300)
   expect(readLog).toContain(AGENT_FILE)
+})
+
+// Non-interactive sessions (claude -p) write no activity file, snapshot or end record,
+// and send rate limits only.
+const headless = { ...start, isInteractive: false }
+const RATE_ONLY = [{ rate_limits: rateLimitsInput([FIVE, WEEK]), fetched_at_ms: 61_000 }]
+
+test('a non-interactive session writes no activity file', async ($, on) => {
+  const { writes, clock } = world(on)
+  await $.session.start(headless)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await $.turn.complete(turnEnd())
+  await clock.settle()
+  expect(writes[ACTIVITY]).toBeUndefined()
+})
+
+test('a non-interactive session runs no record-session-end', async ($, on) => {
+  const { ran } = world(on)
+  await $.session.start(headless)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  expect(ran.map((r) => r.argv[0])).not.toContain('/repo/bin/record-session-end')
+})
+
+test('a non-interactive session sends rate limits only', async ($, on) => {
+  const { ran } = world(on)
+  await $.session.start(headless)
+  await $.session.measure(measure([FIVE, WEEK]))
+  expect(statuslines(ran)).toEqual(RATE_ONLY)
+})
+
+test('a headless session with no transcript still sends rate limits', async ($, on) => {
+  const { ran, logged } = world(on, { exists: (p) => !p.endsWith('.jsonl') })
+  await $.session.start(headless)
+  await $.session.measure(measure([FIVE, WEEK]))
+  expect(statuslines(ran)).toEqual(RATE_ONLY)
+  expect(logged).not.toContain('transcript not found')
+})
+
+test('a non-interactive session arms no handoff timer', async ($, on) => {
+  const { cacheRan, clock } = world(on, timed())
+  await $.session.start(headless)
+  await idleTurn($)
+  await clock.advance(ARM)
+  await clock.set(FIRE)
+  expect(cacheRan).toEqual([])
+})
+
+test('a session with no session.start is treated as interactive', async ($, on) => {
+  const { writes, ran, clock } = world(on)
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await $.session.measure(measure([FIVE, WEEK]))
+  await clock.settle()
+  expect(activityOf(writes).state).toBe('working')
+  expect(statuslines(ran)[0].session_id).toBe('s1')
 })

@@ -22,6 +22,8 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevel
 // (checkSetup). It also shows a dismissable plan limit band above the prompt when the
 // Session or Week window passes 75% or 90%, and shares the dismissal between running
 // sessions through limit-warnings.json.
+// A non-interactive session (claude -p) gets no activity file, no snapshot, no end
+// record and no handoff timer. It sends rate limits only.
 // The bin/ scripts write the session, usage, update-verdict and review files, so the
 // formats, the atomic writes and the freshness checks of those files are theirs.
 // The mod writes five formats itself with $.fs.write, under <config dir>/cc-dashboard/:
@@ -112,6 +114,17 @@ async function run($: EngineInterface, name: string, input: object, timeoutMs: n
 // cached path is not checked again. session.end drops the ended session's path:
 // only session.measure reads this map, for the current session id.
 const transcripts = new Map<string, string>()
+
+// The mode session.start reported, by session id. forgetSession drops the entry. A
+// session with no entry (no session.start seen) counts as interactive. headless is
+// set by the headless usage writer, not here.
+const sessionModes = new Map<string, { interactive: boolean, cwd: string, headless?: boolean }>()
+
+// True only for a session that session.start reported with isInteractive false
+// (claude -p and Agent SDK runs).
+async function nonInteractive($: EngineInterface) {
+  return sessionModes.get(await $.session.id())?.interactive === false
+}
 
 // <config dir> is CLAUDE_CONFIG_DIR with a leading ~ expanded, else ~/.claude.
 // Null when neither variable is set.
@@ -482,6 +495,7 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
   try {
     const id = await $.session.id()
     if (!SESSION_ID.test(id)) return
+    if (await nonInteractive($)) return
     const now = await $.clock.now()
     const known = activities.get(id)
     if (!known && !create) return
@@ -523,6 +537,7 @@ function forgetSession(id: string) {
   runningTools.delete(id)
   endedAgents.delete(id)
   transcripts.delete(id)
+  sessionModes.delete(id)
   lastWriteAt.delete(id)
   writeTimers.get(id)?.cancel()
   writeTimers.delete(id)
@@ -1051,6 +1066,7 @@ export const register: Register = (on) => {
   // first prompt. A -p or Agent SDK run starts no reviews: it can exit mid-call and
   // leave claimed sessions pending for an hour.
   on('session.start', async ($, e, next) => {
+    sessionModes.set(await $.session.id(), { interactive: e.isInteractive, cwd: e.cwd })
     await $.command.register({
       name: 'backfill-updates',
       description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
@@ -1075,7 +1091,12 @@ export const register: Register = (on) => {
   on('session.measure', async ($, e, next) => {
     const result = await next(e)
     try {
-      const input = await statuslineInput($, e)
+      // A non-interactive session sends rate limits only: no snapshot, and no
+      // transcript lookup, which a headless session may not have.
+      const rateLimits = rateLimitsInput(e.rateLimits)
+      const input = (await nonInteractive($))
+        ? rateLimits && { rate_limits: rateLimits, fetched_at_ms: await $.clock.now() }
+        : await statuslineInput($, e)
       if (input) await run($, 'record-statusline', input, MEASURE_TIMEOUT_MS)
     } catch (err) {
       fail($, `measure failed (${err instanceof Error ? err.name : 'error'})`)
@@ -1100,7 +1121,9 @@ export const register: Register = (on) => {
   // either way. A store failure is logged and does not stop the rest of the hook.
   on('session.end', async ($, e, next) => {
     const handoff = handoffs.get(e.sessionId)
+    const interactive = sessionModes.get(e.sessionId)?.interactive !== false
     forgetSession(e.sessionId)
+    if (!interactive) return next(e)
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
@@ -1129,7 +1152,7 @@ export const register: Register = (on) => {
   // A turn that begins is working. turn.start has no agentId: a subagent's run raises
   // none.
   on('turn.start', async ($, e, next) => {
-    await dropHandoff($)
+    if (!(await nonInteractive($))) await dropHandoff($)
     await track($, (a, now) => setState(a, 'working', now))
     return next(e)
   })
@@ -1160,7 +1183,7 @@ export const register: Register = (on) => {
       setState(a, 'waiting', now)
     })
     try {
-      armHandoff($, await $.session.id())
+      if (!(await nonInteractive($))) armHandoff($, await $.session.id())
     } catch (err) {
       fail($, `handoff timer failed (${errorName(err)})`)
     }
