@@ -119,7 +119,7 @@ const transcripts = new Map<string, string>()
 // The mode session.start reported, by session id. forgetSession drops the entry. A
 // session with no entry (no session.start seen) counts as interactive. headless is
 // set by the headless usage writer, not here.
-const sessionModes = new Map<string, { interactive: boolean, cwd: string, headless?: boolean }>()
+const sessionModes = new Map<string, { interactive: boolean, cwd: string, headless?: boolean, pendingCost?: number }>()
 
 // True only for a session that session.start reported with isInteractive false
 // (claude -p and Agent SDK runs).
@@ -1163,8 +1163,13 @@ export const register: Register = (on) => {
     try {
       const id = await $.session.id()
       const usd = e.cost?.usd
-      const mode = usd === undefined || !SESSION_ID.test(id) ? undefined : await headlessMode($, id)
-      if (mode) queueHeadless($, id, mode.cwd, (h) => { h.reportedCost = usd })
+      const mode = sessionModes.get(id)
+      if (usd !== undefined && SESSION_ID.test(id) && mode?.interactive === false) {
+        // Only the first turn.step decides headless, so a cost that arrives before it
+        // waits in the mode and joins the first headless write.
+        if (mode.headless === undefined) mode.pendingCost = usd
+        else if (mode.headless) queueHeadless($, id, mode.cwd, (h) => { h.reportedCost = usd })
+      }
     } catch (err) {
       fail($, `headless usage failed (${errorName(err)})`)
     }
@@ -1274,7 +1279,14 @@ export const register: Register = (on) => {
         const now = await $.clock.now()
         // A headless session has no transcript rows for agent-usage to correct, so its
         // subagent steps go to its own file only.
-        if (mode) queueHeadless($, id, mode.cwd, (h) => { h.steps.push(stepOf(result.usage!, now, e.turnId, e.index, e.agentId)) })
+        if (mode) {
+          const pending = mode.pendingCost
+          mode.pendingCost = undefined
+          queueHeadless($, id, mode.cwd, (h) => {
+            if (pending !== undefined) h.reportedCost = pending
+            h.steps.push(stepOf(result.usage!, now, e.turnId, e.index, e.agentId))
+          })
+        }
         else if (e.agentId) queueStep($, e.agentId, stepOf(result.usage, now, e.turnId, e.index))
       }
     } catch (err) {

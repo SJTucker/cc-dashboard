@@ -2540,3 +2540,16 @@ test('the headless step stream passes through unchanged', async ($, on) => {
   expect(chunks).toEqual(STEP_CHUNKS)
   expect(result).toEqual(STEP_RESULT)
 })
+
+test('a measure with cost before the first step decides nothing, and its cost joins the first headless write', async ($, on) => {
+  const checked: string[] = []
+  const { writes, clock } = world(on, { exists: (p) => { if (p.endsWith('.jsonl')) checked.push(p); return false } })
+  await $.session.start(headlessStart)
+  await $.session.measure(measure([], { usd: 0.0042 }))
+  await clock.settle()
+  expect(checked).toEqual([])
+  expect(Object.keys(writes).filter((p) => p.includes('headless-usage'))).toEqual([])
+  await readStep($.turn.step(stepInput() as never) as never)
+  await clock.settle()
+  expect(JSON.parse(writes[HEADLESS_FILE]).reportedCost).toBe(0.0042)
+})
