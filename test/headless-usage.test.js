@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { tmpDir } = require('./helpers');
-const { getHeadlessUsageDir, findHeadlessFiles, isHeadlessFile, readHeadlessUsage } = require('../lib/headless-usage');
+const { getHeadlessUsageDir, findHeadlessFiles, readHeadlessUsage } = require('../lib/headless-usage');
 
 const STEPS = [
   { t: 1000, model: 'claude-haiku-5-5', input: 2, cacheWrite: 3238, cacheRead: 28335, output: 111, turnId: 't1', index: 1 },
@@ -65,8 +65,6 @@ test('findHeadlessFiles lists *.json in the folder, and nothing for a missing on
   fs.writeFileSync(path.join(dir, 'note.txt'), 'x');
   assert.deepStrictEqual(findHeadlessFiles(dir), [file]);
   assert.deepStrictEqual(findHeadlessFiles(path.join(dir, 'missing')), []);
-  assert.strictEqual(isHeadlessFile(file, dir), true);
-  assert.strictEqual(isHeadlessFile(file, path.join(dir, 'other')), false);
   assert.strictEqual(getHeadlessUsageDir('/c'), path.join('/c', 'cc-dashboard', 'headless-usage'));
 });
 

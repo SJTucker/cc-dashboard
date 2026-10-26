@@ -2553,3 +2553,19 @@ test('a measure with cost before the first step decides nothing, and its cost jo
   await clock.settle()
   expect(JSON.parse(writes[HEADLESS_FILE]).reportedCost).toBe(0.0042)
 })
+
+test('a headless session.end waits for the queued headless write', async ($, on) => {
+  const { writes, clock } = world(on, { ...noTranscript, writeMs: [500] })
+  await $.session.start(headlessStart)
+  await readStep($.turn.step(stepInput() as never) as never)
+  let ended = false
+  void $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } }).then(() => {
+    ended = true
+  })
+  await clock.advance(100)
+  expect(ended).toBe(false)
+  expect(writes[HEADLESS_FILE]).toBeUndefined()
+  await clock.advance(500)
+  expect(ended).toBe(true)
+  expect(JSON.parse(writes[HEADLESS_FILE]).steps).toHaveLength(1)
+})

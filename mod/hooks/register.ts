@@ -23,7 +23,8 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevel
 // Session or Week window passes 75% or 90%, and shares the dismissal between running
 // sessions through limit-warnings.json.
 // A non-interactive session (claude -p) gets no activity file, no snapshot, no end
-// record and no handoff timer. It sends rate limits only.
+// record and no handoff timer. It sends rate limits, and when it has no transcript it writes
+// its usage to headless-usage/.
 // The bin/ scripts write the session, usage, update-verdict and review files, so the
 // formats, the atomic writes and the freshness checks of those files are theirs.
 // The mod writes six formats itself with $.fs.write, under <config dir>/cc-dashboard/:
@@ -1194,8 +1195,14 @@ export const register: Register = (on) => {
   on('session.end', async ($, e, next) => {
     const handoff = handoffs.get(e.sessionId)
     const interactive = sessionModes.get(e.sessionId)?.interactive !== false
+    const writing = headlessWrites.get(e.sessionId)
     forgetSession(e.sessionId)
-    if (!interactive) return next(e)
+    if (!interactive) {
+      // A claude -p process exits once session.end returns, so a queued headless write
+      // finishes first. The chain never rejects.
+      if (writing) await writing
+      return next(e)
+    }
     // The script starts before next, so it does not wait for the other hooks.
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
@@ -1290,7 +1297,7 @@ export const register: Register = (on) => {
         else if (e.agentId) queueStep($, e.agentId, stepOf(result.usage, now, e.turnId, e.index))
       }
     } catch (err) {
-      fail($, `agent usage failed (${errorName(err)})`)
+      fail($, `usage record failed (${errorName(err)})`)
     }
     return result
   }).catch(async function* ($, e, next) {
