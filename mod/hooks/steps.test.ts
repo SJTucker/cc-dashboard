@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { parseSteps, stepOf, stepsText } from './steps'
+import { headlessText, parseHeadless, parseSteps, stepOf, stepsText } from './steps'
 
 const USAGE = { input_tokens: 2, output_tokens: 163, cache_read_input_tokens: 33650, cache_creation_input_tokens: 3649, model: 'claude-haiku-4-5' }
 
@@ -24,4 +24,11 @@ test('parseSteps drops a step with a bad count', async () => {
   const good = stepOf(USAGE, 1000, 't1', 0)
   const text = JSON.stringify({ agentId: 'a1', steps: [good, { ...good, output: 'x' }, { ...good, input: -1 }, null] })
   expect(parseSteps(text)).toEqual([good])
+})
+
+test('parseHeadless keeps the steps with their agentId and the reported cost, and ignores a bad cost', () => {
+  const step = { ...stepOf(USAGE, 5, 't1', 0, 'a1') }
+  expect(parseHeadless(headlessText('s1', '/w', 0.5, [step]))).toEqual({ steps: [step], reportedCost: 0.5 })
+  expect(parseHeadless(JSON.stringify({ steps: [step], reportedCost: 'x' }))).toEqual({ steps: [step] })
+  expect(parseHeadless(undefined)).toEqual({ steps: [] })
 })

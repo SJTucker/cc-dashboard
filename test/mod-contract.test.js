@@ -8,6 +8,7 @@ const { spawnSync } = require('child_process');
 const { tmpDir } = require('./helpers');
 const { readActivity } = require('../lib/activity');
 const { readAgentSteps } = require('../lib/agent-steps');
+const { readHeadlessUsage } = require('../lib/headless-usage');
 const { collectMarkers } = require('../lib/changes');
 
 // The mod test runner refuses to import a .json file, so the entries live in
@@ -71,6 +72,16 @@ test('readActivity parses the activity sample the mod writes', (t) => {
   assert.deepStrictEqual(readActivity(dir, a.updatedAt + 1000).get('s1'), {
     sessionId: a.sessionId, state: a.state, since: a.since, tool: null, subagents: 0, updatedAt: a.updatedAt,
   });
+});
+
+test('readHeadlessUsage parses the headless usage sample the mod writes', async (t) => {
+  const dir = path.join(tmpDir(t, 'contract-headless'), 'headless-usage');
+  fs.mkdirSync(dir);
+  const file = path.join(dir, `${CONTRACT.headlessUsage.sessionId}.json`);
+  fs.writeFileSync(file, JSON.stringify(CONTRACT.headlessUsage));
+  const rows = await readHeadlessUsage(file);
+  assert.strictEqual(rows.ok, true);
+  assert.strictEqual(rows.calls.length, 2);
 });
 
 test('readAgentSteps parses the agent usage sample the mod writes', async (t) => {

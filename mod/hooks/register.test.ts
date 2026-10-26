@@ -101,6 +101,10 @@ const CONTRACT = {
   "activity": { "sessionId": "s1", "state": "working", "tool": null, "subagents": 0, "since": 61000, "updatedAt": 61000 },
   "agentUsage": { "agentId": "a1", "steps": [
     { "t": 61000, "model": "claude-haiku-4-5", "input": 2, "cacheWrite": 3649, "cacheRead": 33650, "output": 163, "turnId": "t1", "index": 1 } ] },
+  "headlessUsage": { "sessionId": "s1", "cwd": "/work/my.demo", "reportedCost": 0.0042,
+    "steps": [
+      { "t": 1000, "model": "claude-haiku-5-5", "input": 2, "cacheWrite": 3238, "cacheRead": 28335, "output": 111, "turnId": "t1", "index": 1 },
+      { "t": 1001, "model": "claude-haiku-5-5", "agentId": "a1", "input": 2, "cacheWrite": 21918, "cacheRead": 0, "output": 55, "turnId": "t2", "index": 0 } ] },
   "changes": [
     { "t": 2000, "kind": "claude-md", "name": "CLAUDE.md", "label": "add rule b", "file": "/home/u/.claude/CLAUDE.md" } ]
 }
@@ -2443,4 +2447,96 @@ test('a session with no session.start is treated as interactive', async ($, on) 
   await clock.settle()
   expect(activityOf(writes).state).toBe('working')
   expect(statuslines(ran)[0].session_id).toBe('s1')
+})
+
+// Headless sessions: non-interactive with no transcript, so the mod records their usage.
+const HEADLESS_FILE = '/home/u/.claude/cc-dashboard/headless-usage/s1.json'
+const noTranscript = { exists: (p: string) => !p.endsWith('.jsonl') }
+const headlessStart = { ...start, isInteractive: false }
+const HEADLESS_USAGE = { input_tokens: 2, output_tokens: 111, cache_read_input_tokens: 28335, cache_creation_input_tokens: 3238, model: 'claude-haiku-5-5' }
+const SUB_USAGE = { input_tokens: 2, output_tokens: 55, cache_read_input_tokens: 0, cache_creation_input_tokens: 21918, model: 'claude-haiku-5-5' }
+
+test('a headless main-thread step is written to headless-usage/<id>.json', async ($, on) => {
+  const { writes, clock, state } = world(on, { ...noTranscript, nowOffset: -60_000, stepResult: { ...STEP_RESULT, usage: HEADLESS_USAGE } })
+  await $.session.start(headlessStart)
+  await readStep($.turn.step(stepInput() as never) as never)
+  await clock.advance(1)
+  state.stepResult = { ...STEP_RESULT, turnId: 't2', index: 0, usage: SUB_USAGE }
+  await readStep($.turn.step(stepInput({ turnId: 't2', index: 0, agentId: 'a1' }) as never) as never)
+  await $.session.measure(measure([], { usd: 0.0042 }))
+  await clock.settle()
+  expect(JSON.parse(writes[HEADLESS_FILE] ?? 'null')).toEqual(CONTRACT.headlessUsage)
+})
+
+test('a headless subagent step carries agentId and writes no agent-usage file', async ($, on) => {
+  const { writes, clock } = world(on, noTranscript)
+  await $.session.start(headlessStart)
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(JSON.parse(writes[HEADLESS_FILE]).steps[0].agentId).toBe('a1')
+  expect(Object.keys(writes).filter((p) => p.includes('agent-usage'))).toEqual([])
+})
+
+test('a non-interactive session with a transcript writes no headless file', async ($, on) => {
+  const { writes, clock } = world(on)
+  await $.session.start(headlessStart)
+  await readStep($.turn.step(stepInput() as never) as never)
+  await clock.settle()
+  expect(Object.keys(writes).filter((p) => p.includes('headless-usage'))).toEqual([])
+})
+
+test('an interactive session writes no headless file', async ($, on) => {
+  const { writes, clock } = world(on, noTranscript)
+  await $.session.start(start)
+  await readStep($.turn.step(stepInput() as never) as never)
+  await clock.settle()
+  expect(Object.keys(writes).filter((p) => p.includes('headless-usage'))).toEqual([])
+})
+
+test('headless steps append, and earlier steps in the file are kept', async ($, on) => {
+  const earlier = { t: 1, model: 'claude-haiku-5-5', input: 2, cacheWrite: 1, cacheRead: 0, output: 9, turnId: 't0', index: 0 }
+  const { writes, clock } = world(on, { ...noTranscript, files: { [HEADLESS_FILE]: JSON.stringify({ sessionId: 's1', cwd: '/x', steps: [earlier] }) } })
+  await $.session.start(headlessStart)
+  await readStep($.turn.step(stepInput() as never) as never)
+  await clock.settle()
+  expect(JSON.parse(writes[HEADLESS_FILE]).steps.map((s: { output: number }) => s.output)).toEqual([9, 163])
+})
+
+test('the transcript check runs once per session', async ($, on) => {
+  const checked: string[] = []
+  const { clock } = world(on, { exists: (p) => { if (p.endsWith('.jsonl')) checked.push(p); return false } })
+  await $.session.start(headlessStart)
+  await readStep($.turn.step(stepInput() as never) as never)
+  const after = checked.length
+  await readStep($.turn.step(stepInput({ index: 2 }) as never) as never)
+  await clock.settle()
+  expect(after).toBeGreaterThan(0)
+  expect(checked.length).toBe(after)
+})
+
+test('a failing headless write logs headless usage failed', async ($, on) => {
+  const { clock, logged } = world(on, { ...noTranscript, writeFails: true })
+  await $.session.start(headlessStart)
+  await readStep($.turn.step(stepInput() as never) as never)
+  await clock.settle()
+  expect(logged.some((line) => line.includes('headless usage failed'))).toBe(true)
+})
+
+test('a session that ends right after a headless step still gets its write', async ($, on) => {
+  const { writes, clock } = world(on, noTranscript)
+  await $.session.start(headlessStart)
+  await readStep($.turn.step(stepInput() as never) as never)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  expect(JSON.parse(writes[HEADLESS_FILE]).cwd).toBe('/work/my.demo')
+})
+
+test('the headless step stream passes through unchanged', async ($, on) => {
+  const { chunks, result } = await (async () => {
+    world(on, noTranscript)
+    await $.session.start(headlessStart)
+    return readStep($.turn.step(stepInput() as never) as never)
+  })()
+  expect(chunks).toEqual(STEP_CHUNKS)
+  expect(result).toEqual(STEP_RESULT)
 })

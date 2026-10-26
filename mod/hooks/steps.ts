@@ -18,10 +18,14 @@ export type AgentStep = {
   index: number
 }
 
-export function stepOf(usage: TurnUsage, t: number, turnId: string, index: number): AgentStep {
+// A step of a headless session (claude -p, no transcript). A subagent's step names its agent.
+export type HeadlessStep = AgentStep & { agentId?: string }
+
+export function stepOf(usage: TurnUsage, t: number, turnId: string, index: number, agentId?: string): HeadlessStep {
   return {
     t,
     model: usage.model,
+    ...(agentId ? { agentId } : {}),
     input: usage.input_tokens,
     cacheWrite: usage.cache_creation_input_tokens,
     cacheRead: usage.cache_read_input_tokens,
@@ -54,4 +58,21 @@ export function parseSteps(text: string | undefined): AgentStep[] {
 
 export function stepsText(agentId: string, steps: readonly AgentStep[]): string {
   return JSON.stringify({ agentId, steps })
+}
+
+// What a headless session's file already holds: its steps and its reported cost. Steps
+// with a bad count are dropped, and a missing or unreadable file holds nothing.
+export function parseHeadless(text: string | undefined): { steps: HeadlessStep[], reportedCost?: number } {
+  const steps = parseSteps(text) as HeadlessStep[]
+  let cost: unknown
+  try {
+    cost = text ? (JSON.parse(text) as { reportedCost?: unknown } | null)?.reportedCost : undefined
+  } catch {
+    // parseSteps already returned no steps
+  }
+  return isCount(cost) ? { steps, reportedCost: cost as number } : { steps }
+}
+
+export function headlessText(sessionId: string, cwd: string, reportedCost: number | undefined, steps: readonly HeadlessStep[]): string {
+  return JSON.stringify({ sessionId, cwd, ...(reportedCost === undefined ? {} : { reportedCost }), steps })
 }

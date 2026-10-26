@@ -8,8 +8,8 @@ import { newestTool, setState, toolDetail, toolsOf } from './activity'
 import type { Activity, ToolRun } from './activity'
 import { backfillText, errorName, errorText, versionSpan } from './text'
 import type { Judged } from './text'
-import { parseSteps, stepOf, stepsText } from './steps'
-import type { AgentStep } from './steps'
+import { headlessText, parseHeadless, parseSteps, stepOf, stepsText } from './steps'
+import type { AgentStep, HeadlessStep } from './steps'
 import { REPO_STEPS, handoffDocument, handoffWaitMs, hourCacheExpiry, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
@@ -26,14 +26,15 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevel
 // record and no handoff timer. It sends rate limits only.
 // The bin/ scripts write the session, usage, update-verdict and review files, so the
 // formats, the atomic writes and the freshness checks of those files are theirs.
-// The mod writes five formats itself with $.fs.write, under <config dir>/cc-dashboard/:
+// The mod writes six formats itself with $.fs.write, under <config dir>/cc-dashboard/:
 //   activity/<session id>.json   the session's state. Read by lib/activity.js.
 //   agent-usage/<agent id>.json  each model request of a subagent (steps.ts). Read by lib/agent-steps.js.
+//   headless-usage/<session id>.json  each model request of a session with no transcript (steps.ts). Read by lib/headless-usage.js.
 //   changes/<session id>.json    the setup changes checkSetup found. Read by collectMarkers in lib/changes.js.
 //   setup/<name>.json            the stored copy of each watched setup file. Read back by checkSetup.
 //   limit-warnings.json          the dismissed plan limit levels. Read by every running session's mod.
 // Activity has one writer per session, which keeps a session's states in order, where a
-// script started per event can finish out of order. The server reads the first three
+// script started per event can finish out of order. The server reads the first four
 // formats, and the CONTRACT block in register.test.ts holds a sample of each, which
 // test/mod-contract.test.js parses with the server's readers.
 //
@@ -406,6 +407,12 @@ const agentSteps = new Map<string, AgentStep[]>()
 const stepWrites = new Map<string, Promise<void>>()
 const lastWritten = new Map<string, string>()
 
+// A headless session's recorded steps and reported cost, and the chain that orders
+// the writes of its file. recordHeadless reads the file back on the first write after
+// a reload.
+const headlessState = new Map<string, { steps: HeadlessStep[], reportedCost?: number }>()
+const headlessWrites = new Map<string, Promise<void>>()
+
 // An agent counts while it is pending, running or waiting: all three are work that
 // has not ended. idle is a teammate between turns, and completed, failed and killed
 // have ended. An agent in the session's endedAgents does not count. It leaves
@@ -485,6 +492,57 @@ function forgetAgentSteps(agentId: string) {
   })
 }
 
+// Applies change to the session's headless record and writes the whole file. The
+// first write of a session this module instance has not seen reads the file first,
+// so a reload keeps the steps written before it.
+async function recordHeadless($: EngineInterface, id: string, cwd: string, change: (h: { steps: HeadlessStep[], reportedCost?: number }) => void) {
+  const dir = await configDir($)
+  if (!dir) return
+  const file = `${dir}/cc-dashboard/headless-usage/${id}.json`
+  let h = headlessState.get(id)
+  if (!h) {
+    h = parseHeadless(await $.fs.read(file).then(String, () => undefined))
+    headlessState.set(id, h)
+  }
+  change(h)
+  await $.fs.write(file, headlessText(id, cwd, h.reportedCost, h.steps))
+}
+
+// Adds a headless write to the end of the session's chain and returns at once. A
+// failed write is logged, and the chain goes on with the next one. cwd is passed in
+// because session.end drops the session's mode before a queued write runs.
+function queueHeadless($: EngineInterface, id: string, cwd: string, change: (h: { steps: HeadlessStep[], reportedCost?: number }) => void) {
+  const previous = headlessWrites.get(id) ?? Promise.resolve()
+  headlessWrites.set(id, previous.then(() => recordHeadless($, id, cwd, change)).catch((err) => fail($, `headless usage failed (${errorName(err)})`)))
+}
+
+// Drops the session's headless record and chain once its last queued write settles,
+// as forgetAgentSteps does for an agent.
+function forgetHeadless(id: string) {
+  const chain = headlessWrites.get(id)
+  if (!chain) return
+  chain.finally(() => {
+    if (headlessWrites.get(id) !== chain) return forgetHeadless(id)
+    headlessWrites.delete(id)
+    headlessState.delete(id)
+  })
+}
+
+// Decides once per session whether it is headless: non-interactive, and no
+// transcript, so the dashboard has no other record of its usage. Returns the
+// session's mode when it is, else undefined.
+async function headlessMode($: EngineInterface, id: string) {
+  const mode = sessionModes.get(id)
+  if (!mode || mode.interactive !== false) return undefined
+  if (mode.headless === undefined) {
+    const found = await transcriptPath($, await $.session.root(), id)
+    // session.end can run during the lookup.
+    if (sessionModes.get(id) !== mode) return undefined
+    mode.headless = found === null
+  }
+  return mode.headless ? mode : undefined
+}
+
 // Applies change to the session's state, then queues a write of it. A change within
 // ACTIVITY_WRITE_MS of the last write waits for a timer and writes the newest state
 // once. A change that returns false means nothing changed, and nothing is written.
@@ -543,6 +601,7 @@ function forgetSession(id: string) {
   writeTimers.delete(id)
   writing.delete(id)
   lastWritten.delete(id)
+  forgetHeadless(id)
   handoffs.delete(id)
   cancelHandoffTimer(id)
 }
@@ -1102,6 +1161,14 @@ export const register: Register = (on) => {
       fail($, `measure failed (${err instanceof Error ? err.name : 'error'})`)
     }
     try {
+      const id = await $.session.id()
+      const usd = e.cost?.usd
+      const mode = usd === undefined || !SESSION_ID.test(id) ? undefined : await headlessMode($, id)
+      if (mode) queueHeadless($, id, mode.cwd, (h) => { h.reportedCost = usd })
+    } catch (err) {
+      fail($, `headless usage failed (${errorName(err)})`)
+    }
+    try {
       await measureBand($, e.rateLimits)
     } catch (err) {
       fail($, `limit band failed (${errorName(err)})`)
@@ -1201,7 +1268,15 @@ export const register: Register = (on) => {
     for await (const chunk of stream) yield chunk
     const result = await stream.result
     try {
-      if (e.agentId && result.usage) queueStep($, e.agentId, stepOf(result.usage, await $.clock.now(), e.turnId, e.index))
+      if (result.usage) {
+        const id = await $.session.id()
+        const mode = SESSION_ID.test(id) ? await headlessMode($, id) : undefined
+        const now = await $.clock.now()
+        // A headless session has no transcript rows for agent-usage to correct, so its
+        // subagent steps go to its own file only.
+        if (mode) queueHeadless($, id, mode.cwd, (h) => { h.steps.push(stepOf(result.usage!, now, e.turnId, e.index, e.agentId)) })
+        else if (e.agentId) queueStep($, e.agentId, stepOf(result.usage, now, e.turnId, e.index))
+      }
     } catch (err) {
       fail($, `agent usage failed (${errorName(err)})`)
     }
