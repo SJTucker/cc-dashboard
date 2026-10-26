@@ -174,6 +174,28 @@ test('recordRateLimits ignores input with no rate_limits, or an unreadable trans
   assert.strictEqual(fs.existsSync(file), false);
 });
 
+const NO_TRANSCRIPT_RL = { five_hour: { used_percentage: 7, resets_at: null } };
+const OTHER_NO_TRANSCRIPT_RL = { five_hour: { used_percentage: 50, resets_at: null } };
+
+test('recordRateLimits stamps fetched_at_ms when the input has no transcript_path', () => {
+  const file = missingFile('rate-limits.json');
+  recordRateLimits({ rate_limits: NO_TRANSCRIPT_RL, fetched_at_ms: 1_000 }, file);
+  assert.strictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).fetchedAtMs, 1_000);
+});
+
+test('recordRateLimits keeps a newer reading over an older fetched_at_ms', () => {
+  const file = missingFile('rate-limits.json');
+  recordRateLimits({ rate_limits: NO_TRANSCRIPT_RL, fetched_at_ms: 2_000 }, file);
+  recordRateLimits({ rate_limits: OTHER_NO_TRANSCRIPT_RL, fetched_at_ms: 1_000 }, file);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')).rate_limits, NO_TRANSCRIPT_RL);
+});
+
+test('recordRateLimits records nothing with neither transcript_path nor fetched_at_ms', () => {
+  const file = missingFile('rate-limits.json');
+  recordRateLimits({ rate_limits: NO_TRANSCRIPT_RL }, file);
+  assert.strictEqual(fs.existsSync(file), false);
+});
+
 test('readLimits picks the statusline source when it is newer', () => {
   const claudeJson = writeClaudeJson(withCache({ five_hour: usageWindow(6, null) }, FETCHED - 60_000));
   const rateLimits = writeRateLimits({

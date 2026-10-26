@@ -245,6 +245,15 @@ test('bin/record-statusline records with a PORT that the server would refuse', (
   assert.strictEqual(readSnapshot(sessions).sessionId, 'abc-123');
 });
 
+test('bin/record-statusline with rate_limits and fetched_at_ms only writes rate limits and no snapshot', () => {
+  const { config, sessions, limits } = configDir();
+  const rateLimits = { five_hour: { used_percentage: 4, resets_at: null } };
+  const result = runBin('record-statusline', JSON.stringify({ rate_limits: rateLimits, fetched_at_ms: Date.now() }), config);
+  assert.strictEqual(result.status, 0, result.stderr);
+  assert.deepStrictEqual(fs.existsSync(sessions) ? fs.readdirSync(sessions) : [], []);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(limits, 'utf8')).rate_limits, rateLimits);
+});
+
 for (const name of ['record-statusline']) {
   test(`bin/${name} writes the session snapshot and the rate limits`, () => {
     const { config, sessions, limits } = configDir();
