@@ -216,6 +216,12 @@ test('migration 9 to 10 gives a null repo when the transcript path has no projec
   assert.deepStrictEqual(MIGRATIONS[9](old, '/nowhere/abc.jsonl').edits[0].repo, null);
 });
 
+test('migration 14 to 15 changes nothing, and stored version-14 rows load through it', () => {
+  const old = rowsOf({});
+  assert.strictEqual(MIGRATIONS[14](old), old);
+  assert.strictEqual(upgradeRows(old, 14).version, require('../lib/extract').EXTRACT_VERSION);
+});
+
 test('migration 13 to 14 changes nothing', () => {
   const old = rowsOf({});
   assert.strictEqual(MIGRATIONS[13](old), old);

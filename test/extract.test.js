@@ -694,8 +694,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 14', () => {
-  assert.strictEqual(EXTRACT_VERSION, 14);
+test('EXTRACT_VERSION is 15', () => {
+  assert.strictEqual(EXTRACT_VERSION, 15);
 });
 
 function toolResultLine({ id = 'toolu_1', content = 'hello', agentId = null, min = 1 } = {}) {
@@ -827,4 +827,32 @@ test('a Read result prefixed 1<tab> with no leading spaces gives the title', asy
   const prompt = `Read ${HANDOFF_FILE}, check Preconditions`;
   const rows = await extractFile(writeTranscript(handoffLines({ prompt, result: '1\t# Handoff: fix the deploy failure\n2\t' })));
   assert.strictEqual(rows.sessions.s1.handoffTitle, 'Fix the deploy failure');
+});
+
+// Sessions marked from the entrypoint field: 'sdk-cli' is claude -p, 'cli' is interactive.
+const withEntrypoint = (entrypoint, text = 'hi') => ({ ...typedPrompt(text), ...(entrypoint ? { entrypoint } : {}) });
+
+test('a session whose lines all carry entrypoint sdk-cli is non-interactive', async () => {
+  const rows = await extractFile(writeTranscript([withEntrypoint('sdk-cli'), withEntrypoint('sdk-cli', 'again')]));
+  assert.strictEqual(rows.sessions.s1.nonInteractive, true);
+});
+
+test('a session with entrypoint cli lines is interactive', async () => {
+  const rows = await extractFile(writeTranscript([withEntrypoint('cli')]));
+  assert.strictEqual(rows.sessions.s1.nonInteractive, false);
+});
+
+test('a session mixing cli and sdk-cli lines is interactive', async () => {
+  const rows = await extractFile(writeTranscript([withEntrypoint('sdk-cli'), withEntrypoint('cli', 'later')]));
+  assert.strictEqual(rows.sessions.s1.nonInteractive, false);
+});
+
+test('a session whose lines carry no entrypoint has no nonInteractive field', async () => {
+  const rows = await extractFile(writeTranscript([withEntrypoint(null)]));
+  assert.ok(!('nonInteractive' in rows.sessions.s1));
+});
+
+test('an unrecognised entrypoint does not decide the session', async () => {
+  const rows = await extractFile(writeTranscript([withEntrypoint('vscode')]));
+  assert.ok(!('nonInteractive' in rows.sessions.s1));
 });
