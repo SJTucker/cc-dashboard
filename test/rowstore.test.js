@@ -37,12 +37,13 @@ function writeFile(dir, name, ids, ageMs = 0) {
 
 // A real extract that records which files it read. `clock` is the store's `now`, which
 // the tests advance past REFRESH_SHARE_MS instead of sleeping.
-function harness(dir, { store = null, log, agentUsageDir } = {}) {
+function harness(dir, { store = null, log, agentUsageDir, headlessUsageDir } = {}) {
   const reads = [];
   const clock = { now: Date.now() };
   const rows = createRowStore({
     projectsDir: () => dir,
     agentUsageDir: () => agentUsageDir ?? null,
+    headlessUsageDir: () => headlessUsageDir ?? null,
     store,
     log,
     now: () => clock.now,
@@ -1705,6 +1706,53 @@ test('a subagent response with no final line is priced at the output in its step
   const data = aggregate(rows.entries().map((e) => e.rows), { days: null });
   assert.strictEqual(data.summary.totalOutput, 300);
   assert.deepStrictEqual([data.meta.noFinalCalls, data.meta.noFinalCorrected], [1, 1]);
+});
+
+test('headless files are listed and read through extractFile', async () => {
+  const { base, dir } = makeProjects();
+  const headlessDir = path.join(base, 'cc-dashboard', 'headless-usage');
+  const file = writeSteps(headlessDir, 's1', [{ ...STEP, agentId: 'a1' }], 60_000);
+  const { rows, reads, refresh } = harness(dir, { headlessUsageDir: headlessDir });
+  await refresh();
+  assert.deepStrictEqual(reads, [file]);
+  const [entry] = rows.entries();
+  assert.strictEqual(entry.rows.headless, true);
+  assert.deepStrictEqual(entry.rows.calls.map((c) => [c.sessionId, c.agentId]), [['s1', 'a1']]);
+});
+
+test('a cost-only headless file is stored and aggregated without error', async () => {
+  const { base, dir } = makeProjects();
+  const headlessDir = path.join(base, 'cc-dashboard', 'headless-usage');
+  writeSteps(headlessDir, 's1', [], 2 * DAY_MS);
+  const store = openStore(tmpDb());
+  const { rows, refresh } = harness(dir, { store, headlessUsageDir: headlessDir });
+  await refresh();
+  const data = aggregate(rows.entries().map((e) => e.rows), { days: 1 });
+  assert.strictEqual(data.summary.totalOutput, 0);
+  store.close();
+});
+
+test('a persisted headless file older than a day is deleted and its rows kept', async () => {
+  const { base, dir } = makeProjects();
+  const headlessDir = path.join(base, 'cc-dashboard', 'headless-usage');
+  const file = writeSteps(headlessDir, 's1', [STEP], 2 * DAY_MS);
+  const store = openStore(tmpDb());
+  const { rows, refresh } = harness(dir, { store, headlessUsageDir: headlessDir });
+  await refresh();
+  assert.strictEqual(fs.existsSync(file), false);
+  await refresh();
+  assert.deepStrictEqual(rows.entries().map((e) => e.rows.calls.length), [1]);
+  store.close();
+});
+
+test('a headless file within a day is kept', async () => {
+  const { base, dir } = makeProjects();
+  const headlessDir = path.join(base, 'cc-dashboard', 'headless-usage');
+  const file = writeSteps(headlessDir, 's1', [STEP], 60_000);
+  const store = openStore(tmpDb());
+  await harness(dir, { store, headlessUsageDir: headlessDir }).refresh();
+  assert.strictEqual(fs.existsSync(file), true);
+  store.close();
 });
 
 test('the row store passes its own intern map to store.loadAll', () => {

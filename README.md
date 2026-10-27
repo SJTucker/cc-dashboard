@@ -347,6 +347,10 @@ start of the response. When a response has no final line, the dashboard prices i
 at the output the mod recorded. Responses recorded before the mod did this keep the
 transcript's figure.
 
+A `claude -p` session has no transcript. The mod records each request such a session
+makes in `<config dir>/cc-dashboard/headless-usage/<session id>.json`, and the
+dashboard counts those requests as calls of that session.
+
 ### What the panels show
 
 When either window reaches 75%, a warning banner at the top of the page shows on
@@ -647,6 +651,7 @@ only. History then starts at the oldest transcript on disk. Raising
 server.js              Express app on 127.0.0.1: serves public/ and the /api routes summary, rtk, limits, changes, records, sessions/live, reviews (with dismiss and undo), refresh and prices (check)
 lib/activity.js        Reads the activity files the mod writes (working or waiting), ignores stale ones, deletes those older than a day
 lib/agent-steps.js     Reads the mod's agent-usage files: the output of each subagent request, for responses whose transcript has no final usage line
+lib/headless-usage.js  Reads the mod's headless-usage files: the model requests of a claude -p session, as call rows
 lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill and subagent, plus per-session titles, branches and edited lines
 lib/changes.js         Setup change markers: plugin installs, new models, Claude Code releases, the mod's setup changes, changes.json
 lib/config-dir.js      loadConfig: reads CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB and PORT for the server and the bin/ scripts (server.js reads CC_DASHBOARD_PRICE_CHECK itself, in priceCheckOn)
