@@ -95,24 +95,30 @@ export function parseUsageCache(text: string | undefined): Snapshot | null {
     (w) => (typeof w.resets_at === 'string' ? w.resets_at : undefined))
 }
 
-// The newest snapshot taken after currentAtMs, merged over current: a window the snapshot
-// lacks keeps its current reading. Null when no snapshot is newer.
+// Each window from the newest snapshot taken after currentAtMs that has that window. A
+// window that no newer snapshot has keeps its current reading. The result's fetchedAtMs
+// is the newest snapshot adopted. Null when no snapshot is newer.
 export function newerReadings(
   current: readonly Reading[],
   currentAtMs: number,
   snapshots: readonly (Snapshot | null)[],
 ): Snapshot | null {
-  let newest: Snapshot | null = null
-  for (const s of snapshots) {
-    if (s && s.readings.length && s.fetchedAtMs > currentAtMs && (!newest || s.fetchedAtMs > newest.fetchedAtMs)) newest = s
-  }
-  if (!newest) return null
+  let fetchedAtMs = currentAtMs
   const readings: Reading[] = []
   for (const kind of KINDS) {
-    const r = newest.readings.find((x) => x.kind === kind) ?? current.find((x) => x.kind === kind)
-    if (r) readings.push(r)
+    let atMs = currentAtMs
+    let reading = current.find((x) => x.kind === kind)
+    for (const s of snapshots) {
+      const r = s && s.fetchedAtMs > atMs ? s.readings.find((x) => x.kind === kind) : undefined
+      if (r) {
+        atMs = s!.fetchedAtMs
+        reading = r
+      }
+    }
+    fetchedAtMs = Math.max(fetchedAtMs, atMs)
+    if (reading) readings.push(reading)
   }
-  return { fetchedAtMs: newest.fetchedAtMs, readings }
+  return fetchedAtMs > currentAtMs ? { fetchedAtMs, readings } : null
 }
 
 // The readings whose window has not reset yet. One with no or an unreadable resetsAt stays.

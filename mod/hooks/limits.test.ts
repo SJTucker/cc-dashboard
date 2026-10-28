@@ -141,3 +141,13 @@ test('newerReadings replaces only the windows the newer snapshot has', async () 
     { kind: 'seven_day', percent: 41 },
   ] })
 })
+
+test('newerReadings takes each window from the newest snapshot that has it', async () => {
+  const band = [{ kind: 'five_hour' as const, percent: 77 }, { kind: 'seven_day' as const, percent: 60 }]
+  const cache = { fetchedAtMs: 2_000, readings: [{ kind: 'five_hour' as const, percent: 80 }, { kind: 'seven_day' as const, percent: 62 }] }
+  const sessionOnly = { fetchedAtMs: 3_000, readings: [{ kind: 'five_hour' as const, percent: 88 }] }
+  expect(newerReadings(band, 1_000, [sessionOnly, cache])).toEqual({ fetchedAtMs: 3_000, readings: [
+    { kind: 'five_hour', percent: 88 },
+    { kind: 'seven_day', percent: 62 },
+  ] })
+})
