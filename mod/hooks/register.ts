@@ -12,7 +12,7 @@ import { headlessText, parseHeadless, parseSteps, stepOf, stepsText } from './st
 import type { AgentStep, HeadlessStep } from './steps'
 import { REPO_STEPS, handoffDocument, handoffWaitMs, hourCacheExpiry, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
-import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, parseLevels, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
+import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
 // in bin/, and judges new Claude Code releases for the setup changes markers
@@ -135,6 +135,15 @@ async function configDir($: EngineInterface) {
   const home = await $.env.get('HOME')
   if (!configEnv && !home) return null
   return configEnv ? configEnv.replace(/^~(?=\/|$)/, home ?? '~') : `${home}/.claude`
+}
+
+// .claude.json sits in CLAUDE_CONFIG_DIR when that is set, else in the home folder, as in
+// claudeJsonPath in lib/config-dir.js. Null when neither variable is set.
+async function claudeJsonPath($: EngineInterface) {
+  const configEnv = await $.env.get('CLAUDE_CONFIG_DIR')
+  const home = await $.env.get('HOME')
+  if (configEnv) return `${configEnv.replace(/^~(?=\/|$)/, home ?? '~')}/.claude.json`
+  return home ? `${home}/.claude.json` : null
 }
 
 // No $ call returns the transcript's path. Claude Code keeps it at
@@ -1039,13 +1048,25 @@ async function checkSetup($: EngineInterface) {
   await $.store.set(SETUP_KEY, state)
 }
 
-// The plan limit band above the prompt. session.measure stores the latest Session and
-// Week readings and the dismissed levels in $.state. The band lists each window above
-// its dismissed level. Dismiss writes the levels to limit-warnings.json, which every
-// running session reads on its next measure and on the recheck timer.
+// The plan limit band above the prompt. $.state holds the Session and Week readings, when
+// they were taken (fetchedAtMs), and the dismissed levels. The band lists each window
+// above its dismissed level. The readings come from three places, and the newest
+// fetchedAtMs wins: this session's session.measure, <cfg>/rate-limits.json (every
+// session's measure, through bin/record-statusline), and the /usage cache in .claude.json.
+// An idle session gets no measure, so the recheck timer reads the two files once a
+// minute. Dismiss writes the levels to limit-warnings.json, which every running session
+// reads on its next measure and on the recheck timer.
+//
+// Two known gaps. rate-limits.json stamps a reading with the transcript's mtime, the
+// writing session's last API response, while the band stamps its own measure with
+// $.clock.now(). So a band stamped at the end of a turn can skip another session's
+// reading from a few seconds earlier, until the next write to the file. And after a
+// failed Dismiss write (unsaved), maxLevels keeps this session's level over a reset
+// another session wrote, so the band stays hidden until 90% or this session's next
+// measure.
 
 const RECHECK_MS = 60_000
-const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readings: [], levels: NO_LEVELS, unsaved: false })
+const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readings: [], levels: NO_LEVELS, unsaved: false, fetchedAtMs: 0 })
 
 // A module variable, so a reload drops it. The next measure starts the timer again.
 let recheck: Timer | undefined
@@ -1064,18 +1085,19 @@ async function readLevels($: EngineInterface, path: string) {
 // is unsaved, and the write below retries it. A measure with no Session or Week window
 // (an API-key login) leaves the band as it is.
 async function measureBand($: EngineInterface, limits: readonly SessionRateLimit[]) {
-  const readings = liveReadings(readingsOf(limits), await $.clock.now())
+  const now = await $.clock.now()
+  const readings = liveReadings(readingsOf(limits), now)
   if (!readings.length) return
   const path = await limitsPath($)
   const stored = path ? await readLevels($, path) : NO_LEVELS
   const held = await read($, band)
   const levels = resetLevels(readings, held.unsaved ? maxLevels(stored, held.levels) : stored)
-  await update($, band, () => ({ readings, levels, unsaved: held.unsaved }))
+  await update($, band, () => ({ readings, levels, unsaved: held.unsaved, fetchedAtMs: now }))
   if (path) {
     if (!sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
     await update($, band, (b) => ({ ...b, unsaved: false }))
   }
-  if (shownWindows(readings, levels).length) startRecheck($)
+  startRecheck($)
 }
 
 function startRecheck($: EngineInterface) {
@@ -1085,24 +1107,31 @@ function startRecheck($: EngineInterface) {
   })
 }
 
-// Picks up a dismissal another session wrote and redraws the reset countdown. A window
-// whose reset time has passed leaves the band. Stops once the band shows nothing.
+// Adopts a reading from rate-limits.json or the /usage cache that is newer than the
+// band's, picks up a dismissal another session wrote, and redraws the reset countdown.
+// A window whose reset time has passed leaves the band. It writes no levels: the session
+// whose measure sees a window reset writes the 0. It never stops, because a Week reading
+// stays live for up to 7 days.
 async function recheckBand($: EngineInterface) {
   const path = await limitsPath($)
   const file = path ? await readLevels($, path) : undefined
+  const dir = await configDir($)
+  const json = await claudeJsonPath($)
+  const rateText = dir ? await $.fs.read(`${dir}/rate-limits.json`).then(String, () => undefined) : undefined
+  const cacheText = json ? await $.fs.read(json).then(String, () => undefined) : undefined
   const now = await $.clock.now()
-  await update($, band, (b) => ({
-    readings: liveReadings(b.readings, now),
-    levels: file ? (b.unsaved ? maxLevels(file, b.levels) : file) : b.levels,
-    unsaved: b.unsaved,
-  }))
-  const current = await read($, band)
-  if (shownWindows(current.readings, current.levels).length) {
-    $.ui.invalidate('ui.render')
-    return
-  }
-  recheck?.cancel()
-  recheck = undefined
+  await update($, band, (b) => {
+    // Band state saved before fetchedAtMs existed can survive a reload.
+    const atMs = b.fetchedAtMs ?? 0
+    const newer = newerReadings(b.readings, atMs, [parseRateLimitsFile(rateText), parseUsageCache(cacheText)])
+    return {
+      readings: liveReadings(newer ? newer.readings : b.readings, now),
+      levels: file ? (b.unsaved ? maxLevels(file, b.levels) : file) : b.levels,
+      unsaved: b.unsaved,
+      fetchedAtMs: newer ? newer.fetchedAtMs : atMs,
+    }
+  })
+  $.ui.invalidate('ui.render')
 }
 
 // Hides the band in this session first, so a failed write still hides it here. The
