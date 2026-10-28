@@ -37,6 +37,84 @@ export function readingsOf(limits: readonly { kind: string; percentUsed: number;
   return out
 }
 
+// Readings from a file another writer keeps, and when that writer got them (epoch ms).
+export type Snapshot = { fetchedAtMs: number; readings: Reading[] }
+
+function parseObject(text: string | undefined): Record<string, unknown> | null {
+  let data: unknown = null
+  try {
+    if (text !== undefined) data = JSON.parse(text)
+  } catch {
+    return null
+  }
+  return data !== null && typeof data === 'object' ? (data as Record<string, unknown>) : null
+}
+
+// The Session and Week windows of an object keyed by window kind. percentOf and resetOf
+// read one window's entry. A snapshot needs a number fetchedAtMs and at least one window.
+function snapshotOf(
+  fetchedAtMs: unknown,
+  windows: unknown,
+  percentOf: (w: Record<string, unknown>) => unknown,
+  resetOf: (w: Record<string, unknown>) => string | undefined,
+): Snapshot | null {
+  if (typeof fetchedAtMs !== 'number' || !Number.isFinite(fetchedAtMs)) return null
+  if (windows === null || typeof windows !== 'object') return null
+  const readings: Reading[] = []
+  for (const kind of KINDS) {
+    const w = (windows as Record<string, unknown>)[kind]
+    if (w === null || typeof w !== 'object') continue
+    const percent = percentOf(w as Record<string, unknown>)
+    if (typeof percent !== 'number' || !Number.isFinite(percent)) continue
+    const resetsAt = resetOf(w as Record<string, unknown>)
+    readings.push(resetsAt === undefined ? { kind, percent } : { kind, percent, resetsAt })
+  }
+  return readings.length ? { fetchedAtMs, readings } : null
+}
+
+// <cfg>/rate-limits.json, which bin/record-statusline writes from every session's measure.
+// Its resets_at is epoch seconds.
+export function parseRateLimitsFile(text: string | undefined): Snapshot | null {
+  const data = parseObject(text)
+  if (!data) return null
+  return snapshotOf(data.fetchedAtMs, data.rate_limits, (w) => w.used_percentage, (w) => {
+    const s = w.resets_at
+    if (typeof s !== 'number' || !Number.isFinite(s)) return undefined
+    const date = new Date(s * 1000)
+    return Number.isNaN(date.getTime()) ? undefined : date.toISOString()
+  })
+}
+
+// cachedUsageUtilization in .claude.json, which /usage and the server's usage refresher
+// write. Its resets_at is an ISO string.
+export function parseUsageCache(text: string | undefined): Snapshot | null {
+  const cache = parseObject(text)?.cachedUsageUtilization
+  if (cache === null || typeof cache !== 'object') return null
+  const { fetchedAtMs, utilization } = cache as Record<string, unknown>
+  return snapshotOf(fetchedAtMs, utilization, (w) => w.utilization,
+    (w) => (typeof w.resets_at === 'string' ? w.resets_at : undefined))
+}
+
+// The newest snapshot taken after currentAtMs, merged over current: a window the snapshot
+// lacks keeps its current reading. Null when no snapshot is newer.
+export function newerReadings(
+  current: readonly Reading[],
+  currentAtMs: number,
+  snapshots: readonly (Snapshot | null)[],
+): Snapshot | null {
+  let newest: Snapshot | null = null
+  for (const s of snapshots) {
+    if (s && s.readings.length && s.fetchedAtMs > currentAtMs && (!newest || s.fetchedAtMs > newest.fetchedAtMs)) newest = s
+  }
+  if (!newest) return null
+  const readings: Reading[] = []
+  for (const kind of KINDS) {
+    const r = newest.readings.find((x) => x.kind === kind) ?? current.find((x) => x.kind === kind)
+    if (r) readings.push(r)
+  }
+  return { fetchedAtMs: newest.fetchedAtMs, readings }
+}
+
 // The readings whose window has not reset yet. One with no or an unreadable resetsAt stays.
 export function liveReadings(readings: readonly Reading[], nowMs: number): Reading[] {
   return readings.filter((r) => r.resetsAt === undefined || !(Date.parse(r.resetsAt) <= nowMs))

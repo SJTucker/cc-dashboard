@@ -2133,6 +2133,13 @@ const at = (percent: number, kind: 'five_hour' | 'seven_day' = 'five_hour'): Ses
   ({ kind, percentUsed: percent, resetsAt: new Date(61_000 + 130 * 60_000).toISOString() })
 const bandLine = async (ui: { find: (q: { type?: string; text?: RegExp }) => Promise<{ text: string } | undefined> }) =>
   (await ui.find({ type: 'Text', text: /Nearing your plan limit/ }))?.text
+// Readings other sessions and /usage recorded. The band's first reading is stamped at the
+// mock clock's start, 61 000 ms.
+const RATE_LIMITS = '/home/u/.claude/rate-limits.json'
+const CLAUDE_JSON = '/home/u/.claude.json'
+const RESETS_S = Math.floor((61_000 + 130 * 60_000) / 1000)
+const rateFile = (fetchedAtMs: number, percent: number) =>
+  JSON.stringify({ fetchedAtMs, rate_limits: { five_hour: { used_percentage: percent, resets_at: RESETS_S } } })
 
 test('a window at 75% shows the limit band and one at 74.4% does not', async ($, on) => {
   world(on)
@@ -2223,17 +2230,73 @@ test('the recheck timer redraws the reset countdown', async ($, on) => {
   await ui.unmount()
 })
 
-test('the recheck timer stops reading limit-warnings.json once the band shows nothing', async ($, on) => {
-  const { state, clock, readLog } = world(on)
+test('a newer reading in rate-limits.json updates the band within a minute', async ($, on) => {
+  const { state, clock } = world(on)
   const ui = await $.ui.mount(BAND)
-  await $.session.measure(measure([at(81), WEEK]))
-  await ui.press({ key: 'dismiss-limits' })
-  state.files[LIMITS] = '{"five_hour":75,"seven_day":0}'
+  await $.session.measure(measure([at(77), WEEK]))
+  state.files[RATE_LIMITS] = rateFile(90_000, 88)
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 88%')
+  await ui.unmount()
+})
+
+test('a newer /usage cache in .claude.json updates the band within a minute', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(77), WEEK]))
+  state.files[CLAUDE_JSON] = JSON.stringify({ cachedUsageUtilization: { fetchedAtMs: 90_000, utilization: {
+    five_hour: { utilization: 80, resets_at: at(80).resetsAt },
+  } } })
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 80%')
+  await ui.unmount()
+})
+
+test("an older reading in rate-limits.json does not replace the band's percent", async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(77), WEEK]))
+  state.files[RATE_LIMITS] = rateFile(1_000, 99)
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 77%')
+  await ui.unmount()
+})
+
+test("a session below 75% shows the band when another session's reading passes 75%", async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(70), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  state.files[RATE_LIMITS] = rateFile(90_000, 80)
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 80%')
+  await ui.unmount()
+})
+
+test('a newer reading below 75% writes nothing, and the band returns once another session resets the level', async ($, on) => {
+  const { state, clock, writes } = world(on, { files: { [LIMITS]: '{"five_hour":75,"seven_day":0}' } })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  state.files[RATE_LIMITS] = rateFile(90_000, 10)
   await clock.advance(60_000)
   expect(await bandLine(ui)).toBeUndefined()
-  const reads = readLog.filter((p) => p === LIMITS).length
-  await clock.advance(120_000)
-  expect(readLog.filter((p) => p === LIMITS).length).toBe(reads)
+  expect(writes[LIMITS]).toBeUndefined()
+  state.files[LIMITS] = '{"five_hour":0,"seven_day":0}'
+  state.files[RATE_LIMITS] = rateFile(150_000, 76)
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 76%')
+  await ui.unmount()
+})
+
+test('an unreadable .claude.json leaves the band as it is', async ($, on) => {
+  const { state, clock, logged } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(77), WEEK]))
+  state.files[CLAUDE_JSON] = '{"cachedUsage'
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 77%')
+  expect(logged.filter((l) => /limit band/.test(l))).toEqual([])
   await ui.unmount()
 })
 

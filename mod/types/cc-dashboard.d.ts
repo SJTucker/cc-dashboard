@@ -5,6 +5,6 @@ export type CcDashboardLevels = Record<'five_hour' | 'seven_day', number>
 
 declare module 'claude-code' {
   interface PluginState {
-    'cc-dashboard': { limitBand: { readings: CcDashboardReading[]; levels: CcDashboardLevels; unsaved: boolean } }
+    'cc-dashboard': { limitBand: { readings: CcDashboardReading[]; levels: CcDashboardLevels; unsaved: boolean; fetchedAtMs: number } }
   }
 }
