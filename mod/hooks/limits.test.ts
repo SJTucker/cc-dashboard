@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { NO_LEVELS, bandText, dismissLevels, levelOf, liveReadings, maxLevels, parseLevels, readingsOf, resetLevels, resetText, sameLevels, shownWindows } from './limits'
+import { NO_LEVELS, bandText, dismissLevels, levelOf, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, resetText, sameLevels, shownWindows } from './limits'
 
 const NOW = Date.parse('2026-10-12T12:00:00.000Z')
 const IN_2H10 = '2026-10-12T14:10:00.000Z'
@@ -89,4 +89,55 @@ test('liveReadings drops a past reset and keeps future, missing and unparseable 
   const missing = { kind: 'five_hour' as const, percent: 80 }
   const bad = { kind: 'seven_day' as const, percent: 80, resetsAt: 'soon' }
   expect(liveReadings([past, future, missing, bad], NOW)).toEqual([future, missing, bad])
+})
+
+test('parseRateLimitsFile reads both windows and turns resets_at seconds into ISO', async () => {
+  const text = JSON.stringify({ fetchedAtMs: 5_000, rate_limits: {
+    five_hour: { used_percentage: 87.5, resets_at: 1792968600 },
+    seven_day: { used_percentage: 10 },
+  }, dayStart: {} })
+  expect(parseRateLimitsFile(text)).toEqual({ fetchedAtMs: 5_000, readings: [
+    { kind: 'five_hour', percent: 87.5, resetsAt: new Date(1792968600 * 1000).toISOString() },
+    { kind: 'seven_day', percent: 10 },
+  ] })
+  expect(parseRateLimitsFile(undefined)).toBeNull()
+  expect(parseRateLimitsFile('not json')).toBeNull()
+  expect(parseRateLimitsFile('{"rate_limits":{"five_hour":{"used_percentage":80}}}')).toBeNull()
+  expect(parseRateLimitsFile('{"fetchedAtMs":1,"rate_limits":{"spend_limit":{"used_percentage":9}}}')).toBeNull()
+})
+
+test('parseUsageCache reads cachedUsageUtilization and keeps its ISO resets_at', async () => {
+  const text = JSON.stringify({ other: 1, cachedUsageUtilization: { fetchedAtMs: 7_000, utilization: {
+    five_hour: { utilization: 80, resets_at: '2026-10-25T22:49:59.768560+00:00' },
+    seven_day: { utilization: 9, resets_at: '2026-11-01T09:59:59.768585+00:00' },
+    seven_day_opus: null,
+  } } })
+  expect(parseUsageCache(text)).toEqual({ fetchedAtMs: 7_000, readings: [
+    { kind: 'five_hour', percent: 80, resetsAt: '2026-10-25T22:49:59.768560+00:00' },
+    { kind: 'seven_day', percent: 9, resetsAt: '2026-11-01T09:59:59.768585+00:00' },
+  ] })
+  expect(parseUsageCache('{"cachedUsageUtilization":null}')).toBeNull()
+  expect(parseUsageCache('{"theme":"dark"}')).toBeNull()
+  expect(parseUsageCache('{"cachedUsageUtilization":{"fetchedAtMs":1,"utilization":{"five_hour":{"utilization":"80"}}}}')).toBeNull()
+  expect(parseUsageCache('{"truncat')).toBeNull()
+  expect(parseUsageCache(undefined)).toBeNull()
+})
+
+test('newerReadings takes the newest snapshot newer than the band and ignores older ones', async () => {
+  const band = [{ kind: 'five_hour' as const, percent: 77 }]
+  const older = { fetchedAtMs: 900, readings: [{ kind: 'five_hour' as const, percent: 70 }] }
+  const newer = { fetchedAtMs: 2_000, readings: [{ kind: 'five_hour' as const, percent: 85 }] }
+  const newest = { fetchedAtMs: 3_000, readings: [{ kind: 'five_hour' as const, percent: 88 }] }
+  expect(newerReadings(band, 1_000, [older, null])).toBeNull()
+  expect(newerReadings(band, 1_000, [newer, newest, older])).toEqual({ fetchedAtMs: 3_000, readings: newest.readings })
+  expect(newerReadings(band, 1_000, [{ fetchedAtMs: 5_000, readings: [] }])).toBeNull()
+})
+
+test('newerReadings replaces only the windows the newer snapshot has', async () => {
+  const band = [{ kind: 'five_hour' as const, percent: 77 }, { kind: 'seven_day' as const, percent: 41 }]
+  const sessionOnly = { fetchedAtMs: 2_000, readings: [{ kind: 'five_hour' as const, percent: 88 }] }
+  expect(newerReadings(band, 1_000, [sessionOnly])).toEqual({ fetchedAtMs: 2_000, readings: [
+    { kind: 'five_hour', percent: 88 },
+    { kind: 'seven_day', percent: 41 },
+  ] })
 })
