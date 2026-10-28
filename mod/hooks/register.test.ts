@@ -2262,6 +2262,61 @@ test("an older reading in rate-limits.json does not replace the band's percent",
   await ui.unmount()
 })
 
+test('with CLAUDE_CONFIG_DIR set, the band reads .claude.json from that folder', async ($, on) => {
+  const { state, clock } = world(on, { env: { HOME: '/home/u', CLAUDE_CONFIG_DIR: '~/cfg' } })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(77), WEEK]))
+  state.files['/home/u/cfg/.claude.json'] = JSON.stringify({ cachedUsageUtilization: { fetchedAtMs: 90_000, utilization: {
+    five_hour: { utilization: 82, resets_at: at(82).resetsAt },
+  } } })
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 82%')
+  await ui.unmount()
+})
+
+test("an older /usage cache in .claude.json does not replace the band's percent", async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(77), WEEK]))
+  state.files[CLAUDE_JSON] = JSON.stringify({ cachedUsageUtilization: { fetchedAtMs: 1_000, utilization: {
+    five_hour: { utilization: 99, resets_at: at(99).resetsAt },
+  } } })
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 77%')
+  await ui.unmount()
+})
+
+test('a newer reading whose window has already reset takes that window off the band', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80), WEEK]))
+  expect(await bandLine(ui)).toContain('Session 80%')
+  state.files[RATE_LIMITS] = JSON.stringify({ fetchedAtMs: 90_000, rate_limits: { five_hour: { used_percentage: 90, resets_at: 100 } } })
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a claude -p session starts no recheck timer', async ($, on) => {
+  const { clock, readLog } = world(on)
+  await $.session.start({ ...start, isInteractive: false })
+  await $.session.measure(measure([at(80), WEEK]))
+  await clock.advance(120_000)
+  expect(readLog.filter((p) => p === RATE_LIMITS)).toEqual([])
+})
+
+test('the recheck timer does not redraw while the band shows nothing', async ($, on) => {
+  const { clock } = world(on)
+  let redraws = 0
+  on('ui.invalidate', () => {
+    redraws++
+    return { value: undefined }
+  })
+  await $.session.measure(measure([at(23.5), WEEK]))
+  await clock.advance(60_000)
+  expect(redraws).toBe(0)
+})
+
 test("a session below 75% shows the band when another session's reading passes 75%", async ($, on) => {
   const { state, clock } = world(on)
   const ui = await $.ui.mount(BAND)
