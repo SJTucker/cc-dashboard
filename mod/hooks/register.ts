@@ -129,21 +129,20 @@ async function nonInteractive($: EngineInterface) {
 }
 
 // <config dir> is CLAUDE_CONFIG_DIR with a leading ~ expanded, else ~/.claude.
-// Null when neither variable is set.
-async function configDir($: EngineInterface) {
-  const configEnv = await $.env.get('CLAUDE_CONFIG_DIR')
-  const home = await $.env.get('HOME')
-  if (!configEnv && !home) return null
-  return configEnv ? configEnv.replace(/^~(?=\/|$)/, home ?? '~') : `${home}/.claude`
-}
-
 // .claude.json sits in CLAUDE_CONFIG_DIR when that is set, else in the home folder, as in
 // claudeJsonPath in lib/config-dir.js. Null when neither variable is set.
-async function claudeJsonPath($: EngineInterface) {
+async function configPaths($: EngineInterface) {
   const configEnv = await $.env.get('CLAUDE_CONFIG_DIR')
   const home = await $.env.get('HOME')
-  if (configEnv) return `${configEnv.replace(/^~(?=\/|$)/, home ?? '~')}/.claude.json`
-  return home ? `${home}/.claude.json` : null
+  if (configEnv) {
+    const dir = configEnv.replace(/^~(?=\/|$)/, home ?? '~')
+    return { dir, claudeJson: `${dir}/.claude.json` }
+  }
+  return home ? { dir: `${home}/.claude`, claudeJson: `${home}/.claude.json` } : null
+}
+
+async function configDir($: EngineInterface) {
+  return (await configPaths($))?.dir ?? null
 }
 
 // No $ call returns the transcript's path. Claude Code keeps it at
@@ -1071,9 +1070,11 @@ const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readi
 // A module variable, so a reload drops it. The next measure starts the timer again.
 let recheck: Timer | undefined
 
+const limitsFile = (dir: string) => `${dir}/cc-dashboard/limit-warnings.json`
+
 async function limitsPath($: EngineInterface) {
   const dir = await configDir($)
-  return dir ? `${dir}/cc-dashboard/limit-warnings.json` : null
+  return dir ? limitsFile(dir) : null
 }
 
 async function readLevels($: EngineInterface, path: string) {
@@ -1097,7 +1098,8 @@ async function measureBand($: EngineInterface, limits: readonly SessionRateLimit
     if (!sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
     await update($, band, (b) => ({ ...b, unsaved: false }))
   }
-  startRecheck($)
+  // A claude -p session shows no band, so it reads nothing on a timer.
+  if (!(await nonInteractive($))) startRecheck($)
 }
 
 function startRecheck($: EngineInterface) {
@@ -1111,27 +1113,29 @@ function startRecheck($: EngineInterface) {
 // band's, picks up a dismissal another session wrote, and redraws the reset countdown.
 // A window whose reset time has passed leaves the band. It writes no levels: the session
 // whose measure sees a window reset writes the 0. It never stops, because a Week reading
-// stays live for up to 7 days.
+// stays live for up to 7 days. It redraws only while the band shows a window, or when
+// one has just left it.
 async function recheckBand($: EngineInterface) {
-  const path = await limitsPath($)
-  const file = path ? await readLevels($, path) : undefined
-  const dir = await configDir($)
-  const json = await claudeJsonPath($)
-  const rateText = dir ? await $.fs.read(`${dir}/rate-limits.json`).then(String, () => undefined) : undefined
-  const cacheText = json ? await $.fs.read(json).then(String, () => undefined) : undefined
+  const paths = await configPaths($)
+  const file = paths ? await readLevels($, limitsFile(paths.dir)) : undefined
+  const rateText = paths ? await $.fs.read(`${paths.dir}/rate-limits.json`).then(String, () => undefined) : undefined
+  const cacheText = paths ? await $.fs.read(paths.claudeJson).then(String, () => undefined) : undefined
   const now = await $.clock.now()
+  let shown = false
   await update($, band, (b) => {
     // Band state saved before fetchedAtMs existed can survive a reload.
     const atMs = b.fetchedAtMs ?? 0
     const newer = newerReadings(b.readings, atMs, [parseRateLimitsFile(rateText), parseUsageCache(cacheText)])
-    return {
+    const next = {
       readings: liveReadings(newer ? newer.readings : b.readings, now),
       levels: file ? (b.unsaved ? maxLevels(file, b.levels) : file) : b.levels,
       unsaved: b.unsaved,
       fetchedAtMs: newer ? newer.fetchedAtMs : atMs,
     }
+    shown = shownWindows(b.readings, b.levels).length > 0 || shownWindows(next.readings, next.levels).length > 0
+    return next
   })
-  $.ui.invalidate('ui.render')
+  if (shown) $.ui.invalidate('ui.render')
 }
 
 // Hides the band in this session first, so a failed write still hides it here. The
