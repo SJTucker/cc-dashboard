@@ -161,7 +161,9 @@ releases. If an update breaks it, the transcript shows one line starting
 
 When the Session or Week plan window reaches 75%, the mod shows a band above the
 prompt. The band lists each window at 75% or more, with its percent and the time
-until it resets. Dismiss hides the band in this session at once and in other running
+until it resets. The percent is the newest reading that any session or `/usage`
+recorded, checked once a minute, so the band in an idle session keeps up with the
+others. Dismiss hides the band in this session at once and in other running
 sessions within a minute. A window dismissed at 75% shows again at 90%. A window
 dismissed at 90% stays hidden until it resets, and after a reset it warns again at 75%.
 
