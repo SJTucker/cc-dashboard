@@ -809,7 +809,16 @@ test('the last commit of a re-record sequence is found by ancestry when all comm
   const first = layer('p.txt', 'one');
   const second = layer('q.txt', 'two');
   const tip = layer('r.txt', 'three');
-  const { rows } = resolveCommits({ dir, t0: 998_500, t1: 1_003_000, command: 'x', rerecordSince: 1_000_500 });
+  // A later rebase can reorder reflog entries that share one second. The stub lists the
+  // first layer's entry above the tip's, so the sequence's newest entry is not its tip.
+  const real = gitRun();
+  const run = (args, cwd, opts) => {
+    const out = real(args, cwd, opts);
+    if (args[0] !== 'log' || !args.includes('-g') || !args.includes('--date=unix')) return out;
+    const lines = out.split('\n').filter(Boolean);
+    return [...lines.filter((l) => l.startsWith(first)), ...lines.filter((l) => !l.startsWith(first))].join('\n') + '\n';
+  };
+  const { rows } = resolveCommits({ dir, t0: 998_500, t1: 1_003_000, command: 'x', rerecordSince: 1_000_500, run });
   assert.deepStrictEqual(rows.find((r) => r.sha === tip).rerecordDelta, { added: 0, removed: 0 });
   assert.ok(rows.filter((r) => r.sha !== tip && r.squash).every((r) => !r.rerecordDelta));
   assert.ok([first, second].every((sha) => rows.find((r) => r.sha === sha)?.squash === true));
