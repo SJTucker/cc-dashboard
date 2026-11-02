@@ -142,7 +142,7 @@ function freshServerDb(t) {
 }
 
 // Rows with nothing in them, for tests that only care when a file finishes loading.
-const emptyRows = () => ({ ok: true, calls: [], toolUses: [], errors: [], edits: [], prompts: [], commands: [], sessions: Object.create(null), minT: null, maxT: null });
+const emptyRows = () => ({ ok: true, calls: [], toolUses: [], errors: [], edits: [], commits: [], prompts: [], commands: [], sessions: Object.create(null), minT: null, maxT: null });
 
 // An async extract that returns emptyRows(). While ctl.hold is true, each file waits
 // until the test calls release(file). `reads` lists the files extract was called for,

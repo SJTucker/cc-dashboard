@@ -304,7 +304,7 @@ test('an edit row counts added and removed lines for the line sessionId', async 
   ]);
   const rows = await extractFile(file);
 
-  assert.deepStrictEqual(rows.edits, [{ toolUseId: 'toolu_1', t: Date.parse(T1), sessionId: 's1', added: 2, removed: 1, repo: null }]);
+  assert.deepStrictEqual(rows.edits, [{ toolUseId: 'toolu_1', t: Date.parse(T1), sessionId: 's1', added: 2, removed: 1, repo: null, file: null }]);
 });
 
 test('an edit row carries the repo of the edited file, and falls back to cwd only without a filePath', async () => {
@@ -694,8 +694,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 15', () => {
-  assert.strictEqual(EXTRACT_VERSION, 15);
+test('EXTRACT_VERSION is 16', () => {
+  assert.strictEqual(EXTRACT_VERSION, 16);
 });
 
 function toolResultLine({ id = 'toolu_1', content = 'hello', agentId = null, min = 1 } = {}) {
@@ -855,4 +855,64 @@ test('a session whose lines carry no entrypoint has no nonInteractive field', as
 test('an unrecognised entrypoint does not decide the session', async () => {
   const rows = await extractFile(writeTranscript([withEntrypoint('vscode')]));
   assert.ok(!('nonInteractive' in rows.sessions.s1));
+});
+
+// Commit rows. A real repo is built, with a commit made between the Bash tool_use line
+// (T0) and its tool_result line (T1).
+const hasGit = spawnSync('git', ['--version']).status === 0;
+const COMMIT_SECS = Date.parse(T0) / 1000 + 2;
+
+function commitRepo(t, { commit = true } = {}) {
+  const repo = fs.realpathSync(helpers.tmpDir(t, 'extract-commit'));
+  const git = (args, secs) => {
+    const env = { ...process.env, GIT_AUTHOR_DATE: `@${secs} +0000`, GIT_COMMITTER_DATE: `@${secs} +0000` };
+    const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+  };
+  git(['init', '-q', '-b', 'main'], 1);
+  if (commit) {
+    fs.writeFileSync(path.join(repo, 'a.txt'), 'x\ny\nz\n');
+    git(['add', '-A'], COMMIT_SECS);
+    git(['commit', '-q', '-m', 'feat: x'], COMMIT_SECS);
+  }
+  return repo;
+}
+
+const commitCall = (command, extra = {}) => assistant({ ts: T0, content: [toolUse('toolu_c', 'Bash', { command })], extra: { sessionId: 's1', ...extra } });
+const commitResult = (extra = {}, block = {}) => ({ type: 'user', timestamp: T1, sessionId: 's1', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_c', content: 'ok', ...block }] }, ...extra });
+
+test('extractFile records a commit row for a Bash git commit', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git commit -m "feat: x"`), commitResult()]));
+
+  assert.strictEqual(rows.commits.length, 1);
+  const { sha, parent, ...rest } = rows.commits[0];
+  assert.match(sha, /^[0-9a-f]{40}$/);
+  assert.strictEqual(parent, null);
+  assert.deepStrictEqual(rest, { added: 3, removed: 0, files: [path.join(repo, 'a.txt')], repo, amend: false, toolUseId: 'toolu_c', t: Date.parse(T1), sessionId: 's1' });
+});
+
+test('extractFile uses the line cwd when the command has no cd', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall('git commit -m "feat: x"', { cwd: repo }), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+});
+
+test('extractFile records no commit row when the commit call failed', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t, { commit: false });
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git commit -m "feat: x"`), commitResult({}, { is_error: true })]));
+  assert.deepStrictEqual(rows.commits, []);
+});
+
+test('extractFile records no commit row before the result arrives', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git commit -m "feat: x"`)]));
+  assert.deepStrictEqual(rows.commits, []);
+});
+
+test('an edit row carries the edited file path', async () => {
+  const rows = await extractFile(writeTranscript([
+    { type: 'user', timestamp: T1, sessionId: 's1', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }] }, toolUseResult: { filePath: '/a/b.js', structuredPatch: [{ lines: ['+new'] }] } },
+  ]));
+  assert.strictEqual(rows.edits[0].file, '/a/b.js');
 });

@@ -34,7 +34,7 @@ test('put then loadAll round-trips an entry, and put replaces the same path', ()
 
   const loaded = store.loadAll().sort((a, b) => (a.path < b.path ? -1 : 1));
   assert.strictEqual(loaded.length, 2);
-  assert.deepStrictEqual(loaded[0], { path: '/p/one.jsonl', size: 20, mtimeMs: 1234.5, version: 1, minT: 100, maxT: 200, onDisk: true, rows: rowsOf({ calls: [{ key: 'k2' }], commands: [], results: [], turns: [] }) });
+  assert.deepStrictEqual(loaded[0], { path: '/p/one.jsonl', size: 20, mtimeMs: 1234.5, version: 1, minT: 100, maxT: 200, onDisk: true, rows: rowsOf({ calls: [{ key: 'k2' }], commands: [], commits: [], results: [], turns: [] }) });
   assert.strictEqual(loaded[1].onDisk, false);
   store.close();
 });
@@ -214,6 +214,15 @@ test('migration 9 to 10 gives edit rows without a repo the repo of their transcr
 test('migration 9 to 10 gives a null repo when the transcript path has no projects folder', () => {
   const old = rowsOf({ edits: [{ toolUseId: 'a', t: 1, sessionId: 's', added: 1, removed: 0 }] });
   assert.deepStrictEqual(MIGRATIONS[9](old, '/nowhere/abc.jsonl').edits[0].repo, null);
+});
+
+test('MIGRATIONS[15] adds an empty commits list', () => {
+  const old = rowsOf({ edits: [{ toolUseId: 'a', t: 1, sessionId: 's', added: 1, removed: 0, repo: null }] });
+  const out = MIGRATIONS[15](old);
+  assert.deepStrictEqual(out.commits, []);
+  assert.deepStrictEqual(out.edits, old.edits);
+  assert.ok(!('file' in out.edits[0]));
+  assert.deepStrictEqual(MIGRATIONS[15]({ ...old, commits: [{ sha: 'x' }] }).commits, [{ sha: 'x' }]);
 });
 
 test('migration 14 to 15 changes nothing, and stored version-14 rows load through it', () => {
