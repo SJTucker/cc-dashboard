@@ -7,6 +7,7 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { lineRows } = require('../lib/lines');
 const { extractFile, markRebuilds, REBUILD_MIN_TOKENS, EXTRACT_VERSION } = require('../lib/extract');
 
 const ROOT = path.join(__dirname, '..');
@@ -1154,6 +1155,76 @@ test('a command that holds a reset and a commit marks nothing when its result is
   const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset --soft HEAD~3 && git commit -m s`), commitResult({}, { is_error: true, content: 'fatal: bad revision' })]));
   assert.ok(rows.commits.filter((c) => !c.fromReflog).length > 0);
   assert.ok(rows.commits.every((c) => !c.squash));
+});
+
+const gitAt = (repo, args, secs) => {
+  const env = { ...process.env, GIT_AUTHOR_DATE: `@${secs} +0000`, GIT_COMMITTER_DATE: `@${secs} +0000` };
+  const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+};
+const callAt = (id, ts, command) => assistant({ ts, msg: `m${id}`, req: `r${id}`, content: [toolUse(id, 'Bash', { command })], extra: { sessionId: 's1' } });
+const resultAt = (id, ts, block = {}) => ({ type: 'user', timestamp: ts, sessionId: 's1', message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'ok', ...block }] } });
+const addedOf = (rows) => lineRows([], rows.commits).reduce((n, r) => n + r.added, 0);
+
+test('a commit call that failed after committing still takes the re-record state of an earlier reset', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t, { commit: false });
+  fs.writeFileSync(path.join(repo, 'base.txt'), 'x\n');
+  gitAt(repo, ['add', '-A'], 1);
+  gitAt(repo, ['commit', '-q', '-m', 'base'], 1);
+  fs.writeFileSync(path.join(repo, 'a.txt'), 'a\nb\nc\nd\ne\n');
+  gitAt(repo, ['add', '-A'], COMMIT_SECS - 102);
+  gitAt(repo, ['commit', '-q', '-m', 'pre'], COMMIT_SECS - 102);
+  gitAt(repo, ['reset', '-q', '--soft', 'HEAD~1'], COMMIT_SECS - 1);
+  fs.writeFileSync(path.join(repo, 'b.txt'), 'b1\nb2\n');
+  gitAt(repo, ['add', '-A'], COMMIT_SECS + 1);
+  gitAt(repo, ['commit', '-q', '-m', 'redo'], COMMIT_SECS + 1);
+  const rows = await extractFile(writeTranscript([
+    callAt('pre', '2026-10-01T09:58:19.000Z', `cd ${repo} && git commit -m pre`), resultAt('pre', '2026-10-01T09:58:22.000Z'),
+    callAt('rs', T0, `cd ${repo} && git reset --soft HEAD~1`), resultAt('rs', '2026-10-01T10:00:01.500Z', { content: '' }),
+    callAt('c1', '2026-10-01T10:00:02.000Z', `cd ${repo} && git commit -m redo && git push`), resultAt('c1', T1, { is_error: true, content: 'error: failed to push some refs' }),
+  ]));
+  const redo = rows.commits.find((c) => c.subject === 'redo');
+  assert.strictEqual(redo.squash, true);
+  assert.deepStrictEqual(redo.rerecordDelta, { added: 2, removed: 0 });
+  assert.strictEqual(addedOf(rows), 7);
+});
+
+test('a squash merge whose refusal text arrives with a success status marks nothing', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult({ content: 'merge: nope - not something we can merge' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
+test('a one-command reword counts the original commit once, not the squash row', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t, { commit: false });
+  fs.writeFileSync(path.join(repo, 'base.txt'), 'x\n');
+  gitAt(repo, ['add', '-A'], 1);
+  gitAt(repo, ['commit', '-q', '-m', 'base'], 1);
+  fs.writeFileSync(path.join(repo, 'z.txt'), Array.from({ length: 10 }, (_, i) => `l${i}`).join('\n') + '\n');
+  gitAt(repo, ['add', '-A'], COMMIT_SECS - 1);
+  gitAt(repo, ['commit', '-q', '-m', 'zero'], COMMIT_SECS - 1);
+  gitAt(repo, ['reset', '-q', '--soft', 'HEAD~1'], COMMIT_SECS);
+  gitAt(repo, ['commit', '-q', '-m', 'one'], COMMIT_SECS);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git commit -m zero && git reset --soft HEAD~1 && git commit -m one`), commitResult()]));
+  assert.strictEqual(addedOf(rows), 10);
+});
+
+test('a merge --squash in a removed checkout still marks the next commit', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const wt = `${repo}.wt`;
+  const rows = await extractFile(writeTranscript([mergeCall(wt), mergeResult(), commitCall(`cd ${wt} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits[0].fallback, true);
+  assert.strictEqual(rows.commits[0].squash, true);
+});
+
+test('a reset --soft in a removed checkout counts the whole sequence as 0', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const wt = `${repo}.wt`;
+  const rows = await extractFile(writeTranscript([callAt('rs', T0, `cd ${wt} && git reset --soft HEAD~2`), resultAt('rs', '2026-10-01T10:00:01.000Z', { content: '' }), commitCall(`cd ${wt} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits[0].squash, true);
+  assert.ok(!rows.commits[0].rerecordDelta);
+  assert.strictEqual(addedOf(rows), 0);
 });
 
 test('every commit after a git reset that moved HEAD in one command is marked squash, an unstage in between included', { skip: !hasGit }, async (t) => {
