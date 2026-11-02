@@ -194,6 +194,33 @@ test('an amend with amendOf and no original row counts in full', () => {
 
 test('a reflog row and its amend with amendOf count the original in full plus the delta', () => {
   const c1 = commit({ sha: sha('a'), t: 1, added: 30, removed: 20, fromReflog: true, ...who });
-  const c2 = commit({ sha: sha('b'), t: 2, added: 33, removed: 24, amend: true, amendOf: { sha: c1.sha, added: 3, removed: 4 }, ...who });
+  const c2 = commit({ sha: sha('b'), t: 2, added: 33, removed: 24, amend: true, amendOf: { sha: c1.sha, added: 3, removed: 4 }, ...who, subject: 'reworded' });
   assert.deepStrictEqual(lineRows([], [c1, c2]), [row(30, 20, 1), row(3, 4, 2)]);
+});
+
+const rf = { authorTime: 500, authorEmail: 'x@y', subject: 'work', files: ['a.js', 'b.js'] };
+
+test('a reflog row is dropped when a counted row shares its author time, author and subject', () => {
+  const r = commit({ sha: sha('a'), t: 1, fromReflog: true, ...rf });
+  const c = commit({ sha: sha('b'), t: 2, added: 7, removed: 1, patchId: 'P', ...rf });
+  assert.deepStrictEqual(lineRows([], [r, c]), [row(7, 1, 2)]);
+});
+
+test('a reflog row is dropped when a counted row has its subject, author and files at another author time', () => {
+  const r = commit({ sha: sha('a'), t: 1, fromReflog: true, ...rf });
+  const c = commit({ sha: sha('b'), t: 2, added: 7, removed: 1, patchId: 'P', ...rf, authorTime: 900, files: ['b.js', 'a.js'] });
+  assert.deepStrictEqual(lineRows([], [r, c]), [row(7, 1, 2)]);
+});
+
+test('a reflog row with no twin counts', () => {
+  const r = commit({ sha: sha('a'), t: 1, fromReflog: true, patchId: 'Q', ...rf });
+  const c = commit({ sha: sha('b'), t: 2, added: 7, removed: 1, patchId: 'P', ...rf, authorTime: 900, subject: 'other' });
+  assert.deepStrictEqual(lineRows([], [r, c]), [row(10, 2, 1), row(7, 1, 2)]);
+});
+
+test('an amend of a dropped reflog row counts in full', () => {
+  const r = commit({ sha: sha('a'), t: 1, fromReflog: true, ...rf });
+  const c = commit({ sha: sha('c'), t: 2, added: 7, removed: 1, patchId: 'P', ...rf });
+  const a = commit({ sha: sha('b'), t: 3, added: 40, removed: 5, amend: true, amendOf: { sha: r.sha, added: 3, removed: 1 }, authorTime: 600, subject: 'amended', files: ['z.js'], authorEmail: 'x@y' });
+  assert.deepStrictEqual(lineRows([], [r, c, a]), [row(7, 1, 2), row(40, 5, 3)]);
 });

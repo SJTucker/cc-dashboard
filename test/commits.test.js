@@ -576,3 +576,20 @@ test('a lone amend exempts the newest out-of-window commit', { skip: !hasGit }, 
   const { rows } = resolveCommits({ dir, t0: 1_001_000, t1: 1_001_500, command: 'git commit --amend --no-edit' });
   assert.deepStrictEqual(rows.map((x) => x.sha), [head]);
 });
+
+test('resolveCommits marks a reflog-recovered row of an --amend call as an amend', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-reflog-amend');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  commitFiles(dir, { 'b.txt': 'one\n' }, 'work', 1000);
+  const env = { ...process.env, GIT_COMMITTER_DATE: '@1000 +0000' };
+  for (const text of ['one\ntwo\n', 'one\ntwo\nthree\n']) {
+    fs.writeFileSync(path.join(dir, 'b.txt'), text);
+    git(dir, ['add', '-A'], 5000);
+    const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', 'commit', '-q', '--amend', '--no-edit'], { cwd: dir, env: { ...env, GIT_COMMITTER_DATE: '@5000 +0000' }, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+  }
+  const { rows } = resolveCommits({ dir, t0: 999_500, t1: 1_000_400, command: 'git commit --amend --no-edit' });
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].fromReflog, true);
+  assert.strictEqual(rows[0].amend, true);
+});
