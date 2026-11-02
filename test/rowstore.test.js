@@ -238,9 +238,37 @@ test('a restart with a populated database reads no file that is unchanged', asyn
   second.close();
 });
 
-test('an entry whose rows are flagged commitsIncomplete is read again on the next load', async () => {
+test('a stored entry flagged commitsIncomplete is read again once per process', async () => {
   const { dir } = makeProjects();
   const file = writeFile(dir, 'inc', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const seed = openStore(dbFile);
+  const st = fs.statSync(file);
+  seed.put(file, { size: st.size, mtimeMs: st.mtimeMs, version: EXTRACT_VERSION, onDisk: true, rows: { ...(await extractFile(file)), commitsIncomplete: true } });
+  seed.close();
+
+  const store = openStore(dbFile);
+  const { rows, reads, refresh } = harness(dir, { store });
+  await refresh();
+  assert.deepStrictEqual(reads, [file], 'the first load reads the flagged entry again');
+  assert.strictEqual(rows.entries()[0].rows.commitsIncomplete, undefined);
+  await refresh();
+  assert.deepStrictEqual(reads, [file], 'the second load does not');
+  store.close();
+
+  // A new process reads an entry that the database still flags, once.
+  const flagged = openStore(dbFile);
+  flagged.put(file, { size: st.size, mtimeMs: st.mtimeMs, version: EXTRACT_VERSION, onDisk: true, rows: { ...(await extractFile(file)), commitsIncomplete: true } });
+  const again = harness(dir, { store: flagged });
+  await again.refresh();
+  await again.refresh();
+  assert.deepStrictEqual(again.reads, [file]);
+  flagged.close();
+});
+
+test('an in-process commitsIncomplete extract is not read again until the file changes', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'inc2', ['1'], 2 * DAY_MS);
   const reads = [];
   const clock = { now: Date.now() };
   const rows = createRowStore({
@@ -251,21 +279,15 @@ test('an entry whose rows are flagged commitsIncomplete is read again on the nex
     now: () => clock.now,
     extract: async (f) => {
       reads.push(f);
-      const out = await extractFile(f);
-      return reads.length === 1 ? { ...out, commitsIncomplete: true } : out;
+      return { ...(await extractFile(f)), commitsIncomplete: true };
     },
   });
-  const refresh = async () => {
+  for (let i = 0; i < 3; i++) {
     clock.now += REFRESH_SHARE_MS + 1;
     await rows.refresh();
-  };
-  await refresh();
-  assert.strictEqual(rows.entries()[0].rows.ok, true, 'the incomplete rows are still used');
-  assert.strictEqual(rows.entries()[0].rows.calls.length, 1);
-  await refresh();
-  assert.deepStrictEqual(reads, [file, file]);
-  await refresh();
-  assert.strictEqual(reads.length, 2, 'complete rows are not read again');
+  }
+  assert.deepStrictEqual(reads, [file]);
+  assert.strictEqual(rows.entries()[0].rows.ok, true);
 });
 
 test('a stored file with an older extract version is read again when it is on disk', async () => {
