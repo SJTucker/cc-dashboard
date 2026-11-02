@@ -187,7 +187,13 @@ test('an amend of a squash-marked original counts only its delta', () => {
   assert.deepStrictEqual(lineRows([], [o, a]), [row(2, 0, 2)]);
 });
 
-test('an amend with amendOf and no original in the rows counts amendOf', () => {
+test('an amend with amendOf and no original row counts in full', () => {
   const a = commit({ sha: sha('b'), t: 2, amend: true, added: 40, removed: 0, amendOf: { sha: sha('z'), added: 3, removed: 1 }, ...who });
-  assert.deepStrictEqual(lineRows([], [a]), [row(3, 1, 2)]);
+  assert.deepStrictEqual(lineRows([], [a]), [row(40, 0, 2)]);
+});
+
+test('a reflog row and its amend with amendOf count the original in full plus the delta', () => {
+  const c1 = commit({ sha: sha('a'), t: 1, added: 30, removed: 20, fromReflog: true, ...who });
+  const c2 = commit({ sha: sha('b'), t: 2, added: 33, removed: 24, amend: true, amendOf: { sha: c1.sha, added: 3, removed: 4 }, ...who });
+  assert.deepStrictEqual(lineRows([], [c1, c2]), [row(30, 20, 1), row(3, 4, 2)]);
 });

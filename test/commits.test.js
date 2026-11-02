@@ -531,3 +531,48 @@ test('a non-amend row has amendOf null and a timeout in a new step is transient'
   const slow = gitRun((args) => { if (args.includes('check-attr')) throw Object.assign(new Error('t'), { code: 'ETIMEDOUT', signal: 'SIGTERM' }); });
   assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit -m work', run: slow }), { rows: [], transient: true });
 });
+
+test('resolveCommits reads a commit that an amend removed from every ref from the HEAD reflog', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-reflog');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  const c1 = commitFiles(dir, { 'b.txt': 'one\ntwo\n' }, 'work', 1000);
+  fs.writeFileSync(path.join(dir, 'b.txt'), 'one\ntwo\nthree\n');
+  git(dir, ['add', '-A'], 5000);
+  const env = { ...process.env, GIT_COMMITTER_DATE: '@5000 +0000' };
+  const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', 'commit', '-q', '--amend', '--no-edit'], { cwd: dir, env, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const { rows } = resolveCommits({ dir, t0: 999_500, t1: 1_000_400, command: 'git commit -m work' });
+  assert.deepStrictEqual(rows.map((x) => x.sha), [c1]);
+  assert.strictEqual(rows[0].fromReflog, true);
+  assert.strictEqual(rows[0].added, 2);
+});
+
+test('resolveCommits returns [] when no reflog entry falls in the window', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-reflog-none');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m work' });
+  assert.deepStrictEqual(rows, []);
+});
+
+test('a lone amend exempts the newest out-of-window commit', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-amend-newest');
+  const gitAt = (args, author, committer) => {
+    const env = { ...process.env, GIT_AUTHOR_DATE: `@${author} +0000`, GIT_COMMITTER_DATE: `@${committer} +0000` };
+    const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, env, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+  };
+  // The previous call's commit: committed at 1000 s, so the 1 s widening admits it, but authored at 500 s.
+  fs.writeFileSync(path.join(dir, 'p.txt'), 'p\n');
+  gitAt(['add', '-A'], 500, 1000);
+  gitAt(['commit', '-q', '-m', 'previous'], 500, 1000);
+  // This call's commit, authored at 400 s and amended at 1001 s.
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'x\n');
+  gitAt(['add', '-A'], 400, 1000);
+  gitAt(['commit', '-q', '-m', 'work'], 400, 1000);
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'x\ny\n');
+  gitAt(['add', '-A'], 400, 1001);
+  gitAt(['commit', '-q', '--amend', '--no-edit'], 400, 1001);
+  const head = git(dir, ['rev-parse', 'HEAD'], 1001);
+  const { rows } = resolveCommits({ dir, t0: 1_001_000, t1: 1_001_500, command: 'git commit --amend --no-edit' });
+  assert.deepStrictEqual(rows.map((x) => x.sha), [head]);
+});

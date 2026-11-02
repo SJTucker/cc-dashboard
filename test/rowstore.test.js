@@ -1864,7 +1864,7 @@ test('a transcript read again while its last response streams logs no lost-call 
   assert.deepStrictEqual(entry.rows.calls.map((c) => [c.key, c.usage.output_tokens]), [['msg-a:req-a', 50], ['msg-b:req-b', 300]]);
 });
 
-test('a flagged entry whose re-read fails is not retried on the next load', async () => {
+test('a flagged entry whose re-read fails is not retried on the next load', async (t) => {
   const { dir } = makeProjects();
   const file = writeFile(dir, 'inc3', ['1'], 2 * DAY_MS);
   const dbFile = tmpDb();
@@ -1887,15 +1887,10 @@ test('a flagged entry whose re-read fails is not retried on the next load', asyn
       throw new Error('boom');
     },
   });
-  const origWarn = console.warn;
-  console.warn = () => {};
-  try {
-    for (let i = 0; i < 3; i++) {
-      clock.now += REFRESH_SHARE_MS + 1;
-      await rows.refresh();
-    }
-  } finally {
-    console.warn = origWarn;
+  t.mock.method(console, 'warn', () => {});
+  for (let i = 0; i < 3; i++) {
+    clock.now += REFRESH_SHARE_MS + 1;
+    await rows.refresh();
   }
   assert.deepStrictEqual(reads, [file], 'the failed re-read happens once');
   assert.strictEqual(rows.entries().length, 1, 'the previous entry stays');
