@@ -701,7 +701,12 @@ test('markRerecord marks only commits after the reset and gives the last one the
   assert.deepStrictEqual(byShaRows.get(fresh).rerecordDelta, { added: 1, removed: 0 });
   resetCommitState();
   const none = resolveCommits({ dir, t0: 998_500, t1: 1_003_000, command: 'x', rerecordSince: 5_000_000 });
-  assert.ok(none.rows.every((r) => r.squash === true && !r.rerecordDelta), 'with no reset entry in range every row counts 0');
+  assert.ok(none.rows.length > 0 && none.rows.every((r) => !r.squash && !r.rerecordDelta), 'with no reset entry in range a checkout that exists leaves every row unmarked');
+  resetCommitState();
+  // A removed checkout is read through the main checkout, which has no reset entry in the
+  // window of its own, so every row is marked and none has a delta.
+  const gone = resolveCommits({ dir: `${dir}.wt`, t0: 998_500, t1: 1_003_000, command: 'x', rerecordSince: 5_000_000 });
+  assert.ok(gone.rows.length > 0 && gone.rows.every((r) => r.squash === true && !r.rerecordDelta), 'with a removed checkout every row counts 0');
 });
 
 test('the last commit of a re-record sequence is found by ancestry when all commits share one second', { skip: !hasGit }, (t) => {

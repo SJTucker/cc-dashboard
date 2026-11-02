@@ -1096,17 +1096,42 @@ test('a commit resolved through the removed-worktree fallback carries the worktr
   assert.strictEqual(rows.commits[0].root, wt);
 });
 
+// A repo whose HEAD reflog holds a real `git reset <mode> HEAD~1` inside the call window,
+// then `commits` commits made after it (a.txt, b.txt ... each one file, subjects feat: 0 ...).
+// markRerecord finds the reset in that reflog, so the call text alone does not mark a commit.
+function resetRepo(t, { mode = '--soft', commits = 1 } = {}) {
+  const repo = commitRepo(t, { commit: false });
+  const git = (args, secs) => {
+    const env = { ...process.env, GIT_AUTHOR_DATE: `@${secs} +0000`, GIT_COMMITTER_DATE: `@${secs} +0000` };
+    const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+  };
+  fs.writeFileSync(path.join(repo, 'base.txt'), 'x\n');
+  git(['add', '-A'], 1);
+  git(['commit', '-q', '-m', 'base'], 1);
+  fs.writeFileSync(path.join(repo, 'a.txt'), 'x\ny\nz\n');
+  git(['add', '-A'], COMMIT_SECS - 1);
+  git(['commit', '-q', '-m', 'prior work'], COMMIT_SECS - 1);
+  git(['reset', '-q', mode, 'HEAD~1'], COMMIT_SECS - 1);
+  for (let i = 0; i < commits; i++) {
+    fs.writeFileSync(path.join(repo, i ? `b${i}.txt` : 'a.txt'), 'x\ny\nz\n');
+    git(['add', '-A'], COMMIT_SECS);
+    git(['commit', '-q', '-m', `feat: ${i}`], COMMIT_SECS);
+  }
+  return repo;
+}
+
 const softCall = (command) => assistant({ ts: T0, msg: 'mm', req: 'rm', content: [toolUse('toolu_m', 'Bash', { command })], extra: { sessionId: 's1' } });
 
 test('a commit in the same command as git reset --soft is marked squash', { skip: !hasGit }, async (t) => {
-  const repo = commitRepo(t);
-  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset --soft HEAD~3 && git commit -m s`), commitResult()]));
+  const repo = resetRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset --soft HEAD~1 && git commit -m s`), commitResult()]));
   assert.strictEqual(rows.commits[0].squash, true);
 });
 
 test('a later commit call after git reset --soft is marked squash', { skip: !hasGit }, async (t) => {
-  const repo = commitRepo(t);
-  const rows = await extractFile(writeTranscript([softCall(`cd ${repo} && git reset --soft x`), mergeResult({ content: '' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  const repo = resetRepo(t);
+  const rows = await extractFile(writeTranscript([softCall(`cd ${repo} && git reset --soft HEAD~1`), mergeResult({ content: '' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
   assert.strictEqual(rows.commits[0].squash, true);
 });
 
@@ -1116,27 +1141,31 @@ test('git reset --soft followed by git reset --hard in one command marks nothing
   assert.ok(!('squash' in rows.commits[0]));
 });
 
-// A second commit one second after commitRepo's, so both fall inside a call's window.
-function addSecondCommit(repo) {
-  const secs = COMMIT_SECS + 1;
-  const env = { ...process.env, GIT_AUTHOR_DATE: `@${secs} +0000`, GIT_COMMITTER_DATE: `@${secs} +0000` };
-  fs.writeFileSync(path.join(repo, 'b.txt'), 'b\n');
-  for (const args of [['add', '-A'], ['commit', '-q', '-m', 'second']]) {
-    const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env, encoding: 'utf8' });
-    assert.strictEqual(r.status, 0, r.stderr);
-  }
-}
+test('a git reset --soft whose result is an error marks no later commit', { skip: !hasGit }, async (t) => {
+  const repo = resetRepo(t);
+  const failed = mergeResult({ is_error: true, content: 'fatal: ambiguous argument HEAD~3: unknown revision or path not in the working tree.' });
+  const rows = await extractFile(writeTranscript([softCall(`cd ${repo} && git reset --soft HEAD~3`), failed, commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.ok(rows.commits.filter((c) => !c.fromReflog).length > 0);
+  assert.ok(rows.commits.every((c) => !c.squash));
+});
+
+test('a command that holds a reset and a commit marks nothing when its result is an error', { skip: !hasGit }, async (t) => {
+  const repo = resetRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset --soft HEAD~3 && git commit -m s`), commitResult({}, { is_error: true, content: 'fatal: bad revision' })]));
+  assert.ok(rows.commits.filter((c) => !c.fromReflog).length > 0);
+  assert.ok(rows.commits.every((c) => !c.squash));
+});
 
 test('every commit after a git reset that moved HEAD in one command is marked squash, an unstage in between included', { skip: !hasGit }, async (t) => {
-  const repo = commitRepo(t);
-  addSecondCommit(repo);
+  const repo = resetRepo(t, { commits: 2 });
   const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset -q --soft base && git reset -q && git add a && git commit -m one && git add b && git commit -m two`), commitResult()]));
-  assert.strictEqual(rows.commits.length, 2);
-  assert.ok(rows.commits.every((c) => c.squash === true));
+  const after = rows.commits.filter((c) => !c.fromReflog);
+  assert.strictEqual(after.length, 2);
+  assert.ok(after.every((c) => c.squash === true));
 });
 
 test('git reset --soft HEAD~1 alone marks the next commit call', { skip: !hasGit }, async (t) => {
-  const repo = commitRepo(t);
+  const repo = resetRepo(t);
   const rows = await extractFile(writeTranscript([softCall(`cd ${repo} && git reset --soft HEAD~1`), mergeResult({ content: '' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
   assert.strictEqual(rows.commits[0].squash, true);
 });
@@ -1148,7 +1177,7 @@ test('git reset HEAD -- f alone creates no state', { skip: !hasGit }, async (t) 
 });
 
 test('a unstage after git reset --soft keeps the state for the next commit call', { skip: !hasGit }, async (t) => {
-  const repo = commitRepo(t);
+  const repo = resetRepo(t);
   const rows = await extractFile(writeTranscript([softCall(`cd ${repo} && git reset -q --soft base && git reset -q`), mergeResult({ content: '' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
   assert.strictEqual(rows.commits[0].squash, true);
 });
@@ -1160,7 +1189,7 @@ test('git reset of an existing path is an unstage and marks nothing', { skip: !h
 });
 
 test('git reset to a revision marks the commit after it, and a reset --soft with no rev marks nothing', { skip: !hasGit }, async (t) => {
-  const repo = commitRepo(t);
+  const repo = resetRepo(t, { mode: '--mixed' });
   const marked = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset -q HEAD~1 && git commit -m s`), commitResult()]));
   assert.strictEqual(marked.commits[0].squash, true);
   require('../lib/commits').resetCommitState();
