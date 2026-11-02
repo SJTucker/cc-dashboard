@@ -976,6 +976,22 @@ test('a squash merge of a ref that does not exist marks nothing', { skip: !hasGi
   assert.ok(!('squash' in rows.commits[0]));
 });
 
+test('a squash merge refused for a dirty tree marks nothing', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const text = 'error: Your local changes to the following files would be overwritten by merge:\n\ta.txt\nPlease commit your changes or stash them before you merge.\nAborting';
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult({ is_error: true, content: text }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
+test('a squash merge followed by git merge --abort in the same command marks nothing', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const call = assistant({ ts: T0, msg: 'mm', req: 'rm', content: [toolUse('toolu_m', 'Bash', { command: `cd ${repo} && git merge --squash topic || git merge --abort` })], extra: { sessionId: 's1' } });
+  const rows = await extractFile(writeTranscript([call, mergeResult(), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
 const T_MID = '2026-10-01T10:00:02.000Z';
 // A Bash call (id toolu_x) that runs `command` between the merge and the commit, with its result.
 const otherCall = (command) => [
