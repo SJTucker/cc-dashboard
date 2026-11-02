@@ -75,3 +75,25 @@ test('lineRows counts rewritten copies once, keeping the earliest', () => {
   const b = commit({ sha: 'b'.repeat(40), t: 1, added: 3, ...o });
   assert.deepStrictEqual(lineRows([], [a, b]), [row(3, 2, 1)]);
 });
+
+test('lineRows keeps a cross-session amend next to the commit it rewrote', () => {
+  const c1 = commit({ sha: '1'.repeat(40), sessionId: 's1', t: 2, authorTime: 100, authorEmail: 'a@b', subject: 'x', added: 5 });
+  const c2 = commit({ sha: '2'.repeat(40), sessionId: 's2', t: 4, authorTime: 100, authorEmail: 'a@b', subject: 'x', added: 7, amend: true });
+  const rows = lineRows([], [c1, c2]);
+  assert.deepStrictEqual(rows.map((r) => [r.sessionId, r.added]), [['s1', 5], ['s2', 7]]);
+});
+
+test('lineRows keeps the named row when one sha is seen in two sessions', () => {
+  const unnamed = commit({ sessionId: 's1', t: 2 });
+  const named = commit({ sessionId: 's2', t: 5, named: true });
+  for (const input of [[unnamed, named], [named, unnamed]]) {
+    const rows = lineRows([], input);
+    assert.deepStrictEqual(rows.map((r) => r.sessionId), ['s2']);
+  }
+});
+
+test('lineRows matches edits against files relative to toplevel', () => {
+  const c = commit({ files: ['a.js'], toplevel: '/r', t: 5 });
+  const edit = { toolUseId: 'e', t: 3, sessionId: 's1', added: 4, removed: 0, repo: '/r', file: '/r/a.js' };
+  assert.deepStrictEqual(lineRows([edit], [c]).map((r) => r.added), [10]);
+});
