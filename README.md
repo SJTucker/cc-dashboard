@@ -55,7 +55,7 @@ cache write and cache read:
 
 ![Daily cost, Daily tokens, Cumulative cost and Daily tokens by type charts over 30 days](docs/screenshots/usage-charts.png)
 
-Lines of code, below those charts on the Analysis tab, draws the lines added above a zero line and the lines deleted below it, per day. Each of the 4 repos with the most lines changed in the range gets one line for added and one for deleted. Each repo's two lines share its colour and dash pattern, and each repo has its own dash pattern. The other repos are summed into Other. A worktree counts as its main checkout. Edits to files outside any repo, and edits from deleted transcripts whose repo cannot be found, show as No repo. The panel counts the lines added and removed by Edit and Write results, subagents included. A Write of a new file counts all its lines as added. A Write over an existing file counts only the lines that differ. Edits made through Bash, such as `sed -i`, are not counted. Edits to session scratchpad files, memory files and the global `CLAUDE.md` are not counted.
+Lines of code, below those charts on the Analysis tab, draws the lines added above a zero line and the lines deleted below it, per day. Each of the 4 repos with the most lines changed in the range gets one line for added and one for deleted. Each repo's two lines share its colour and dash pattern, and each repo has its own dash pattern. The other repos are summed into Other. A worktree counts as its main checkout. Edits to files outside any repo, and edits from deleted transcripts whose repo cannot be found, show as No repo. The panel counts the lines added and removed by Edit and Write results and by the commits a session's Bash `git commit` calls made, subagents included. `resolveCommits` finds those commits with `git log` in the call's folder, by committer time between the call and its result. An Edit or Write is dropped when a later commit by the same session contains its file, so those lines count once. A commit made with `--amend` replaces the commit it amended. Merge commits, binary files and the lockfiles `package-lock.json`, `pnpm-lock.yaml`, `yarn.lock` and `Cargo.lock` count 0 lines. A Write of a new file counts all its lines as added. A Write over an existing file counts only the lines that differ. Uncommitted edits made through Bash, such as `sed -i`, are not counted. Edits to session scratchpad files, memory files and the global `CLAUDE.md` are not counted.
 
 The Models panel, at the bottom of the Now tab, shows today's share bar of each model's tokens or cost (the Tokens and Cost buttons in its head pick the measure), with the model table below it: tokens, share, dollars per million tokens and the thinking share of output. Under every chart a legend row shows each series with an icon drawn like its mark. A long list shows its first rows and a Show all button in place, so no panel scrolls inside the page.
 
@@ -136,8 +136,10 @@ recently. It makes no network request of its own.
   shows — before the first prompt. Its Prompts,
   Cost today and Lines columns come from today's transcripts instead. A session that
   started yesterday shows fewer prompts, less cost and fewer lines than over its
-  whole life. Lines counts the lines added and removed by Edit and Write calls,
-  subagents included. Edits made through Bash, such as `sed -i`, are not counted.
+  whole life. Lines counts the lines added and removed by Edit and Write calls and
+  by the commits the session's Bash calls made, subagents included. An Edit later
+  committed by the same session counts once. Uncommitted edits made through Bash,
+  such as `sed -i`, are not counted.
   Edits to session scratchpad files, memory files and the global `CLAUDE.md` are not
   counted. Hover a Cost today value to see the snapshot's own counter, "Session total since
   it started". That counter is Claude Code's own and includes calls that write no
@@ -654,7 +656,7 @@ server.js              Express app on 127.0.0.1: serves public/ and the /api rou
 lib/activity.js        Reads the activity files the mod writes (working or waiting), ignores stale ones, deletes those older than a day
 lib/agent-steps.js     Reads the mod's agent-usage files: the output of each subagent request, for responses whose transcript has no final usage line
 lib/headless-usage.js  Reads the mod's headless-usage files: the model requests of a claude -p session, as call rows
-lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill and subagent, plus per-session titles, branches and edited lines
+lib/aggregate.js       Turns the rows of many transcripts into totals by day or hour, model, tool, skill and subagent, plus per-session titles, branches and edited and committed lines
 lib/changes.js         Setup change markers: plugin installs, new models, Claude Code releases, the mod's setup changes, changes.json
 lib/config-dir.js      loadConfig: reads CLAUDE_CONFIG_DIR, CHANGES_FILE, RTK_DB and PORT for the server and the bin/ scripts (server.js reads CC_DASHBOARD_PRICE_CHECK itself, in priceCheckOn)
 lib/dates.js           Local-time date keys, hour keys and hour slots, and the start of a range (windowStart)
