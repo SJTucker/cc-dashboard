@@ -432,7 +432,7 @@ function gitRun(fail) {
   const { execFileSync } = require('child_process');
   return (args, cwd, opts = {}) => {
     if (fail && fail(args)) throw Object.assign(new Error('git failed'), { status: 129, stderr: 'error: unknown option' });
-    return execFileSync('git', args, { cwd, encoding: 'utf8', input: opts.input, stdio: ['pipe', 'pipe', 'pipe'] });
+    return execFileSync('git', args, { cwd, encoding: opts.encoding ?? 'utf8', input: opts.input, stdio: ['pipe', 'pipe', 'pipe'] });
   };
 }
 
@@ -530,14 +530,99 @@ test('an amend in a folder without a reflog has amendOf null', { skip: !hasGit }
   assert.strictEqual(rows[0].amendOf, null);
 });
 
-test('a non-amend row has amendOf null and a timeout in a new step is transient', { skip: !hasGit }, (t) => {
+// A gitRun whose calls that mention `word` time out.
+function slowOn(word) {
+  const real = gitRun();
+  return (args, cwd, opts) => {
+    if (args.includes(word)) throw Object.assign(new Error('t'), { code: 'ETIMEDOUT', signal: 'SIGTERM' });
+    return real(args, cwd, opts);
+  };
+}
+
+test('a non-amend row has amendOf null', { skip: !hasGit }, (t) => {
   const dir = initRepo(t, 'commits-timeout');
   commitFiles(dir, { 'a.txt': lines(2) }, 'work', 1000);
   const one = resolveCommits({ dir, ...WINDOW, command: 'git commit -m work', run: gitRun() });
   assert.strictEqual(one.rows[0].amendOf, null);
+});
+
+test('patch-ids tell apart two patches whose bytes differ only where they are not UTF-8, and the log call passes --no-textconv', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  const idFor = (name, byte) => {
+    const dir = initRepo(t, name);
+    commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+    commitFiles(dir, { 'a.txt': Buffer.from([0x61, byte, 0x0a]) }, 'bytes', 1000);
+    const calls = [];
+    const real = gitRun();
+    const run = (args, cwd, opts) => { calls.push(args); return real(args, cwd, opts); };
+    const [row] = resolveCommits({ dir, ...WINDOW, command: 'git commit -m bytes', run }).rows;
+    assert.ok(calls.some((a) => a.includes('-p') && a.includes('--no-textconv')));
+    return row.patchId;
+  };
+  const a = idFor('commits-bytes-a', 0xff);
+  const b = idFor('commits-bytes-b', 0xfe);
+  assert.ok(a && b && a !== b);
+});
+
+test('a .gitattributes deleted by a later commit still marks the file generated for the earlier commit', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-attr-deleted');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  const first = commitFiles(dir, { '.gitattributes': 'gen.txt linguist-generated\n', 'gen.txt': lines(5) }, 'add generated', 1000);
+  git(dir, ['rm', '-q', '.gitattributes'], 1001);
+  git(dir, ['commit', '-q', '-m', 'drop attributes'], 1001);
+  const row = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "add generated"' }).rows.find((r) => r.sha === first);
+  assert.deepStrictEqual(row.generated, ['gen.txt']);
+  assert.strictEqual(row.added, 1, 'only .gitattributes counts');
+});
+
+test('a timeout in the check-attr step keeps the rows with no generated files and is transient and uncached', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  const dir = initRepo(t, 'commits-timeout-attr');
+  commitFiles(dir, { 'a.txt': lines(2) }, 'work', 1000);
   resetCommitState();
-  const slow = gitRun((args) => { if (args.includes('check-attr')) throw Object.assign(new Error('t'), { code: 'ETIMEDOUT', signal: 'SIGTERM' }); });
-  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit -m work', run: slow }), { rows: [], transient: true });
+  const res = resolveCommits({ dir, ...WINDOW, command: 'git commit -m work', run: slowOn('check-attr') });
+  assert.strictEqual(res.transient, true);
+  assert.strictEqual(res.rows.length, 1);
+  assert.deepStrictEqual(res.rows[0].generated, []);
+  assert.strictEqual(res.rows[0].added, 2);
+  assert.strictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit -m work', run: gitRun() }).transient, false, 'a transient result is not cached');
+});
+
+test('a timeout in the patch-id step keeps the rows with patchId null and is transient', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  const dir = initRepo(t, 'commits-timeout-patchid');
+  commitFiles(dir, { 'a.txt': lines(2) }, 'work', 1000);
+  resetCommitState();
+  const res = resolveCommits({ dir, ...WINDOW, command: 'git commit -m work', run: slowOn('patch-id') });
+  assert.strictEqual(res.transient, true);
+  assert.strictEqual(res.rows.length, 1);
+  assert.strictEqual(res.rows[0].patchId, null);
+  assert.strictEqual(res.rows[0].added, 2);
+});
+
+test('a timeout in the reflog step of a re-record keeps the rows unmarked and is transient', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  const dir = initRepo(t, 'commits-timeout-reflog');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  commitFiles(dir, { 'p.txt': lines(3) }, 'pre', 1000);
+  git(dir, ['reset', '-q', '--soft', 'HEAD~1'], 1001);
+  commitFiles(dir, { 'p.txt': lines(4) }, 'new', 1002);
+  resetCommitState();
+  const slow = (args, cwd, opts) => {
+    if (args[0] === 'log' && args.includes('-g') && args.includes('--date=unix')) throw Object.assign(new Error('t'), { code: 'ETIMEDOUT', signal: 'SIGTERM' });
+    return gitRun()(args, cwd, opts);
+  };
+  const res = resolveCommits({ dir, t0: 998_500, t1: 1_003_000, command: 'x', rerecordSince: 1_000_500, run: slow });
+  assert.strictEqual(res.transient, true);
+  assert.ok(res.rows.length > 0 && res.rows.every((r) => !r.squash));
+});
+
+test('a timeout in the main log query still returns no rows and is transient', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  const dir = initRepo(t, 'commits-timeout-log');
+  commitFiles(dir, { 'a.txt': lines(2) }, 'work', 1000);
+  resetCommitState();
+  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit -m work', run: slowOn('--numstat') }), { rows: [], transient: true });
 });
 
 test('resolveCommits reads a commit that an amend removed from every ref from the HEAD reflog', { skip: !hasGit }, (t) => {
