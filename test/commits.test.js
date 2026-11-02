@@ -391,7 +391,8 @@ test('an amend followed by a rebase exempts only the amended commit', { skip: !h
   // The rebase rewrites `side` after the amend, so its copy has the later committer time.
   git(dir, ['rebase', '-q', 'main', 'side'], 1000);
   const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit --amend --no-edit && git rebase main side' });
-  assert.deepStrictEqual(rows.map((x) => x.sha), [amended]);
+  assert.deepStrictEqual(rows.filter((x) => !x.rewrite).map((x) => x.sha), [amended]);
+  assert.ok(rows.filter((x) => x.rewrite).length > 0, 'the rebased copy of side is a rewrite row, not exempt');
 });
 
 test('ENOBUFS is permanent, cached and named in a warning', (t) => {
@@ -574,7 +575,8 @@ test('a lone amend exempts the newest out-of-window commit', { skip: !hasGit }, 
   gitAt(['commit', '-q', '--amend', '--no-edit'], 400, 1001);
   const head = git(dir, ['rev-parse', 'HEAD'], 1001);
   const { rows } = resolveCommits({ dir, t0: 1_001_000, t1: 1_001_500, command: 'git commit --amend --no-edit' });
-  assert.deepStrictEqual(rows.map((x) => x.sha), [head]);
+  assert.deepStrictEqual(rows.filter((x) => !x.rewrite).map((x) => x.sha), [head]);
+  assert.strictEqual(rows.find((x) => x.sha !== head)?.rewrite, true, 'the previous call\'s commit is a rewrite row');
 });
 
 test('resolveCommits marks a reflog-recovered row of an --amend call as an amend', { skip: !hasGit }, (t) => {
@@ -592,4 +594,41 @@ test('resolveCommits marks a reflog-recovered row of an --amend call as an amend
   assert.strictEqual(rows.length, 1);
   assert.strictEqual(rows[0].fromReflog, true);
   assert.strictEqual(rows[0].amend, true);
+});
+
+// Runs git with only the committer date set, so a rebase keeps each commit's author time.
+function gitCommitterAt(dir, args, secs, extraEnv = {}) {
+  const env = { ...process.env, GIT_COMMITTER_DATE: `@${secs} +0000`, ...extraEnv };
+  const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', '-c', 'commit.gpgsign=false', ...args], { cwd: dir, env, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  return r.stdout.trim();
+}
+
+test('resolveCommits returns the copies a rebase made as rewrite rows', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-rewrite');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  git(dir, ['checkout', '-q', '-b', 'side'], 100);
+  commitFiles(dir, { 's.txt': lines(4) }, 'old work', 500);
+  git(dir, ['checkout', '-q', 'main'], 600);
+  const mine = commitFiles(dir, { 'm.txt': 'x\n' }, 'y', 1000);
+  gitCommitterAt(dir, ['rebase', '-q', 'main', 'side'], 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git rebase main side' });
+  const copy = rows.find((r) => r.subject === 'old work');
+  assert.strictEqual(copy?.rewrite, true);
+  assert.strictEqual(copy.added, 4);
+  assert.ok(!rows.find((r) => r.sha === mine)?.rewrite);
+});
+
+test('resolveCommits returns no rewrite row for a cherry-picked commit by another author', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-rewrite-other');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  git(dir, ['checkout', '-q', '-b', 'side'], 100);
+  fs.writeFileSync(path.join(dir, 's.txt'), lines(4));
+  git(dir, ['add', '-A'], 500);
+  git(dir, ['commit', '-q', '-m', 'theirs', '--author', 'Other <other@e.x>'], 500);
+  const theirs = git(dir, ['rev-parse', 'HEAD'], 500);
+  git(dir, ['checkout', '-q', 'main'], 600);
+  gitCommitterAt(dir, ['cherry-pick', theirs], 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git cherry-pick ' + theirs });
+  assert.deepStrictEqual(rows, []);
 });
