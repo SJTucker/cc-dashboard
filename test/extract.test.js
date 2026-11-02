@@ -889,7 +889,7 @@ test('extractFile records a commit row for a Bash git commit', { skip: !hasGit }
   const { sha, parent, ...rest } = rows.commits[0];
   assert.match(sha, /^[0-9a-f]{40}$/);
   assert.strictEqual(parent, null);
-  assert.deepStrictEqual(rest, { added: 3, removed: 0, files: [path.join(repo, 'a.txt')], repo, toplevel: repo, amend: false, authorTime: COMMIT_SECS, authorEmail: 't@e.x', subject: 'feat: x', toolUseId: 'toolu_c', t: Date.parse(T1), sessionId: 's1' });
+  assert.deepStrictEqual(rest, { added: 3, removed: 0, files: ['a.txt'], repo, toplevel: repo, amend: false, named: true, authorTime: COMMIT_SECS, authorEmail: 't@e.x', subject: 'feat: x', toolUseId: 'toolu_c', t: Date.parse(T1), sessionId: 's1' });
 });
 
 test('extractFile uses the line cwd when the command has no cd', { skip: !hasGit }, async (t) => {
@@ -904,11 +904,15 @@ test('extractFile records no commit row when the commit call failed', { skip: !h
   assert.deepStrictEqual(rows.commits, []);
 });
 
-test('extractFile flags the row set when git cannot run', { skip: !hasGit }, async (t) => {
+test('extractFile flags the row set when a git call is killed', { skip: !hasGit }, async (t) => {
   const repo = commitRepo(t);
-  const file = writeTranscript([commitCall(`cd ${repo} && git commit -m "feat: x" # no git`), commitResult()]);
+  const file = writeTranscript([commitCall(`cd ${repo} && git commit -m "feat: x" # killed git`), commitResult()]);
+  // A fake `git` that kills itself with SIGTERM gives the same error shape as a timeout.
+  const fakeDir = fs.mkdtempSync(path.join(os.tmpdir(), 'fakegit-'));
+  t.after(() => fs.rmSync(fakeDir, { recursive: true, force: true }));
+  fs.writeFileSync(path.join(fakeDir, 'git'), '#!/bin/sh\nkill -TERM $$\n', { mode: 0o755 });
   const saved = process.env.PATH;
-  process.env.PATH = '';
+  process.env.PATH = fakeDir;
   let rows;
   try {
     rows = await extractFile(file);

@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const helpers = require('./helpers');
-const { isCommitCommand, commitDir, resolveCommits } = require('../lib/commits');
+const { isCommitCommand, commitDir, resolveCommits, resetCommitState } = require('../lib/commits');
 
 const hasGit = spawnSync('git', ['--version']).status === 0;
 
@@ -63,7 +63,7 @@ test('resolveCommits finds the commit in the window', { skip: !hasGit }, (t) => 
   assert.strictEqual(rows.length, 1);
   assert.strictEqual(rows[0].added, 3);
   assert.strictEqual(rows[0].removed, 1);
-  assert.deepStrictEqual([...rows[0].files].sort(), [path.join(top, 'a.txt'), path.join(top, 'b.txt')]);
+  assert.deepStrictEqual([...rows[0].files].sort(), ['a.txt', 'b.txt']);
   assert.strictEqual(rows[0].parent, first);
   assert.strictEqual(rows[0].amend, false);
 });
@@ -200,5 +200,73 @@ test('resolveCommits lists a non-ASCII file name unquoted', { skip: !hasGit }, (
   const dir = initRepo(t, 'commits-utf8');
   commitFiles(dir, { 'caf\u00e9.txt': 'x\n' }, 'utf8', 1000);
   const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m utf8' });
-  assert.deepStrictEqual(rows[0].files, [path.join(fs.realpathSync(dir), 'caf\u00e9.txt')]);
+  assert.deepStrictEqual(rows[0].files, ['caf\u00e9.txt']);
+});
+
+const failing = (shape) => () => { throw Object.assign(new Error('git failed'), shape); };
+const failShapes = {
+  ENOENT: { code: 'ENOENT', errno: -2, syscall: 'spawnSync git' },
+  stub: { status: 1, stderr: 'xcode-select: note: No developer tools were found, requesting install.\nxcrun: error: invalid active developer path' },
+};
+
+for (const [name, shape] of Object.entries(failShapes)) {
+  test(`resolveCommits stops spawning git after the ${name} failure`, (t) => {
+    t.after(resetCommitState);
+    resetCommitState();
+    let calls = 0;
+    const run = (...a) => { calls++; return failing(shape)(...a); };
+    const first = resolveCommits({ dir: os.tmpdir(), t0: 8_000_000, t1: 8_000_100, command: 'git commit -m x', run });
+    assert.deepStrictEqual(first, { rows: [], transient: false });
+    assert.strictEqual(calls, 1);
+    const other = resolveCommits({ dir: os.tmpdir(), t0: 8_100_000, t1: 8_100_100, command: 'git commit -m y', run });
+    assert.deepStrictEqual(other, { rows: [], transient: false });
+    assert.strictEqual(calls, 1);
+  });
+}
+
+test('resolveCommits caches a dubious-ownership failure without flagging it', (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  let calls = 0;
+  const run = (...a) => { calls++; return failing({ status: 128, stderr: "fatal: detected dubious ownership in repository at '/r'" })(...a); };
+  const opts = { dir: os.tmpdir(), t0: 8_200_000, t1: 8_200_100, command: 'git commit -m x', run };
+  assert.deepStrictEqual(resolveCommits(opts), { rows: [], transient: false });
+  resolveCommits(opts);
+  assert.strictEqual(calls, 1);
+});
+
+test('resolveCommits flags a signal kill as transient and does not cache it', (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  let calls = 0;
+  const run = (...a) => { calls++; return failing({ signal: 'SIGKILL', status: null })(...a); };
+  const opts = { dir: os.tmpdir(), t0: 8_300_000, t1: 8_300_100, command: 'git commit -m x', run };
+  assert.deepStrictEqual(resolveCommits(opts), { rows: [], transient: true });
+  resolveCommits(opts);
+  assert.strictEqual(calls, 2);
+});
+
+test('resolveCommits runs rev-parse once per directory', (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const seen = [];
+  const run = (args) => { seen.push(args[0] === 'rev-parse' ? 'rev-parse' : 'log'); return args[0] === 'rev-parse' ? '/nonexistent-top\n' : ''; };
+  const dir = os.tmpdir();
+  resolveCommits({ dir, t0: 9_000_000, t1: 9_000_100, command: 'git commit -m x', run });
+  resolveCommits({ dir, t0: 9_500_000, t1: 9_500_100, command: 'git commit -m x', run });
+  assert.strictEqual(seen.filter((a) => a === 'rev-parse').length, 1);
+  assert.ok(seen.filter((a) => a === 'log').length >= 2);
+});
+
+test('resolveCommits reads HEAD first, so a sibling worktree commit is not returned', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-sibling');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  const other = helpers.tmpDir(t, 'commits-sibling-wt') + '/wt';
+  git(dir, ['worktree', 'add', '-q', '-b', 'other', other], 100);
+  const mine = commitFiles(dir, { 'a.txt': lines(2) }, 'in a', 1000);
+  commitFiles(other, { 'b.txt': lines(5) }, 'in b', 1001);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit --amend --no-edit' });
+  assert.deepStrictEqual(rows.map((r) => r.sha), [mine]);
+  assert.strictEqual(rows[0].amend, true);
+  assert.strictEqual(rows[0].named, undefined);
 });
