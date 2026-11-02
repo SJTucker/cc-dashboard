@@ -886,10 +886,11 @@ test('extractFile records a commit row for a Bash git commit', { skip: !hasGit }
   const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git commit -m "feat: x"`), commitResult()]));
 
   assert.strictEqual(rows.commits.length, 1);
-  const { sha, parent, ...rest } = rows.commits[0];
+  const { sha, parent, patchId, ...rest } = rows.commits[0];
   assert.match(sha, /^[0-9a-f]{40}$/);
+  assert.match(patchId, /^[0-9a-f]{40}$/);
   assert.strictEqual(parent, null);
-  assert.deepStrictEqual(rest, { added: 3, removed: 0, files: ['a.txt'], repo, toplevel: repo, amend: false, named: true, authorTime: COMMIT_SECS, authorEmail: 't@e.x', subject: 'feat: x', toolUseId: 'toolu_c', t: Date.parse(T1), sessionId: 's1' });
+  assert.deepStrictEqual(rest, { added: 3, removed: 0, files: ['a.txt'], generated: [], amendOf: null, repo, toplevel: repo, amend: false, named: true, authorTime: COMMIT_SECS, authorEmail: 't@e.x', subject: 'feat: x', toolUseId: 'toolu_c', t: Date.parse(T1), sessionId: 's1' });
 });
 
 test('extractFile uses the line cwd when the command has no cd', { skip: !hasGit }, async (t) => {

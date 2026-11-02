@@ -431,3 +431,114 @@ test('a file name with a newline is counted and listed', { skip: !hasGit }, (t) 
   assert.strictEqual(rows[0].added, 2);
   assert.deepStrictEqual([...rows[0].files].sort(), ['n\nl.txt', 't\tab.txt']);
 });
+
+// A run stub that forwards to git and throws for the calls `fail` matches.
+function gitRun(fail) {
+  const { execFileSync } = require('child_process');
+  return (args, cwd, opts = {}) => {
+    if (fail && fail(args)) throw Object.assign(new Error('git failed'), { status: 129, stderr: 'error: unknown option' });
+    return execFileSync('git', args, { cwd, encoding: 'utf8', input: opts.input, stdio: ['pipe', 'pipe', 'pipe'] });
+  };
+}
+
+test('rows carry a patchId that matches a cherry-picked copy', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-patchid');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  git(dir, ['checkout', '-q', '-b', 'a'], 100);
+  const x = commitFiles(dir, { 'x.txt': lines(3) }, 'feat: x', 1000);
+  git(dir, ['checkout', '-q', 'main'], 1000);
+  git(dir, ['cherry-pick', x], 1001);
+  const a = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: x"', run: gitRun() });
+  git(dir, ['checkout', '-q', 'a'], 1000);
+  resetCommitState();
+  const b = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: x"', run: gitRun() });
+  assert.strictEqual(a.rows.length, 1);
+  assert.strictEqual(b.rows.length, 1);
+  assert.notStrictEqual(a.rows[0].sha, b.rows[0].sha);
+  assert.match(a.rows[0].patchId, /^[0-9a-f]{40}/);
+  assert.strictEqual(a.rows[0].patchId, b.rows[0].patchId);
+});
+
+for (const attr of ['linguist-generated', 'linguist-vendored']) {
+  test(`generated files count 0 and the commit still gets a patchId (${attr})`, { skip: !hasGit }, (t) => {
+    const dir = initRepo(t, `commits-gen-${attr}`);
+    commitFiles(dir, { 'base.txt': 'x\n', '.gitattributes': `data/** ${attr}\n` }, 'base', 100);
+    fs.mkdirSync(path.join(dir, 'data'));
+    commitFiles(dir, { 'data/big.md': lines(500), 'a.js': lines(2) }, 'feat: data', 1000);
+    const { rows, transient } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: data"' });
+    assert.strictEqual(transient, false);
+    assert.strictEqual(rows.length, 1);
+    assert.strictEqual(rows[0].added, 2);
+    assert.strictEqual(rows[0].removed, 0);
+    assert.deepStrictEqual(rows[0].generated, ['data/big.md']);
+    assert.ok(rows[0].files.includes('data/big.md'));
+    assert.ok(rows[0].patchId);
+  });
+}
+
+test('attributes come from the commit\'s own tree', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-gen-tree');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  fs.mkdirSync(path.join(dir, 'data'));
+  commitFiles(dir, { '.gitattributes': 'data/** linguist-generated\n', 'data/big.md': lines(500), 'a.js': lines(2) }, 'feat: both', 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: both"' });
+  // a.js (2 lines) and the one-line .gitattributes count. data/big.md counts 0.
+  assert.strictEqual(rows[0].added, 3);
+  assert.deepStrictEqual(rows[0].generated, ['data/big.md']);
+});
+
+test('an old git without check-attr --source falls back to the working tree', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-gen-old');
+  commitFiles(dir, { 'base.txt': 'x\n', '.gitattributes': 'data/** linguist-generated\n' }, 'base', 100);
+  fs.mkdirSync(path.join(dir, 'data'));
+  commitFiles(dir, { 'data/big.md': lines(50), 'a.js': lines(2) }, 'feat: data', 1000);
+  const calls = [];
+  const noSource = (args) => { calls.push(args); return args.includes('check-attr') && args.some((a) => a.startsWith('--source')); };
+  const one = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: data"', run: gitRun(noSource) });
+  assert.strictEqual(one.rows[0].added, 2);
+  assert.deepStrictEqual(one.rows[0].generated, ['data/big.md']);
+  assert.ok(calls.some((a) => a.includes('check-attr') && !a.some((x) => x.startsWith('--source'))));
+  resetCommitState();
+  const both = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: data"', run: gitRun((args) => args.includes('check-attr')) });
+  assert.strictEqual(both.transient, false);
+  assert.strictEqual(both.rows.length, 1);
+  assert.deepStrictEqual(both.rows[0].generated, []);
+  assert.ok(both.rows[0].patchId);
+});
+
+function amendTwoStep(dir, secs) {
+  fs.appendFileSync(path.join(dir, 'a.txt'), lines(3));
+  git(dir, ['add', '-A'], secs);
+  git(dir, ['commit', '-q', '--amend', '--no-edit'], secs);
+}
+
+test('an amend row carries amendOf from the reflog', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-amendof');
+  const c1 = commitFiles(dir, { 'a.txt': lines(10) }, 'work', 500);
+  amendTwoStep(dir, 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit --amend --no-edit', run: gitRun() });
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].amend, true);
+  assert.strictEqual(rows[0].added, 13);
+  assert.deepStrictEqual(rows[0].amendOf, { sha: c1, added: 3, removed: 0 });
+});
+
+test('an amend in a folder without a reflog has amendOf null', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-noreflog');
+  commitFiles(dir, { 'a.txt': lines(10) }, 'work', 500);
+  amendTwoStep(dir, 1000);
+  const { rows, transient } = resolveCommits({ dir, ...WINDOW, command: 'git commit --amend --no-edit', run: gitRun((args) => args.includes('-g')) });
+  assert.strictEqual(transient, false);
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].amendOf, null);
+});
+
+test('a non-amend row has amendOf null and a timeout in a new step is transient', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-timeout');
+  commitFiles(dir, { 'a.txt': lines(2) }, 'work', 1000);
+  const one = resolveCommits({ dir, ...WINDOW, command: 'git commit -m work', run: gitRun() });
+  assert.strictEqual(one.rows[0].amendOf, null);
+  resetCommitState();
+  const slow = gitRun((args) => { if (args.includes('check-attr')) throw Object.assign(new Error('t'), { code: 'ETIMEDOUT', signal: 'SIGTERM' }); });
+  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit -m work', run: slow }), { rows: [], transient: true });
+});
