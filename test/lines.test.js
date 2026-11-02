@@ -284,11 +284,41 @@ test('file coverage drops a rewrite row but not a reflog row', () => {
   assert.strictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js']), rl]).length, 3);
 });
 
-test('a squash row, a reflog row and a rewrite row with one author key leave only the squash row, counting 0', () => {
+test('a squash row never drops an earlier reflog row: the reflog row counts and its rewrite twin is dropped', () => {
   const s = commit({ sha: sha('a'), t: 3, squash: true, patchId: 'S', ...rf });
   const r = commit({ sha: sha('b'), t: 1, fromReflog: true, patchId: 'R', ...rf });
   const w = commit({ sha: sha('c'), t: 2, rewrite: true, committerEmail: 'x@y', patchId: 'W', ...rf });
-  assert.deepStrictEqual(lineRows([], [s, r, w]), []);
+  assert.deepStrictEqual(lineRows([], [s, r, w]), [row(10, 2, 1)]);
+});
+
+test('a squash row drops a later rewrite row with its author key', () => {
+  const s = commit({ sha: sha('a'), t: 3, squash: true, patchId: 'S', ...rf });
+  const w = commit({ sha: sha('c'), t: 5, rewrite: true, committerEmail: 'x@y', patchId: 'W', ...rf });
+  assert.deepStrictEqual(lineRows([], [s, w]), []);
+});
+
+test('a squash row twins a later rewrite row by patchId', () => {
+  const s = commit({ sha: sha('a'), t: 3, squash: true, patchId: 'S', ...rf });
+  const w = commit({ sha: sha('c'), t: 5, rewrite: true, committerEmail: 'x@y', patchId: 'S', authorTime: 1, subject: 'other', files: ['z'] });
+  assert.deepStrictEqual(lineRows([], [s, w]), []);
+});
+
+test('a merge --squash of a one-commit branch counts the branch commit once', () => {
+  const r = commit({ sha: sha('b'), t: 1, fromReflog: true, patchId: 'P', ...rf });
+  const s = commit({ sha: sha('a'), t: 3, squash: true, patchId: 'P', authorTime: 3, authorEmail: 'me@x', subject: 'feat: squashed', files: ['/r/a.js'] });
+  assert.deepStrictEqual(lineRows([], [r, s]), [row(10, 2, 1)]);
+});
+
+test('a reworded re-record counts the reflog original once', () => {
+  const r = commit({ sha: sha('b'), t: 1, fromReflog: true, patchId: 'P', ...rf });
+  const s = commit({ sha: sha('a'), t: 3, squash: true, patchId: 'P', rerecordDelta: { added: 0, removed: 0 }, authorTime: 3, authorEmail: 'me@x', subject: 'reworded', files: ['/r/a.js'] });
+  assert.deepStrictEqual(lineRows([], [r, s]), [row(10, 2, 1)]);
+});
+
+test('a re-record with the same subject and a new file counts the original plus the new lines', () => {
+  const r = commit({ sha: sha('b'), t: 1, fromReflog: true, patchId: 'P1', ...rf });
+  const s = commit({ sha: sha('a'), t: 3, squash: true, added: 13, patchId: 'P2', rerecordDelta: { added: 3, removed: 0 }, ...rf, authorTime: 3 });
+  assert.deepStrictEqual(lineRows([], [r, s]), [row(10, 2, 1), row(3, 0, 3)]);
 });
 
 test('with no primary or squash row, a reflog row counts and its rewrite twin is dropped', () => {
