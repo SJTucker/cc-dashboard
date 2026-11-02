@@ -21,6 +21,10 @@ test('isCommitCommand recognises git commit calls', () => {
   }
 });
 
+test('commitDirs closes a subshell whose commit message holds a parenthesis', () => {
+  assert.deepStrictEqual(commitDirs('(cd /a && git commit -m "fix(x)") && git commit -m y', '/c'), ['/a', '/c']);
+});
+
 test('commitDirs lists the directory of every git commit segment', () => {
   assert.deepStrictEqual(commitDirs('cd /a && git commit -m x; cd /b && git commit -m y', '/c'), ['/a', '/b']);
   assert.deepStrictEqual(commitDirs('(cd /a && git commit -m x)', '/c'), ['/a']);
