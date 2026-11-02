@@ -159,3 +159,35 @@ test('a live-worktree commit does not cover the same path edited in another work
   const c = commit({ t: 2, toplevel: '/r.b', files: ['src/a.js'] });
   assert.deepStrictEqual(lineRows([e], [c]), [row(5, 1, 1), row(10, 2, 2)]);
 });
+
+test('an amend of a patch-id copy subtracts the dropped copy and emits only the kept row', () => {
+  const c = commit({ sha: sha('a'), t: 1, parent: 'P1', patchId: 'X', added: 10, removed: 0, ...who });
+  const copy = commit({ sha: sha('b'), t: 2, parent: 'P2', patchId: 'X', added: 10, removed: 0, ...who });
+  const a = commit({ sha: sha('c'), t: 3, parent: 'P2', amend: true, added: 14, removed: 0, ...who });
+  assert.deepStrictEqual(lineRows([], [c, copy, a]), [row(10, 0, 1), row(4, 0, 3)]);
+});
+
+test('a fallback commit covers an edit of its own removed worktree only', () => {
+  const c = commit({ t: 2, toplevel: '/r', root: '/r.b', fallback: true, files: ['src/a.js'] });
+  const other = edit({ t: 1, file: '/r.a/src/a.js', root: '/r.a' });
+  const own = edit({ t: 1, file: '/r.b/src/a.js', root: '/r.b' });
+  assert.deepStrictEqual(lineRows([other], [c]), [row(5, 1, 1), row(10, 2, 2)]);
+  assert.deepStrictEqual(lineRows([own], [c]), [row(10, 2, 2)]);
+});
+
+test('an edit outside its root still matches by absolute path', () => {
+  const e = edit({ t: 1, file: '/elsewhere/a.js', root: '/r' });
+  const c = commit({ t: 2, files: ['a.js'], toplevel: '/elsewhere' });
+  assert.deepStrictEqual(lineRows([e], [c]), [row(10, 2, 2)]);
+});
+
+test('an amend of a squash-marked original counts only its delta', () => {
+  const o = commit({ sha: sha('a'), t: 1, squash: true, added: 10, removed: 0, ...who });
+  const a = commit({ sha: sha('b'), t: 2, amend: true, added: 12, removed: 0, ...who });
+  assert.deepStrictEqual(lineRows([], [o, a]), [row(2, 0, 2)]);
+});
+
+test('an amend with amendOf and no original in the rows counts amendOf', () => {
+  const a = commit({ sha: sha('b'), t: 2, amend: true, added: 40, removed: 0, amendOf: { sha: sha('z'), added: 3, removed: 1 }, ...who });
+  assert.deepStrictEqual(lineRows([], [a]), [row(3, 1, 2)]);
+});

@@ -1070,3 +1070,12 @@ test('edit rows carry their checkout root', async (t) => {
   ]));
   assert.strictEqual(rows.edits[0].root, wt);
 });
+
+test('a commit resolved through the removed-worktree fallback carries the worktree root', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const wt = `${repo}.wt`;
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${wt} && git commit -m "feat: x"`), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+  assert.strictEqual(rows.commits[0].fallback, true);
+  assert.strictEqual(rows.commits[0].root, wt);
+});
