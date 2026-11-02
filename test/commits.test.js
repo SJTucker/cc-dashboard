@@ -58,7 +58,7 @@ test('resolveCommits finds the commit in the window', { skip: !hasGit }, (t) => 
   const dir = initRepo(t, 'commits');
   const first = commitFiles(dir, { 'b.txt': 'x\ny\n' }, 'init', 500);
   commitFiles(dir, { 'a.txt': lines(3), 'b.txt': 'x\n' }, 'feat: one', 1000);
-  const rows = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: one"' });
+  const rows = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: one"' }).rows;
   const top = fs.realpathSync(dir);
   assert.strictEqual(rows.length, 1);
   assert.strictEqual(rows[0].added, 3);
@@ -71,7 +71,7 @@ test('resolveCommits finds the commit in the window', { skip: !hasGit }, (t) => 
 test('resolveCommits ignores commits outside the window', { skip: !hasGit }, (t) => {
   const dir = initRepo(t, 'commits-out');
   commitFiles(dir, { 'a.txt': 'x\n' }, 'old', 900);
-  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit -m old' }), []);
+  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit -m old' }).rows, []);
 });
 
 test('resolveCommits skips merge commits', { skip: !hasGit }, (t) => {
@@ -82,7 +82,7 @@ test('resolveCommits skips merge commits', { skip: !hasGit }, (t) => {
   git(dir, ['checkout', '-q', 'main'], 1000);
   const main = commitFiles(dir, { 'm.txt': 'x\n' }, 'main', 1000);
   git(dir, ['merge', '--no-ff', '-q', '-m', 'merge', 'side'], 1000);
-  const rows = resolveCommits({ dir, ...WINDOW, command: 'git commit -F msg.txt' });
+  const rows = resolveCommits({ dir, ...WINDOW, command: 'git commit -F msg.txt' }).rows;
   assert.deepStrictEqual(rows.map((r) => r.sha).sort(), [side, main].sort());
 });
 
@@ -90,9 +90,9 @@ test('resolveCommits prefers commits whose subject is in the command', { skip: !
   const dir = initRepo(t, 'commits-subject');
   commitFiles(dir, { 'a.txt': 'x\n' }, 'feat: one', 1000);
   const two = commitFiles(dir, { 'b.txt': 'x\n' }, 'feat: two', 1001);
-  const hit = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: two"' });
+  const hit = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: two"' }).rows;
   assert.deepStrictEqual(hit.map((r) => r.sha), [two]);
-  const miss = resolveCommits({ dir, ...WINDOW, command: 'git commit -F msg.txt' });
+  const miss = resolveCommits({ dir, ...WINDOW, command: 'git commit -F msg.txt' }).rows;
   assert.strictEqual(miss.length, 2);
 });
 
@@ -100,14 +100,14 @@ test('resolveCommits counts binary and lockfiles as zero', { skip: !hasGit }, (t
   const dir = initRepo(t, 'commits-lock');
   fs.writeFileSync(path.join(dir, 'p.png'), Buffer.from([0, 1, 2, 0, 255, 0]));
   commitFiles(dir, { 'package-lock.json': lines(500), 'a.js': lines(2) }, 'deps', 1000);
-  const [row] = resolveCommits({ dir, ...WINDOW, command: 'git commit -m deps' });
+  const [row] = resolveCommits({ dir, ...WINDOW, command: 'git commit -m deps' }).rows;
   assert.strictEqual(row.added, 2);
   assert.strictEqual(row.removed, 0);
   assert.deepStrictEqual(row.files.map((f) => path.basename(f)).sort(), ['a.js', 'p.png', 'package-lock.json']);
 });
 
-test('resolveCommits returns [] for a missing dir', () => {
-  assert.deepStrictEqual(resolveCommits({ dir: '/nonexistent/x', ...WINDOW, command: 'git commit -m x' }), []);
+test('resolveCommits returns [] for a missing dir, cached and not transient', () => {
+  assert.deepStrictEqual(resolveCommits({ dir: '/nonexistent/x', ...WINDOW, command: 'git commit -m x' }), { rows: [], transient: false });
 });
 
 test('resolveCommits falls back to findRepo for a deleted worktree', { skip: !hasGit }, (t) => {
@@ -116,7 +116,7 @@ test('resolveCommits falls back to findRepo for a deleted worktree', { skip: !ha
   fs.mkdirSync(app);
   git(app, ['init', '-q', '-b', 'main'], 1);
   const sha = commitFiles(app, { 'a.txt': 'x\n' }, 'feat', 1000);
-  const rows = resolveCommits({ dir: path.join(base, 'app.feature'), ...WINDOW, command: 'git commit -m feat' });
+  const { rows } = resolveCommits({ dir: path.join(base, 'app.feature'), ...WINDOW, command: 'git commit -m feat' });
   assert.deepStrictEqual(rows.map((r) => r.sha), [sha]);
 });
 
@@ -133,4 +133,72 @@ test('resolveCommits caches by dir and window', () => {
   assert.ok(first > 0);
   resolveCommits(opts);
   assert.strictEqual(calls, first);
+});
+
+test('resolveCommits does not cache a transient failure and flags it', () => {
+  let calls = 0;
+  const run = () => {
+    calls++;
+    throw Object.assign(new Error('spawnSync git ETIMEDOUT'), { code: 'ETIMEDOUT', signal: 'SIGTERM' });
+  };
+  const opts = { dir: os.tmpdir(), t0: 6_000_000, t1: 6_000_100, command: 'git commit -m x', run };
+  assert.deepStrictEqual(resolveCommits(opts), { rows: [], transient: true });
+  assert.deepStrictEqual(resolveCommits(opts), { rows: [], transient: true });
+  assert.strictEqual(calls, 2);
+});
+
+test('resolveCommits caches a folder that is not a git repository', () => {
+  let calls = 0;
+  const run = () => {
+    calls++;
+    throw Object.assign(new Error('fatal'), { status: 128, stderr: 'fatal: not a git repository (or any of the parent directories): .git' });
+  };
+  const opts = { dir: os.tmpdir(), t0: 7_000_000, t1: 7_000_100, command: 'git commit -m x', run };
+  assert.deepStrictEqual(resolveCommits(opts), { rows: [], transient: false });
+  resolveCommits(opts);
+  assert.strictEqual(calls, 1);
+});
+
+test('resolveCommits drops a rewritten copy made inside the window', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-rebase');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  git(dir, ['checkout', '-q', '-b', 'side'], 100);
+  commitFiles(dir, { 's.txt': lines(4) }, 'old work', 500);
+  git(dir, ['checkout', '-q', 'main'], 600);
+  const mine = commitFiles(dir, { 'm.txt': 'x\n' }, 'y', 1000);
+  // Rebasing side onto main at 1000 s keeps the author time (500) and moves the committer time.
+  git(dir, ['rebase', '-q', 'main', 'side'], 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m y && git rebase main side' });
+  assert.deepStrictEqual(rows.map((r) => r.sha), [mine]);
+});
+
+test('resolveCommits keeps the old author time for an amend', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-amend');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'work', 500);
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'x\ny\n');
+  git(dir, ['add', '-A'], 1000);
+  const env = { ...process.env, GIT_COMMITTER_DATE: '@1000 +0000' };
+  const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', 'commit', '-q', '--amend', '--no-edit'], { cwd: dir, env, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit --amend --no-edit' });
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].amend, true);
+  assert.strictEqual(rows[0].authorTime, 500);
+  assert.strictEqual(rows[0].toplevel, fs.realpathSync(dir));
+});
+
+test('resolveCommits reads --amend only from words outside quotes', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-amend-text');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'docs: explain --amend', 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "docs: explain --amend"' });
+  assert.strictEqual(rows[0].amend, false);
+  const heredoc = resolveCommits({ dir, ...WINDOW, command: "git commit -m \"$(cat <<'EOF'\ndocs: explain --amend\nEOF\n)\"" });
+  assert.strictEqual(heredoc.rows[0].amend, false);
+});
+
+test('resolveCommits lists a non-ASCII file name unquoted', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-utf8');
+  commitFiles(dir, { 'caf\u00e9.txt': 'x\n' }, 'utf8', 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m utf8' });
+  assert.deepStrictEqual(rows[0].files, [path.join(fs.realpathSync(dir), 'caf\u00e9.txt')]);
 });

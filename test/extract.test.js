@@ -889,7 +889,7 @@ test('extractFile records a commit row for a Bash git commit', { skip: !hasGit }
   const { sha, parent, ...rest } = rows.commits[0];
   assert.match(sha, /^[0-9a-f]{40}$/);
   assert.strictEqual(parent, null);
-  assert.deepStrictEqual(rest, { added: 3, removed: 0, files: [path.join(repo, 'a.txt')], repo, amend: false, toolUseId: 'toolu_c', t: Date.parse(T1), sessionId: 's1' });
+  assert.deepStrictEqual(rest, { added: 3, removed: 0, files: [path.join(repo, 'a.txt')], repo, toplevel: repo, amend: false, authorTime: COMMIT_SECS, authorEmail: 't@e.x', subject: 'feat: x', toolUseId: 'toolu_c', t: Date.parse(T1), sessionId: 's1' });
 });
 
 test('extractFile uses the line cwd when the command has no cd', { skip: !hasGit }, async (t) => {
@@ -902,6 +902,24 @@ test('extractFile records no commit row when the commit call failed', { skip: !h
   const repo = commitRepo(t, { commit: false });
   const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git commit -m "feat: x"`), commitResult({}, { is_error: true })]));
   assert.deepStrictEqual(rows.commits, []);
+});
+
+test('extractFile flags the row set when git cannot run', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const file = writeTranscript([commitCall(`cd ${repo} && git commit -m "feat: x" # no git`), commitResult()]);
+  const saved = process.env.PATH;
+  process.env.PATH = '';
+  let rows;
+  try {
+    rows = await extractFile(file);
+  } finally {
+    process.env.PATH = saved;
+  }
+  assert.deepStrictEqual(rows.commits, []);
+  assert.strictEqual(rows.commitsIncomplete, true);
+  const again = await extractFile(file);
+  assert.strictEqual(again.commits.length, 1, 'a transient failure is not cached');
+  assert.strictEqual(again.commitsIncomplete, undefined);
 });
 
 test('extractFile records no commit row before the result arrives', { skip: !hasGit }, async (t) => {

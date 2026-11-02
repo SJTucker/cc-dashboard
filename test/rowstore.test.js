@@ -238,6 +238,36 @@ test('a restart with a populated database reads no file that is unchanged', asyn
   second.close();
 });
 
+test('an entry whose rows are flagged commitsIncomplete is read again on the next load', async () => {
+  const { dir } = makeProjects();
+  const file = writeFile(dir, 'inc', ['1'], 2 * DAY_MS);
+  const reads = [];
+  const clock = { now: Date.now() };
+  const rows = createRowStore({
+    projectsDir: () => dir,
+    agentUsageDir: () => null,
+    headlessUsageDir: () => null,
+    store: null,
+    now: () => clock.now,
+    extract: async (f) => {
+      reads.push(f);
+      const out = await extractFile(f);
+      return reads.length === 1 ? { ...out, commitsIncomplete: true } : out;
+    },
+  });
+  const refresh = async () => {
+    clock.now += REFRESH_SHARE_MS + 1;
+    await rows.refresh();
+  };
+  await refresh();
+  assert.strictEqual(rows.entries()[0].rows.ok, true, 'the incomplete rows are still used');
+  assert.strictEqual(rows.entries()[0].rows.calls.length, 1);
+  await refresh();
+  assert.deepStrictEqual(reads, [file, file]);
+  await refresh();
+  assert.strictEqual(reads.length, 2, 'complete rows are not read again');
+});
+
 test('a stored file with an older extract version is read again when it is on disk', async () => {
   const { dir } = makeProjects();
   const old = writeFile(dir, 'old', ['1'], 2 * DAY_MS);
