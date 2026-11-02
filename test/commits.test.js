@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const helpers = require('./helpers');
-const { isCommitCommand, commitDir, resolveCommits, resetCommitState } = require('../lib/commits');
+const { isCommitCommand, commitDir, commitDirs, resolveCommits, resetCommitState } = require('../lib/commits');
 
 const hasGit = spawnSync('git', ['--version']).status === 0;
 
@@ -29,6 +29,16 @@ test('commitDir finds the directory a commit runs in', () => {
   assert.strictEqual(commitDir('git commit -m x', '/c'), '/c');
   assert.strictEqual(commitDir('git commit -m x', null), null);
   assert.strictEqual(commitDir('cd /a && cd /b && git commit -m x', '/c'), '/b');
+});
+
+test('commitDirs lists the directory of every git commit segment', () => {
+  assert.deepStrictEqual(commitDirs('cd /a && git commit -m x; cd /b && git commit -m y', '/c'), ['/a', '/b']);
+  assert.deepStrictEqual(commitDirs('(cd /a && git commit -m x)', '/c'), ['/a']);
+  assert.deepStrictEqual(commitDirs('(cd /a) && git commit -m x', '/c'), ['/c']);
+  assert.deepStrictEqual(commitDirs('git -C /r commit -C HEAD --amend', '/c'), ['/r']);
+  assert.deepStrictEqual(commitDirs('git commit -C HEAD', '/c'), ['/c']);
+  assert.deepStrictEqual(commitDirs('git commit -m x && git commit -m y', '/c'), ['/c']);
+  assert.deepStrictEqual(commitDirs('git status', '/c'), []);
 });
 
 function git(dir, args, secs) {
@@ -311,4 +321,100 @@ test('resolveCommits skips --all for a failed call', { skip: !hasGit }, (t) => {
   const cmd = 'git commit --amend --no-edit';
   assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: cmd, failed: true }).rows, []);
   assert.strictEqual(resolveCommits({ dir, ...WINDOW, command: cmd }).rows.length, 1, 'a call that did not fail still falls back to --all');
+});
+
+test('a file named HEAD in the folder does not break the lookup', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const dir = initRepo(t, 'commits-head-file');
+  const sha = commitFiles(dir, { 'a.txt': 'x\n' }, 'feat: a', 1000);
+  fs.writeFileSync(path.join(dir, 'HEAD'), 'untracked\n');
+  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: a"' }).rows.map((r) => r.sha), [sha]);
+});
+
+test('a stash is not taken for a commit', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const dir = initRepo(t, 'commits-stash');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  fs.writeFileSync(path.join(dir, 'a.txt'), 'x\ny\nz\n');
+  git(dir, ['stash', '-q'], 1000);
+  // HEAD has nothing in the window, so the --all query runs and must skip refs/stash.
+  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git stash' }).rows, []);
+  const sha = commitFiles(dir, { 'b.txt': 'x\n' }, 'real', 1000);
+  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit -m real; git stash' }).rows.map((r) => r.sha), [sha]);
+});
+
+test('a rename counts the changed lines only', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const dir = initRepo(t, 'commits-rename');
+  commitFiles(dir, { 'a.js': 'one\ntwo\nthree\nfour\nfive\nsix\n' }, 'base', 100);
+  git(dir, ['mv', 'a.js', 'b.js'], 1000);
+  fs.writeFileSync(path.join(dir, 'b.js'), 'one\ntwo\nTHREE\nfour\nfive\nsix\n');
+  git(dir, ['add', '-A'], 1000);
+  git(dir, ['commit', '-q', '-m', 'mv'], 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m mv' });
+  assert.strictEqual(rows.length, 1);
+  assert.deepStrictEqual([rows[0].added, rows[0].removed, rows[0].files], [1, 1, ['b.js']]);
+});
+
+test('--date and -C commits keep their author time exemption', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const dir = initRepo(t, 'commits-exempt');
+  const old = commitFiles(dir, { 'a.txt': 'x\n' }, 'old', 100);
+  fs.writeFileSync(path.join(dir, 'b.txt'), 'x\n');
+  git(dir, ['add', '-A'], 1000);
+  const env = { ...process.env, GIT_COMMITTER_DATE: '@1000 +0000' };
+  const commit = (args) => {
+    const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', 'commit', '-q', ...args], { cwd: dir, env: { ...env, GIT_AUTHOR_DATE: '@100 +0000' }, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+  };
+  commit(['--date=@100 +0000', '-m', 'dated']);
+  const dated = git(dir, ['rev-parse', 'HEAD'], 1000);
+  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: 'git commit --date=@100 -m dated' }).rows.map((r) => r.sha), [dated]);
+  fs.writeFileSync(path.join(dir, 'c.txt'), 'x\n');
+  git(dir, ['add', '-A'], 1000);
+  commit(['-C', old]);
+  const reused = git(dir, ['rev-parse', 'HEAD'], 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: `git commit -C ${old}` });
+  assert.ok(rows.some((r) => r.sha === reused), 'the -C commit is returned');
+});
+
+test('an amend followed by a rebase exempts only the amended commit', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const dir = initRepo(t, 'commits-amend-rebase');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  git(dir, ['checkout', '-q', '-b', 'side'], 100);
+  commitFiles(dir, { 's.txt': lines(4) }, 'old side', 500);
+  git(dir, ['checkout', '-q', 'main'], 600);
+  commitFiles(dir, { 'm.txt': 'x\n' }, 'work', 700);
+  fs.writeFileSync(path.join(dir, 'm.txt'), 'x\ny\n');
+  git(dir, ['add', '-A'], 999);
+  const env = { ...process.env, GIT_COMMITTER_DATE: '@999 +0000' };
+  const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', 'commit', '-q', '--amend', '--no-edit'], { cwd: dir, env, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const amended = git(dir, ['rev-parse', 'HEAD'], 999);
+  // The rebase rewrites `side` after the amend, so its copy has the later committer time.
+  git(dir, ['rebase', '-q', 'main', 'side'], 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit --amend --no-edit && git rebase main side' });
+  assert.deepStrictEqual(rows.map((x) => x.sha), [amended]);
+});
+
+test('ENOBUFS is permanent, cached and named in a warning', (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const warnings = [];
+  t.mock.method(console, 'warn', (...a) => warnings.push(a.join(' ')));
+  let calls = 0;
+  const run = () => { calls++; throw { code: 'ENOBUFS', signal: 'SIGTERM' }; };
+  const dir = os.tmpdir();
+  const opts = { dir, t0: 13_000_000, t1: 13_000_100, command: 'git commit -m x', run };
+  assert.deepStrictEqual(resolveCommits(opts), { rows: [], transient: false });
+  const first = calls;
+  assert.deepStrictEqual(resolveCommits(opts), { rows: [], transient: false });
+  assert.strictEqual(calls, first);
+  assert.ok(warnings.some((w) => w.includes(dir)));
 });
