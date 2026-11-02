@@ -270,3 +270,45 @@ test('resolveCommits reads HEAD first, so a sibling worktree commit is not retur
   assert.strictEqual(rows[0].amend, true);
   assert.strictEqual(rows[0].named, undefined);
 });
+
+test('resolveCommits does not latch gitUnavailable for a deleted folder', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const gone = path.join(helpers.tmpDir(t, 'commits-gone'), 'deleted');
+  const enoent = { code: 'ENOENT', syscall: 'spawnSync git', path: 'git' };
+  let spawned = 0;
+  const run = (...a) => { spawned++; return failing(enoent)(...a); };
+  assert.deepStrictEqual(resolveCommits({ dir: gone, ...WINDOW, command: 'git commit -m x', run }), { rows: [], transient: false });
+  assert.strictEqual(spawned, 0, 'a missing folder is not sent to git');
+  // ENOENT for a folder that has vanished since the existence check is "gone", not "no git".
+  const vanishing = helpers.tmpDir(t, 'commits-vanish');
+  resolveCommits({ dir: vanishing, t0: 1, t1: 2, command: 'git commit -m x', run: (...a) => { fs.rmSync(vanishing, { recursive: true }); return failing(enoent)(...a); } });
+  const dir = initRepo(t, 'commits-after-gone');
+  const sha = commitFiles(dir, { 'a.txt': 'x\n' }, 'feat: live', 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: live"' });
+  assert.deepStrictEqual(rows.map((r) => r.sha), [sha]);
+});
+
+test('resolveCommits still latches on ENOENT when the folder exists', (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const enoent = { code: 'ENOENT', syscall: 'spawnSync git', path: 'git' };
+  let calls = 0;
+  const run = (...a) => { calls++; return failing(enoent)(...a); };
+  resolveCommits({ dir: os.tmpdir(), t0: 11_000_000, t1: 11_000_100, command: 'git commit -m x', run });
+  resolveCommits({ dir: os.tmpdir(), t0: 12_000_000, t1: 12_000_100, command: 'git commit -m y', run });
+  assert.strictEqual(calls, 1);
+});
+
+test('resolveCommits skips --all for a failed call', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const dir = initRepo(t, 'commits-failed');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  const other = helpers.tmpDir(t, 'commits-failed-wt') + '/wt';
+  git(dir, ['worktree', 'add', '-q', '-b', 'other', other], 100);
+  commitFiles(other, { 'b.txt': lines(5) }, 'in b', 1001);
+  const cmd = 'git commit --amend --no-edit';
+  assert.deepStrictEqual(resolveCommits({ dir, ...WINDOW, command: cmd, failed: true }).rows, []);
+  assert.strictEqual(resolveCommits({ dir, ...WINDOW, command: cmd }).rows.length, 1, 'a call that did not fail still falls back to --all');
+});
