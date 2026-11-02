@@ -7,7 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const helpers = require('./helpers');
-const { isCommitCommand, commitDir, commitDirs, resolveCommits, resetCommitState } = require('../lib/commits');
+const { isCommitCommand, commitDirs, resolveCommits, resetCommitState } = require('../lib/commits');
 
 const hasGit = spawnSync('git', ['--version']).status === 0;
 
@@ -18,17 +18,6 @@ test('isCommitCommand recognises git commit calls', () => {
   for (const c of ['git commit-tree abc', 'git log --grep commit', 'echo "git commit"', 'git rebase --continue']) {
     assert.strictEqual(isCommitCommand(c), false, c);
   }
-});
-
-test('commitDir finds the directory a commit runs in', () => {
-  assert.strictEqual(commitDir('cd /a/b && git commit -m x', '/c'), '/a/b');
-  assert.strictEqual(commitDir('git -C /a commit -m x', '/c'), '/a');
-  assert.strictEqual(commitDir('cd sub && git commit', '/c'), '/c/sub');
-  assert.strictEqual(commitDir('cd ~/r && git commit', null), path.join(os.homedir(), 'r'));
-  assert.strictEqual(commitDir('cd "/a b" && git commit', null), '/a b');
-  assert.strictEqual(commitDir('git commit -m x', '/c'), '/c');
-  assert.strictEqual(commitDir('git commit -m x', null), null);
-  assert.strictEqual(commitDir('cd /a && cd /b && git commit -m x', '/c'), '/b');
 });
 
 test('commitDirs lists the directory of every git commit segment', () => {

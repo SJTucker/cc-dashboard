@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const helpers = require('./helpers');
-const { encodeFolder, findRepo, repoFromProjectFolder, projectFolderOf, configDirOf } = require('../lib/repo');
+const { encodeFolder, findRepo, checkoutRoot, repoFromProjectFolder, projectFolderOf, configDirOf } = require('../lib/repo');
 
 // os.tmpdir() on macOS sits under /var, a symlink to /private/var. The folder walk
 // skips symlinks, so fixtures live under the real path.
@@ -123,4 +123,13 @@ test('configDirOf takes the folder above projects, for main and subagent transcr
   assert.strictEqual(configDirOf('/u/.claude/projects/-u-code-app/abc.jsonl'), '/u/.claude');
   assert.strictEqual(configDirOf('/u/.claude/projects/-u-code-app/abc/subagents/agent-1.jsonl'), '/u/.claude');
   assert.strictEqual(configDirOf('/u/elsewhere/abc.jsonl'), null);
+});
+
+test('checkoutRoot returns the main checkout, a live worktree, and a removed worktrunk worktree', (t) => {
+  const { main, worktree } = layout(base(t));
+  assert.strictEqual(checkoutRoot(path.join(main, 'src')), main);
+  assert.strictEqual(checkoutRoot(path.join(worktree, 'src')), worktree);
+  const removed = path.join(path.dirname(main), 'app.deleted-branch');
+  assert.strictEqual(checkoutRoot(path.join(removed, 'src', 'deep')), removed);
+  assert.strictEqual(checkoutRoot('relative/path'), null);
 });

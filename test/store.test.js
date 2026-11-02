@@ -225,6 +225,11 @@ test('MIGRATIONS[15] adds an empty commits list', () => {
   assert.deepStrictEqual(MIGRATIONS[15]({ ...old, commits: [{ sha: 'x' }] }).commits, [{ sha: 'x' }]);
 });
 
+test('MIGRATIONS[16] leaves the rows as they were', () => {
+  const old = rowsOf({ commits: [{ sha: 'x' }], edits: [{ toolUseId: 'a', file: '/f' }] });
+  assert.strictEqual(MIGRATIONS[16](old), old);
+});
+
 test('migration 14 to 15 changes nothing, and stored version-14 rows load through it', () => {
   const old = rowsOf({});
   assert.strictEqual(MIGRATIONS[14](old), old);

@@ -304,7 +304,7 @@ test('an edit row counts added and removed lines for the line sessionId', async 
   ]);
   const rows = await extractFile(file);
 
-  assert.deepStrictEqual(rows.edits, [{ toolUseId: 'toolu_1', t: Date.parse(T1), sessionId: 's1', added: 2, removed: 1, repo: null, file: null }]);
+  assert.deepStrictEqual(rows.edits, [{ toolUseId: 'toolu_1', t: Date.parse(T1), sessionId: 's1', added: 2, removed: 1, repo: null, file: null, root: null }]);
 });
 
 test('an edit row carries the repo of the edited file, and falls back to cwd only without a filePath', async () => {
@@ -694,8 +694,8 @@ test('extractFile reads a .json path as a step file', async () => {
   assert.deepStrictEqual(rows.agentSteps, [{ agentId: 'a9', t: 1, model: 'm', input: 1, cacheWrite: 2, cacheRead: 3, output: 4 }]);
 });
 
-test('EXTRACT_VERSION is 16', () => {
-  assert.strictEqual(EXTRACT_VERSION, 16);
+test('EXTRACT_VERSION is 17', () => {
+  assert.strictEqual(EXTRACT_VERSION, 17);
 });
 
 function toolResultLine({ id = 'toolu_1', content = 'hello', agentId = null, min = 1 } = {}) {
@@ -938,4 +938,88 @@ test('an edit row carries the edited file path', async () => {
     { type: 'user', timestamp: T1, sessionId: 's1', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }] }, toolUseResult: { filePath: '/a/b.js', structuredPatch: [{ lines: ['+new'] }] } },
   ]));
   assert.strictEqual(rows.edits[0].file, '/a/b.js');
+});
+
+test('extractFile resolves every repo a command committed to', { skip: !hasGit }, async (t) => {
+  const a = commitRepo(t);
+  const b = commitRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${a} && git commit -m a && cd ${b} && git commit -m b`), commitResult()]));
+  assert.deepStrictEqual(rows.commits.map((c) => c.toplevel).sort(), [a, b].sort());
+});
+
+const mergeCall = (repo, ts = T0) => assistant({ ts, msg: 'mm', req: 'rm', content: [toolUse('toolu_m', 'Bash', { command: `cd ${repo} && git merge --squash topic` })], extra: { sessionId: 's1' } });
+const mergeResult = (block = {}, ts = T0) => ({ type: 'user', timestamp: ts, sessionId: 's1', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_m', content: 'Squash commit -- not updating HEAD', ...block }] } });
+
+test('a commit after merge --squash is marked squash', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult(), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+  assert.strictEqual(rows.commits[0].squash, true);
+});
+
+test('a commit in the same command as merge --squash is marked squash', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git merge --squash topic && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits[0].squash, true);
+});
+
+test('a squash merge that stopped on a conflict still marks the commit', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult({ is_error: true, content: 'CONFLICT (content): Merge conflict in a.txt' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits[0].squash, true);
+});
+
+test('a squash merge of a ref that does not exist marks nothing', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult({ is_error: true, content: 'merge: nope - not something we can merge' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
+test('a squash mark applies to one commit only', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const second = { ...commitCall(`cd ${repo} && git commit -m s`), uuid: 'u2' };
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult(), commitCall(`cd ${repo} && git commit -m s`), commitResult(), second, { ...commitResult(), timestamp: T2 }]));
+  assert.strictEqual(rows.commits.filter((c) => c.squash).length, 1);
+});
+
+{
+  const T_RESULT = '2026-10-01T10:00:01.000Z';
+  const bgCall = (repo) => assistant({ ts: T0, content: [toolUse('toolu_c', 'Bash', { command: `cd ${repo} && git commit -m "feat: x"`, run_in_background: true })], extra: { sessionId: 's1' } });
+  const launched = commitResult({}, { content: 'Command running in background' });
+  const launchedEarly = { ...launched, timestamp: T_RESULT };
+  const notice = (content) => ({ type: 'user', timestamp: T2, sessionId: 's1', message: { content } });
+  const text = '<task-notification><tool-use-id>toolu_c</tool-use-id><status>completed</status></task-notification>';
+
+  test('a background git commit is resolved at its task notification', { skip: !hasGit }, async (t) => {
+    const repo = commitRepo(t);
+    const rows = await extractFile(writeTranscript([bgCall(repo), launchedEarly, notice(text)]));
+    assert.strictEqual(rows.commits.length, 1);
+    assert.strictEqual(rows.commits[0].t, Date.parse(T2));
+    assert.strictEqual(rows.commits[0].toolUseId, 'toolu_c');
+  });
+
+  test('a background git commit reads a notification made of text blocks', { skip: !hasGit }, async (t) => {
+    const repo = commitRepo(t);
+    const rows = await extractFile(writeTranscript([bgCall(repo), launchedEarly, notice([{ type: 'text', text }])]));
+    assert.strictEqual(rows.commits.length, 1);
+  });
+
+  test('a background git commit with no notification makes no row', { skip: !hasGit }, async (t) => {
+    const repo = commitRepo(t);
+    const rows = await extractFile(writeTranscript([bgCall(repo), launchedEarly, notice('<tool-use-id>toolu_other</tool-use-id>')]));
+    assert.deepStrictEqual(rows.commits, []);
+  });
+}
+
+test('edit rows carry their checkout root', async (t) => {
+  const root = fs.realpathSync(helpers.tmpDir(t, 'extract-root'));
+  const wt = path.join(root, 'repo.wt');
+  fs.mkdirSync(path.join(wt, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(wt, '.git'), 'gitdir: /nowhere/.git/worktrees/repo.wt\n');
+  const file = path.join(wt, 'src', 'a.js');
+  const rows = await extractFile(writeTranscript([
+    { type: 'user', timestamp: T1, sessionId: 's1', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_1', content: 'ok' }] }, toolUseResult: { filePath: file, structuredPatch: [{ lines: ['+new'] }] } },
+  ]));
+  assert.strictEqual(rows.edits[0].root, wt);
 });
