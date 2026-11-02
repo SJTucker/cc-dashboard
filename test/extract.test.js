@@ -1136,3 +1136,18 @@ test('a unstage after git reset --soft keeps the state for the next commit call'
   const rows = await extractFile(writeTranscript([softCall(`cd ${repo} && git reset -q --soft base && git reset -q`), mergeResult({ content: '' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
   assert.strictEqual(rows.commits[0].squash, true);
 });
+
+test('git reset of an existing path is an unstage and marks nothing', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset -q a.txt && git commit -m s`), commitResult()]));
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
+test('git reset to a revision marks the commit after it, and a reset --soft with no rev marks nothing', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const marked = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset -q HEAD~1 && git commit -m s`), commitResult()]));
+  assert.strictEqual(marked.commits[0].squash, true);
+  require('../lib/commits').resetCommitState();
+  const plain = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset -q --soft && git commit -m s`), commitResult()]));
+  assert.ok(!('squash' in plain.commits[0]));
+});

@@ -279,11 +279,9 @@ test('a rewrite row with one uncovered file counts', () => {
   assert.strictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js']), w]).length, 3);
 });
 
-test('a reflog row covered the same way is dropped, and an earlier-authored cover does not count', () => {
-  const w = commit({ sha: sha('w'), t: 5, fromReflog: true, patchId: 'W', authorEmail: 'me@x', authorTime: 500, subject: 'squash', files: ['a.js', 'b.js'] });
-  assert.strictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js']), w]).length, 2);
-  const early = commit({ sha: sha('w'), t: 5, fromReflog: true, patchId: 'W', authorEmail: 'me@x', authorTime: 650, subject: 'squash', files: ['a.js', 'b.js'] });
-  assert.strictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js']), early]).length, 3);
+test('file coverage drops a rewrite row but not a reflog row', () => {
+  const rl = commit({ sha: sha('w'), t: 5, fromReflog: true, patchId: 'W', authorEmail: 'me@x', authorTime: 500, subject: 'squash', files: ['a.js', 'b.js'] });
+  assert.strictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js']), rl]).length, 3);
 });
 
 test('a squash row, a reflog row and a rewrite row with one author key leave only the squash row, counting 0', () => {
@@ -297,4 +295,36 @@ test('with no primary or squash row, a reflog row counts and its rewrite twin is
   const r = commit({ sha: sha('b'), t: 1, fromReflog: true, patchId: 'R', ...rf });
   const w = commit({ sha: sha('c'), t: 2, rewrite: true, committerEmail: 'x@y', patchId: 'W', ...rf });
   assert.deepStrictEqual(lineRows([], [r, w]), [row(10, 2, 1)]);
+});
+
+test('the subject, author and shared-file key needs a twin of at least half the lines', () => {
+  const big = commit({ sha: sha('a'), t: 1, fromReflog: true, patchId: 'B', added: 2774, removed: 0, ...rf, authorTime: 1 });
+  const small = commit({ sha: sha('b'), t: 2, patchId: 'S', added: 300, removed: 66, ...rf, authorTime: 2 });
+  assert.strictEqual(lineRows([], [big, small]).length, 2, 'a 366-line twin does not drop a 2774-line row');
+  const near = commit({ sha: sha('c'), t: 2, patchId: 'N', added: 1500, removed: 0, ...rf, authorTime: 3 });
+  assert.strictEqual(lineRows([], [big, near]).length, 1, 'a twin with over half the lines drops it');
+});
+
+test('equal-rank rows with one author key keep the earliest t', () => {
+  const a = commit({ sha: sha('a'), t: 5, patchId: 'X', ...rf });
+  const b = commit({ sha: sha('b'), t: 3, patchId: 'Y', ...rf });
+  assert.deepStrictEqual(lineRows([], [a, b]), [row(10, 2, 3)]);
+  const am = commit({ sha: sha('c'), t: 4, patchId: 'Z', amend: true, ...rf });
+  assert.strictEqual(lineRows([], [b, am]).length, 2, 'an amend is not deduped');
+});
+
+test('a squash row is never twin-dropped and is the original for a later amend', () => {
+  const key = { authorTime: 800, authorEmail: 'x@y', parent: 'P' };
+  const s = commit({ sha: sha('a'), t: 1, squash: true, fromReflog: true, patchId: 'S', added: 3721, removed: 0, subject: 'chain', files: ['a.js'], ...key });
+  const a = commit({ sha: sha('b'), t: 2, amend: true, patchId: 'A', added: 3683, removed: 0, subject: 'chain2', files: ['a.js'], ...key });
+  assert.deepStrictEqual(lineRows([], [s, a]), [row(0, 0, 2)], 'squash counts 0 and the amend counts max(0, 3683 - 3721)');
+  const dup = commit({ sha: sha('c'), t: 0, patchId: 'D', added: 5, removed: 0, subject: 'chain', files: ['a.js'], authorTime: 800, authorEmail: 'x@y' });
+  assert.strictEqual(lineRows([], [dup, s]).length, 1, 'the squash row stays in the output set next to its twin');
+});
+
+test('a squash row with rerecordDelta counts the delta', () => {
+  const s = commit({ sha: sha('a'), t: 1, squash: true, patchId: 'S', added: 50, removed: 40, rerecordDelta: { added: 7, removed: 2 }, ...rf });
+  assert.deepStrictEqual(lineRows([], [s]), [row(7, 2, 1)]);
+  const z = commit({ sha: sha('b'), t: 1, squash: true, patchId: 'Z', ...rf, subject: 'zz', authorTime: 9 });
+  assert.deepStrictEqual(lineRows([], [z]), []);
 });

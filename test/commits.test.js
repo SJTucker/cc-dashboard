@@ -8,7 +8,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const helpers = require('./helpers');
 const { lineRows } = require('../lib/lines');
-const { isCommitCommand, commitDirs, resolveCommits, resetCommitState } = require('../lib/commits');
+const { isCommitCommand, commitDirs, resolveCommits, resetCommitState, resetEvents } = require('../lib/commits');
 
 const hasGit = spawnSync('git', ['--version']).status === 0;
 
@@ -651,4 +651,51 @@ test('resolveCommits returns a commit reachable from HEAD and a second one that 
   assert.deepStrictEqual(rows.map((r) => r.sha).sort(), [first, second].sort());
   assert.strictEqual(rows.find((r) => r.sha === second).fromReflog, true);
   assert.ok(!rows.find((r) => r.sha === first).fromReflog);
+});
+
+test('a fast-forward merge in the window is not returned from the reflog', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-ff');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  // Another worktree makes the commit, so this checkout's HEAD reflog only lists it through the ff entry.
+  const wt = path.join(helpers.tmpDir(t, 'commits-ff-wt'), 'wt');
+  git(dir, ['worktree', 'add', '-q', '-b', 'other', wt], 100);
+  commitFiles(wt, { 'o.txt': 'o\n' }, 'other work', 1000);
+  git(dir, ['merge', '-q', '--ff-only', 'other'], 1001);
+  git(dir, ['reset', '-q', '--hard', 'HEAD~1'], 1002);
+  git(dir, ['worktree', 'remove', '--force', wt], 1002);
+  git(dir, ['branch', '-q', '-D', 'other'], 1002);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git status' });
+  assert.deepStrictEqual(rows, []);
+});
+
+test('resetEvents treats an unstage of a path or an existing folder as no state change', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-resetkind');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  fs.mkdirSync(path.join(dir, '.superpowers'));
+  const kinds = (cmd) => resetEvents(`cd ${dir} && ${cmd}`, dir).map((e) => e.kind);
+  assert.deepStrictEqual(kinds('git reset -q packages/solver/tests/diag_*.rs'), []);
+  assert.deepStrictEqual(kinds('git reset -q .superpowers'), []);
+  assert.deepStrictEqual(kinds('git reset -q'), []);
+  assert.deepStrictEqual(kinds('git reset -q HEAD~2'), ['rerecord']);
+  assert.deepStrictEqual(kinds('git reset -q abc1234'), ['rerecord']);
+  assert.deepStrictEqual(kinds('git reset -q main'), ['rerecord']);
+  assert.deepStrictEqual(kinds('git reset --soft'), []);
+  assert.deepStrictEqual(kinds('git reset --soft x'), ['rerecord']);
+});
+
+test('markRerecord marks only commits after the reset and gives the last one the real new lines', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-rerecord');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  const before = commitFiles(dir, { 'f.txt': 'f\n' }, 'before', 999);
+  commitFiles(dir, { 'p.txt': lines(3) }, 'pre', 1000);
+  git(dir, ['reset', '-q', '--soft', 'HEAD~1'], 1001);
+  const fresh = commitFiles(dir, { 'p.txt': lines(4) }, 'new', 1002);
+  const { rows } = resolveCommits({ dir, t0: 998_500, t1: 1_003_000, command: 'x', rerecordSince: 1_000_500 });
+  const byShaRows = new Map(rows.map((r) => [r.sha, r]));
+  assert.ok(!byShaRows.get(before).squash, 'a commit made before the reset is not marked');
+  assert.strictEqual(byShaRows.get(fresh).squash, true);
+  assert.deepStrictEqual(byShaRows.get(fresh).rerecordDelta, { added: 1, removed: 0 });
+  resetCommitState();
+  const none = resolveCommits({ dir, t0: 998_500, t1: 1_003_000, command: 'x', rerecordSince: 5_000_000 });
+  assert.ok(none.rows.every((r) => r.squash === true && !r.rerecordDelta), 'with no reset entry in range every row counts 0');
 });
