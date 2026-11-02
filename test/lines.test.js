@@ -43,3 +43,35 @@ test('lineRows keeps sibling commits that share a parent', () => {
   const b = commit({ sha: 'b'.repeat(40), t: 2, added: 4 });
   assert.deepStrictEqual(lineRows([], [a, b]), [row(3, 2, 1), row(4, 2, 2)]);
 });
+
+test('lineRows drops the amended commit, not a sibling in another worktree', () => {
+  const a1 = commit({ sha: 'a'.repeat(40), t: 1, added: 3, toplevel: '/wt/a' });
+  const b1 = commit({ sha: 'b'.repeat(40), t: 2, added: 4, toplevel: '/wt/b' });
+  const a2 = commit({ sha: 'c'.repeat(40), t: 3, added: 5, toplevel: '/wt/a', amend: true });
+  assert.deepStrictEqual(lineRows([], [a1, b1, a2]), [row(4, 2, 2), row(5, 2, 3)]);
+});
+
+test('lineRows leaves a commit alone when the amend is in another session', () => {
+  const a = commit({ sha: 'a'.repeat(40), t: 1, added: 3 });
+  const b = commit({ sha: 'b'.repeat(40), t: 2, added: 4, amend: true, sessionId: 's2' });
+  assert.deepStrictEqual(lineRows([], [a, b]), [row(3, 2, 1), row(4, 2, 2, 's2')]);
+});
+
+test('lineRows does not let an amended-away commit cover an edit', () => {
+  const a1 = commit({ sha: 'a'.repeat(40), t: 2, files: ['/r/a.js'], added: 3 });
+  const a2 = commit({ sha: 'b'.repeat(40), t: 4, files: ['/r/b.js'], added: 6, amend: true });
+  assert.deepStrictEqual(lineRows([edit({ t: 1, file: '/r/a.js' })], [a1, a2]), [row(5, 1, 1), row(6, 2, 4)]);
+});
+
+test('lineRows dedupes a duplicate sha before the amend search', () => {
+  const a = commit({ sha: 'a'.repeat(40), t: 1, added: 3 });
+  const b = commit({ sha: 'b'.repeat(40), t: 2, added: 4, amend: true });
+  assert.deepStrictEqual(lineRows([], [a, a, b]), [row(4, 2, 2)]);
+});
+
+test('lineRows counts rewritten copies once, keeping the earliest', () => {
+  const o = { authorTime: 500, authorEmail: 'x@y', subject: 'feat' };
+  const a = commit({ sha: 'a'.repeat(40), t: 2, added: 3, ...o });
+  const b = commit({ sha: 'b'.repeat(40), t: 1, added: 3, ...o });
+  assert.deepStrictEqual(lineRows([], [a, b]), [row(3, 2, 1)]);
+});
