@@ -976,6 +976,44 @@ test('a squash merge of a ref that does not exist marks nothing', { skip: !hasGi
   assert.ok(!('squash' in rows.commits[0]));
 });
 
+const T_MID = '2026-10-01T10:00:02.000Z';
+// A Bash call (id toolu_x) that runs `command` between the merge and the commit, with its result.
+const otherCall = (command) => [
+  assistant({ ts: T0, msg: 'mx', req: 'rx', content: [toolUse('toolu_x', 'Bash', { command })], extra: { sessionId: 's1' } }),
+  { type: 'user', timestamp: T0, sessionId: 's1', message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_x', content: 'ok' }] } },
+];
+
+test('a squash that reports Already up to date marks nothing', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult({ content: 'Already up to date.' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
+test('a squash dropped by git merge --abort marks no later commit', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult({ is_error: true, content: 'CONFLICT' }), ...otherCall(`cd ${repo} && git merge --abort`), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
+test('a squash dropped by git reset --hard marks no later commit', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult(), ...otherCall(`cd ${repo} && git reset --hard`), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
+test('a squash is kept by commands that do not drop it', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([mergeCall(repo), mergeResult(), ...otherCall(`cd ${repo} && git status && git merge-base a b`), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits[0].squash, true);
+});
+
+test('a commit that started before the squash is not marked', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const early = assistant({ ts: T0, msg: 'me', req: 're', content: [toolUse('toolu_c', 'Bash', { command: `cd ${repo} && git commit -m s` })], extra: { sessionId: 's1' } });
+  const rows = await extractFile(writeTranscript([early, mergeCall(repo, T_MID), mergeResult({}, T_MID), commitResult()]));
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
 test('a squash mark applies to one commit only', { skip: !hasGit }, async (t) => {
   const repo = commitRepo(t);
   const second = { ...commitCall(`cd ${repo} && git commit -m s`), uuid: 'u2' };
@@ -1003,6 +1041,15 @@ test('a squash mark applies to one commit only', { skip: !hasGit }, async (t) =>
     const repo = commitRepo(t);
     const rows = await extractFile(writeTranscript([bgCall(repo), launchedEarly, notice([{ type: 'text', text }])]));
     assert.strictEqual(rows.commits.length, 1);
+  });
+
+  // A background call that failed to start (is_error on its result) committed nothing, so
+  // its notification, if one arrives, creates no row.
+  test('a background git commit whose result is an error makes no row', { skip: !hasGit }, async (t) => {
+    const repo = commitRepo(t);
+    const failedStart = { ...launchedEarly, message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_c', content: 'spawn failed', is_error: true }] } };
+    const rows = await extractFile(writeTranscript([bgCall(repo), failedStart, notice(text)]));
+    assert.deepStrictEqual(rows.commits, []);
   });
 
   test('a background git commit with no notification makes no row', { skip: !hasGit }, async (t) => {

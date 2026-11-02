@@ -133,3 +133,15 @@ test('checkoutRoot returns the main checkout, a live worktree, and a removed wor
   assert.strictEqual(checkoutRoot(path.join(removed, 'src', 'deep')), removed);
   assert.strictEqual(checkoutRoot('relative/path'), null);
 });
+
+test('checkoutRoot returns a submodule root, and passes an existing <repo>.docs folder without .git', (t) => {
+  const { main } = layout(base(t));
+  const sub = path.join(main, 'vendor', 'lib');
+  fs.mkdirSync(path.join(sub, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(sub, '.git'), 'gitdir: ../../.git/modules/lib\n');
+  assert.strictEqual(checkoutRoot(path.join(sub, 'src')), sub);
+  // app.docs exists, holds no .git, and is not a checkout, so the walk goes past it.
+  const docs = path.join(path.dirname(main), 'app.docs');
+  fs.mkdirSync(path.join(docs, 'x'), { recursive: true });
+  assert.strictEqual(checkoutRoot(path.join(docs, 'x')), null);
+});
