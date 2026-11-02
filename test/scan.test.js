@@ -1307,3 +1307,54 @@ test('a subagent commit replaces the main session edit of the same file', { skip
   const { efficiency } = await scanUsage({ days: 'today' });
   assert.deepStrictEqual(efficiency.linesBySession, { s1: { added: 3, removed: 0 } });
 });
+
+// A session commits twice on a branch, then squash-merges the branch. The squash
+// commit repeats the branch commits' lines, so it counts 0.
+test('a squash merge adds nothing to the lines its branch commits counted', { skip: spawnSync('git', ['--version']).status !== 0 }, async (t) => {
+  const base = makeFixture();
+  const repo = fs.realpathSync(helpers.tmpDir(t, 'scan-squash'));
+  const toolAt = atHourToday(10);
+  const secs = toolAt.getTime() / 1000;
+  const git = (args, at) => {
+    const env = { ...process.env, GIT_AUTHOR_DATE: `@${at} +0000`, GIT_COMMITTER_DATE: `@${at} +0000` };
+    const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+  };
+  git(['init', '-q', '-b', 'main'], 1);
+  fs.writeFileSync(path.join(repo, 'base.js'), 'base\n');
+  git(['add', '-A'], 1);
+  git(['commit', '-q', '-m', 'base'], 1);
+  git(['checkout', '-q', '-b', 'topic'], 1);
+  fs.writeFileSync(path.join(repo, 'b.js'), '1\n2\n');
+  git(['add', '-A'], secs + 2);
+  git(['commit', '-q', '-m', 'feat: one'], secs + 2);
+  fs.writeFileSync(path.join(repo, 'c.js'), '1\n2\n3\n');
+  git(['add', '-A'], secs + 12);
+  git(['commit', '-q', '-m', 'feat: two'], secs + 12);
+  git(['checkout', '-q', 'main'], secs + 20);
+  git(['merge', '--squash', 'topic'], secs + 22);
+  git(['commit', '-q', '-m', 'squash topic'], secs + 22);
+
+  const bash = (id, n, command) => [
+    JSON.stringify({
+      type: 'assistant', timestamp: new Date(toolAt.getTime() + n * 10000).toISOString(), sessionId: 's1',
+      message: { id: 'm' + n, model: 'claude-sonnet-4-6', content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }], usage: { input_tokens: 1, output_tokens: 1 } },
+      requestId: 'r' + n,
+    }),
+    JSON.stringify({
+      type: 'user', timestamp: new Date(toolAt.getTime() + n * 10000 + 1000).toISOString(), sessionId: 's1',
+      message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'ok' }] },
+    }),
+  ];
+  const dir = path.join(base, 'projects', 'demo');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'squash.jsonl'), [
+    ...bash('toolu_1', 0, `cd ${repo} && git commit -m "feat: one"`),
+    ...bash('toolu_2', 1, `cd ${repo} && git commit -m "feat: two"`),
+    ...bash('toolu_3', 2, `cd ${repo} && git merge --squash topic && git commit -m "squash topic"`),
+  ].join('\n') + '\n');
+
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.linesBySession, { s1: { added: 5, removed: 0 } });
+});

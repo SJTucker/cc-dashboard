@@ -32,10 +32,12 @@ test('lineRows counts each sha once', () => {
   assert.strictEqual(lineRows([], [commit(), commit()]).length, 1);
 });
 
-test('lineRows lets an amend replace the commit it amended', () => {
-  const a = commit({ sha: 'a'.repeat(40), t: 1, added: 3 });
-  const b = commit({ sha: 'b'.repeat(40), t: 2, added: 4, amend: true });
-  assert.deepStrictEqual(lineRows([], [a, b]), [row(4, 2, 2)]);
+const who = { authorTime: 100, authorEmail: 'a@b' };
+
+test('lineRows counts an amend as its difference from the commit it amended', () => {
+  const a = commit({ sha: 'a'.repeat(40), t: 1, added: 3, ...who });
+  const b = commit({ sha: 'b'.repeat(40), t: 2, added: 4, amend: true, ...who });
+  assert.deepStrictEqual(lineRows([], [a, b]), [row(3, 2, 1), row(1, 0, 2)]);
 });
 
 test('lineRows keeps sibling commits that share a parent', () => {
@@ -44,29 +46,29 @@ test('lineRows keeps sibling commits that share a parent', () => {
   assert.deepStrictEqual(lineRows([], [a, b]), [row(3, 2, 1), row(4, 2, 2)]);
 });
 
-test('lineRows drops the amended commit, not a sibling in another worktree', () => {
-  const a1 = commit({ sha: 'a'.repeat(40), t: 1, added: 3, toplevel: '/wt/a' });
-  const b1 = commit({ sha: 'b'.repeat(40), t: 2, added: 4, toplevel: '/wt/b' });
-  const a2 = commit({ sha: 'c'.repeat(40), t: 3, added: 5, toplevel: '/wt/a', amend: true });
-  assert.deepStrictEqual(lineRows([], [a1, b1, a2]), [row(4, 2, 2), row(5, 2, 3)]);
+test('lineRows subtracts the amended commit of the same worktree, not a sibling in another worktree', () => {
+  const a1 = commit({ sha: 'a'.repeat(40), t: 1, added: 3, toplevel: '/wt/a', ...who });
+  const b1 = commit({ sha: 'b'.repeat(40), t: 2, added: 4, toplevel: '/wt/b', authorTime: 200, authorEmail: 'a@b' });
+  const a2 = commit({ sha: 'c'.repeat(40), t: 3, added: 5, toplevel: '/wt/a', amend: true, ...who });
+  assert.deepStrictEqual(lineRows([], [a1, b1, a2]), [row(3, 2, 1), row(4, 2, 2), row(2, 0, 3)]);
 });
 
-test('lineRows leaves a commit alone when the amend is in another session', () => {
-  const a = commit({ sha: 'a'.repeat(40), t: 1, added: 3 });
-  const b = commit({ sha: 'b'.repeat(40), t: 2, added: 4, amend: true, sessionId: 's2' });
-  assert.deepStrictEqual(lineRows([], [a, b]), [row(3, 2, 1), row(4, 2, 2, 's2')]);
+test('lineRows leaves a commit its lines when the amend is in another session', () => {
+  const a = commit({ sha: 'a'.repeat(40), t: 1, added: 3, ...who });
+  const b = commit({ sha: 'b'.repeat(40), t: 2, added: 4, amend: true, sessionId: 's2', ...who });
+  assert.deepStrictEqual(lineRows([], [a, b]), [row(3, 2, 1), row(1, 0, 2, 's2')]);
 });
 
-test('lineRows does not let an amended-away commit cover an edit', () => {
-  const a1 = commit({ sha: 'a'.repeat(40), t: 2, files: ['/r/a.js'], added: 3 });
-  const a2 = commit({ sha: 'b'.repeat(40), t: 4, files: ['/r/b.js'], added: 6, amend: true });
-  assert.deepStrictEqual(lineRows([edit({ t: 1, file: '/r/a.js' })], [a1, a2]), [row(5, 1, 1), row(6, 2, 4)]);
+test('lineRows lets an amended commit keep covering an edit', () => {
+  const a1 = commit({ sha: 'a'.repeat(40), t: 2, files: ['/r/a.js'], added: 3, ...who });
+  const a2 = commit({ sha: 'b'.repeat(40), t: 4, files: ['/r/b.js'], added: 6, amend: true, ...who });
+  assert.deepStrictEqual(lineRows([edit({ t: 1, file: '/r/a.js' })], [a1, a2]), [row(3, 2, 2), row(3, 0, 4)]);
 });
 
 test('lineRows dedupes a duplicate sha before the amend search', () => {
-  const a = commit({ sha: 'a'.repeat(40), t: 1, added: 3 });
-  const b = commit({ sha: 'b'.repeat(40), t: 2, added: 4, amend: true });
-  assert.deepStrictEqual(lineRows([], [a, a, b]), [row(4, 2, 2)]);
+  const a = commit({ sha: 'a'.repeat(40), t: 1, added: 3, ...who });
+  const b = commit({ sha: 'b'.repeat(40), t: 2, added: 4, amend: true, ...who });
+  assert.deepStrictEqual(lineRows([], [a, a, b]), [row(3, 2, 1), row(1, 0, 2)]);
 });
 
 test('lineRows counts rewritten copies once, keeping the earliest', () => {
@@ -80,7 +82,7 @@ test('lineRows keeps a cross-session amend next to the commit it rewrote', () =>
   const c1 = commit({ sha: '1'.repeat(40), sessionId: 's1', t: 2, authorTime: 100, authorEmail: 'a@b', subject: 'x', added: 5 });
   const c2 = commit({ sha: '2'.repeat(40), sessionId: 's2', t: 4, authorTime: 100, authorEmail: 'a@b', subject: 'x', added: 7, amend: true });
   const rows = lineRows([], [c1, c2]);
-  assert.deepStrictEqual(rows.map((r) => [r.sessionId, r.added]), [['s1', 5], ['s2', 7]]);
+  assert.deepStrictEqual(rows.map((r) => [r.sessionId, r.added]), [['s1', 5], ['s2', 2]]);
 });
 
 test('lineRows keeps the named row when one sha is seen in two sessions', () => {
@@ -96,4 +98,64 @@ test('lineRows matches edits against files relative to toplevel', () => {
   const c = commit({ files: ['a.js'], toplevel: '/r', t: 5 });
   const edit = { toolUseId: 'e', t: 3, sessionId: 's1', added: 4, removed: 0, repo: '/r', file: '/r/a.js' };
   assert.deepStrictEqual(lineRows([edit], [c]).map((r) => r.added), [10]);
+});
+
+const sha = (c) => c.repeat(40);
+
+test('a rebased copy with the same patchId counts once', () => {
+  const a = commit({ sha: sha('a'), t: 5, patchId: 'P', authorTime: 1, authorEmail: 'x@y' });
+  const b = commit({ sha: sha('b'), t: 3, patchId: 'P', authorTime: 2, authorEmail: 'x@y' });
+  assert.deepStrictEqual(lineRows([], [a, b]), [row(10, 2, 3)]);
+});
+
+test('an amend and its rebased copy count once', () => {
+  const am = commit({ sha: sha('a'), t: 3, amend: true, patchId: 'P' });
+  const copy = commit({ sha: sha('b'), t: 6, patchId: 'P' });
+  assert.deepStrictEqual(lineRows([], [am, copy]), [row(10, 2, 3)]);
+});
+
+test('rows without patchId fall back to the author key', () => {
+  const o = { authorTime: 500, authorEmail: 'x@y', subject: 'feat' };
+  const a = commit({ sha: sha('a'), t: 2, ...o });
+  const b = commit({ sha: sha('b'), t: 1, ...o });
+  assert.deepStrictEqual(lineRows([], [a, b]), [row(10, 2, 1)]);
+});
+
+test('an amend counts its reflog delta', () => {
+  const o = commit({ sha: sha('a'), t: 1, added: 10, removed: 0, ...who });
+  const a = commit({ sha: sha('b'), t: 2, added: 13, removed: 0, amend: true, sessionId: 's2', amendOf: { sha: o.sha, added: 3, removed: 0 }, ...who });
+  assert.deepStrictEqual(lineRows([], [o, a]), [row(10, 0, 1), row(3, 0, 2, 's2')]);
+});
+
+test('an amend without amendOf counts the difference from its matched original', () => {
+  const o = commit({ sha: sha('a'), t: 1, added: 10, removed: 0, ...who });
+  const a = commit({ sha: sha('b'), t: 2, added: 25, removed: 0, amend: true, sessionId: 's2', ...who });
+  assert.deepStrictEqual(lineRows([], [o, a]), [row(10, 0, 1), row(15, 0, 2, 's2')]);
+  assert.deepStrictEqual(lineRows([], [a]), [row(25, 0, 2, 's2')], 'no original: counts in full');
+});
+
+test('a same-session amend chain counts the final content once', () => {
+  const c1 = commit({ sha: sha('1'), t: 1, added: 10, removed: 0, ...who });
+  const c2 = commit({ sha: sha('2'), t: 2, added: 12, removed: 0, amend: true, ...who });
+  const c3 = commit({ sha: sha('3'), t: 3, added: 15, removed: 0, amend: true, ...who });
+  const rows = lineRows([], [c1, c2, c3]);
+  assert.strictEqual(rows.reduce((n, r) => n + r.added, 0), 15);
+});
+
+test('a squash commit counts 0 and does not cover edits', () => {
+  const e = edit({ t: 1, file: '/r/f', root: '/r' });
+  const sq = commit({ sha: sha('a'), t: 2, squash: true, files: ['f'], toplevel: '/r' });
+  assert.deepStrictEqual(lineRows([e], [sq]), [row(5, 1, 1)]);
+});
+
+test('matches an edit in a removed worktree to a fallback commit by repo and path', () => {
+  const e = edit({ t: 1, file: '/r.wt/src/a.js', root: '/r.wt', repo: '/r' });
+  const c = commit({ t: 2, toplevel: '/r', fallback: true, repo: '/r', files: ['src/a.js'] });
+  assert.deepStrictEqual(lineRows([e], [c]), [row(10, 2, 2)]);
+});
+
+test('a live-worktree commit does not cover the same path edited in another worktree', () => {
+  const e = edit({ t: 1, file: '/r.a/src/a.js', root: '/r.a' });
+  const c = commit({ t: 2, toplevel: '/r.b', files: ['src/a.js'] });
+  assert.deepStrictEqual(lineRows([e], [c]), [row(5, 1, 1), row(10, 2, 2)]);
 });
