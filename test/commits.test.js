@@ -7,6 +7,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const helpers = require('./helpers');
+const { lineRows } = require('../lib/lines');
 const { isCommitCommand, commitDirs, resolveCommits, resetCommitState } = require('../lib/commits');
 
 const hasGit = spawnSync('git', ['--version']).status === 0;
@@ -619,7 +620,7 @@ test('resolveCommits returns the copies a rebase made as rewrite rows', { skip: 
   assert.ok(!rows.find((r) => r.sha === mine)?.rewrite);
 });
 
-test('resolveCommits returns no rewrite row for a cherry-picked commit by another author', { skip: !hasGit }, (t) => {
+test('resolveCommits returns a cherry-picked commit by another author as a rewrite row with its committer email', { skip: !hasGit }, (t) => {
   const dir = initRepo(t, 'commits-rewrite-other');
   commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
   git(dir, ['checkout', '-q', '-b', 'side'], 100);
@@ -630,5 +631,10 @@ test('resolveCommits returns no rewrite row for a cherry-picked commit by anothe
   git(dir, ['checkout', '-q', 'main'], 600);
   gitCommitterAt(dir, ['cherry-pick', theirs], 1000);
   const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git cherry-pick ' + theirs });
-  assert.deepStrictEqual(rows, []);
+  assert.strictEqual(rows.length, 1);
+  assert.strictEqual(rows[0].rewrite, true);
+  assert.strictEqual(rows[0].authorEmail, 'other@e.x');
+  assert.strictEqual(rows[0].committerEmail, 't@e.x');
+  // lineRows drops it, because no counted row in the repo carries the author's email.
+  assert.deepStrictEqual(lineRows([], rows.map((r) => ({ ...r, t: 2, sessionId: 's' }))), []);
 });

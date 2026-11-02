@@ -254,3 +254,34 @@ test('a reflog row sharing subject, author and one file with a counted row is dr
   const r2 = commit({ sha: sha('d'), t: 1, fromReflog: true, patchId: 'R', ...rf, files: ['x.js'] });
   assert.deepStrictEqual(lineRows([], [r2, c]), [row(10, 2, 1), row(10, 2, 2)]);
 });
+
+test('a rewrite row with author other than committer counts when the author has a counted row in the repo', () => {
+  const o = commit({ sha: sha('a'), t: 1, patchId: 'P', ...rf, authorEmail: 'me@x', subject: 'mine', files: ['q.js'] });
+  const w = commit({ sha: sha('b'), t: 2, rewrite: true, patchId: 'Z', ...rf, authorEmail: 'me@x', committerEmail: 'other@x', authorTime: 100, subject: 'copied' });
+  assert.deepStrictEqual(lineRows([], [o, w]), [row(10, 2, 1), row(10, 2, 2)]);
+});
+
+test('a rewrite row whose author email appears nowhere is dropped', () => {
+  const o = commit({ sha: sha('a'), t: 1, patchId: 'P', ...rf, authorEmail: 'me@x', subject: 'mine', files: ['q.js'] });
+  const w = commit({ sha: sha('b'), t: 2, rewrite: true, patchId: 'Z', ...rf, authorEmail: 'them@x', committerEmail: 'me@x2', authorTime: 100, subject: 'copied' });
+  assert.deepStrictEqual(lineRows([], [o, w]), [row(10, 2, 1)]);
+});
+
+const cov = (id, files, o = {}) => commit({ sha: sha(id), t: 1, patchId: 'P' + id, files, authorEmail: 'me@x', authorTime: 600, subject: 'part ' + id, ...o });
+
+test('a rewrite row whose files are all covered by later-authored counted commits is dropped', () => {
+  const w = commit({ sha: sha('w'), t: 5, rewrite: true, patchId: 'W', authorEmail: 'me@x', committerEmail: 'me@x', authorTime: 500, subject: 'squash', files: ['a.js', 'b.js'] });
+  assert.deepStrictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js'], { authorTime: 700 }), w]).length, 2);
+});
+
+test('a rewrite row with one uncovered file counts', () => {
+  const w = commit({ sha: sha('w'), t: 5, rewrite: true, patchId: 'W', authorEmail: 'me@x', committerEmail: 'me@x', authorTime: 500, subject: 'squash', files: ['a.js', 'c.js'] });
+  assert.strictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js']), w]).length, 3);
+});
+
+test('a reflog row covered the same way is dropped, and an earlier-authored cover does not count', () => {
+  const w = commit({ sha: sha('w'), t: 5, fromReflog: true, patchId: 'W', authorEmail: 'me@x', authorTime: 500, subject: 'squash', files: ['a.js', 'b.js'] });
+  assert.strictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js']), w]).length, 2);
+  const early = commit({ sha: sha('w'), t: 5, fromReflog: true, patchId: 'W', authorEmail: 'me@x', authorTime: 650, subject: 'squash', files: ['a.js', 'b.js'] });
+  assert.strictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js']), early]).length, 3);
+});

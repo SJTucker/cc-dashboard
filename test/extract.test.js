@@ -890,7 +890,7 @@ test('extractFile records a commit row for a Bash git commit', { skip: !hasGit }
   assert.match(sha, /^[0-9a-f]{40}$/);
   assert.match(patchId, /^[0-9a-f]{40}$/);
   assert.strictEqual(parent, null);
-  assert.deepStrictEqual(rest, { added: 3, removed: 0, files: ['a.txt'], generated: [], amendOf: null, repo, toplevel: repo, amend: false, named: true, authorTime: COMMIT_SECS, authorEmail: 't@e.x', subject: 'feat: x', toolUseId: 'toolu_c', t: Date.parse(T1), sessionId: 's1' });
+  assert.deepStrictEqual(rest, { added: 3, removed: 0, files: ['a.txt'], generated: [], amendOf: null, repo, toplevel: repo, amend: false, named: true, authorTime: COMMIT_SECS, authorEmail: 't@e.x', committerEmail: 't@e.x', subject: 'feat: x', toolUseId: 'toolu_c', t: Date.parse(T1), sessionId: 's1' });
 });
 
 test('extractFile uses the line cwd when the command has no cd', { skip: !hasGit }, async (t) => {
@@ -1078,4 +1078,24 @@ test('a commit resolved through the removed-worktree fallback carries the worktr
   assert.strictEqual(rows.commits.length, 1);
   assert.strictEqual(rows.commits[0].fallback, true);
   assert.strictEqual(rows.commits[0].root, wt);
+});
+
+const softCall = (command) => assistant({ ts: T0, msg: 'mm', req: 'rm', content: [toolUse('toolu_m', 'Bash', { command })], extra: { sessionId: 's1' } });
+
+test('a commit in the same command as git reset --soft is marked squash', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset --soft HEAD~3 && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits[0].squash, true);
+});
+
+test('a later commit call after git reset --soft is marked squash', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([softCall(`cd ${repo} && git reset --soft x`), mergeResult({ content: '' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits[0].squash, true);
+});
+
+test('git reset --soft followed by git reset --hard in one command marks nothing', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([softCall(`cd ${repo} && git reset --soft x && git reset --hard y`), mergeResult({ content: '' }), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.ok(!('squash' in rows.commits[0]));
 });
