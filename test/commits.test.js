@@ -443,11 +443,13 @@ test('rows carry a patchId that matches a cherry-picked copy', { skip: !hasGit }
   git(dir, ['checkout', '-q', 'a'], 1000);
   resetCommitState();
   const b = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "feat: x"', run: gitRun() });
-  assert.strictEqual(a.rows.length, 1);
-  assert.strictEqual(b.rows.length, 1);
-  assert.notStrictEqual(a.rows[0].sha, b.rows[0].sha);
-  assert.match(a.rows[0].patchId, /^[0-9a-f]{40}/);
-  assert.strictEqual(a.rows[0].patchId, b.rows[0].patchId);
+  // The HEAD reflog also lists the commit on branch `a`, so only the rows reachable from HEAD are compared.
+  const reach = (r) => r.rows.filter((x) => !x.fromReflog);
+  assert.strictEqual(reach(a).length, 1);
+  assert.strictEqual(reach(b).length, 1);
+  assert.notStrictEqual(reach(a)[0].sha, reach(b)[0].sha);
+  assert.match(reach(a)[0].patchId, /^[0-9a-f]{40}/);
+  assert.strictEqual(reach(a)[0].patchId, reach(b)[0].patchId);
 });
 
 for (const attr of ['linguist-generated', 'linguist-vendored']) {
@@ -637,4 +639,16 @@ test('resolveCommits returns a cherry-picked commit by another author as a rewri
   assert.strictEqual(rows[0].committerEmail, 't@e.x');
   // lineRows drops it, because no counted row in the repo carries the author's email.
   assert.deepStrictEqual(lineRows([], rows.map((r) => ({ ...r, t: 2, sessionId: 's' }))), []);
+});
+
+test('resolveCommits returns a commit reachable from HEAD and a second one that was rewritten away', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-reflog-both');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  const second = commitFiles(dir, { 'b.txt': 'one\ntwo\n' }, 'second', 1000);
+  git(dir, ['reset', '-q', '--hard', 'HEAD~1'], 1001);
+  const first = commitFiles(dir, { 'c.txt': 'c\n' }, 'first', 1002);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m x' });
+  assert.deepStrictEqual(rows.map((r) => r.sha).sort(), [first, second].sort());
+  assert.strictEqual(rows.find((r) => r.sha === second).fromReflog, true);
+  assert.ok(!rows.find((r) => r.sha === first).fromReflog);
 });

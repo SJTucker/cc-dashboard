@@ -285,3 +285,16 @@ test('a reflog row covered the same way is dropped, and an earlier-authored cove
   const early = commit({ sha: sha('w'), t: 5, fromReflog: true, patchId: 'W', authorEmail: 'me@x', authorTime: 650, subject: 'squash', files: ['a.js', 'b.js'] });
   assert.strictEqual(lineRows([], [cov('a', ['a.js']), cov('b', ['b.js']), early]).length, 3);
 });
+
+test('a squash row, a reflog row and a rewrite row with one author key leave only the squash row, counting 0', () => {
+  const s = commit({ sha: sha('a'), t: 3, squash: true, patchId: 'S', ...rf });
+  const r = commit({ sha: sha('b'), t: 1, fromReflog: true, patchId: 'R', ...rf });
+  const w = commit({ sha: sha('c'), t: 2, rewrite: true, committerEmail: 'x@y', patchId: 'W', ...rf });
+  assert.deepStrictEqual(lineRows([], [s, r, w]), []);
+});
+
+test('with no primary or squash row, a reflog row counts and its rewrite twin is dropped', () => {
+  const r = commit({ sha: sha('b'), t: 1, fromReflog: true, patchId: 'R', ...rf });
+  const w = commit({ sha: sha('c'), t: 2, rewrite: true, committerEmail: 'x@y', patchId: 'W', ...rf });
+  assert.deepStrictEqual(lineRows([], [r, w]), [row(10, 2, 1)]);
+});
