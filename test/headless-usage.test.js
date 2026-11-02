@@ -40,6 +40,7 @@ test('the row set is headless with a non-interactive session and min/max t', asy
   assert.strictEqual(rows.sessions.s1.nonInteractive, true);
   assert.deepStrictEqual([rows.minT, rows.maxT], [1000, 1001]);
   assert.deepStrictEqual(rows.toolUses, []);
+  assert.deepStrictEqual(rows.commits, []);
 });
 
 test('two steps with the same turnId, index and t but different agentId get different keys', async (t) => {

@@ -5,6 +5,7 @@ const helpers = require('./helpers');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
+const { spawnSync } = require('child_process');
 const { scanUsage } = require('./scan-usage');
 const { localDateStr } = require('../lib/dates');
 
@@ -1262,4 +1263,47 @@ test('a first prompt over 80 characters is cut to 80, ending in an ellipsis', as
   const expected = 'a'.repeat(50) + ' ' + 'b'.repeat(28) + '…';
   assert.strictEqual(efficiency.firstPromptBySession.s1, expected);
   assert.strictEqual(expected.length, 80);
+});
+
+// Review Focus 4: the main session edits a file and a subagent, in its own transcript
+// file under <session>/subagents/, commits it. lineRows runs after every row set is
+// added, so the lines count once, from the commit.
+test('a subagent commit replaces the main session edit of the same file', { skip: spawnSync('git', ['--version']).status !== 0 }, async (t) => {
+  const base = makeFixture();
+  const repo = fs.realpathSync(helpers.tmpDir(t, 'scan-commit'));
+  const toolAt = atHourToday(10);
+  const commitSecs = toolAt.getTime() / 1000 + 2;
+  const git = (args, secs) => {
+    const env = { ...process.env, GIT_AUTHOR_DATE: `@${secs} +0000`, GIT_COMMITTER_DATE: `@${secs} +0000` };
+    const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', '-c', 'commit.gpgsign=false', ...args], { cwd: repo, env, encoding: 'utf8' });
+    assert.strictEqual(r.status, 0, r.stderr);
+  };
+  git(['init', '-q', '-b', 'main'], 1);
+  fs.writeFileSync(path.join(repo, 'a.js'), 'x\ny\nz\n');
+  git(['add', '-A'], commitSecs);
+  git(['commit', '-q', '-m', 'feat: x'], commitSecs);
+
+  writeSession(base, 'main', [
+    editResultLine(atHourToday(9).toISOString(), {
+      toolId: 'toolu_e1',
+      result: { filePath: path.join(repo, 'a.js'), oldString: '', newString: 'x', structuredPatch: [hunk(['+x', '+y', '+z', '+w', '+v'])] },
+    }),
+  ]);
+  const subDir = path.join(base, 'projects', 'demo', 's1', 'subagents');
+  fs.mkdirSync(subDir, { recursive: true });
+  fs.writeFileSync(path.join(subDir, 'agent-a1.jsonl'), [
+    JSON.stringify({
+      type: 'assistant', timestamp: toolAt.toISOString(), sessionId: 's1', isSidechain: true, agentId: 'a1',
+      message: { id: 'm1', model: 'claude-sonnet-4-6', content: [{ type: 'tool_use', id: 'toolu_c', name: 'Bash', input: { command: `cd ${repo} && git commit -m "feat: x"` } }], usage: { input_tokens: 1, output_tokens: 1 } },
+      requestId: 'r1',
+    }),
+    JSON.stringify({
+      type: 'user', timestamp: new Date(toolAt.getTime() + 5000).toISOString(), sessionId: 's1', isSidechain: true, agentId: 'a1',
+      message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_c', content: 'ok' }] },
+    }),
+  ].join('\n') + '\n');
+
+  const { scanUsage } = loadScan(base);
+  const { efficiency } = await scanUsage({ days: 'today' });
+  assert.deepStrictEqual(efficiency.linesBySession, { s1: { added: 3, removed: 0 } });
 });

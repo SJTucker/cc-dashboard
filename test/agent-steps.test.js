@@ -37,6 +37,7 @@ test('a step file row set has empty results and turns', async () => {
   const rows = await readAgentSteps(writeStepFile(JSON.stringify({ agentId: 'a1', steps: [] })));
   assert.deepStrictEqual(rows.results, []);
   assert.deepStrictEqual(rows.turns, []);
+  assert.deepStrictEqual(rows.commits, []);
 });
 
 test('readAgentSteps of a file that does not parse is not ok, so the row store reads it again', async () => {

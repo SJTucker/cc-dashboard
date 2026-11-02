@@ -11,6 +11,7 @@ what each panel shows.
   without it. The rtk panels use the same module.
 - **`node` on the PATH that Claude Code sees.** The mod runs the scripts in `bin/`
   directly, through their `#!/usr/bin/env node` line. A clone keeps their exec bit.
+- **`git` on the PATH (optional).** The server runs `git rev-parse` and `git log HEAD` (then `git log --all` when HEAD has nothing in the window) in the folder of each Bash `git commit` call to count the lines that commit added and removed. Without `git`, lines come from Edit and Write calls only. A lookup that times out is retried once per server start.
 - **Claude Code.** The mod uses Claude Code's function hooks, which are early access.
   No minimum version is known. The mod was last run on 2.1.294.
 
@@ -216,6 +217,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/usage-refresh/` | `CLAUDE_CONFIG_DIR` | the server. It is the working folder of the headless `/usage` runs and stays empty. Claude Code also creates a matching empty project folder under `<cfg>/projects/`. The runs write no transcript. |
 | `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session`. It also holds the repo path of each edit, the rows of `agent-usage/` files, the call rows of `headless-usage/` files, for each session the text of Claude Code's last away-summary recap (the `away_summary` line it writes when you return to an idle session), the length in characters of each tool result (not its text), each main-loop turn's duration from Claude Code's `turn_duration` lines, and a group for each Bash command: the program, plus the next word when that word is a word or a flag (such as `sed -n` or `git diff`). |
 | `.git` in the folders above each edited file | none | git. The server reads it to find the repo of each file that an Edit or Write call changed. For stored rows of deleted transcripts, it instead lists the folders on the path that the transcript folder's name encodes. |
+| The git repos where a session ran `git commit` through Bash | none | git. The server runs `git rev-parse --show-toplevel` and `git log --numstat` (on `HEAD`, then `--all` when HEAD has nothing in the window) there, read-only, to count the lines of the commits made during each call. When the folder is gone, it falls back to the repo the folder name encodes. |
 | `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, 6 minutes before a 1-hour prompt cache expires or when Claude Code's idle compaction starts, whichever comes first. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
 | rtk's `history.db` | `RTK_DB` | rtk |
 

@@ -342,7 +342,8 @@
         "sessionId": "sess-a",
         "added": 2,
         "removed": 1,
-        "repo": null
+        "repo": null,
+        "file": null
       },
       {
         "toolUseId": "toolu_a3",
@@ -350,7 +351,8 @@
         "sessionId": "sess-a",
         "added": 2,
         "removed": 0,
-        "repo": null
+        "repo": null,
+        "file": null
       },
       {
         "toolUseId": "toolu_a4",
@@ -358,7 +360,8 @@
         "sessionId": "sess-a",
         "added": 0,
         "removed": 0,
-        "repo": null
+        "repo": null,
+        "file": null
       },
       {
         "toolUseId": "toolu_a5",
@@ -366,9 +369,11 @@
         "sessionId": "sess-a",
         "added": 2,
         "removed": 0,
-        "repo": null
+        "repo": null,
+        "file": null
       }
     ],
+    "commits": [],
     "results": [
       {
         "toolUseId": "toolu_a1",
@@ -696,9 +701,11 @@
         "sessionId": "sess-a",
         "added": 2,
         "removed": 1,
-        "repo": null
+        "repo": null,
+        "file": null
       }
     ],
+    "commits": [],
     "results": [
       {
         "toolUseId": "toolu_a1",
@@ -812,9 +819,11 @@
         "sessionId": "sess-c",
         "added": 1,
         "removed": 0,
-        "repo": null
+        "repo": null,
+        "file": null
       }
     ],
+    "commits": [],
     "results": [
       {
         "toolUseId": "toolu_c1",
@@ -894,6 +903,7 @@
     "toolUses": [],
     "errors": [],
     "edits": [],
+    "commits": [],
     "results": [],
     "turns": [],
     "prompts": [],
@@ -1038,9 +1048,11 @@
         "sessionId": "sess-e",
         "added": 1,
         "removed": 1,
-        "repo": null
+        "repo": null,
+        "file": null
       }
     ],
+    "commits": [],
     "results": [
       {
         "toolUseId": "toolu_e1",
@@ -1080,6 +1092,7 @@
     "toolUses": [],
     "errors": [],
     "edits": [],
+    "commits": [],
     "results": [],
     "turns": [],
     "prompts": [],
@@ -1104,6 +1117,7 @@
     "toolUses": [],
     "errors": [],
     "edits": [],
+    "commits": [],
     "results": [],
     "turns": [],
     "prompts": [],
