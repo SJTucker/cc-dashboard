@@ -699,3 +699,24 @@ test('markRerecord marks only commits after the reset and gives the last one the
   const none = resolveCommits({ dir, t0: 998_500, t1: 1_003_000, command: 'x', rerecordSince: 5_000_000 });
   assert.ok(none.rows.every((r) => r.squash === true && !r.rerecordDelta), 'with no reset entry in range every row counts 0');
 });
+
+test('the last commit of a re-record sequence is found by ancestry when all commits share one second', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-rerecord-tip');
+  commitFiles(dir, { 'a.txt': 'x\n' }, 'base', 100);
+  commitFiles(dir, { 'p.txt': lines(3), 'q.txt': lines(2), 'r.txt': lines(1) }, 'pre', 1000);
+  git(dir, ['reset', '-q', '--soft', 'HEAD~1'], 1001);
+  git(dir, ['reset', '-q'], 1001);
+  // Three layers in one committer second. Together they rebuild the pre-reset tree.
+  const layer = (file, msg) => {
+    git(dir, ['add', file], 1002);
+    git(dir, ['commit', '-q', '-m', msg], 1002);
+    return git(dir, ['rev-parse', 'HEAD'], 1002);
+  };
+  const first = layer('p.txt', 'one');
+  const second = layer('q.txt', 'two');
+  const tip = layer('r.txt', 'three');
+  const { rows } = resolveCommits({ dir, t0: 998_500, t1: 1_003_000, command: 'x', rerecordSince: 1_000_500 });
+  assert.deepStrictEqual(rows.find((r) => r.sha === tip).rerecordDelta, { added: 0, removed: 0 });
+  assert.ok(rows.filter((r) => r.sha !== tip && r.squash).every((r) => !r.rerecordDelta));
+  assert.ok([first, second].every((sha) => rows.find((r) => r.sha === sha)?.squash === true));
+});
