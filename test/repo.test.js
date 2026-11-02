@@ -134,6 +134,15 @@ test('checkoutRoot returns the main checkout, a live worktree, and a removed wor
   assert.strictEqual(checkoutRoot('relative/path'), null);
 });
 
+test('checkoutRoot returns a removed .claude/worktrees folder as its own root', (t) => {
+  const repo = path.join(base(t), 'proj');
+  fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(repo, '.claude', 'worktrees', 'live'), { recursive: true });
+  const gone = path.join(repo, '.claude', 'worktrees', 'gone');
+  assert.strictEqual(checkoutRoot(path.join(gone, 'lib')), gone);
+  assert.strictEqual(checkoutRoot(path.join(repo, '.claude', 'worktrees', 'live', 'lib')), repo);
+});
+
 test('checkoutRoot returns a submodule root, and passes an existing <repo>.docs folder without .git', (t) => {
   const { main } = layout(base(t));
   const sub = path.join(main, 'vendor', 'lib');

@@ -154,6 +154,14 @@ test('matches an edit in a removed worktree to a fallback commit by repo and pat
   assert.deepStrictEqual(lineRows([e], [c]), [row(10, 2, 2)]);
 });
 
+test('a fallback commit from a removed .claude/worktrees folder covers its own edit and not the main checkout edit', () => {
+  const gone = '/r/.claude/worktrees/gone';
+  const own = edit({ t: 1, file: `${gone}/src/a.js`, root: gone, repo: '/r' });
+  const main = edit({ toolUseId: 'm', t: 1, file: '/r/src/a.js', root: '/r', repo: '/r' });
+  const c = commit({ t: 2, toplevel: '/r', fallback: true, root: gone, repo: '/r', files: ['src/a.js'] });
+  assert.deepStrictEqual(lineRows([own, main], [c]), [row(5, 1, 1), row(10, 2, 2)]);
+});
+
 test('a live-worktree commit does not cover the same path edited in another worktree', () => {
   const e = edit({ t: 1, file: '/r.a/src/a.js', root: '/r.a' });
   const c = commit({ t: 2, toplevel: '/r.b', files: ['src/a.js'] });
