@@ -39,6 +39,8 @@ test('commitDirs lists the directory of every git commit segment', () => {
   assert.deepStrictEqual(commitDirs('git commit -C HEAD', '/c'), ['/c']);
   assert.deepStrictEqual(commitDirs('git commit -m x && git commit -m y', '/c'), ['/c']);
   assert.deepStrictEqual(commitDirs('git status', '/c'), []);
+  assert.deepStrictEqual(commitDirs('(cd /a && git commit -m "x(y)"; cd b && git commit -m z)', '/c'), ['/a', '/a/b']);
+  assert.deepStrictEqual(commitDirs('(cd /a && git commit -m fix(x); cd b && git commit -m z)', '/c'), ['/a', '/a/b']);
 });
 
 function git(dir, args, secs) {
@@ -417,4 +419,15 @@ test('ENOBUFS is permanent, cached and named in a warning', (t) => {
   assert.deepStrictEqual(resolveCommits(opts), { rows: [], transient: false });
   assert.strictEqual(calls, first);
   assert.ok(warnings.some((w) => w.includes(dir)));
+});
+
+test('a file name with a newline is counted and listed', { skip: !hasGit }, (t) => {
+  t.after(resetCommitState);
+  resetCommitState();
+  const dir = initRepo(t, 'commits-newline');
+  const sha = commitFiles(dir, { 'n\nl.txt': 'x\n', 't\tab.txt': 'y\n' }, 'odd names', 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git commit -m "odd names"' });
+  assert.deepStrictEqual(rows.map((r) => r.sha), [sha]);
+  assert.strictEqual(rows[0].added, 2);
+  assert.deepStrictEqual([...rows[0].files].sort(), ['n\nl.txt', 't\tab.txt']);
 });
