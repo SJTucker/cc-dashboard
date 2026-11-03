@@ -695,3 +695,12 @@ test('a headless row set before the cutoff is skipped by maxT', () => {
   const data = run([headlessSet('h1', [hcall('h1', { t: at(20) })])], { days: 7 });
   assert.strictEqual(data.summary.apiCalls, 0);
 });
+
+test('a rebase that replays a commit authored before the window adds no lines', () => {
+  const replay = (o) => ({ sha: 'a'.repeat(40), parent: 'p', added: 0, removed: 0, files: ['/r/a.js'], repo: '/r', amend: false, t: NOW - 60_000, sessionId: 's1', fromReflog: true, rewrite: true, authorEmail: 'x@y', committerEmail: 'x@y', ...o });
+  const old = replay({ added: 48_698, authorTime: Math.floor((NOW - 10 * 86_400_000) / 1000), subject: 'old work' });
+  const fresh = replay({ sha: 'b'.repeat(40), added: 7, authorTime: Math.floor((NOW - 120_000) / 1000), subject: 'new work', files: ['/r/b.js'] });
+
+  assert.strictEqual(run([rowSet({ commits: [old] })], { days: 1 }).efficiency.linesBySession.s1, undefined);
+  assert.deepStrictEqual(run([rowSet({ commits: [old, fresh] })], { days: 1 }).efficiency.linesBySession.s1, { added: 7, removed: 0 });
+});
