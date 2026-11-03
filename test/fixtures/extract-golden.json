@@ -343,7 +343,8 @@
         "added": 2,
         "removed": 1,
         "repo": null,
-        "file": null
+        "file": null,
+        "root": null
       },
       {
         "toolUseId": "toolu_a3",
@@ -352,7 +353,8 @@
         "added": 2,
         "removed": 0,
         "repo": null,
-        "file": null
+        "file": null,
+        "root": null
       },
       {
         "toolUseId": "toolu_a4",
@@ -361,7 +363,8 @@
         "added": 0,
         "removed": 0,
         "repo": null,
-        "file": null
+        "file": null,
+        "root": null
       },
       {
         "toolUseId": "toolu_a5",
@@ -370,7 +373,8 @@
         "added": 2,
         "removed": 0,
         "repo": null,
-        "file": null
+        "file": null,
+        "root": null
       }
     ],
     "commits": [],
@@ -702,7 +706,8 @@
         "added": 2,
         "removed": 1,
         "repo": null,
-        "file": null
+        "file": null,
+        "root": null
       }
     ],
     "commits": [],
@@ -820,7 +825,8 @@
         "added": 1,
         "removed": 0,
         "repo": null,
-        "file": null
+        "file": null,
+        "root": null
       }
     ],
     "commits": [],
@@ -1049,7 +1055,8 @@
         "added": 1,
         "removed": 1,
         "repo": null,
-        "file": null
+        "file": null,
+        "root": null
       }
     ],
     "commits": [],

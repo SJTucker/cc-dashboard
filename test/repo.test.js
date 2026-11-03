@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const helpers = require('./helpers');
-const { encodeFolder, findRepo, repoFromProjectFolder, projectFolderOf, configDirOf } = require('../lib/repo');
+const { encodeFolder, findRepo, checkoutRoot, repoFromProjectFolder, projectFolderOf, configDirOf } = require('../lib/repo');
 
 // os.tmpdir() on macOS sits under /var, a symlink to /private/var. The folder walk
 // skips symlinks, so fixtures live under the real path.
@@ -123,4 +123,34 @@ test('configDirOf takes the folder above projects, for main and subagent transcr
   assert.strictEqual(configDirOf('/u/.claude/projects/-u-code-app/abc.jsonl'), '/u/.claude');
   assert.strictEqual(configDirOf('/u/.claude/projects/-u-code-app/abc/subagents/agent-1.jsonl'), '/u/.claude');
   assert.strictEqual(configDirOf('/u/elsewhere/abc.jsonl'), null);
+});
+
+test('checkoutRoot returns the main checkout, a live worktree, and a removed worktrunk worktree', (t) => {
+  const { main, worktree } = layout(base(t));
+  assert.strictEqual(checkoutRoot(path.join(main, 'src')), main);
+  assert.strictEqual(checkoutRoot(path.join(worktree, 'src')), worktree);
+  const removed = path.join(path.dirname(main), 'app.deleted-branch');
+  assert.strictEqual(checkoutRoot(path.join(removed, 'src', 'deep')), removed);
+  assert.strictEqual(checkoutRoot('relative/path'), null);
+});
+
+test('checkoutRoot returns a removed .claude/worktrees folder as its own root', (t) => {
+  const repo = path.join(base(t), 'proj');
+  fs.mkdirSync(path.join(repo, '.git'), { recursive: true });
+  fs.mkdirSync(path.join(repo, '.claude', 'worktrees', 'live'), { recursive: true });
+  const gone = path.join(repo, '.claude', 'worktrees', 'gone');
+  assert.strictEqual(checkoutRoot(path.join(gone, 'lib')), gone);
+  assert.strictEqual(checkoutRoot(path.join(repo, '.claude', 'worktrees', 'live', 'lib')), repo);
+});
+
+test('checkoutRoot returns a submodule root, and passes an existing <repo>.docs folder without .git', (t) => {
+  const { main } = layout(base(t));
+  const sub = path.join(main, 'vendor', 'lib');
+  fs.mkdirSync(path.join(sub, 'src'), { recursive: true });
+  fs.writeFileSync(path.join(sub, '.git'), 'gitdir: ../../.git/modules/lib\n');
+  assert.strictEqual(checkoutRoot(path.join(sub, 'src')), sub);
+  // app.docs exists, holds no .git, and is not a checkout, so the walk goes past it.
+  const docs = path.join(path.dirname(main), 'app.docs');
+  fs.mkdirSync(path.join(docs, 'x'), { recursive: true });
+  assert.strictEqual(checkoutRoot(path.join(docs, 'x')), null);
 });
