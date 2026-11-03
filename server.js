@@ -22,6 +22,8 @@ const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = requir
 const { readCacheState, getCacheDir } = require('./lib/cache');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
 const { readActivity, getActivityDir } = require('./lib/activity');
+const { readSettings, writeSettings } = require('./lib/settings');
+const { reviewBacklog, skipBacklog } = require('./lib/review');
 const { readReviews, readClosedPage, parseCursor, suggestionReason, setDismissal, DISMISS_REASONS, CLOSED_PAGE_SIZE, CLOSED_PAGE_MAX } = require('./lib/review');
 const { createReviewDbGetter, legacyReviewsDir } = require('./lib/review-db');
 const { createServerDb, getStorePath, isBusy } = require('./lib/db');
@@ -310,7 +312,7 @@ function createServer(config) {
       // The two rtk rows' daily series come from rtk's own history, not the scan.
       const rtkDaily = readRtkDaily(config.rtkDb);
       if (rtkDaily) Object.assign(report.daily, rtkDaily);
-      res.json(report);
+      res.json({ ...report, labelsOn: readSettings(config.configDir).setupLabels });
     } catch (err) {
       console.error('[API] /api/changes failed:', err);
       res.status(500).json({ error: 'Failed to build the setup changes report', detail: err.message });
@@ -430,7 +432,7 @@ function createServer(config) {
       return;
     }
     try {
-      res.json(readReviews(getReviewDb(), projectsDir, { days: range.days }));
+      res.json({ ...readReviews(getReviewDb(), projectsDir, { days: range.days }), enabled: readSettings(config.configDir).reviews });
     } catch (err) {
       if (sendBusy(res, err)) return;
       console.error('[API] /api/reviews failed:', err);
@@ -490,6 +492,48 @@ function createServer(config) {
       return;
     }
     changeDismissal(res, target, reason);
+  });
+
+  // Saves the dashboard switches. A key the body leaves out keeps its saved value.
+  // Turning reviews from off to on first finds the sessions that ended while it was
+  // off. Without `backlog` they answer 409 with the count and nothing is written, so
+  // the page can ask. 'skip' records them as skipped before the switch is written,
+  // because the mod can only claim sessions once reviews are on. 'review' leaves them
+  // unclaimed for the mod to pick up.
+  const SETTINGS_KEYS = ['reviews', 'setupLabels', 'backlog'];
+  app.post('/api/settings', express.json({ limit: '1kb' }), async (req, res) => {
+    const body = req.body;
+    const bad = !body || typeof body !== 'object' || Array.isArray(body)
+      || Object.keys(body).some((k) => !SETTINGS_KEYS.includes(k))
+      || ['reviews', 'setupLabels'].some((k) => k in body && typeof body[k] !== 'boolean')
+      || ('backlog' in body && body.backlog !== 'review' && body.backlog !== 'skip')
+      || !('reviews' in body || 'setupLabels' in body);
+    if (bad) {
+      res.status(400).json({ error: 'Send reviews and/or setupLabels as booleans, and backlog as "review" or "skip".' });
+      return;
+    }
+    try {
+      const saved = readSettings(config.configDir);
+      const next = {
+        reviews: 'reviews' in body ? body.reviews : saved.reviews,
+        setupLabels: 'setupLabels' in body ? body.setupLabels : saved.setupLabels,
+      };
+      if (next.reviews && !saved.reviews) {
+        const db = getReviewDb();
+        const sessions = await reviewBacklog({ db, sessionsDir: getSessionsDir(config.configDir), projects: projectsDir, now: Date.now() });
+        if (sessions.length && !body.backlog) {
+          res.status(409).json({ error: 'backlog', backlog: sessions.length });
+          return;
+        }
+        if (body.backlog === 'skip') skipBacklog(db, sessions, Date.now());
+      }
+      writeSettings(config.configDir, next);
+      res.json(next);
+    } catch (err) {
+      if (sendBusy(res, err)) return;
+      console.error('[API] /api/settings failed:', err);
+      res.status(500).json({ error: 'Failed to save the settings', detail: err.message });
+    }
   });
 
   app.delete(DISMISS_PATH, (req, res) => {
