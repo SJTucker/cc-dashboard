@@ -236,6 +236,7 @@ function showBody(visible) {
 function renderChanges(report) {
   changesReport = report;
   document.getElementById('beforeAfterPanel').hidden = false;
+  document.getElementById('labelsSwitch').checked = report.labelsOn !== false;
   renderChangesFileNote(report.changesFile);
   // Showing the panel again re-runs renderChanges: resumeRequests in main.mjs
   // calls loadChanges or redrawCharts, which calls redrawChanges.

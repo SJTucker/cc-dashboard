@@ -21,6 +21,11 @@ let reviewsDays = '7';
 // hides the closed list and drops its pages. A server error resolves to { error }
 // so the panel shows the reason. A network failure (status 0) resolves to null and
 // hides the panel, like requestSessions.
+// Requests the range of the last request again and draws it, for after a setting change.
+export function reloadReviews() {
+  return requestReviews(reviewsDays).then(renderReviews);
+}
+
 export function requestReviews(days) {
   reviewsDays = String(days);
   resetClosed(reviewsDays);
@@ -177,8 +182,10 @@ function drawReviews(data) {
     note.textContent = '';
     return;
   }
-  panel.hidden = !data || (!data.reviews.length && !data.closedCount);
+  panel.hidden = !data;
   if (panel.hidden) return;
+  const enabled = data.enabled !== false;
+  document.getElementById('reviewsSwitch').checked = enabled;
 
   const active = document.activeElement;
   const activeKey = active && panel.contains(active) ? active.dataset.reviewFocus : null;
@@ -202,5 +209,7 @@ function drawReviews(data) {
   if (focusKey) [...panel.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus({ preventScroll: true });
 
   const withOpen = countWithOpen(data.reviews);
-  note.textContent = `${withOpen} ${withOpen === 1 ? 'review' : 'reviews'} with open suggestions · ${rangeShort(reviewsDays)}`;
+  note.textContent = enabled
+    ? `${withOpen} ${withOpen === 1 ? 'review' : 'reviews'} with open suggestions · ${rangeShort(reviewsDays)}`
+    : 'Suggestions are off. Ended sessions are not reviewed.';
 }

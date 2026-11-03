@@ -23,7 +23,8 @@ import { renderModelDailyCharts, renderModelsPanel, setupModelMixToggle } from '
 import { loadPricesSource, setupPrices } from './panels/prices.mjs';
 import { refreshRecords } from './panels/records.mjs';
 import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
-import { requestReviews, renderReviews, reviewsMark, reviewsSince } from './panels/reviews.mjs';
+import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews } from './panels/reviews.mjs';
+import { wireReviewsSwitch, wireLabelsSwitch } from './panels/settings-switch.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
@@ -518,6 +519,8 @@ setupModelMixToggle();
 setupPrices({ onApplied: reloadAll });
 refreshRecords();
 setupHighscores();
+wireReviewsSwitch(reloadReviews);
+wireLabelsSwitch();
 refreshHighscores();
 // Runs enterTab once for the hash the page opened with, then on each hash change.
 setupTabs(enterTab);
