@@ -36,6 +36,11 @@ test('git commit -F - with a heredoc message is still a commit call in its direc
   assert.deepStrictEqual(squashDirs(cmd, '/c'), []);
 });
 
+test('commitDirs keeps the directory when a cd target is a variable or a command substitution', () => {
+  assert.deepStrictEqual(commitDirs('for b in x y; do cd $b || exit 1; git rebase main; done', '/c'), ['/c']);
+  assert.deepStrictEqual(commitDirs('cd $(pwd)/sub && git commit -m x', '/c'), ['/c']);
+});
+
 test('commitDirs closes a subshell whose commit message holds a parenthesis', () => {
   assert.deepStrictEqual(commitDirs('(cd /a && git commit -m "fix(x)") && git commit -m y', '/c'), ['/a', '/c']);
 });
