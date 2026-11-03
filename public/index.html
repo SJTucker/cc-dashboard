@@ -242,15 +242,6 @@
             <div class="reviews-closed-more" id="reviewsClosedMore"></div>
           </section>
 
-        <dialog id="reviewsBacklog" class="backlog-dialog" aria-labelledby="reviewsBacklogTitle">
-          <h3 id="reviewsBacklogTitle">Turn suggestions back on</h3>
-          <p id="reviewsBacklogText"></p>
-          <div class="backlog-actions">
-            <button type="button" class="refresh-btn backlog-default" data-backlog="review">Review them</button>
-            <button type="button" class="refresh-btn" data-backlog="skip">Skip them</button>
-            <button type="button" class="refresh-btn" data-backlog="cancel">Cancel</button>
-          </div>
-        </dialog>
         </section>
 
         <div class="panel-row even">
@@ -415,6 +406,16 @@
   </div>
 
   <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+
+  <dialog id="reviewsBacklog" class="backlog-dialog" aria-labelledby="reviewsBacklogTitle">
+    <h3 id="reviewsBacklogTitle">Turn suggestions back on</h3>
+    <p id="reviewsBacklogText"></p>
+    <div class="backlog-actions">
+      <button type="button" class="refresh-btn backlog-default" data-backlog="review">Review them</button>
+      <button type="button" class="refresh-btn" data-backlog="skip">Skip them</button>
+      <button type="button" class="refresh-btn" data-backlog="cancel">Cancel</button>
+    </div>
+  </dialog>
 
   <script type="module" src="/main.mjs"></script>
 </body>

@@ -514,11 +514,8 @@ function createServer(config) {
     }
     try {
       const saved = readSettings(config.configDir);
-      const next = {
-        reviews: 'reviews' in body ? body.reviews : saved.reviews,
-        setupLabels: 'setupLabels' in body ? body.setupLabels : saved.setupLabels,
-      };
-      if (next.reviews && !saved.reviews) {
+      const turnsReviewsOn = body.reviews === true && !saved.reviews;
+      if (turnsReviewsOn) {
         const db = getReviewDb();
         const sessions = await reviewBacklog({ db, sessionsDir: getSessionsDir(config.configDir), projects: projectsDir, now: Date.now() });
         if (sessions.length && !body.backlog) {
@@ -527,6 +524,12 @@ function createServer(config) {
         }
         if (body.backlog === 'skip') skipBacklog(db, sessions, Date.now());
       }
+      // Read again: a POST that arrived during the await above may have changed the other key.
+      const latest = readSettings(config.configDir);
+      const next = {
+        reviews: 'reviews' in body ? body.reviews : latest.reviews,
+        setupLabels: 'setupLabels' in body ? body.setupLabels : latest.setupLabels,
+      };
       writeSettings(config.configDir, next);
       res.json(next);
     } catch (err) {

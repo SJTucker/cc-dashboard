@@ -21,15 +21,15 @@ let reviewsDays = '7';
 // hides the closed list and drops its pages. A server error resolves to { error }
 // so the panel shows the reason. A network failure (status 0) resolves to null and
 // hides the panel, like requestSessions.
-// Requests the range of the last request again and draws it, for after a setting change.
-export function reloadReviews() {
-  return requestReviews(reviewsDays).then(renderReviews);
-}
-
 export function requestReviews(days) {
   reviewsDays = String(days);
   resetClosed(reviewsDays);
   return getJson(`/api/reviews?days=${encodeURIComponent(reviewsDays)}`).then((reviews) => (reviews?.error && reviews.status === 0 ? null : reviews));
+}
+
+// Requests the range of the last request again and draws it, for after a setting change.
+export function reloadReviews() {
+  return requestReviews(reviewsDays).then(renderReviews);
 }
 
 // The payload main.mjs last passed in, and the reviews on screen. Dismiss and undo
@@ -176,6 +176,8 @@ function drawReviews(data) {
     panel.hidden = false;
     status.hidden = false;
     status.textContent = `Could not read session reviews: ${data.error}`;
+    // The switch would show its default, not the saved setting.
+    document.getElementById('reviewsSwitch').disabled = true;
     list.replaceChildren();
     document.getElementById('reviewsMore').replaceChildren();
     drawClosed({ closedCount: null });
@@ -185,7 +187,9 @@ function drawReviews(data) {
   panel.hidden = !data;
   if (panel.hidden) return;
   const enabled = data.enabled !== false;
-  document.getElementById('reviewsSwitch').checked = enabled;
+  const reviewsSwitch = document.getElementById('reviewsSwitch');
+  reviewsSwitch.checked = enabled;
+  reviewsSwitch.disabled = false;
 
   const active = document.activeElement;
   const activeKey = active && panel.contains(active) ? active.dataset.reviewFocus : null;

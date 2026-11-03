@@ -242,7 +242,9 @@ function showBody(visible) {
 function renderChanges(report) {
   changesReport = report;
   document.getElementById('beforeAfterPanel').hidden = false;
-  document.getElementById('labelsSwitch').checked = report.labelsOn !== false;
+  const labelsSwitch = document.getElementById('labelsSwitch');
+  labelsSwitch.checked = report.labelsOn !== false;
+  labelsSwitch.disabled = false;
   renderChangesFileNote(report.changesFile);
   // Showing the panel again re-runs renderChanges: resumeRequests in main.mjs
   // calls loadChanges or redrawCharts, which calls redrawChanges.
@@ -303,6 +305,8 @@ export async function loadChanges() {
     note.hidden = false;
     note.classList.add('changes-error');
     note.textContent = `Couldn't load setup changes: ${err.message}`;
+    // The switch would show its default, not the saved setting.
+    document.getElementById('labelsSwitch').disabled = true;
   }
 }
 

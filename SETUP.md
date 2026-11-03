@@ -218,7 +218,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/headless-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<session id>.json` per headless session (`claude -p` with no transcript). Each holds the session id, its working folder, the cost Claude Code last reported and, for each model request, its time, model, subagent id when there is one, turn id, step index and four token counts. The server reads them into `transcripts.db` as call rows and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
-| `<cfg>/cc-dashboard/settings.json` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session`, the mod |
+| `<cfg>/cc-dashboard/settings.json` | `CLAUDE_CONFIG_DIR` | The server writes it from the Suggestions and Haiku labels switches. `bin/review-session` and the mod read it. |
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
 | `<cfg>/cc-dashboard/server.pid`, `<cfg>/cc-dashboard/server.log` | `CLAUDE_CONFIG_DIR` | `bin/server`. `bin/server stop` removes the pid file. Each `bin/server start` empties the log. |
 | `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
