@@ -1,3 +1,5 @@
+import { setLabelsOn } from './changes.mjs';
+
 // The Suggestions and Haiku labels switches: saving the choice to /api/settings and
 // the dialog that asks what to do with sessions that ended while suggestions were off.
 
@@ -85,7 +87,10 @@ export function wireLabelsSwitch() {
     box.disabled = true;
     const result = await saveSettings({ setupLabels: want });
     box.disabled = false;
-    if (result.ok) return;
+    if (result.ok) {
+      setLabelsOn(want);
+      return;
+    }
     box.checked = !want;
     note.hidden = false;
     note.classList.add('changes-error');

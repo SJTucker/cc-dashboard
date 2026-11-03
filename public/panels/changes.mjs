@@ -132,6 +132,12 @@ function drawBeforeAfter(report, marker) {
 }
 
 let changesReport = null;
+
+// Keeps the cached report in step with a saved Haiku labels switch, so a redraw
+// from the cache shows the saved state.
+export function setLabelsOn(on) {
+  if (changesReport) changesReport.labelsOn = on;
+}
 let selectedMarkerKey = null;
 
 // The row whose daily chart shows. Kept across marker changes, redraws and
