@@ -1,6 +1,6 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, Register, SessionMeasureInput, SessionRateLimit, Timer } from 'claude-code'
-import { baseName, changesFileText, commandPaths, fallbackLabel, cleanLabel, folderFile, includedPaths, lineDiff, readSetupState, settingsChanges, snapshotName } from './setup'
+import { baseName, changesFileText, commandPaths, fallbackLabel, cleanLabel, folderFile, includedPaths, lineDiff, parseDashboardSettings, readSetupState, settingsChanges, snapshotName } from './setup'
 import type { SetupEntry, SetupState, Snapshot, Watched } from './setup'
 import { projectFolder, rateLimitsInput, statuslineRecord } from './statusline'
 import type { Frozen } from './statusline'
@@ -24,6 +24,9 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // A non-interactive session (claude -p) gets no activity file, no snapshot, no end
 // record and no handoff timer. It sends rate limits, and when it has no transcript it writes
 // its usage to headless-usage/.
+// The mod reads settings.json in the same folder, which the dashboard writes. While its
+// setupLabels value is false, the mod makes no Haiku label call, no release judging
+// call and no changelog fetch.
 // The bin/ scripts write the session, usage, update-verdict and review files, so the
 // formats, the atomic writes and the freshness checks of those files are theirs.
 // The mod writes six formats itself with $.fs.write, under <config dir>/cc-dashboard/:
@@ -148,6 +151,16 @@ async function configPaths($: EngineInterface) {
 
 async function configDir($: EngineInterface) {
   return (await configPaths($))?.dir ?? null
+}
+
+const LABELS_OFF_TEXT = "Haiku labels are off in the dashboard's Setup changes panel. Turn them on to judge Claude Code releases."
+
+// Reads <config dir>/cc-dashboard/settings.json. A missing dir or a failed read gives
+// both switches on.
+async function dashboardSettings($: EngineInterface) {
+  const dir = await configDir($)
+  const text = dir ? await $.fs.read(`${dir}/cc-dashboard/settings.json`).then(String, () => undefined) : undefined
+  return parseDashboardSettings(text)
 }
 
 // No $ call returns the transcript's path. Claude Code keeps it at
@@ -354,6 +367,7 @@ async function updatesPath($: EngineInterface) {
 // Runs once per session start, after the session is up. Only the running version
 // is looked up here; /backfill-updates covers the versions before it.
 async function checkVersion($: EngineInterface) {
+  if (!(await dashboardSettings($)).setupLabels) return
   const { base } = await $.session.version()
   if (!base || !RELEASE.test(base)) return // a dev build has no changelog entry
   const file = await updatesPath($)
@@ -965,7 +979,7 @@ async function haikuLabel($: EngineInterface, name: string, added: string[], rem
   }
 }
 
-async function entriesFor($: EngineInterface, c: Change): Promise<SetupEntry[]> {
+async function entriesFor($: EngineInterface, c: Change, labels: boolean): Promise<SetupEntry[]> {
   const base = { t: c.t, name: c.w.name, file: c.w.path }
   const who = c.w.mode === 'script' ? `${baseName(c.w.path)} ` : ''
   if (c.before === null) return [{ ...base, kind: c.w.kind, label: `${who}added` }]
@@ -979,7 +993,7 @@ async function entriesFor($: EngineInterface, c: Change): Promise<SetupEntry[]> 
   const { added, removed } = lineDiff(c.before, c.after)
   if (c.w.mode === 'rtk') return [{ ...base, kind: c.w.kind, label: fallbackLabel(added, []) }]
   if (!added.length && !removed.length) return [{ ...base, kind: c.w.kind, label: 'changed' }]
-  const label = (await haikuLabel($, c.w.name, added, removed)) ?? fallbackLabel(added, removed)
+  const label = (labels ? await haikuLabel($, c.w.name, added, removed) : null) ?? fallbackLabel(added, removed)
   return [{ ...base, kind: c.w.kind, label }]
 }
 
@@ -1000,7 +1014,8 @@ async function checkSetup($: EngineInterface) {
     if (c) checked.push(c)
   }
   const entries: SetupEntry[] = []
-  for (const c of checked) if (c.change) entries.push(...(await entriesFor($, c.change)))
+  const { setupLabels } = await dashboardSettings($)
+  for (const c of checked) if (c.change) entries.push(...(await entriesFor($, c.change, setupLabels)))
   if (entries.length) {
     const file = `${dir}/cc-dashboard/changes/${id}.json`
     // A resumed session starts again with the same id: keep what it wrote before.
@@ -1153,7 +1168,7 @@ export const register: Register = (on) => {
     return result
   })
 
-  on('command.run', { command: 'backfill-updates' }, async ($) => ({ text: backfillText(await judgeUpdates($)) }))
+  on('command.run', { command: 'backfill-updates' }, async ($) => ((await dashboardSettings($)).setupLabels ? { text: backfillText(await judgeUpdates($)) } : { text: LABELS_OFF_TEXT }))
 
   on('command.run', { command: 'transcript-handoff' }, async ($) => {
     const path = await transcriptPath($, await $.session.root(), await $.session.id())

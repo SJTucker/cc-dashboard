@@ -132,6 +132,12 @@ function drawBeforeAfter(report, marker) {
 }
 
 let changesReport = null;
+
+// Keeps the cached report in step with a saved Haiku labels switch, so a redraw
+// from the cache shows the saved state.
+export function setLabelsOn(on) {
+  if (changesReport) changesReport.labelsOn = on;
+}
 let selectedMarkerKey = null;
 
 // The row whose daily chart shows. Kept across marker changes, redraws and
@@ -236,6 +242,9 @@ function showBody(visible) {
 function renderChanges(report) {
   changesReport = report;
   document.getElementById('beforeAfterPanel').hidden = false;
+  const labelsSwitch = document.getElementById('labelsSwitch');
+  labelsSwitch.checked = report.labelsOn !== false;
+  labelsSwitch.disabled = false;
   renderChangesFileNote(report.changesFile);
   // Showing the panel again re-runs renderChanges: resumeRequests in main.mjs
   // calls loadChanges or redrawCharts, which calls redrawChanges.
@@ -296,6 +305,8 @@ export async function loadChanges() {
     note.hidden = false;
     note.classList.add('changes-error');
     note.textContent = `Couldn't load setup changes: ${err.message}`;
+    // The switch would show its default, not the saved setting.
+    document.getElementById('labelsSwitch').disabled = true;
   }
 }
 

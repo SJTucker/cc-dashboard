@@ -227,6 +227,7 @@
           <div class="panel-head">
             <h2 id="reviewsHeading">Session reviews</h2>
             <span class="panel-meta" id="reviewsNote"></span>
+            <label class="panel-switch"><input type="checkbox" role="switch" id="reviewsSwitch" checked> Suggestions</label>
           </div>
           <p class="review-empty" id="reviewsStatus" role="status" hidden></p>
           <ul class="reviews-list" id="reviewsList"></ul>
@@ -240,6 +241,7 @@
             <p class="review-empty" id="reviewsClosedStatus" role="status" hidden></p>
             <div class="reviews-closed-more" id="reviewsClosedMore"></div>
           </section>
+
         </section>
 
         <div class="panel-row even">
@@ -375,6 +377,7 @@
           <div class="panel-head">
             <h2>Setup changes &middot; before and after</h2>
             <span class="panel-meta">7 days before and after the picked change</span>
+            <label class="panel-switch"><input type="checkbox" role="switch" id="labelsSwitch" checked> Haiku labels</label>
           </div>
           <p id="changesFileNote" class="panel-note changes-file-note" hidden></p>
           <p id="baEmpty" class="bar-empty" hidden>No setup changes in this range.</p>
@@ -403,6 +406,16 @@
   </div>
 
   <div id="tooltip" class="tooltip" role="tooltip" hidden></div>
+
+  <dialog id="reviewsBacklog" class="backlog-dialog" aria-labelledby="reviewsBacklogTitle">
+    <h3 id="reviewsBacklogTitle">Turn suggestions back on</h3>
+    <p id="reviewsBacklogText"></p>
+    <div class="backlog-actions">
+      <button type="button" class="refresh-btn backlog-default" data-backlog="review">Review them</button>
+      <button type="button" class="refresh-btn" data-backlog="skip">Skip them</button>
+      <button type="button" class="refresh-btn" data-backlog="cancel">Cancel</button>
+    </div>
+  </dialog>
 
   <script type="module" src="/main.mjs"></script>
 </body>

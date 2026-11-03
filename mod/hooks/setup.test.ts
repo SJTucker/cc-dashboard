@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { baseName, changesFileText, cleanLabel, commandPaths, escapeRegExp, fallbackLabel, folderFile, includedPaths, lineDiff, readSetupState, settingsChanges, snapshotName } from './setup'
+import { baseName, changesFileText, cleanLabel, commandPaths, escapeRegExp, fallbackLabel, folderFile, includedPaths, lineDiff, parseDashboardSettings, readSetupState, settingsChanges, snapshotName } from './setup'
 
 test('snapshotName is stable per path and differs between paths', async () => {
   expect(snapshotName('/h/.claude/CLAUDE.md')).toBe(snapshotName('/h/.claude/CLAUDE.md'))
@@ -139,4 +139,13 @@ test('changesFileText appends new entries to an earlier array and ignores anythi
   expect(JSON.parse(changesFileText([older], [entry]))).toEqual([older, entry])
   expect(JSON.parse(changesFileText({ not: 'an array' }, [entry]))).toEqual([entry])
   expect(changesFileText([], [entry]).endsWith(']\n')).toBe(true)
+})
+
+test('parseDashboardSettings counts only false as off', async () => {
+  expect(parseDashboardSettings('{"setupLabels":false}')).toEqual({ reviews: true, setupLabels: false })
+  expect(parseDashboardSettings('{"reviews":false}')).toEqual({ reviews: false, setupLabels: true })
+  expect(parseDashboardSettings('{"setupLabels":"no"}')).toEqual({ reviews: true, setupLabels: true })
+  expect(parseDashboardSettings('')).toEqual({ reviews: true, setupLabels: true })
+  expect(parseDashboardSettings('[]')).toEqual({ reviews: true, setupLabels: true })
+  expect(parseDashboardSettings(undefined)).toEqual({ reviews: true, setupLabels: true })
 })

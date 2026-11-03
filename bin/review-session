@@ -4,7 +4,8 @@
 // Run by the dashboard's Claude Code mod (mod/hooks/register.ts), which calls Haiku
 // because only the mod can. Two subcommands:
 //   prompt   closes open suggestions older than 14 days, claims ended sessions not reviewed yet and prints
-//            {"reviews": [{"sessionId", "system", "prompt"}]}
+//            {"reviews": [{"sessionId", "system", "prompt"}]}. While settings.json
+//            has "reviews": false it claims nothing and prints {"reviews": []}.
 //   record   {"sessionId", "reply"} or {"sessionId", "error"} on stdin; writes
 //            the review to transcripts.db
 // Prints one JSON object on success. On failure it prints the reason on stderr
@@ -16,6 +17,7 @@ const { getProjectsDir } = require('../lib/transcript-files');
 const { getSessionsDir } = require('../lib/sessions');
 const { openReviewDb, legacyReviewsDir } = require('../lib/review-db');
 const { getStorePath } = require('../lib/db');
+const { readSettings } = require('../lib/settings');
 const { readStdin } = require('../lib/stdin');
 
 function fail(message) {
@@ -41,7 +43,9 @@ if (command !== 'prompt' && command !== 'record') {
       command === 'prompt'
         ? Promise.resolve()
           .then(() => expireSuggestions(db))
-          .then(() => pendingReviews({ db, sessionsDir: getSessionsDir(configDir), projects: getProjectsDir(configDir), configDir }))
+          .then(() => (readSettings(configDir).reviews
+            ? pendingReviews({ db, sessionsDir: getSessionsDir(configDir), projects: getProjectsDir(configDir), configDir })
+            : []))
           .then((reviews) => ({ reviews }))
         : readStdin().then((input) => recordReview(db, JSON.parse(input)));
     work.then(

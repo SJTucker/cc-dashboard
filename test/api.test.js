@@ -1053,6 +1053,7 @@ test('GET /api/reviews lists finished reviews with suggestion state', async (t) 
       suggestions: [{ idx: 0, kind: 'token-waste', text: 'Read the file once.', dismissedAt: null, reason: null }],
     }],
     closedCount: 0,
+    enabled: true,
   });
 });
 
@@ -1060,7 +1061,7 @@ test('GET /api/reviews and /api/reviews/closed accept days=today', async (t) => 
   const { url } = await startServer(t);
   const open = await fetch(`${url}/api/reviews?days=today`);
   assert.strictEqual(open.status, 200);
-  assert.deepStrictEqual(await open.json(), { reviews: [], closedCount: 0 });
+  assert.deepStrictEqual(await open.json(), { reviews: [], closedCount: 0, enabled: true });
   const closed = await fetch(`${url}/api/reviews/closed?days=today`);
   assert.strictEqual(closed.status, 200);
 });
@@ -1069,7 +1070,7 @@ test('GET /api/reviews answers an empty list before any review exists', async (t
   const { url } = await startServer(t);
   const res = await fetch(`${url}/api/reviews?days=7`);
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(await res.json(), { reviews: [], closedCount: 0 });
+  assert.deepStrictEqual(await res.json(), { reviews: [], closedCount: 0, enabled: true });
 });
 
 test('GET /api/reviews imports review files from an earlier version', async (t) => {
@@ -1152,7 +1153,7 @@ test('GET /api/reviews/closed pages closed suggestions newest first and caps lim
   const rest = await (await fetch(`${url}/api/reviews/closed?days=7&before=${encodeURIComponent(big.next)}`)).json();
   assert.deepStrictEqual(rest.reviews.map((r) => r.sessionId), ['sess-50', 'sess-51', 'sess-52', 'sess-53', 'sess-54']);
   assert.strictEqual(rest.next, null);
-  assert.deepStrictEqual(await (await fetch(`${url}/api/reviews?days=7`)).json(), { reviews: [], closedCount: 55 });
+  assert.deepStrictEqual(await (await fetch(`${url}/api/reviews?days=7`)).json(), { reviews: [], closedCount: 55, enabled: true });
 });
 
 test('an expired suggestion refuses undo and the expired reason, and takes a new reason', async (t) => {
@@ -1282,7 +1283,7 @@ test('GET /api/reviews answers 503 within 1000 ms when its first import meets th
   await release();
   const after = await fetch(`${base}/api/reviews?days=7`);
   assert.strictEqual(after.status, 200);
-  assert.deepStrictEqual(await after.json(), { reviews: [], closedCount: 0 });
+  assert.deepStrictEqual(await after.json(), { reviews: [], closedCount: 0, enabled: true });
 });
 
 test('the dismiss routes answer 503 within 1000 ms under the review lock, reads still answer, and a dismiss works after', async (t) => {
@@ -1502,4 +1503,106 @@ test('a Claude model the pricing page never names starts one check, not one an h
   await fetch(`${url}/api/summary?days=today`); // the scan records the name again
   await sleep(300);
   assert.strictEqual(pages.calls, 1, 'that check already looked for this name');
+});
+
+// Settings switches
+const typedPrompt = (text) => JSON.stringify({ type: 'user', origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: text } });
+
+function postSettings(url, body) {
+  return fetch(`${url}/api/settings`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+}
+
+function writeSavedSettings(config, data) {
+  fs.mkdirSync(path.join(config.configDir, 'cc-dashboard'), { recursive: true });
+  fs.writeFileSync(path.join(config.configDir, 'cc-dashboard', 'settings.json'), JSON.stringify(data));
+}
+
+function addBacklogSession(config) {
+  const sessions = path.join(config.configDir, 'cc-dashboard', 'sessions');
+  fs.mkdirSync(sessions, { recursive: true });
+  fs.writeFileSync(path.join(sessions, 'abc.json'), JSON.stringify({ sessionId: 'abc', project: 'demo', endedAt: Date.now() }));
+  fs.mkdirSync(path.join(config.configDir, 'projects', '-work-demo'), { recursive: true });
+  fs.writeFileSync(path.join(config.configDir, 'projects', '-work-demo', 'abc.jsonl'), ['one', 'two', 'three'].map(typedPrompt).join('\n') + '\n');
+}
+
+test('POST /api/settings turns reviews off and GET /api/reviews reports it', async (t) => {
+  const { url } = await startServer(t);
+  const res = await postSettings(url, { reviews: false });
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(await res.json(), { reviews: false, setupLabels: true });
+  assert.strictEqual((await (await fetch(`${url}/api/reviews?days=7`)).json()).enabled, false);
+});
+
+test('POST /api/settings turning reviews on with a backlog answers 409 with the count', async (t) => {
+  const { url, config } = await startServer(t);
+  writeSavedSettings(config, { reviews: false });
+  addBacklogSession(config);
+  const res = await postSettings(url, { reviews: true });
+  assert.strictEqual(res.status, 409);
+  assert.deepStrictEqual(await res.json(), { error: 'backlog', backlog: 1 });
+  assert.strictEqual(require('../lib/settings').readSettings(config.configDir).reviews, false);
+});
+
+test('backlog skip marks the sessions skipped and turns reviews on', async (t) => {
+  const { url, config } = await startServer(t);
+  writeSavedSettings(config, { reviews: false });
+  addBacklogSession(config);
+  const res = await postSettings(url, { reviews: true, backlog: 'skip' });
+  assert.strictEqual(res.status, 200);
+  const db = openTestReviewDb(config);
+  const row = db.prepare("SELECT skip_reason FROM reviews WHERE session_id = 'abc'").get();
+  db.close();
+  assert.strictEqual(row.skip_reason, 'suggestions were off');
+  assert.strictEqual(require('../lib/settings').readSettings(config.configDir).reviews, true);
+});
+
+test('backlog review turns reviews on and leaves the sessions unclaimed', async (t) => {
+  const { url, config } = await startServer(t);
+  writeSavedSettings(config, { reviews: false });
+  addBacklogSession(config);
+  const res = await postSettings(url, { reviews: true, backlog: 'review' });
+  assert.strictEqual(res.status, 200);
+  const db = openTestReviewDb(config);
+  const row = db.prepare("SELECT * FROM reviews WHERE session_id = 'abc'").get();
+  db.close();
+  assert.strictEqual(row, undefined);
+  assert.strictEqual(require('../lib/settings').readSettings(config.configDir).reviews, true);
+});
+
+test('POST /api/settings with reviews true while already on answers 200 and skips nothing', async (t) => {
+  const { url, config } = await startServer(t);
+  addBacklogSession(config);
+  const res = await postSettings(url, { reviews: true, backlog: 'skip' });
+  assert.strictEqual(res.status, 200);
+  const db = openTestReviewDb(config);
+  const row = db.prepare("SELECT * FROM reviews WHERE session_id = 'abc'").get();
+  db.close();
+  assert.strictEqual(row, undefined);
+});
+
+test('POST /api/settings answers 400 for a bad body', async (t) => {
+  const { url } = await startServer(t);
+  for (const body of [{}, { reviews: 'no' }, { backlog: 'later', reviews: true }, { other: true }]) {
+    const res = await postSettings(url, body);
+    assert.strictEqual(res.status, 400, JSON.stringify(body));
+    assert.ok((await res.json()).error);
+  }
+});
+
+test('POST /api/settings answers 500 when the file cannot be written', { skip: process.getuid && process.getuid() === 0 }, async (t) => {
+  const { url, config } = await startServer(t);
+  const dir = path.join(config.configDir, 'cc-dashboard');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.chmodSync(dir, 0o500);
+  t.after(() => { try { fs.chmodSync(dir, 0o700); } catch { /* temp dir already removed */ } });
+  const res = await postSettings(url, { setupLabels: false });
+  assert.strictEqual(res.status, 500);
+  assert.strictEqual((await res.json()).error, 'Failed to save the settings');
+});
+
+test('GET /api/changes reports labelsOn', async (t) => {
+  const { url } = await startServer(t);
+  assert.strictEqual((await (await fetch(`${url}/api/changes`)).json()).labelsOn, true);
+  await postSettings(url, { setupLabels: false });
+  assert.strictEqual((await (await fetch(`${url}/api/changes`)).json()).labelsOn, false);
 });

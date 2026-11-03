@@ -225,7 +225,9 @@ marker. `enabledPlugins` is left out, because plugin installs are marked already
 Haiku labels a change to `CLAUDE.md` and the files it pulls in with `@`, a rule, a
 skill, an agent, or the project's `CLAUDE.md` or `CLAUDE.local.md` from the added and
 removed lines. When Haiku fails, the label is the first added line. A settings label
-lists the changed keys, for example `effortLevel high → medium`.
+lists the changed keys, for example `effortLevel high → medium`. The Haiku labels
+switch in the panel header stops these labels and the Claude Code update judging.
+With it off, the label is the first added line.
 
 The first check stores copies and records nothing. A project's files are stored the
 first time a session runs there, so its existing `CLAUDE.md` does not show as added.
@@ -240,7 +242,9 @@ When a session ends or `/clear` runs, the mod asks Haiku to review it and sugges
 to three changes. The kinds are a CLAUDE.md rule that would have prevented a
 correction, a skill or hook for repeated steps, token waste such as large tool output
 or repeated reads, and a change to how the session was run. "No suggestions" is a
-normal result. The Session reviews panel lists reviews that still have an open
+normal result. The Suggestions switch in the panel header stops these reviews. Turning
+it back on with sessions waiting opens a dialog: Review them, Skip them or Cancel. The
+panel shows even when there are no reviews, so the switch stays reachable. The panel lists reviews that still have an open
 suggestion, from the range picked on the Analysis tab (Today, 7d, 30d, 90d or All). A review
 with no suggestions, or whose Haiku call failed, is not listed. An open suggestion
 closes as expired 14 days after its review. Each review shows the session's title
@@ -627,7 +631,8 @@ only. History then starts at the oldest transcript on disk. Raising
   the running Claude Code version has no verdict or when you run
   `/backfill-updates`. That request comes from Claude Code, not from the
   dashboard server.
-  The mod also calls Haiku to review ended sessions and to label setup changes.
+  The mod also calls Haiku to review ended sessions and to label setup changes. The
+  Suggestions and Haiku labels switches on the Analysis tab stop those calls.
   [Network and model use](SETUP.md#network-and-model-use) in SETUP.md lists what each
   call sends.
 - **Localhost only.** The server binds to `127.0.0.1` and rejects any request whose

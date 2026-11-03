@@ -27,6 +27,11 @@ export function requestReviews(days) {
   return getJson(`/api/reviews?days=${encodeURIComponent(reviewsDays)}`).then((reviews) => (reviews?.error && reviews.status === 0 ? null : reviews));
 }
 
+// Requests the range of the last request again and draws it, for after a setting change.
+export function reloadReviews() {
+  return requestReviews(reviewsDays).then(renderReviews);
+}
+
 // The payload main.mjs last passed in, and the reviews on screen. Dismiss and undo
 // replace lastReviews and redraw without a request. renderPayload in main.mjs passes
 // a loaded payload again on a resize, and the set below keeps local changes.
@@ -171,14 +176,20 @@ function drawReviews(data) {
     panel.hidden = false;
     status.hidden = false;
     status.textContent = `Could not read session reviews: ${data.error}`;
+    // The switch would show its default, not the saved setting.
+    document.getElementById('reviewsSwitch').disabled = true;
     list.replaceChildren();
     document.getElementById('reviewsMore').replaceChildren();
     drawClosed({ closedCount: null });
     note.textContent = '';
     return;
   }
-  panel.hidden = !data || (!data.reviews.length && !data.closedCount);
+  panel.hidden = !data;
   if (panel.hidden) return;
+  const enabled = data.enabled !== false;
+  const reviewsSwitch = document.getElementById('reviewsSwitch');
+  reviewsSwitch.checked = enabled;
+  reviewsSwitch.disabled = false;
 
   const active = document.activeElement;
   const activeKey = active && panel.contains(active) ? active.dataset.reviewFocus : null;
@@ -202,5 +213,7 @@ function drawReviews(data) {
   if (focusKey) [...panel.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus({ preventScroll: true });
 
   const withOpen = countWithOpen(data.reviews);
-  note.textContent = `${withOpen} ${withOpen === 1 ? 'review' : 'reviews'} with open suggestions · ${rangeShort(reviewsDays)}`;
+  note.textContent = enabled
+    ? `${withOpen} ${withOpen === 1 ? 'review' : 'reviews'} with open suggestions · ${rangeShort(reviewsDays)}`
+    : 'Suggestions are off. Ended sessions are not reviewed.';
 }

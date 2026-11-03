@@ -73,3 +73,14 @@
 .reviews-closed-more { display: flex; gap: var(--sp-3); margin-top: var(--sp-2); }
 .reviews-closed-more [aria-disabled="true"] { opacity: 0.6; cursor: progress; }
 .review-reason { font-style: italic; white-space: nowrap; color: var(--text-secondary); }
+
+/* ---------- Haiku switches and the backlog dialog ---------- */
+
+.panel-switch { display: inline-flex; align-items: center; gap: var(--sp-1); margin-left: var(--sp-3); font-size: var(--fs-caption); color: var(--text-secondary); cursor: pointer; }
+.panel-switch input { margin: 0; }
+.backlog-dialog { max-width: 420px; padding: var(--sp-4); border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--text-primary); }
+.backlog-dialog::backdrop { background: rgb(0 0 0 / 50%); }
+.backlog-dialog h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-body); }
+.backlog-actions { display: flex; gap: var(--sp-2); justify-content: flex-end; margin-top: var(--sp-3); }
+/* The default action differs by weight and border, not colour. */
+.backlog-default { font-weight: 700; border-width: 2px; }
