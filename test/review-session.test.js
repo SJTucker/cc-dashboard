@@ -30,6 +30,17 @@ function run(base, args, input = '') {
   return { code: res.status, out: res.stdout ? JSON.parse(res.stdout) : null, err: res.stderr };
 }
 
+test('prompt hands back nothing while reviews are off', () => {
+  const base = fixture();
+  fs.writeFileSync(path.join(base, 'cc-dashboard', 'settings.json'), '{"reviews": false}');
+  const prompted = run(base, ['prompt']);
+  assert.strictEqual(prompted.code, 0);
+  assert.deepStrictEqual(prompted.out, { reviews: [] });
+  const check = new DatabaseSync(path.join(base, 'cc-dashboard', 'transcripts.db'));
+  assert.strictEqual(check.prepare("SELECT status FROM reviews WHERE session_id = 'abc'").get(), undefined);
+  check.close();
+});
+
 test('prompt hands back the ended session and record stores the answer', () => {
   const base = fixture();
   const prompted = run(base, ['prompt']);

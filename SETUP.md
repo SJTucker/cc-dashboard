@@ -218,6 +218,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/headless-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<session id>.json` per headless session (`claude -p` with no transcript). Each holds the session id, its working folder, the cost Claude Code last reported and, for each model request, its time, model, subagent id when there is one, turn id, step index and four token counts. The server reads them into `transcripts.db` as call rows and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
+| `<cfg>/cc-dashboard/settings.json` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session`, the mod |
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
 | `<cfg>/cc-dashboard/server.pid`, `<cfg>/cc-dashboard/server.log` | `CLAUDE_CONFIG_DIR` | `bin/server`. `bin/server stop` removes the pid file. Each `bin/server start` empties the log. |
 | `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
@@ -288,7 +289,8 @@ of them.
     characters of each Claude reply. The digest names each tool call with its file
     path, URL host, skill, subagent type or Bash program name. Bash arguments are not
     sent. The digest also holds the first 200 characters of each tool error. A digest
-    over 60,000 characters keeps its first 20,000 and last 40,000.
+    over 60,000 characters keeps its first 20,000 and last 40,000. The Suggestions
+    switch in the Session reviews panel stops these calls.
   - **Labelling a setup change:** the file's short name and its added and removed
     lines, up to 4,096 characters. Labelling covers `CLAUDE.md`, the files it includes
     with `@path`, rules, skills, agents, and a project's `CLAUDE.md` and

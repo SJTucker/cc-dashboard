@@ -325,6 +325,38 @@ test('pendingReviews returns sessions with 3 or more prompts and records the res
   assert.deepStrictEqual(await review.pendingReviews({ db, sessionsDir, projects, now: NOW }), []);
 });
 
+test('reviewBacklog lists only recent, unreviewed sessions with enough prompts', async () => {
+  const { review, db, sessionsDir, projects } = fixture();
+  writeSnapshot(sessionsDir, { sessionId: 'recent', project: 'demo', endedAt: NOW - 1 });
+  writeSnapshot(sessionsDir, { sessionId: 'old', project: 'demo', endedAt: NOW - 8 * DAY });
+  writeSnapshot(sessionsDir, { sessionId: 'small', project: 'demo', endedAt: NOW - 2 });
+  writeSnapshot(sessionsDir, { sessionId: 'failed', project: 'demo', endedAt: NOW - 3 });
+  writeSnapshot(sessionsDir, { sessionId: 'lost', project: 'demo', endedAt: NOW - 4 });
+  writeSessionTranscript(projects, 'recent', 3);
+  writeSessionTranscript(projects, 'old', 3);
+  writeSessionTranscript(projects, 'small', 2);
+  writeSessionTranscript(projects, 'failed', 3);
+  review.claimReview(db, { sessionId: 'failed', project: 'demo', endedAt: NOW - 3 }, NOW);
+  review.finishReview(db, 'failed', { status: 'failed', error: 'x' }, NOW);
+  const backlog = await review.reviewBacklog({ db, sessionsDir, projects, now: NOW });
+  assert.deepStrictEqual(backlog.map((s) => s.sessionId), ['recent']);
+  assert.strictEqual(rowOf(db, 'recent'), undefined);
+});
+
+test('skipBacklog marks each session skipped with the off reason', async () => {
+  const { review, db, sessionsDir, projects } = fixture();
+  writeSnapshot(sessionsDir, { sessionId: 'a', project: 'demo', endedAt: NOW - 1 });
+  writeSnapshot(sessionsDir, { sessionId: 'b', project: 'demo', endedAt: NOW - 2 });
+  writeSessionTranscript(projects, 'a', 3);
+  writeSessionTranscript(projects, 'b', 4);
+  const backlog = await review.reviewBacklog({ db, sessionsDir, projects, now: NOW });
+  assert.strictEqual(review.skipBacklog(db, backlog, NOW), 2);
+  for (const id of ['a', 'b']) {
+    assert.deepStrictEqual([rowOf(db, id).status, rowOf(db, id).skip_reason], ['skipped', 'suggestions were off']);
+  }
+  assert.deepStrictEqual(await review.pendingReviews({ db, sessionsDir, projects, now: NOW }), []);
+});
+
 test('earlierSuggestions lists suggestions from done reviews in the last 14 days, newest review first, with their state', () => {
   const { review, db } = fixture();
   seed(review, db, 'old', {}, [{ kind: 'workflow', text: 'too old' }], NOW - 15 * 24 * HOUR);
