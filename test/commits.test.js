@@ -13,10 +13,10 @@ const { squashDirs, isCommitCommand, commitDirs, resolveCommits, resetCommitStat
 const hasGit = spawnSync('git', ['--version']).status === 0;
 
 test('isCommitCommand recognises git commit calls', () => {
-  for (const c of ['git commit -m x', 'cd /a && git add -A && git commit -m "x"', 'git -C /a commit -m x', 'rtk git commit -m x']) {
+  for (const c of ['git commit -m x', 'cd /a && git add -A && git commit -m "x"', 'git -C /a commit -m x', 'rtk git commit -m x', 'git rebase --exec ./strip.sh main', 'git cherry-pick abc', 'git revert abc', 'git am p.patch', 'git pull --rebase', 'cd /a && git -C /b rebase main']) {
     assert.strictEqual(isCommitCommand(c), true, c);
   }
-  for (const c of ['git commit-tree abc', 'git log --grep commit', 'echo "git commit"', 'git rebase --continue']) {
+  for (const c of ['git commit-tree abc', 'git log --grep commit', 'echo "git commit"', 'git merge --squash x', 'git merge topic']) {
     assert.strictEqual(isCommitCommand(c), false, c);
   }
 });
@@ -724,6 +724,20 @@ test('resolveCommits returns the copies a rebase made as rewrite rows', { skip: 
   assert.strictEqual(copy?.rewrite, true);
   assert.strictEqual(copy.added, 4);
   assert.ok(!rows.find((r) => r.sha === mine)?.rewrite);
+});
+
+test('resolveCommits returns the commits a rebase --exec amend script rewrote as rewrite rows', { skip: !hasGit }, (t) => {
+  const dir = initRepo(t, 'commits-rebase-exec');
+  commitFiles(dir, { 'base.txt': 'x\n' }, 'base', 100);
+  commitFiles(dir, { 'a.txt': lines(3) }, 'first work', 200);
+  commitFiles(dir, { 'b.txt': lines(5) }, 'second work', 300);
+  gitCommitterAt(dir, ['rebase', '-q', '--exec', 'git commit -q --amend --no-edit', 'HEAD~2'], 1000);
+  const { rows } = resolveCommits({ dir, ...WINDOW, command: 'git rebase --exec ./strip.sh HEAD~2' });
+  const bySubject = new Map(rows.map((r) => [r.subject, r]));
+  assert.strictEqual(bySubject.get('first work')?.rewrite, true);
+  assert.strictEqual(bySubject.get('first work').added, 3);
+  assert.strictEqual(bySubject.get('second work')?.rewrite, true);
+  assert.strictEqual(bySubject.get('second work').added, 5);
 });
 
 test('resolveCommits returns a cherry-picked commit by another author as a rewrite row with its committer email', { skip: !hasGit }, (t) => {

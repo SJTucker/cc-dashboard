@@ -1250,6 +1250,28 @@ test('git commit -F - with a heredoc message that quotes git merge --squash is a
   assert.ok(!('squash' in rows.commits[0]));
 });
 
+test('a rebase --exec call is a commit call and its amended copies are rewrite rows, while the heredoc that writes the script is not', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t, { commit: false });
+  gitAt(repo, ['commit', '-q', '--allow-empty', '-m', 'base'], 1);
+  fs.writeFileSync(path.join(repo, 'a.txt'), 'a1\na2\na3\n');
+  gitAt(repo, ['add', '-A'], 100);
+  gitAt(repo, ['commit', '-q', '-m', 'first work'], 100);
+  fs.writeFileSync(path.join(repo, 'b.txt'), 'b1\nb2\n');
+  gitAt(repo, ['add', '-A'], 101);
+  gitAt(repo, ['commit', '-q', '-m', 'second work'], 101);
+  const env = { ...process.env, GIT_COMMITTER_DATE: `@${COMMIT_SECS} +0000` };
+  const r = spawnSync('git', ['-c', 'user.name=T', '-c', 'user.email=t@e.x', '-c', 'commit.gpgsign=false', 'rebase', '-q', '--exec', 'git commit -q --amend --no-edit', 'HEAD~2'], { cwd: repo, env, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const write = callAt('w', '2026-10-01T09:59:00.000Z', `cd ${repo} && cat > strip.sh <<'EOF'\n#!/usr/bin/env bash\ngit log -1 --format=%B | git commit --amend --no-verify -F - -q\nEOF\nchmod +x strip.sh`);
+  const rows = await extractFile(writeTranscript([
+    write, resultAt('w', '2026-10-01T09:59:01.000Z'),
+    callAt('rb', T0, `cd ${repo} && git rebase -q --exec "./strip.sh" HEAD~2`), resultAt('rb', T1),
+  ]));
+  assert.deepStrictEqual(rows.commits.map((c) => c.toolUseId), ['rb', 'rb']);
+  assert.ok(rows.commits.every((c) => c.rewrite === true));
+  assert.deepStrictEqual(rows.commits.map((c) => c.added).sort(), [2, 3]);
+});
+
 test('a reset --soft in a removed checkout counts the whole sequence as 0', { skip: !hasGit }, async (t) => {
   const repo = commitRepo(t);
   const wt = `${repo}.wt`;
