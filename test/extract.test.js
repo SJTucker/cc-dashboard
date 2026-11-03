@@ -1226,6 +1226,30 @@ test('git text quoted under an unresolved ${repo} path does not mark a commit in
   assert.ok(!('squash' in rows.commits[0]));
 });
 
+test('git text in a heredoc body registers no squash', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const call = callAt('h', T0, `cd ${repo} && cat > notes.md <<'EOF'\ngit merge --squash topic\nEOF`);
+  const rows = await extractFile(writeTranscript([call, resultAt('h', '2026-10-01T10:00:01.000Z'), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
+test('git reset text in a heredoc body creates no re-record state', { skip: !hasGit }, async (t) => {
+  const repo = resetRepo(t);
+  const call = callAt('h', T0, `cd ${repo} && python3 - <<'E'\ngit reset --soft HEAD~1\nE`);
+  const rows = await extractFile(writeTranscript([call, resultAt('h', '2026-10-01T10:00:01.000Z'), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.ok(rows.commits.filter((c) => !c.fromReflog).length > 0);
+  assert.ok(rows.commits.every((c) => !c.squash));
+});
+
+test('git commit -F - with a heredoc message that quotes git merge --squash is a commit call with no squash', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const rows = await extractFile(writeTranscript([commitCall(`cd ${repo} && git commit -F - <<'EOF'\nfeat: x\n\nbody with git merge --squash y\nEOF`), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+  assert.strictEqual(rows.commits[0].toplevel, repo);
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
 test('a reset --soft in a removed checkout counts the whole sequence as 0', { skip: !hasGit }, async (t) => {
   const repo = commitRepo(t);
   const wt = `${repo}.wt`;

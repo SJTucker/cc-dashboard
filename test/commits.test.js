@@ -8,7 +8,7 @@ const path = require('path');
 const { spawnSync } = require('child_process');
 const helpers = require('./helpers');
 const { lineRows } = require('../lib/lines');
-const { isCommitCommand, commitDirs, resolveCommits, resetCommitState, resetEvents } = require('../lib/commits');
+const { squashDirs, isCommitCommand, commitDirs, resolveCommits, resetCommitState, resetEvents } = require('../lib/commits');
 
 const hasGit = spawnSync('git', ['--version']).status === 0;
 
@@ -19,6 +19,21 @@ test('isCommitCommand recognises git commit calls', () => {
   for (const c of ['git commit-tree abc', 'git log --grep commit', 'echo "git commit"', 'git rebase --continue']) {
     assert.strictEqual(isCommitCommand(c), false, c);
   }
+});
+
+test('heredoc bodies are data: git text inside one is no squash, reset or commit segment', () => {
+  assert.deepStrictEqual(squashDirs("cd /a && cat > notes.md <<'EOF'\ngit merge --squash topic\nEOF", '/c'), []);
+  assert.deepStrictEqual(resetEvents("cd /a && python3 - <<'E'\ngit reset --soft HEAD~1\nE", '/c'), []);
+  assert.strictEqual(isCommitCommand("cat <<EOF\ngit commit -m x\nEOF"), false);
+  assert.deepStrictEqual(squashDirs("cat <<-X\n\tgit merge --squash t\n\tX\ngit merge --squash u", '/c'), ['/c']);
+  assert.deepStrictEqual(squashDirs("cat <<'EOF'\ngit merge --squash t", '/c'), [], 'an unterminated heredoc runs to the end');
+});
+
+test('git commit -F - with a heredoc message is still a commit call in its directory', () => {
+  const cmd = "cd /a && git commit -F - <<'EOF'\nfeat: x\n\nbody with git merge --squash y\nEOF";
+  assert.strictEqual(isCommitCommand(cmd), true);
+  assert.deepStrictEqual(commitDirs(cmd, '/c'), ['/a']);
+  assert.deepStrictEqual(squashDirs(cmd, '/c'), []);
 });
 
 test('commitDirs closes a subshell whose commit message holds a parenthesis', () => {
