@@ -1218,6 +1218,14 @@ test('a merge --squash in a removed checkout still marks the next commit', { ski
   assert.strictEqual(rows.commits[0].squash, true);
 });
 
+test('git text quoted under an unresolved ${repo} path does not mark a commit in the enclosing checkout', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const quoted = `cd ${repo} && python3 - <<'EOF'\ncd \${b} && git merge --squash topic\ncd \${b} && git reset --soft HEAD~1\nEOF`;
+  const rows = await extractFile(writeTranscript([callAt('q', T0, quoted), resultAt('q', '2026-10-01T10:00:01.000Z'), commitCall(`cd ${repo} && git commit -m s`), commitResult()]));
+  assert.strictEqual(rows.commits.length, 1);
+  assert.ok(!('squash' in rows.commits[0]));
+});
+
 test('a reset --soft in a removed checkout counts the whole sequence as 0', { skip: !hasGit }, async (t) => {
   const repo = commitRepo(t);
   const wt = `${repo}.wt`;
