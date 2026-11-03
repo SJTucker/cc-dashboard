@@ -1,5 +1,6 @@
 import type { AgentInfo, EngineInterface, On, SessionRateLimit, UsageUnit } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
+import { handoffText, resumePrompt } from './handoff'
 import { snapshotName } from './setup'
 import { rateLimitsInput } from './statusline'
 
@@ -49,19 +50,6 @@ type World = {
   stats: Record<string, number>
   // What $.session.cwd returns.
   cwd: string
-  // Answers process.run for git and date, keyed by argv joined with spaces. A command
-  // not listed exits 0 with no output. These runs go to commandRan, so `ran` keeps
-  // only bin/ scripts.
-  commands: Record<string, { exitCode: number; stdout: string; stderr?: string }>
-  // model.fork replies in call order. `throws` makes the call reject. With none left,
-  // the fork answers nothing-to-fork.
-  forks: Array<
-    | { isAnswered: true; text: string }
-    | { isAnswered: false; reason: 'nothing-to-fork' | 'empty-reply' | 'aborted' }
-    | { throws: true }
-  >
-  // How long each fork takes on the mock clock.
-  forkMs: number
   // The input box's text, which $.prompt.read returns.
   draft: string
   // context.tokens in $.session.usage(). Undefined leaves it out, as before a response.
@@ -147,9 +135,6 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     writeMs: [],
     stats: {},
     cwd: '/work/my.demo',
-    commands: {},
-    forks: [],
-    forkMs: 0,
     draft: '',
     contextTokens: undefined,
     cacheState: { exitCode: 0, stdout: '{}' },
@@ -160,7 +145,6 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     ...w,
   }
   const ran: Ran[] = []
-  const commandRan: string[] = []
   const forked: string[] = []
   const statuses: (string | undefined)[] = []
   const fills: string[] = []
@@ -214,12 +198,8 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('model.fork', async (_$, e) => {
     forked.push(e.prompt)
-    if (state.forkMs > 0) await clock.sleep(state.forkMs)
-    const reply = state.forks.shift() ?? { isAnswered: false as const, reason: 'nothing-to-fork' as const }
-    if ('throws' in reply) throw new Error('refused')
-    return { value: { ...reply, usage } }
+    return { value: { isAnswered: false as const, reason: 'nothing-to-fork' as const, usage } }
   })
-  on('session.compact', (_$, e) => ({ messages: e.messages }))
   on('session.cwd', () => ({ value: state.cwd }))
   on('ui.status', (_$, e) => {
     statuses.push(e.text)
@@ -270,12 +250,6 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     return { sessionId: e.sessionId }
   })
   on('process.run', async (_$, e) => {
-    if (e.argv[0] === 'git' || e.argv[0] === 'date') {
-      const key = e.argv.join(' ')
-      commandRan.push(key)
-      const out = state.commands[key] ?? { exitCode: 0, stdout: '' }
-      return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
-    }
     if (e.argv[0]?.endsWith('/review-session')) {
       const stdin = e.init?.stdin
       let parsed: unknown = stdin
@@ -330,7 +304,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('tool.check', () => ({ decision: state.verdict }))
   on('agent.spawn', () => ({ model: 'claude-haiku-4-5', agentId: 'a1' }))
-  return { ran, reviewRan, cacheRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, commandRan, forked, statuses, fills }
+  return { ran, reviewRan, cacheRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, forked, statuses, fills }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -619,10 +593,10 @@ const judging = {
   record: { exitCode: 0, stdout: '{"recorded":1,"relevant":1,"unjudged":0}' },
 }
 
-test('session.start registers /backfill-updates', async ($, on) => {
+test('session.start registers /backfill-updates and /transcript-handoff', async ($, on) => {
   const { registered } = world(on, { files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
   await $.session.start(start)
-  expect(registered).toEqual(['backfill-updates'])
+  expect(registered).toEqual(['backfill-updates', 'transcript-handoff'])
 })
 
 test('session.start returns before the check fetches', async ($, on) => {
@@ -784,7 +758,7 @@ test('/backfill-updates names a failing script', async ($, on) => {
 test('a failing command.register is logged and session.start still resolves', async ($, on) => {
   const { logged } = world(on, { registerFails: true, files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
   await $.session.start(start)
-  expect(logged).toEqual(['could not register /backfill-updates (HooksError)'])
+  expect(logged).toEqual(['could not register /backfill-updates (HooksError)', 'could not register /transcript-handoff (HooksError)'])
 })
 
 test('/backfill-updates names a prompt that printed no batches', async ($, on) => {
@@ -1556,200 +1530,249 @@ test('the first rule in a folder that was empty at the first check is marked add
   expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([{ t: 61_000, kind: 'claude-md', name: 'rules/x.md', label: 'added', file: rule }])
 })
 
-const REPO = {
-  'git rev-parse --show-toplevel': { exitCode: 0, stdout: '/work/my.demo\n' },
-  'git branch --show-current': { exitCode: 0, stdout: 'feat/Handoff X\n' },
-  'date +%Y-%m-%d-%H%M%S': { exitCode: 0, stdout: '2026-10-12-154500\n' },
-}
-const HANDOFF = '/work/my.demo/.claude/handoffs/2026-10-12-154500-feat-handoff-x.md'
-const DOC = { isAnswered: true as const, text: '# Handoff: demo\n\nbody\n' }
-const READY = 'handoff ready · /clear to resume'
-const compacting = (over: { trigger?: 'auto' | 'manual'; agentId?: string } = {}) => ({
-  trigger: 'auto' as const,
-  messages: [{ role: 'user' as const, text: 'hi', toolUses: [] }],
-  ...over,
-})
+const TRANSCRIPT = '/home/u/.claude/projects/-work-my-demo/s1.jsonl'
+const READY = 'cache expires soon · /clear to resume from the transcript'
+const RESUME = resumePrompt(TRANSCRIPT)
 // One finished main-thread turn, which leaves the session waiting. Named idleTurn
 // because this file already has a constant called idle.
 async function idleTurn($: EngineInterface) {
   await $.turn.start({ text: 'hi', turnId: 't1' })
   await $.turn.complete(turnEnd())
 }
+const clear = { reason: 'clear' as const, sessionId: 's1', resume: { id: 's1' } }
+const ARM = 1_000
+const LEAD = 420_000
+const EXPIRES = 61_000 + HOUR
+const FIRE = EXPIRES - LEAD
+const TRANSCRIPT_ARGS = { transcript: TRANSCRIPT }
+const cache = (ttl: '1h' | '5m', expiresAt: number) => ({ exitCode: 0, stdout: JSON.stringify({ ttl, expiresAt }) })
+const timed = (over: Partial<World> = {}): Partial<World> => ({
+  contextTokens: 103_224,
+  cacheState: cache('1h', EXPIRES),
+  ...over,
+})
 
-test('an idle auto compaction writes a handoff from a fork and shows the status', async ($, on) => {
-  const { writes, forked, statuses, commandRan, clock } = world(on, { commands: REPO, forks: [DOC] })
+test('an idle turn over 50k tokens on a 1h cache shows the status 7 minutes before the cache expires, with no fork', async ($, on) => {
+  const { forked, statuses, cacheRan, state, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
+  await clock.advance(ARM)
+  expect(cacheRan.map((r) => r.stdin)).toEqual([TRANSCRIPT_ARGS])
+  await clock.set(FIRE - 1)
+  expect(statuses).toEqual([undefined])
+  await clock.set(FIRE)
+  expect(statuses).toEqual([undefined, READY])
+  expect(forked).toEqual([])
+  expect(state.store['handoff:s1']).toEqual({ resume: RESUME, at: FIRE })
+})
+
+for (const [name, over] of [
+  ['under 50k tokens', { contextTokens: 49_999 }],
+  ['with no token count', { contextTokens: undefined }],
+] as const) {
+  test(`an idle turn ${name} runs no script and arms nothing`, async ($, on) => {
+    const { statuses, cacheRan, logged, clock } = world(on, timed(over))
+    await idleTurn($)
+    await clock.set(FIRE)
+    expect(cacheRan).toEqual([])
+    expect(statuses).toEqual([undefined])
+    expect(logged).toEqual([])
+  })
+}
+
+for (const [name, state] of [
+  ['a 5m cache', cache('5m', 61_000 + 300_000)],
+  ['a transcript with no main call', { exitCode: 0, stdout: '{}' }],
+] as const) {
+  test(`${name} arms nothing and logs nothing`, async ($, on) => {
+    const { statuses, cacheRan, logged, clock } = world(on, timed({ cacheState: state }))
+    await idleTurn($)
+    await clock.set(FIRE)
+    expect(cacheRan.length).toBe(1)
+    expect(statuses).toEqual([undefined])
+    expect(logged).toEqual([])
+  })
+}
+
+test('a timer armed after the fire time but before the expiry shows the status at once', async ($, on) => {
+  const { statuses, clock } = world(on, timed({ cacheState: cache('1h', 61_000 + 300_000) }))
+  await idleTurn($)
+  await clock.advance(ARM)
   await clock.settle()
-  expect(commandRan).toContain('git rev-parse --show-toplevel')
-  expect(commandRan).toContain('date +%Y-%m-%d-%H%M%S')
-  expect(forked.length).toBe(1)
-  expect(forked[0]).toContain('feat/Handoff X')
-  expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
   expect(statuses).toEqual([undefined, READY])
 })
 
-test('the first turn after a load clears the status once, for a status an earlier load left', async ($, on) => {
-  const { statuses } = world(on)
+test('a cache that expired before the timer was armed gets the status at once', async ($, on) => {
+  const { statuses, clock } = world(on, timed({ cacheState: cache('1h', 61_000 + 100) }))
   await idleTurn($)
+  await clock.advance(ARM)
+  await clock.settle()
+  expect(statuses).toEqual([undefined, READY])
+})
+
+test('no transcript arms nothing and logs nothing', async ($, on) => {
+  const { statuses, cacheRan, logged, clock } = world(on, timed({ exists: () => false }))
   await idleTurn($)
+  await clock.set(FIRE)
+  expect(cacheRan).toEqual([])
   expect(statuses).toEqual([undefined])
-})
-
-test('the compaction passes on before the fork answers', async ($, on) => {
-  const { writes, clock } = world(on, { commands: REPO, forks: [DOC], forkMs: 30_000 })
-  await idleTurn($)
-  const result = await $.session.compact(compacting())
-  expect(result.messages.length).toBe(1)
-  await clock.advance(1_000)
-  expect(writes[HANDOFF]).toBe(undefined)
-  await clock.advance(30_000)
-  await clock.settle()
-  expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
-})
-
-test('a manual compaction writes no handoff', async ($, on) => {
-  const { forked, clock } = world(on, { commands: REPO, forks: [DOC] })
-  await idleTurn($)
-  await $.session.compact(compacting({ trigger: 'manual' }))
-  await clock.settle()
-  expect(forked).toEqual([])
-})
-
-test('an auto compaction during a turn writes no handoff', async ($, on) => {
-  const { forked, clock } = world(on, { commands: REPO, forks: [DOC] })
-  await $.turn.start({ text: 'hi', turnId: 't1' })
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(forked).toEqual([])
-})
-
-test('a subagent compaction writes no handoff', async ($, on) => {
-  const { forked, clock } = world(on, { commands: REPO, forks: [DOC] })
-  await idleTurn($)
-  await $.session.compact(compacting({ agentId: 'a1' }))
-  await clock.settle()
-  expect(forked).toEqual([])
-})
-
-test('with no session state, as after a reload, compaction passes on and writes nothing', async ($, on) => {
-  const { forked, logged, clock } = world(on, { commands: REPO, forks: [DOC] })
-  const result = await $.session.compact(compacting())
-  await clock.settle()
-  expect(result.messages.length).toBe(1)
-  expect(forked).toEqual([])
   expect(logged).toEqual([])
 })
 
-test('a second idle compaction before the next turn writes nothing more', async ($, on) => {
-  const { forked, clock } = world(on, { commands: REPO, forks: [DOC, DOC] })
-  await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(forked.length).toBe(1)
-})
+for (const [name, state, reason] of [
+  ['fails', { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }, 'cache-state exit 1'],
+  ['prints invalid JSON', { exitCode: 0, stdout: 'nope' }, 'cache-state invalid JSON'],
+] as const) {
+  test(`a cache-state that ${name} arms nothing and logs the error name`, async ($, on) => {
+    const { statuses, logged, clock } = world(on, timed({ cacheState: state }))
+    await idleTurn($)
+    await clock.set(FIRE)
+    expect(statuses).toEqual([undefined])
+    expect(logged).toEqual([`handoff timer failed (${reason})`])
+  })
+}
 
-test('after the next turn, a later idle compaction writes again and the status clears in between', async ($, on) => {
-  const { forked, statuses, clock } = world(on, { commands: REPO, forks: [DOC, DOC] })
+test('turn.start cancels the timer, and the next idle turn arms it again', async ($, on) => {
+  const later = EXPIRES + 10_000
+  const { statuses, cacheRan, state, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
-  await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(forked.length).toBe(2)
-  expect(statuses).toEqual([undefined, READY, undefined, READY])
-})
-
-test('a fork with no answer writes nothing, sets no status and logs the reason', async ($, on) => {
-  const { writes, statuses, logged, clock } = world(on, { commands: REPO, forks: [{ isAnswered: false, reason: 'empty-reply' }] })
-  await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(writes[HANDOFF]).toBe(undefined)
+  await clock.advance(ARM)
+  state.cacheState = cache('1h', later)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.set(FIRE)
   expect(statuses).toEqual([undefined])
-  expect(logged).toEqual(['handoff failed (fork empty-reply)'])
+  await $.turn.complete(turnEnd({ turnId: 't2' }))
+  await clock.advance(ARM)
+  expect(cacheRan.length).toBe(2)
+  await clock.set(later - LEAD)
+  expect(statuses).toEqual([undefined, READY])
 })
 
-test('a fork that rejects is logged, and no retry runs in the same idle gap', async ($, on) => {
-  const { forked, logged, clock } = world(on, { commands: REPO, forks: [{ throws: true }, DOC] })
+test('turn.start during the arming delay runs no script', async ($, on) => {
+  const { cacheRan, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(forked.length).toBe(1)
-  // The engine may wrap the handler's error message, so only the prefix is fixed.
-  expect(logged.length).toBe(1)
-  expect(logged[0]).toMatch(/^handoff failed \(/)
+  await clock.advance(ARM - 1)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.advance(ARM)
+  expect(cacheRan).toEqual([])
 })
 
-test('a blank fork reply counts as no answer', async ($, on) => {
-  const { writes, logged, clock } = world(on, { commands: REPO, forks: [{ isAnswered: true, text: '  \n' }] })
+test('a cache-state reply that comes after turn.start arms nothing', async ($, on) => {
+  const { statuses, cacheRan, state, clock } = world(on, timed({ cacheMs: 2_000 }))
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(writes[HANDOFF]).toBe(undefined)
-  expect(logged).toEqual(['handoff failed (fork empty)'])
+  await clock.advance(ARM)
+  expect(cacheRan.length).toBe(1)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  // The second arming finds too few tokens, so it runs no script and sets no timer.
+  state.contextTokens = 1_000
+  await $.turn.complete(turnEnd({ turnId: 't2' }))
+  await clock.advance(2_000)
+  await clock.set(FIRE)
+  expect(statuses).toEqual([undefined])
 })
 
-test('without a timestamp no fork runs', async ($, on) => {
-  const commands = { ...REPO, 'date +%Y-%m-%d-%H%M%S': { exitCode: 1, stdout: '', stderr: 'date: failed' } }
-  const { forked, logged, clock } = world(on, { commands, forks: [DOC] })
+// Claude Code's keep-alive can move the expiry after the timer is armed, so the
+// timer runs bin/cache-state again when it fires.
+test('a timer whose cache was renewed meanwhile re-arms for the new expiry', async ($, on) => {
+  const { statuses, cacheRan, state, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(forked).toEqual([])
-  expect(logged).toEqual(['handoff failed (no timestamp)'])
+  await clock.advance(ARM)
+  state.cacheState = cache('1h', EXPIRES + 600_000)
+  await clock.set(FIRE)
+  expect(statuses).toEqual([undefined])
+  expect(cacheRan.length).toBe(2)
+  await clock.set(FIRE + 600_000 - 1)
+  expect(statuses).toEqual([undefined])
+  await clock.set(FIRE + 600_000)
+  expect(statuses).toEqual([undefined, READY])
 })
 
-test('outside a git repo the handoff goes under cwd with no-branch', async ($, on) => {
-  const notGit = { exitCode: 128, stdout: '', stderr: 'fatal: not a git repository' }
-  const commands = { ...REPO, 'git rev-parse --show-toplevel': notGit, 'git branch --show-current': notGit }
-  const { writes, clock } = world(on, { commands, forks: [DOC], cwd: '/work/plain' })
+test('a timer whose expiry is unchanged shows the status after one re-check', async ($, on) => {
+  const { statuses, cacheRan, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(writes['/work/plain/.claude/handoffs/2026-10-12-154500-no-branch.md']).toBe('# Handoff: demo\n\nbody\n')
+  await clock.set(FIRE)
+  expect(statuses).toEqual([undefined, READY])
+  expect(cacheRan.length).toBe(2)
 })
 
-test('a turn that starts while the fork runs gets the file but no status', async ($, on) => {
-  const { writes, statuses, clock } = world(on, { commands: REPO, forks: [DOC], forkMs: 30_000 })
+test('a re-check that finds under 50k tokens, as after a Claude Code compaction, offers nothing', async ($, on) => {
+  const { statuses, state, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.advance(1_000)
+  await clock.advance(ARM)
+  state.contextTokens = 3_000
+  await clock.set(FIRE)
+  await clock.settle()
+  expect(statuses).toEqual([undefined])
+})
+
+test("turn.start during the timer's re-check shows nothing and arms nothing", async ($, on) => {
+  const { statuses, cacheRan, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  state.cacheMs = 500
+  state.cacheState = cache('1h', EXPIRES + 600_000)
+  await clock.set(FIRE)
+  expect(cacheRan.length).toBe(2)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.set(FIRE + 600_000)
+  expect(statuses).toEqual([undefined])
+  // A timer re-armed after turn.start would fire and run bin/cache-state again.
+  expect(cacheRan.length).toBe(2)
+})
+
+test('a failing re-check logs the error and shows nothing', async ($, on) => {
+  const { statuses, logged, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  state.cacheState = { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }
+  await clock.set(FIRE)
+  expect(statuses).toEqual([undefined])
+  expect(logged).toEqual(['handoff timer failed (cache-state exit 1)'])
+})
+
+test('an idle turn in a session with no terminal runs no script and arms no timer', async ($, on) => {
+  const { statuses, cacheRan, clock } = world(on, timed({ surfaces: [] }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  expect(cacheRan).toEqual([])
+  await clock.set(FIRE)
+  expect(statuses).toEqual([undefined])
+})
+
+test('a /clear cancels the timer', async ($, on) => {
+  const { statuses, state, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  await $.session.end(clear)
+  // forgetSession also drops the activity entry, which would stop a surviving timer at
+  // fireHandoff's state check. turn.complete recreates a waiting entry. Its second
+  // session.id call, in armHandoff, throws, so no arming replaces or cancels the timer.
+  let idCalls = 0
+  Object.defineProperty(state, 'id', {
+    get() {
+      if (++idCalls > 1) throw new Error('no id')
+      return 's1'
+    },
+  })
+  await $.turn.complete(turnEnd())
+  await clock.set(FIRE)
+  expect(statuses).not.toContain(READY)
+})
+
+test('a second idle gap after the next turn gets its own status', async ($, on) => {
+  const { statuses, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.set(FIRE)
   await $.turn.start({ text: 'back', turnId: 't2' })
-  await clock.advance(30_000)
-  await clock.settle()
-  expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
-  expect(statuses).toEqual([undefined])
+  expect(statuses).toEqual([undefined, READY, undefined])
 })
 
-test('a fork from an earlier idle gap does not mark the later gap ready', async ($, on) => {
-  const { forked, statuses, clock } = world(on, { commands: REPO, forks: [DOC, DOC], forkMs: 30_000 })
-  await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.advance(1_000)
-  await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.advance(29_500)
-  expect(statuses.filter((s) => s === READY).length).toBe(0)
-  await clock.advance(30_000)
-  await clock.settle()
-  expect(forked.length).toBe(2)
-  expect(statuses.slice(statuses.lastIndexOf(undefined) + 1)).toEqual([READY])
-})
+const RECENT = 60_000
+const DAY_MS = 24 * 60 * 60 * 1000
 
-const RESUME = `Read ${HANDOFF}, check Preconditions, then continue from "Next steps".`
-const clear = { reason: 'clear' as const, sessionId: 's1', resume: { id: 's1' } }
-
-test('a /clear after a handoff fills the resume prompt 4 s later and clears the status', async ($, on) => {
-  const { fills, statuses, state, clock } = world(on, { commands: REPO, forks: [DOC] })
+test('a /clear after a ready handoff fills the transcript prompt 4 s later and clears the status', async ($, on) => {
+  const { fills, statuses, state, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
+  await clock.set(FIRE)
   await $.session.end(clear)
   state.id = 's2'
   await clock.advance(3_999)
@@ -1761,10 +1784,9 @@ test('a /clear after a handoff fills the resume prompt 4 s later and clears the 
 })
 
 test('a prompt sent within 4 s of the /clear is not followed by the resume prompt', async ($, on) => {
-  const { fills, state, clock } = world(on, { commands: REPO, forks: [DOC] })
+  const { fills, state, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
+  await clock.set(FIRE)
   await $.session.end(clear)
   state.id = 's2'
   await clock.advance(1_000)
@@ -1775,7 +1797,7 @@ test('a prompt sent within 4 s of the /clear is not followed by the resume promp
 })
 
 test('a /clear with no handoff fills nothing', async ($, on) => {
-  const { fills, clock } = world(on, { commands: REPO })
+  const { fills, clock } = world(on)
   await idleTurn($)
   await $.session.end(clear)
   await clock.advance(5_000)
@@ -1784,10 +1806,9 @@ test('a /clear with no handoff fills nothing', async ($, on) => {
 })
 
 test('text typed after the /clear is not replaced', async ($, on) => {
-  const { fills, statuses, clock } = world(on, { commands: REPO, forks: [DOC], draft: 'my own prompt' })
+  const { fills, statuses, clock } = world(on, timed({ draft: 'my own prompt' }))
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
+  await clock.set(FIRE)
   await $.session.end(clear)
   await clock.advance(4_000)
   await clock.settle()
@@ -1796,10 +1817,9 @@ test('text typed after the /clear is not replaced', async ($, on) => {
 })
 
 test('a /clear after the user kept working fills nothing', async ($, on) => {
-  const { fills, clock } = world(on, { commands: REPO, forks: [DOC] })
+  const { fills, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
+  await clock.set(FIRE)
   await idleTurn($)
   await $.session.end(clear)
   await clock.advance(5_000)
@@ -1807,41 +1827,15 @@ test('a /clear after the user kept working fills nothing', async ($, on) => {
   expect(fills).toEqual([])
 })
 
-test('a /clear while the fork runs fills nothing, and the file is still written', async ($, on) => {
-  const { fills, writes, statuses, state, clock } = world(on, { commands: REPO, forks: [DOC], forkMs: 30_000 })
-  await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.advance(1_000)
-  await $.session.end(clear)
-  await clock.advance(31_000)
-  await clock.settle()
-  expect(fills).toEqual([])
-  expect(writes[HANDOFF]).toBe('# Handoff: demo\n\nbody\n')
-  expect(statuses).toEqual([undefined])
-  expect(state.store['handoff:s1']).toBeUndefined()
-})
-
 test('an exit with a ready handoff clears the status and fills nothing', async ($, on) => {
-  const { fills, statuses, clock } = world(on, { commands: REPO, forks: [DOC] })
+  const { fills, statuses, clock } = world(on, timed())
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
+  await clock.set(FIRE)
   await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
   await clock.advance(5_000)
   await clock.settle()
   expect(fills).toEqual([])
   expect(statuses).toEqual([undefined, READY, undefined])
-})
-
-const RECENT = 60_000
-const DAY_MS = 24 * 60 * 60 * 1000
-
-test('a ready handoff is stored with its resume prompt', async ($, on) => {
-  const { state, clock } = world(on, { commands: REPO, forks: [DOC] })
-  await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(state.store['handoff:s1']).toEqual({ resume: RESUME, at: 61_000 })
 })
 
 test('a /clear after a reload still fills the resume prompt and deletes the stored entry', async ($, on) => {
@@ -1876,248 +1870,35 @@ test('a session.end that is not a /clear deletes the stored handoff and fills no
 })
 
 test('a new ready handoff prunes stored handoffs older than 7 days and keeps newer ones', async ($, on) => {
-  const { state, clock } = world(on, {
-    commands: REPO,
-    forks: [DOC],
+  const { state, clock } = world(on, timed({
     store: {
-      'handoff:old': { resume: 'x', at: 61_000 - 8 * DAY_MS },
-      'handoff:new': { resume: 'y', at: 61_000 - 6 * DAY_MS },
+      'handoff:old': { resume: 'x', at: EXPIRES - 8 * DAY_MS },
+      'handoff:new': { resume: 'y', at: EXPIRES - 6 * DAY_MS },
       setup: { folders: [] },
     },
-  })
+  }))
   await idleTurn($)
-  await $.session.compact(compacting())
-  await clock.settle()
+  await clock.set(FIRE)
   expect(state.store['handoff:old']).toBe(undefined)
-  expect(state.store['handoff:new']).toEqual({ resume: 'y', at: 61_000 - 6 * DAY_MS })
+  expect(state.store['handoff:new']).toEqual({ resume: 'y', at: EXPIRES - 6 * DAY_MS })
   expect(state.store.setup).toEqual({ folders: [] })
   expect(state.store['handoff:s1']).toBeDefined()
 })
 
-const LEAD = 360_000
-const ARM = 1_000
-const EXPIRES = 61_000 + HOUR
-const FIRE = EXPIRES - LEAD
-const TRANSCRIPT = '/home/u/.claude/projects/-work-my-demo/s1.jsonl'
-const cache = (ttl: '1h' | '5m', expiresAt: number) => ({ exitCode: 0, stdout: JSON.stringify({ ttl, expiresAt }) })
-const timed = (over: Partial<World> = {}): Partial<World> => ({
-  commands: REPO,
-  forks: [DOC, DOC],
-  contextTokens: 103_224,
-  cacheState: cache('1h', EXPIRES),
-  ...over,
+const handoffCmd = { command: 'transcript-handoff', args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }
+
+test('/transcript-handoff prints the cd command, the transcript path and the resume prompt', async ($, on) => {
+  world(on)
+  const result = await $.command.run(handoffCmd)
+  expect(result).toEqual({ text: handoffText('/work/my.demo', TRANSCRIPT) })
+  expect(result.text).toContain('cd /work/my.demo && claude')
+  expect(result.text).toContain(TRANSCRIPT)
 })
 
-test('an idle turn over 50k tokens on a 1h cache writes a handoff 6 minutes before the cache expires', async ($, on) => {
-  const { forked, writes, statuses, cacheRan, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.advance(ARM)
-  expect(cacheRan.map((r) => r.stdin)).toEqual([{ transcript: TRANSCRIPT }])
-  await clock.set(FIRE - 1)
-  expect(forked).toEqual([])
-  await clock.set(FIRE)
-  expect(forked.length).toBe(1)
-  expect(writes[HANDOFF]).toBe(DOC.text)
-  expect(statuses).toEqual([undefined, READY])
-})
-
-for (const [name, over] of [
-  ['under 50k tokens', { contextTokens: 49_999 }],
-  ['with no token count', { contextTokens: undefined }],
-] as const) {
-  test(`an idle turn ${name} runs no script and arms nothing`, async ($, on) => {
-    const { forked, cacheRan, logged, clock } = world(on, timed(over))
-    await idleTurn($)
-    await clock.set(EXPIRES)
-    expect(cacheRan).toEqual([])
-    expect(forked).toEqual([])
-    expect(logged).toEqual([])
-  })
-}
-
-for (const [name, state] of [
-  ['a 5m cache', cache('5m', 61_000 + 300_000)],
-  ['an expiry already inside 6 minutes', cache('1h', 61_000 + LEAD)],
-  ['a transcript with no main call', { exitCode: 0, stdout: '{}' }],
-] as const) {
-  test(`${name} arms nothing and logs nothing`, async ($, on) => {
-    const { forked, cacheRan, logged, clock } = world(on, timed({ cacheState: state }))
-    await idleTurn($)
-    await clock.set(EXPIRES)
-    expect(cacheRan.length).toBe(1)
-    expect(forked).toEqual([])
-    expect(logged).toEqual([])
-  })
-}
-
-test('no transcript arms nothing and logs nothing', async ($, on) => {
-  const { forked, cacheRan, logged, clock } = world(on, timed({ exists: () => false }))
-  await idleTurn($)
-  await clock.set(EXPIRES)
-  expect(cacheRan).toEqual([])
-  expect(forked).toEqual([])
-  expect(logged).toEqual([])
-})
-
-for (const [name, state, reason] of [
-  ['fails', { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }, 'cache-state exit 1'],
-  ['prints invalid JSON', { exitCode: 0, stdout: 'nope' }, 'cache-state invalid JSON'],
-] as const) {
-  test(`a cache-state that ${name} arms nothing and logs the error name`, async ($, on) => {
-    const { forked, logged, clock } = world(on, timed({ cacheState: state }))
-    await idleTurn($)
-    await clock.set(EXPIRES)
-    expect(forked).toEqual([])
-    expect(logged).toEqual([`handoff timer failed (${reason})`])
-  })
-}
-
-test('turn.start cancels the timer, and the next idle turn arms it again', async ($, on) => {
-  const later = EXPIRES + 10_000
-  const { forked, cacheRan, state, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.advance(ARM)
-  state.cacheState = cache('1h', later)
-  await $.turn.start({ text: 'more', turnId: 't2' })
-  await clock.set(FIRE)
-  expect(forked).toEqual([])
-  await $.turn.complete(turnEnd({ turnId: 't2' }))
-  await clock.advance(ARM)
-  expect(cacheRan.length).toBe(2)
-  await clock.set(later - LEAD)
-  expect(forked.length).toBe(1)
-})
-
-test('turn.start during the arming delay runs no script', async ($, on) => {
-  const { cacheRan, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.advance(ARM - 1)
-  await $.turn.start({ text: 'more', turnId: 't2' })
-  await clock.advance(ARM)
-  expect(cacheRan).toEqual([])
-})
-
-test('a cache-state reply that comes after turn.start arms nothing', async ($, on) => {
-  const { forked, cacheRan, state, clock } = world(on, timed({ cacheMs: 2_000 }))
-  await idleTurn($)
-  await clock.advance(ARM)
-  expect(cacheRan.length).toBe(1)
-  await $.turn.start({ text: 'more', turnId: 't2' })
-  // The second arming finds too few tokens, so it runs no script and sets no timer.
-  state.contextTokens = 1_000
-  await $.turn.complete(turnEnd({ turnId: 't2' }))
-  await clock.advance(2_000)
-  await clock.set(EXPIRES)
-  expect(forked).toEqual([])
-})
-
-test('a timer that fires after the cache expired writes no handoff', async ($, on) => {
-  // The timer fires on schedule, but clock.now already reads past the expiry, as after a sleep.
-  const { forked, state, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.advance(ARM)
-  state.nowOffset = LEAD
-  await clock.set(FIRE)
-  expect(forked).toEqual([])
-})
-
-// Claude Code's keep-alive can move the expiry after the timer is armed, so the
-// timer runs bin/cache-state again when it fires.
-test('a timer whose cache was renewed meanwhile re-arms for the new expiry', async ($, on) => {
-  const { forked, cacheRan, state, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.advance(ARM)
-  state.cacheState = cache('1h', EXPIRES + 600_000)
-  await clock.set(FIRE)
-  expect(forked).toEqual([])
-  expect(cacheRan.length).toBe(2)
-  await clock.set(FIRE + 600_000 - 1)
-  expect(forked).toEqual([])
-  await clock.set(FIRE + 600_000)
-  expect(forked.length).toBe(1)
-})
-
-test('a timer whose expiry is unchanged forks as before', async ($, on) => {
-  const { forked, cacheRan, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.set(FIRE)
-  expect(forked.length).toBe(1)
-  expect(cacheRan.length).toBe(2)
-})
-
-test("turn.start during the timer's re-check forks nothing and arms nothing", async ($, on) => {
-  const { forked, cacheRan, state, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.advance(ARM)
-  state.cacheMs = 500
-  state.cacheState = cache('1h', EXPIRES + 600_000)
-  await clock.set(FIRE)
-  expect(cacheRan.length).toBe(2)
-  await $.turn.start({ text: 'more', turnId: 't2' })
-  await clock.set(EXPIRES + 600_000)
-  expect(forked).toEqual([])
-  // A timer re-armed after turn.start would fire and run bin/cache-state again.
-  expect(cacheRan.length).toBe(2)
-})
-
-test('a failing re-check logs the error and forks nothing', async ($, on) => {
-  const { forked, logged, state, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.advance(ARM)
-  state.cacheState = { exitCode: 1, stdout: '', stderr: 'cache-state: boom\n' }
-  await clock.set(FIRE)
-  expect(forked).toEqual([])
-  expect(logged).toEqual(['handoff timer failed (cache-state exit 1)'])
-})
-
-test('an idle turn in a session with no terminal runs no script and arms no timer', async ($, on) => {
-  const { forked, cacheRan, clock } = world(on, timed({ surfaces: [] }))
-  await idleTurn($)
-  await clock.advance(ARM)
-  expect(cacheRan).toEqual([])
-  await clock.set(FIRE)
-  expect(forked).toEqual([])
-})
-
-test('a /clear cancels the timer', async ($, on) => {
-  const { forked, state, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.advance(ARM)
-  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
-  // forgetSession also drops the activity entry, which would stop a surviving timer at
-  // fireHandoff's state check. turn.complete recreates a waiting entry. Its second
-  // session.id call, in armHandoff, throws, so no arming replaces or cancels the timer.
-  let idCalls = 0
-  Object.defineProperty(state, 'id', {
-    get() {
-      if (++idCalls > 1) throw new Error('no id')
-      return 's1'
-    },
-  })
-  await $.turn.complete(turnEnd())
-  await clock.set(EXPIRES)
-  expect(forked).toEqual([])
-})
-
-test('the timer after an idle compaction in the same gap forks nothing more', async ($, on) => {
-  const { forked, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.advance(ARM)
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(forked.length).toBe(1)
-  await clock.set(EXPIRES)
-  expect(forked.length).toBe(1)
-})
-
-test('an idle compaction after the timer in the same gap forks nothing more', async ($, on) => {
-  const { forked, clock } = world(on, timed())
-  await idleTurn($)
-  await clock.set(FIRE)
-  expect(forked.length).toBe(1)
-  await $.session.compact(compacting())
-  await clock.settle()
-  expect(forked.length).toBe(1)
+test('/transcript-handoff with no transcript prints the error text', async ($, on) => {
+  world(on, { exists: () => false })
+  const result = await $.command.run(handoffCmd)
+  expect(result).toEqual({ text: 'transcript-handoff: transcript not found. Send a prompt first, then run /transcript-handoff again.' })
 })
 
 // The plan limit band (register.ts).

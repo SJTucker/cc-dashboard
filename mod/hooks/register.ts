@@ -10,8 +10,7 @@ import { backfillText, errorName, errorText, versionSpan } from './text'
 import type { Judged } from './text'
 import { headlessText, parseHeadless, parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep, HeadlessStep } from './steps'
-import { REPO_STEPS, handoffDocument, handoffWaitMs, hourCacheExpiry, planHandoff, resumePrompt } from './handoff'
-import type { StepOutput } from './handoff'
+import { handoffText, handoffWaitMs, hourCacheExpiry, resumePrompt } from './handoff'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
@@ -38,6 +37,11 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // script started per event can finish out of order. The server reads the first four
 // formats, and the CONTRACT block in register.test.ts holds a sample of each, which
 // test/mod-contract.test.js parses with the server's readers.
+//
+// 7 minutes before the 1h prompt cache of a session with 50k tokens or more expires,
+// it offers /clear and prefills the next session's input with a prompt to read the old
+// transcript. /transcript-handoff prints that prompt with the command that starts a
+// session in the same folder.
 //
 // Only engine events are hooked. Claude Code's cc-plugin-sec-default skips every
 // classic.* hook of an installed plugin, so classic SessionStart and SessionEnd
@@ -113,8 +117,9 @@ async function run($: EngineInterface, name: string, input: object, timeoutMs: n
 }
 
 // Transcript paths found so far, by session id. A transcript does not move, so a
-// cached path is not checked again. session.end drops the ended session's path:
-// only session.measure reads this map, for the current session id.
+// cached path is not checked again. session.end drops the ended session's path.
+// session.measure, the handoff code and /transcript-handoff read this map, for
+// the current session id.
 const transcripts = new Map<string, string>()
 
 // The mode session.start reported, by session id. forgetSession drops the entry. A
@@ -615,69 +620,53 @@ function forgetSession(id: string) {
   cancelHandoffTimer(id)
 }
 
-// Handoffs before the prompt cache expires. The mod writes a handoff document from a
-// fork of the full conversation, so the user can /clear and resume from the file
-// instead of a summary or a cold cache. Two triggers start one. Claude Code's idle
-// compaction raises session.compact, in a 1h session with at least 200k tokens of
-// context. The mod's own timer (handoffTimers) covers 1h sessions from 50k tokens
-// up, and users who turned idle compaction off.
-// A session's entry is 'writing' while the fork runs, 'ready' once the file is
-// written, and 'failed' when the write gave up. Any entry blocks a second handoff
+// The handoff before the prompt cache expires. 7 minutes before a 1h cache of a session
+// with 50k tokens or more runs out, the status offers /clear, and the next session's
+// input is prefilled with a prompt to read this session's transcript. The mod's own
+// timer (handoffTimers) starts it. No model call is made, because the transcript is the
+// record.
+// The mod hooks no session.compact. On Claude Code 2.1.316, cc-plugin-sec-default sends
+// that event past the user tier, so a mod's hook never runs. An idle compaction that
+// summarised the session therefore ends its idle gap without the mod seeing it. The
+// timer's re-check then finds the context under HANDOFF_MIN_TOKENS and offers nothing.
+// A session's entry is set when the handoff is ready. Any entry blocks a second handoff
 // until turn.start removes it, so each idle gap gets one at most.
 // A reload empties the map, so a ready entry is also kept in $.store under
 // HANDOFF_KEY + session id, as { resume, at }. session.end reads it when the map has
-// no ready entry. turn.start and session.end delete it. A process that dies without a
+// no entry. turn.start and session.end delete it. A process that dies without a
 // session.end leaves its key behind, so each new ready entry deletes keys older than
 // HANDOFF_STORE_MAX_AGE_MS.
 const HANDOFF_KEY = 'handoff:'
 const HANDOFF_STORE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-const HANDOFF_STATUS = 'handoff ready · /clear to resume'
+const HANDOFF_STATUS = 'cache expires soon · /clear to resume from the transcript'
 // $.ui.status() with no text clears the status. On Claude Code 2.1.296, $.ui.status('')
 // pins an empty "⚠ cc-dashboard:" line above the input instead.
-const HANDOFF_STEP_TIMEOUT_MS = 5000
-type Handoff = { state: 'writing' | 'failed' } | { state: 'ready'; resume: string }
+type Handoff = { resume: string }
 const handoffs = new Map<string, Handoff>()
 
-// Runs each REPO_STEPS command in cwd. A command that fails or throws is recorded,
-// not raised, because the prompt shows the failure the way the skill shows its errors.
-async function repoState($: EngineInterface, cwd: string): Promise<StepOutput[]> {
-  const outputs: StepOutput[] = []
-  for (const step of REPO_STEPS) {
-    try {
-      const { exitCode, stdout, stderr } = await $.process.run([...step.argv], { cwd, timeoutMs: HANDOFF_STEP_TIMEOUT_MS })
-      outputs.push({ label: step.label, ok: exitCode === 0, text: (exitCode === 0 ? stdout : stderr).trim() })
-    } catch (err) {
-      outputs.push({ label: step.label, ok: false, text: errorName(err) })
+// Makes the session's handoff ready: the map entry, the status and the stored copy.
+// A session with no transcript gets none, and the skip is logged. A prompt or
+// an end during the awaits replaces or removes the map entry, and then
+// the status stays as that event left it and the stored key is deleted again, so a
+// handoff from an earlier idle gap cannot outlive its gap.
+async function readyHandoff($: EngineInterface, id: string) {
+  try {
+    const path = await transcriptPath($, await $.session.root(), id)
+    if (!path) {
+      note($, 'handoff skipped (transcript not found)')
+      return
     }
+    const resume = resumePrompt(path)
+    const ready: Handoff = { resume }
+    handoffs.set(id, ready)
+    $.ui.status(HANDOFF_STATUS)
+    const now = await $.clock.now()
+    await $.store.set(HANDOFF_KEY + id, { resume, at: now })
+    if (handoffs.get(id) !== ready) await $.store.delete(HANDOFF_KEY + id)
+    await pruneHandoffs($, id, now)
+  } catch (err) {
+    note($, `handoff failed (${errorText(err)})`)
   }
-  return outputs
-}
-
-// The fork reads the conversation from before the compaction, from the cache, and
-// adds no transcript line. The file is written even when a turn or a /clear has come
-// since, because it is still a record of the session. Only the status and the
-// prefill need the entry to still be the one this call started, so a fork from an
-// earlier idle gap cannot change a later gap's entry. fs.write creates the handoffs folder
-// when it is missing.
-async function writeHandoff($: EngineInterface, id: string, entry: Handoff) {
-  const cwd = await $.session.cwd()
-  const plan = planHandoff(await repoState($, cwd), cwd)
-  if (!plan) throw new Error('no timestamp')
-  const reply = await $.model.fork({ prompt: plan.prompt })
-  if (!reply.isAnswered) throw new Error(`fork ${reply.reason}`)
-  const doc = handoffDocument(reply.text)
-  if (!doc) throw new Error('fork empty')
-  await $.fs.write(plan.path, doc)
-  if (handoffs.get(id) !== entry) return
-  const resume = resumePrompt(plan.path)
-  const ready: Handoff = { state: 'ready', resume }
-  handoffs.set(id, ready)
-  $.ui.status(HANDOFF_STATUS)
-  const now = await $.clock.now()
-  await $.store.set(HANDOFF_KEY + id, { resume, at: now })
-  // A prompt or an end during the write removed the entry and found no key to delete.
-  if (handoffs.get(id) !== ready) await $.store.delete(HANDOFF_KEY + id)
-  await pruneHandoffs($, id, now)
 }
 
 // Deletes the stored handoffs of other sessions that are older than the maximum age.
@@ -710,31 +699,20 @@ async function deleteStoredHandoff($: EngineInterface, id: string) {
   }
 }
 
-// Starts the handoff and returns at once. A failure is logged each time, because it
-// happens at most once per idle gap.
-function startHandoff($: EngineInterface, id: string) {
-  const entry: Handoff = { state: 'writing' }
-  handoffs.set(id, entry)
-  writeHandoff($, id, entry).catch((err) => {
-    if (handoffs.get(id) === entry) handoffs.set(id, { state: 'failed' })
-    note($, `handoff failed (${errorText(err)})`)
-  })
-}
-
 // The handoff timer. Claude Code gives the mod no cache TTL, so bin/cache-state reads
 // it from the transcript, with the rule the dashboard uses. After each main-thread
 // turn, armHandoff waits HANDOFF_ARM_DELAY_MS, so the turn.complete hook returns first
 // and the transcript holds the turn's last call. The fire timer then runs
-// HANDOFF_LEAD_MS before a 1h cache expires, the point Claude Code's idle compaction
-// uses. When it fires, it runs bin/cache-state again, because Claude Code's keep-alive
-// can move the expiry later while a subagent runs, and re-arms for a later expiry.
-// A session's entry in handoffTimers is the arming timer, then the fire timer.
-// turn.start and forgetSession cancel it. A reload cancels every timer and empties the
-// map, so an idle gap that spans a reload gets no timer handoff. The timer arms only
-// in sessions with a terminal, as idle compaction does. If the machine sleeps through
-// the fire time, fireHandoff skips the fork once the cache's expiry has passed.
+// HANDOFF_LEAD_MS before a 1h cache expires, ahead of Claude Code's idle compaction at
+// 0.9 times the TTL, which is 54 minutes. When it fires, it runs bin/cache-state again, because Claude Code's
+// keep-alive can move the expiry later while a subagent runs, and re-arms for a later
+// expiry. A session's entry in handoffTimers is the arming timer, then the fire timer.
+// turn.start and forgetSession cancel it. A reload cancels every timer
+// and empties the map, so an idle gap that spans a reload gets no handoff. The timer
+// arms only in sessions with a terminal. A timer armed or re-checked after the fire
+// time, as after the machine slept, fires at once.
 const HANDOFF_MIN_TOKENS = 50_000
-const HANDOFF_LEAD_MS = 6 * 60 * 1000
+const HANDOFF_LEAD_MS = 7 * 60 * 1000
 const HANDOFF_ARM_DELAY_MS = 1000
 const CACHE_STATE_TIMEOUT_MS = 5000
 const handoffTimers = new Map<string, Timer>()
@@ -767,7 +745,7 @@ function armHandoff($: EngineInterface, id: string) {
 
 // Milliseconds until the handoff should start, with the cache expiry it was computed
 // for, or null when this idle gap gets no timer: no terminal, under HANDOFF_MIN_TOKENS,
-// no transcript, not a 1h cache, or too close to the expiry. A failing script throws.
+// no transcript or not a 1h cache. A failing script throws.
 async function handoffWait($: EngineInterface, id: string): Promise<{ wait: number; expiresAt: number } | null> {
   if ((await $.session.surfaces()).length === 0) return null
   const tokens = (await $.session.usage()).context.tokens
@@ -780,8 +758,7 @@ async function handoffWait($: EngineInterface, id: string): Promise<{ wait: numb
   }
   const expiresAt = hourCacheExpiry(cache)
   if (expiresAt === null) return null
-  const wait = handoffWaitMs(expiresAt, await $.clock.now(), HANDOFF_LEAD_MS)
-  return wait === null ? null : { wait, expiresAt }
+  return { wait: handoffWaitMs(expiresAt, await $.clock.now(), HANDOFF_LEAD_MS), expiresAt }
 }
 
 // Sets the session's fire timer for an armed wait.
@@ -795,18 +772,13 @@ function armFire($: EngineInterface, id: string, { wait, expiresAt }: { wait: nu
   handoffTimers.set(id, fire)
 }
 
-// The same checks as the session.compact trigger: the session is between turns and
-// has no handoff in this idle gap. A fork after the cache expired would start cold, so
-// it is skipped when the clock has reached expiresAt, as after the machine slept.
-// Claude Code's keep-alive can renew the cache after the timer was armed, so the
-// expiry is read again first. A later expiry re-arms the timer for it. A turn.start,
-// /clear or newer turn during that read replaces or cancels fire, and then nothing
-// happens here.
+// Claude Code's keep-alive can renew the cache after the timer was armed, so the expiry
+// is read again first. A later expiry re-arms the timer for it. A null re-read, as when
+// Claude Code's compaction left the context under HANDOFF_MIN_TOKENS, offers nothing. Otherwise the
+// handoff is made ready when the session is between turns and has no handoff in this
+// idle gap. A turn.start, /clear or newer turn during the read replaces or cancels fire,
+// and then nothing happens here.
 async function fireHandoff($: EngineInterface, id: string, expiresAt: number, fire: Timer) {
-  if ((await $.clock.now()) >= expiresAt) {
-    if (handoffTimers.get(id) === fire) handoffTimers.delete(id)
-    return
-  }
   const renewed = await handoffWait($, id)
   if (handoffTimers.get(id) !== fire) return
   if (renewed !== null && renewed.expiresAt > expiresAt) {
@@ -814,11 +786,11 @@ async function fireHandoff($: EngineInterface, id: string, expiresAt: number, fi
     return
   }
   handoffTimers.delete(id)
-  if (activities.get(id)?.state === 'waiting' && !handoffs.has(id)) startHandoff($, id)
+  if (renewed !== null && activities.get(id)?.state === 'waiting' && !handoffs.has(id)) await readyHandoff($, id)
 }
 
 // A prompt makes the handoff out of date, so turn.start drops it and clears the
-// status. The file stays on disk. The stored entry is deleted when the map had an
+// status. The stored entry is deleted when the map had an
 // entry, and on the first call after a load, because an earlier load of this module
 // may have stored one that the map no longer holds. That first call also clears a
 // status that an earlier load set. It also cancels the session's handoff timer.
@@ -828,7 +800,7 @@ async function dropHandoff($: EngineInterface) {
     cancelHandoffTimer(id)
     const handoff = handoffs.get(id)
     handoffs.delete(id)
-    if (handoff?.state === 'ready' || !statusCleared) $.ui.status()
+    if (handoff || !statusCleared) $.ui.status()
     if (handoff || !statusCleared) await deleteStoredHandoff($, id)
     statusCleared = true
   } catch (err) {
@@ -1164,6 +1136,10 @@ export const register: Register = (on) => {
       name: 'backfill-updates',
       description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
     }).catch((err) => note($, `could not register /backfill-updates (${errorName(err)})`))
+    await $.command.register({
+      name: 'transcript-handoff',
+      description: 'Print a prompt that resumes this session in a fresh one by reading its transcript',
+    }).catch((err) => note($, `could not register /transcript-handoff (${errorName(err)})`))
     const result = await next(e)
     $.clock.after(0, () => {
       checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
@@ -1178,6 +1154,12 @@ export const register: Register = (on) => {
   })
 
   on('command.run', { command: 'backfill-updates' }, async ($) => ({ text: backfillText(await judgeUpdates($)) }))
+
+  on('command.run', { command: 'transcript-handoff' }, async ($) => {
+    const path = await transcriptPath($, await $.session.root(), await $.session.id())
+    if (!path) return { text: 'transcript-handoff: transcript not found. Send a prompt first, then run /transcript-handoff again.' }
+    return { text: handoffText(await $.session.cwd(), path) }
+  })
 
   // Fires after each main-thread turn and when a rate-limit window moves a whole
   // point, so Plan usage stays current through a long turn.
@@ -1222,7 +1204,7 @@ export const register: Register = (on) => {
   // /resume (reason 'resume'), and no session.start follows either, so the review
   // of the ended session starts here. After any other end, the next session.start
   // reviews it. A ready handoff turns into a prefill of the next session's input on a
-  // /clear, and its status is cleared on any other end. The handoff is the map's ready
+  // /clear, and its status is cleared on any other end. The handoff is the map's
   // entry, or else the stored one, which survives a reload. The stored entry is deleted
   // either way. A store failure is logged and does not stop the rest of the hook.
   on('session.end', async ($, e, next) => {
@@ -1240,7 +1222,7 @@ export const register: Register = (on) => {
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
     // The store reads follow run, so the script is not delayed by them.
-    const resume = handoff?.state === 'ready' ? handoff.resume : await storedResume($, e.sessionId)
+    const resume = handoff?.resume ?? (await storedResume($, e.sessionId))
     if (resume !== undefined) {
       if (e.reason === 'clear') prefillAfterClear($, resume)
       else $.ui.status()
@@ -1335,23 +1317,6 @@ export const register: Register = (on) => {
     return result
   }).catch(async function* ($, e, next) {
     return yield* next(e)
-  })
-
-  // Idle compaction reports trigger 'auto', as threshold compaction does. Threshold
-  // compaction runs inside a turn, so only a main-thread session whose state is
-  // waiting gets a handoff. The hook has 10 s of its own time and the fork takes
-  // longer, so the fork is not awaited. A fork started here keeps running after the
-  // hook returns, and it reads the conversation from before the compaction.
-  on('session.compact', async ($, e, next) => {
-    if (e.trigger === 'auto' && !e.agentId) {
-      try {
-        const id = await $.session.id()
-        if (activities.get(id)?.state === 'waiting' && !handoffs.has(id)) startHandoff($, id)
-      } catch (err) {
-        fail($, `handoff failed (${errorName(err)})`)
-      }
-    }
-    return next(e)
   })
 
   // The tool is set before next(e) and cleared after it, even when the call throws.
