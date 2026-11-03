@@ -70,10 +70,18 @@ loads, and later starts, read only the transcripts that changed. The server crea
 ## Install the mod
 
 The mod in `mod/` records plan usage, live session state, session reviews, Claude Code
-release markers and setup change markers, and writes a handoff 6 minutes before the
-1-hour prompt cache expires or when Claude Code compacts an idle session. It also
-shows a dismissable band above the prompt when the Session or Week plan window
-reaches 75%. Link it into your skills folder from the clone:
+release markers and setup change markers. It also shows a dismissable band above the
+prompt when the Session or Week plan window reaches 75%.
+
+7 minutes before the 1-hour prompt cache of a session with at least 50,000 tokens of
+context expires, the status line shows `cache expires soon · /clear to resume from the
+transcript`. After `/clear`, the mod fills the new session's input box with a prompt
+to read the old session's transcript. The mod writes no file for this.
+`/transcript-handoff` prints the same prompt with the `cd ... && claude` command for
+the session's folder. Claude Code's own compaction (`/compact`, threshold and idle) is
+unchanged, because Claude Code does not pass compaction to installed mods.
+
+Link the mod into your skills folder from the clone:
 
 ```bash
 ln -s "$PWD/mod" ~/.claude/skills/cc-dashboard
@@ -218,7 +226,6 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session`. It also holds the repo path of each edit, the rows of `agent-usage/` files, the call rows of `headless-usage/` files, for each session the text of Claude Code's last away-summary recap (the `away_summary` line it writes when you return to an idle session), the length in characters of each tool result (not its text), each main-loop turn's duration from Claude Code's `turn_duration` lines, and a group for each Bash command: the program, plus the next word when that word is a word or a flag (such as `sed -n` or `git diff`). |
 | `.git` in the folders above each edited file | none | git. The server reads it to find the repo of each file that an Edit or Write call changed. For stored rows of deleted transcripts, it instead lists the folders on the path that the transcript folder's name encodes. |
 | The git repos where a session ran `git commit` through Bash | none | git. The server runs `git rev-parse --show-toplevel`, `git log --numstat` (on `HEAD`, then `--all` when HEAD has nothing in the window), `git log -g HEAD`, `git diff --numstat`, `git patch-id` and `git check-attr` (which reads `.gitattributes` for `linguist-generated` and `linguist-vendored`) there, read-only, to count the lines of the commits made during each call. When the folder is gone, it falls back to the repo the folder name encodes. |
-| `<worktree root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, 6 minutes before a 1-hour prompt cache expires or when Claude Code's idle compaction starts, whichever comes first. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
 | rtk's `history.db` | `RTK_DB` | rtk |
 
 `transcripts.db` runs in SQLite WAL mode. While a process has it open,
@@ -287,23 +294,13 @@ of them.
     with `@path`, rules, skills, agents, and a project's `CLAUDE.md` and
     `CLAUDE.local.md`. Changes to settings files, hook scripts, the statusline script
     and rtk's config are labelled on your machine and not sent.
-- **The mod forks the session's own model** once per idle gap, to write a handoff
-  document. It does this 6 minutes before the prompt cache expires, in a session with
-  a 1-hour cache and at least 50,000 tokens of context. It also does it when Claude
-  Code compacts an idle session, which happens after about 54 idle minutes in a
-  1-hour session with at least 200,000 tokens. Whichever comes first writes the
-  handoff. The fork reads the whole conversation from the prompt cache and sends the
-  output of `git rev-parse`, `git branch`, `git log`, `git worktree list`,
-  `git status`, `git diff --stat` and `git stash list` for the session's folder, and
-  the current date. It writes no transcript line, so the dashboard's totals leave out
-  its cost. To find the cache's lifetime and expiry, the mod runs `bin/cache-state`
-  after each main-thread turn in an interactive session with at least 50,000 tokens
-  of context, and again when the timer fires. It reads the session's transcript and
-  the expiry `bin/cache-line` saved, so a cache Claude Code renewed while a subagent
-  ran moves the timer later. The timer does not run in
-  sessions without a terminal (Agent SDK, `-p`). Turning off idle compaction
-  (`"idleCompaction": false`, `"autoCompactEnabled": false`, `DISABLE_AUTO_COMPACT=1`
-  or `DISABLE_COMPACT=1`) does not turn off the handoff.
+- **The mod makes no model call for handoffs.** After each main-thread turn in an
+  interactive session with at least 50,000 tokens of context, it runs
+  `bin/cache-state`, which reads the session's transcript and the expiry
+  `bin/cache-line` saved. For a 1-hour cache, the mod sets a timer for 7 minutes before the
+  expiry and runs `bin/cache-state` again when it fires, so a cache that Claude Code renewed
+  while a subagent ran moves the timer later. The timer does not run in sessions
+  without a terminal (Agent SDK, `-p`).
 
 ## Check it works
 
