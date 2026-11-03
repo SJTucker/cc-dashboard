@@ -37,6 +37,19 @@ const clip = (text: string) => (text.length > LABEL_MAX ? `${text.slice(0, LABEL
 // Drops a Markdown list, heading or quote marker from the start of a line.
 const bare = (line: string) => line.replace(/^[-*#>\s]+/, '').trim()
 
+// The dashboard's settings.json, written by lib/settings.js. A missing or invalid
+// file, a non-object, or any value other than false counts as on.
+export function parseDashboardSettings(text: unknown) {
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(String(text))
+  } catch {
+    parsed = null
+  }
+  const v = isObject(parsed) ? parsed : {}
+  return { reviews: v.reviews !== false, setupLabels: v.setupLabels !== false }
+}
+
 // The label when Haiku gives none.
 export function fallbackLabel(added: string[], removed: string[]) {
   const first = added.map(bare).find(Boolean)

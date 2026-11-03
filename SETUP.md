@@ -239,10 +239,11 @@ reviews request (the first `/api/reviews` or dismiss request, through `getReview
 or the first time `bin/review-session` runs. The server does not import when it
 first opens the file. The folder stays on disk and is never read or written again.
 
-The mod also reads these files to record setup changes. It writes none of them.
+The mod also reads these files to record setup changes and to check the dashboard's switches. It writes none of them.
 
 - `<cfg>/CLAUDE.md`, the files it includes with an `@path` line, and `<cfg>/rules/`
 - `<cfg>/settings.json` and `<cfg>/settings.local.json`
+- `<cfg>/cc-dashboard/settings.json`, the dashboard's own switches
 - `<cfg>/skills/*/SKILL.md` and `<cfg>/agents/*.md`
 - the scripts named by hook commands and by `statusLine` in `settings.json`
 - `config.toml` and `filters.toml` in `~/Library/Application Support/rtk/`. This path
@@ -277,7 +278,8 @@ of them.
   when the running Claude Code version has no verdict, or when you run
   `/backfill-updates`.
 - **The mod calls Haiku** through your Claude Code login to judge releases, review
-  ended sessions and label setup changes. No API key is read. These calls write no
+  ended sessions and label setup changes. The Haiku labels switch in the Setup changes
+  panel stops the label and release-judging calls and the changelog fetch. No API key is read. These calls write no
   transcript line, so the dashboard's totals leave out their cost. Reviews and labels
   run in interactive sessions only. Each call sends this:
   - **Judging releases:** the changelog entries of up to 20 versions. Nothing from

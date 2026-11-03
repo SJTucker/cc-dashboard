@@ -2468,3 +2468,47 @@ test('a headless session.end waits for the queued headless write', async ($, on)
   expect(ended).toBe(true)
   expect(JSON.parse(writes[HEADLESS_FILE]).steps).toHaveLength(1)
 })
+
+const DASH_SETTINGS = `${CFG}/cc-dashboard/settings.json`
+const LABELS_OFF = '{"setupLabels":false}'
+
+test('labels off: an edited CLAUDE.md gets the fallback label and no Haiku call', async ($, on) => {
+  const { writes, asked, clock } = world(on, {
+    files: { ...judged, [DASH_SETTINGS]: LABELS_OFF, [CLAUDE_MD]: 'a\nb', [snap(CLAUDE_MD)]: snapText(CLAUDE_MD, 1000, 'a') },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+    replies: [{ isAnswered: true, text: 'add rule b' }],
+  })
+  await startAndSettle($, clock)
+  expect(asked).toEqual([])
+  expect(JSON.parse(writes[CHANGES] ?? '[]')).toEqual([
+    { t: 2000, kind: 'claude-md', name: 'CLAUDE.md', label: 'b', file: CLAUDE_MD },
+  ])
+  expect(JSON.parse(writes[snap(CLAUDE_MD)] ?? 'null')).toEqual({ path: CLAUDE_MD, mtimeMs: 2000, text: 'a\nb' })
+})
+
+test('labels off: a version with no verdict is not fetched or judged', async ($, on) => {
+  const { ran, fetched, asked, clock } = world(on, {
+    files: { [DASH_SETTINGS]: LABELS_OFF },
+    scripts: judging,
+    replies: [{ isAnswered: true, text: VERDICT }],
+  })
+  await $.session.start(start)
+  await clock.settle()
+  expect(fetched).toEqual([])
+  expect(asked).toEqual([])
+  expect(ran).toEqual([])
+})
+
+test('labels off: /backfill-updates answers with the off text and fetches nothing', async ($, on) => {
+  const { ran, fetched, asked } = world(on, {
+    files: { [DASH_SETTINGS]: LABELS_OFF },
+    scripts: judging,
+    replies: [{ isAnswered: true, text: VERDICT }],
+  })
+  const result = await $.command.run(backfill)
+  expect(result.text).toBe("Haiku labels are off in the dashboard's Setup changes panel. Turn them on to judge Claude Code releases.")
+  expect(fetched).toEqual([])
+  expect(asked).toEqual([])
+  expect(ran).toEqual([])
+})
