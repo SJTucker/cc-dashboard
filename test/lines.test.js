@@ -226,6 +226,43 @@ test('a reflog row with no twin counts', () => {
   assert.deepStrictEqual(lineRows([], [r, c]), [row(10, 2, 1), row(7, 1, 2)]);
 });
 
+test('a reflog row authored before since counts 0', () => {
+  const r = commit({ sha: sha('a'), t: 1_000_000, fromReflog: true, ...rf });
+  assert.deepStrictEqual(lineRows([], [r], { since: 600_000 }), []);
+});
+
+test('a rewrite row authored before since counts 0', () => {
+  const r = commit({ sha: sha('a'), t: 1_000_000, rewrite: true, committerEmail: 'x@y', ...rf });
+  assert.deepStrictEqual(lineRows([], [r], { since: 600_000 }), []);
+});
+
+test('a reflog row authored at or after since still counts', () => {
+  const r = commit({ sha: sha('a'), t: 1_000_000, fromReflog: true, ...rf });
+  assert.deepStrictEqual(lineRows([], [r], { since: 500_000 }), [row(10, 2, 1_000_000)]);
+});
+
+test('a primary row authored before since still counts', () => {
+  const r = commit({ sha: sha('a'), t: 1_000_000, ...rf });
+  assert.deepStrictEqual(lineRows([], [r], { since: 600_000 }), [row(10, 2, 1_000_000)]);
+});
+
+test('an old reflog row and its patch-id copy both count 0', () => {
+  const r1 = commit({ sha: sha('a'), t: 1_000_000, fromReflog: true, patchId: 'Q', ...rf });
+  const r2 = commit({ sha: sha('b'), t: 1_000_001, rewrite: true, committerEmail: 'x@y', patchId: 'Q', ...rf });
+  assert.deepStrictEqual(lineRows([], [r1, r2], { since: 600_000 }), []);
+});
+
+test('an amend of a reflog row dropped by since counts in full', () => {
+  const r = commit({ sha: sha('a'), t: 1_000_000, fromReflog: true, ...rf });
+  const a = commit({ sha: sha('b'), t: 1_000_001, added: 40, removed: 5, amend: true, amendOf: { sha: r.sha, added: 3, removed: 1 }, authorTime: 900, authorEmail: 'x@y', subject: 'amended', files: ['z.js'] });
+  assert.deepStrictEqual(lineRows([], [r, a], { since: 600_000 }), [row(40, 5, 1_000_001)]);
+});
+
+test('without since an old reflog row with no twin still counts', () => {
+  const r = commit({ sha: sha('a'), t: 1_000_000, fromReflog: true, ...rf });
+  assert.deepStrictEqual(lineRows([], [r]), [row(10, 2, 1_000_000)]);
+});
+
 test('an amend of a dropped reflog row counts in full', () => {
   const r = commit({ sha: sha('a'), t: 1, fromReflog: true, ...rf });
   const c = commit({ sha: sha('c'), t: 2, added: 7, removed: 1, patchId: 'P', ...rf });
