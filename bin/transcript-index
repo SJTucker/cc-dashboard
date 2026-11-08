@@ -13,10 +13,16 @@
 //
 // Run by hand as `bin/transcript-index <transcript.jsonl>`, it prints the index to
 // stdout. A missing file prints the reason on stderr and exits 1.
+//
+// With `--steps <n>`, run by the orchestrate skill on a worker's transcript, it
+// prints a header from the agent-<id>.meta.json beside the file, the files the
+// worker read, and its last n steps. A missing file prints "no transcript yet" and
+// exits 0, because a worker launched a moment ago has no file yet.
 
 const fs = require('fs');
 const path = require('path');
-const { buildIndex, renderIndex } = require('../lib/transcript-index');
+const { parseArgs } = require('util');
+const { buildIndex, renderIndex, recentSteps, contextTokens } = require('../lib/transcript-index');
 const { readStdin } = require('../lib/stdin');
 
 function fail(message) {
@@ -65,12 +71,65 @@ function writeIndex({ transcript, out }) {
   }
 }
 
-const arg = process.argv[2];
-if (arg !== undefined) {
-  const lines = readLines(arg);
-  if (lines === null) fail(`cannot read ${arg}`);
-  else process.stdout.write(renderIndex(buildIndex(lines), path.resolve(arg)));
-} else {
+const USAGE = `usage: transcript-index                              read {"transcript","out"} on stdin, write the index to out
+       transcript-index <transcript.jsonl>          print the index
+       transcript-index <transcript.jsonl> --steps <n>
+                                                    print a worker's header, files read and last n steps
+`;
+
+// The agent-<id>.meta.json beside a worker transcript, or null.
+function readMeta(file) {
+  try {
+    const meta = JSON.parse(fs.readFileSync(file.replace(/\.jsonl$/, '.meta.json'), 'utf8'));
+    return meta && typeof meta === 'object' ? meta : null;
+  } catch {
+    return null;
+  }
+}
+
+function stepsHeader(file, lines, index) {
+  const tail = `context ${contextTokens(lines) ?? '?'} tokens · ${lines.length} lines · last activity ${index.facts.updatedAt ?? '?'}`;
+  const meta = readMeta(file);
+  if (!meta) return `${path.basename(file)} · ${tail}`;
+  const id = path.basename(file, '.jsonl').replace(/^agent-/, '');
+  const kind = `${meta.agentType ?? '?'}, ${meta.model ?? 'default model'}`;
+  return `Agent ${id}: "${meta.description ?? ''}" (${kind}) · finished: ${meta.finished === true ? 'yes' : 'no'} · ${tail}`;
+}
+
+function printSteps(file, n) {
+  const lines = readLines(file);
+  if (lines === null) {
+    process.stdout.write(`no transcript yet: ${file}\n`);
+    return;
+  }
+  const index = buildIndex(lines);
+  const read = [...new Set(index.turns.flatMap((t) => t.read))];
+  const head = [stepsHeader(file, lines, index), `Read: ${read.length ? read.join(', ') : 'none'}`];
+  process.stdout.write([...head, '', ...recentSteps(lines, n)].join('\n') + '\n');
+}
+
+function main() {
+  let args;
+  try {
+    args = parseArgs({ allowPositionals: true, options: { steps: { type: 'string' }, help: { type: 'boolean' } } });
+  } catch (err) {
+    return fail(err.message);
+  }
+  const { values, positionals } = args;
+  if (values.help) return process.stdout.write(USAGE);
+  const [file] = positionals;
+  if (positionals.length > 1) return fail(`expected one transcript path, got ${positionals.length}`);
+  if (values.steps !== undefined) {
+    const n = Number(values.steps);
+    if (!Number.isInteger(n) || n < 1) return fail(`--steps needs a positive whole number, got ${values.steps}`);
+    if (file === undefined) return fail('--steps needs a transcript path');
+    return printSteps(file, n);
+  }
+  if (file !== undefined) {
+    const lines = readLines(file);
+    if (lines === null) return fail(`cannot read ${file}`);
+    return process.stdout.write(renderIndex(buildIndex(lines), path.resolve(file)));
+  }
   readStdin()
     .then((input) => {
       const paths = pathsOf(input);
@@ -79,3 +138,5 @@ if (arg !== undefined) {
     })
     .catch((err) => fail(err.message));
 }
+
+main();

@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildIndex, stepsOf, renderIndex } = require('../lib/transcript-index');
+const { buildIndex, stepsOf, renderIndex, recentSteps, contextTokens } = require('../lib/transcript-index');
 
 // Fixture lines in the shapes Claude Code writes. Each helper returns one JSON line.
 let clock = 0;
@@ -277,4 +277,52 @@ test('omits empty rows in a turn', () => {
     assert.ok(!new RegExp(`^${row}`, 'm').test(onlyTextTurnMd), row);
   }
   assert.ok(onlyTextTurnMd.includes('Last reply: Hello.'));
+});
+
+// A worker transcript with a task, two reads, a failed command, a coordinator
+// message, an edit and a final text, at fixed times, for the --steps helpers.
+function at(s) {
+  return { ...WORKER, timestamp: `2026-11-08T14:02:${s}.000Z` };
+}
+function withUsage(blocks, usage, s) {
+  return rec({ type: 'assistant', ...at(s), message: { role: 'assistant', content: blocks, usage } });
+}
+function workerLines() {
+  return [
+    rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do task 3' } }),
+    assistant([tool('Read', { file_path: '/r/spec.md' }, 'r1'), tool('Read', { file_path: '/r/a.ts' }, 'r2')], at('01')),
+    toolResult('r1', { extra: at('02') }),
+    withUsage([tool('Bash', { command: 'npm test' }, 'b1')], { input_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 0 }, '02'),
+    toolResult('b1', { isError: true, body: 'exit 1', extra: at('03') }),
+    coordinator('Stop after this.', at('05')),
+    assistant([tool('Edit', { file_path: '/r/a.ts' }, 'e1')], at('09')),
+    withUsage([text('Done; tests pass.')], { input_tokens: 1250, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 0 }, '11'),
+  ];
+}
+
+test('recentSteps gives the last n steps, oldest first, with line numbers and times', () => {
+  assert.deepEqual(recentSteps(workerLines(), 2), ['7 14:02:09 Edit /r/a.ts', '8 14:02:11 TEXT Done; tests pass.']);
+});
+
+test('recentSteps shows an error result and a coordinator message', () => {
+  const out = recentSteps(workerLines(), 10);
+  assert.ok(out.includes('5 14:02:03 ERROR Bash: exit 1'), out.join('\n'));
+  assert.ok(out.includes('6 14:02:05 MSG Stop after this.'), out.join('\n'));
+  assert.equal(out[0], '1 14:02:00 USER Do task 3');
+});
+
+test('recentSteps puts each step on one line and cuts text at 160 and a tool argument at 120', () => {
+  const long = 'word '.repeat(60);
+  const lines = [
+    rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } }),
+    assistant([text(`line one\n\n${long}`), tool('Bash', { command: 'x'.repeat(200) }, 'b1')], at('01')),
+  ];
+  const [, txt, bash] = recentSteps(lines, 3);
+  assert.equal(txt, `2 14:02:01 TEXT ${`line one ${long}`.slice(0, 160)}`);
+  assert.equal(bash, `2 14:02:01 Bash ${'x'.repeat(120)}`);
+});
+
+test('contextTokens sums input, cache read and cache creation of the last assistant record', () => {
+  assert.equal(contextTokens(workerLines()), 41_250);
+  assert.equal(contextTokens([rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } })]), null);
 });
