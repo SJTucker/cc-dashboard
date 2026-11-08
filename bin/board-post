@@ -1,0 +1,35 @@
+#!/usr/bin/env node
+'use strict';
+
+// Appends one post to an orchestrator's board, the file of discoveries that
+// workers share: `bin/board-post <board path> --from <label> --title <text>
+// [--body <text>]`. The orchestrate skill tells each worker to post a fact that
+// affects work beyond its own task, and `bin/transcript-index --watch --board`
+// prints each new post.
+//
+// Each post is one JSON line, {t, from, title, body}, written with a single
+// append, so posts from workers running at once do not interleave. The title is
+// cut to 120 characters and the body to 2,000. Prints nothing and exits 0; a
+// missing path, --from or --title prints the reason on stderr and exits 1.
+
+const fs = require('fs');
+const { parseArgs } = require('util');
+
+function main() {
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: { from: { type: 'string' }, title: { type: 'string' }, body: { type: 'string' } },
+  });
+  if (positionals.length !== 1) throw new Error('usage: board-post <board path> --from <label> --title <text> [--body <text>]');
+  if (!values.from) throw new Error('--from is required');
+  if (!values.title) throw new Error('--title is required');
+  const post = { t: new Date().toISOString(), from: values.from, title: values.title.slice(0, 120), body: (values.body ?? '').slice(0, 2000) };
+  fs.appendFileSync(positionals[0], JSON.stringify(post) + '\n');
+}
+
+try {
+  main();
+} catch (err) {
+  process.stderr.write(`board-post: ${err.message}\n`);
+  process.exitCode = 1;
+}

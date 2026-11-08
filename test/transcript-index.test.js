@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildIndex, stepsOf, renderIndex } = require('../lib/transcript-index');
+const { buildIndex, stepsOf, renderIndex, recentSteps, contextTokens, watchEvents } = require('../lib/transcript-index');
 
 // Fixture lines in the shapes Claude Code writes. Each helper returns one JSON line.
 let clock = 0;
@@ -277,4 +277,160 @@ test('omits empty rows in a turn', () => {
     assert.ok(!new RegExp(`^${row}`, 'm').test(onlyTextTurnMd), row);
   }
   assert.ok(onlyTextTurnMd.includes('Last reply: Hello.'));
+});
+
+// A worker transcript with a task, two reads, a failed command, a coordinator
+// message, an edit and a final text, at fixed times, for the --steps helpers.
+function at(s) {
+  return { ...WORKER, timestamp: `2026-11-08T14:02:${s}.000Z` };
+}
+function withUsage(blocks, usage, s) {
+  return rec({ type: 'assistant', ...at(s), message: { role: 'assistant', content: blocks, usage } });
+}
+function workerLines() {
+  return [
+    rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do task 3' } }),
+    assistant([tool('Read', { file_path: '/r/spec.md' }, 'r1'), tool('Read', { file_path: '/r/a.ts' }, 'r2')], at('01')),
+    toolResult('r1', { extra: at('02') }),
+    withUsage([tool('Bash', { command: 'npm test' }, 'b1')], { input_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 0 }, '02'),
+    toolResult('b1', { isError: true, body: 'exit 1', extra: at('03') }),
+    coordinator('Stop after this.', at('05')),
+    assistant([tool('Edit', { file_path: '/r/a.ts' }, 'e1')], at('09')),
+    withUsage([text('Done; tests pass.')], { input_tokens: 1250, cache_read_input_tokens: 40_000, cache_creation_input_tokens: 0 }, '11'),
+  ];
+}
+
+test('recentSteps gives the last n steps, oldest first, with line numbers and times', () => {
+  assert.deepEqual(recentSteps(workerLines(), 2), ['7 14:02:09 Edit /r/a.ts', '8 14:02:11 TEXT Done; tests pass.']);
+});
+
+test('recentSteps shows an error result and a coordinator message', () => {
+  const out = recentSteps(workerLines(), 10);
+  assert.ok(out.includes('5 14:02:03 ERROR Bash: exit 1'), out.join('\n'));
+  assert.ok(out.includes('6 14:02:05 MSG Stop after this.'), out.join('\n'));
+  assert.equal(out[0], '1 14:02:00 USER Do task 3');
+});
+
+test('recentSteps puts each step on one line and cuts text at 160 and a tool argument at 120', () => {
+  const long = 'word '.repeat(60);
+  const lines = [
+    rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } }),
+    assistant([text(`line one\n\n${long}`), tool('Bash', { command: 'x'.repeat(200) }, 'b1')], at('01')),
+  ];
+  const [, txt, bash] = recentSteps(lines, 3);
+  assert.equal(txt, `2 14:02:01 TEXT ${`line one ${long}`.slice(0, 160)}`);
+  assert.equal(bash, `2 14:02:01 Bash ${'x'.repeat(120)}`);
+});
+
+test('contextTokens sums input, cache read and cache creation of the last assistant record', () => {
+  assert.equal(contextTokens(workerLines()), 41_250);
+  assert.equal(contextTokens([rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } })]), null);
+});
+
+// A worker that edits `file` `times` times after its task prompt.
+function linesWithEdit(file, times = 1) {
+  const edits = Array.from({ length: times }, (_, i) => assistant([tool('Edit', { file_path: file }, `e${i}`)], at('01')));
+  return [rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do task 3' } }), ...edits];
+}
+const NO_LIMITS = { files: null, budget: null };
+
+test('watchEvents reports an edit outside the task files once', () => {
+  let r = watchEvents(linesWithEdit('/r/other.ts'), null, { files: ['/r/a.ts'], budget: null });
+  assert.deepEqual(r.events, ['DRIFT edit outside task files: /r/other.ts']);
+  r = watchEvents(linesWithEdit('/r/other.ts', 2), r.seen, { files: ['/r/a.ts'], budget: null });
+  assert.deepEqual(r.events, []);
+  assert.deepEqual(watchEvents(linesWithEdit('/r/other.ts'), null, NO_LIMITS).events, [], 'no file list, no drift');
+});
+
+test('watchEvents matches a task file given relative to the worktree', () => {
+  assert.deepEqual(watchEvents(linesWithEdit('/wt/lib/a.js'), null, { files: ['lib/a.js'], budget: null }).events, []);
+  assert.deepEqual(watchEvents(linesWithEdit('/wt/xlib/a.js'), null, { files: ['lib/a.js'], budget: null }).events, ['DRIFT edit outside task files: /wt/xlib/a.js']);
+});
+
+test('watchEvents reports three identical failures in a row once', () => {
+  const fail = (i) => [assistant([tool('Bash', { command: 'npm test' }, `b${i}`)], at('02')), toolResult(`b${i}`, { isError: true, body: 'exit 1', extra: at('03') })];
+  const task = rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do task 3' } });
+  let r = watchEvents([task, ...fail(1), ...fail(2)], null, NO_LIMITS);
+  assert.deepEqual(r.events, []);
+  r = watchEvents([task, ...fail(1), ...fail(2), ...fail(3)], r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, ['STUCK Bash exit 1 failed 3 times in a row']);
+  r = watchEvents([task, ...fail(1), ...fail(2), ...fail(3), ...fail(4)], r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, [], 'a fourth failure in the same run is not reported again');
+});
+
+test('watchEvents does not count failures with different text as one run', () => {
+  const lines = [rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do task 3' } })];
+  ['exit 1', 'exit 2', 'exit 1'].forEach((body, i) => {
+    lines.push(assistant([tool('Bash', { command: 'npm test' }, `b${i}`)], at('02')), toolResult(`b${i}`, { isError: true, body, extra: at('03') }));
+  });
+  assert.deepEqual(watchEvents(lines, null, NO_LIMITS).events, []);
+});
+
+test('watchEvents reports the budget crossing once', () => {
+  const lines = workerLines();
+  assert.deepEqual(watchEvents(lines, null, { files: null, budget: 50_000 }).events.filter((e) => e.startsWith('BUDGET')), []);
+  let r = watchEvents(lines.slice(0, 7), null, { files: null, budget: 41_000 });
+  assert.deepEqual(r.events.filter((e) => e.startsWith('BUDGET')), []);
+  r = watchEvents(lines, r.seen, { files: null, budget: 41_000 });
+  assert.deepEqual(r.events, ['BUDGET context 41250 tokens, over 41000']);
+  r = watchEvents([...lines, assistant([text('more')], at('12'))], r.seen, { files: null, budget: 41_000 });
+  assert.deepEqual(r.events, []);
+});
+
+test('watchEvents reports a coordinator message with its line', () => {
+  const r = watchEvents(workerLines(), null, NO_LIMITS);
+  assert.deepEqual(r.events, ['MSG landed at line 6']);
+  assert.equal(r.done, false);
+});
+
+test('watchEvents reports DONE on a SubagentHandback and sets done', () => {
+  const lines = [...workerLines(), assistant([tool('SubagentHandback', { message: 'Report:\n  all done' }, 'h1')], at('12'))];
+  let r = watchEvents(lines.slice(0, 7), null, NO_LIMITS);
+  assert.equal(r.done, false);
+  r = watchEvents(lines, r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, ['DONE Report: all done']);
+  assert.equal(r.done, true);
+});
+
+test('watchEvents reports DONE with the last text when the meta file says finished', () => {
+  const r = watchEvents(workerLines(), null, { ...NO_LIMITS, finished: true });
+  assert.deepEqual(r.events, ['MSG landed at line 6', 'DONE Done; tests pass.']);
+  assert.equal(r.done, true);
+});
+
+// A steer sent while a worker runs is written as a queued_command attachment.
+function steer(message, s) {
+  return rec({ type: 'attachment', ...at(s), attachment: { type: 'queued_command', prompt: message, origin: { kind: 'coordinator' }, isMeta: true } });
+}
+function handback(message, s) {
+  return assistant([tool('SubagentHandback', { message }, 'h' + s)], at(s));
+}
+
+test('a steer that lands mid-run is a msg step and a MSG event', () => {
+  const lines = [...linesWithEdit('/r/a.ts'), steer('Stop after this file.', '04'), assistant([text('STEERED')], at('05'))];
+  assert.deepEqual(stepsOf(lines, 3, 3).map((s) => [s.kind, s.text]), [['msg', 'Stop after this file.']]);
+  assert.deepEqual(watchEvents(lines, null, NO_LIMITS).events, ['MSG landed at line 3']);
+  assert.deepEqual(buildIndex(lines).turns.map((t) => t.startLine), [1, 3]);
+});
+
+test('watchEvents with sinceLine reports only events after that line', () => {
+  const lines = [...workerLines(), handback('Report: done', '12')];
+  const r = watchEvents(lines, null, { ...NO_LIMITS, sinceLine: 6 });
+  assert.deepEqual(r.events, ['DONE Report: done']);
+});
+
+test('watchEvents follows a worker resumed after its report to its last report', () => {
+  const lines = [...workerLines(), handback('first report', '12'), coordinator('Fix the test.', at('13')), handback('second report', '14')];
+  assert.deepEqual(watchEvents(lines, null, NO_LIMITS).events, ['MSG landed at line 6', 'MSG landed at line 10', 'DONE second report']);
+  const resumed = lines.slice(0, 10);
+  const r = watchEvents(resumed, null, { ...NO_LIMITS, finished: true });
+  assert.equal(r.done, false, 'a finished flag left from the first run does not end a resumed worker');
+});
+
+test('a task file entry ending in / covers every file under that folder', () => {
+  const opts = { files: ['lib/a.js', '/tmp/scratch/', 'docs/superpowers/'], budget: null };
+  for (const file of ['/tmp/scratch/x.js', '/wt/docs/superpowers/plans/p.md']) {
+    assert.deepEqual(watchEvents(linesWithEdit(file), null, opts).events, [], file);
+  }
+  assert.deepEqual(watchEvents(linesWithEdit('/tmp/scratchy/x.js'), null, opts).events, ['DRIFT edit outside task files: /tmp/scratchy/x.js']);
 });
