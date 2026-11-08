@@ -55,8 +55,14 @@ function writeIndex({ transcript, out }) {
   const md = renderIndex(buildIndex(lines), transcript, dir);
   fs.mkdirSync(dir, { recursive: true });
   const tmp = path.join(dir, `.${path.basename(out)}.${process.pid}.tmp`);
-  fs.writeFileSync(tmp, md);
-  fs.renameSync(tmp, out);
+  // A failed write (a full disk) must not leave a temp file behind each turn.
+  try {
+    fs.writeFileSync(tmp, md);
+    fs.renameSync(tmp, out);
+  } catch (err) {
+    fs.rmSync(tmp, { force: true });
+    throw err;
+  }
 }
 
 const arg = process.argv[2];

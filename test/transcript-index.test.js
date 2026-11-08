@@ -130,6 +130,15 @@ test('a resubmitted prompt with the same parentUuid and no reply between starts 
   assert.equal(idx.turns[0].endLine, 4);
 });
 
+test('an edited resubmission with the same parentUuid starts its own turn, so the prompt sent is kept', () => {
+  const lines = [
+    typed('fix it', { uuid: 'u1', parentUuid: 'p0' }),
+    typed('fix it, and add a test', { uuid: 'u2', parentUuid: 'p0' }),
+    assistant([text('on it')]),
+  ];
+  assert.deepEqual(buildIndex(lines).turns.map((t) => t.prompt), ['fix it', 'fix it, and add a test']);
+});
+
 test("a worker's SubagentHandback report is its turn's last text", () => {
   const lines = [
     rec({ type: 'user', ...WORKER, message: { role: 'user', content: 'Do task 3' } }),

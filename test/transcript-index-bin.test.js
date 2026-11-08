@@ -48,6 +48,17 @@ test('stdin mode writes the index to out and prints nothing', (t) => {
   assert.deepEqual(fs.readdirSync(path.dirname(out)), ['s1.md'], 'no temp file left behind');
 });
 
+test('stdin mode removes its temp file when the write fails', (t) => {
+  const T = transcript(t, [typed('hello', 1), reply('hi', 1)]);
+  const dir = path.join(tmpDir(t, 'transcript-index-out'), 'idx');
+  // A folder where the index file should go makes the rename fail.
+  fs.mkdirSync(path.join(dir, 's1.md'), { recursive: true });
+  const r = run(JSON.stringify({ transcript: T, out: path.join(dir, 's1.md') }));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^transcript-index: /);
+  assert.deepEqual(fs.readdirSync(dir), ['s1.md']);
+});
+
 test('argv mode prints the index', (t) => {
   const T = transcript(t, [typed('hello', 1), reply('hi', 1)]);
   const r = runArgs([T]);
