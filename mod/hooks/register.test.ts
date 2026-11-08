@@ -62,6 +62,8 @@ type World = {
   nowOffset: number
   // Makes session.root reject.
   rootFails: boolean
+  // How long a bin/transcript-index run takes on the mock clock. Its runs go to indexRan.
+  indexMs: number
 }
 
 const entry = (name: string): Entry => ({ name, kind: name.endsWith('.md') ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -78,6 +80,7 @@ const CONTRACT = {
     { "script": "review-session", "args": ["prompt"], "stdin": "" },
     { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
     { "script": "cache-state", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl" } },
+    { "script": "transcript-index", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl", "out": "/nonexistent/idx/abc.md" } },
     { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
     { "script": "record-statusline", "args": [], "stdin": {
       "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 } }, "fetched_at_ms": 61000 } },
@@ -142,6 +145,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     surfaces: ['terminal'],
     nowOffset: 0,
     rootFails: false,
+    indexMs: 0,
     ...w,
   }
   const ran: Ran[] = []
@@ -150,6 +154,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const fills: string[] = []
   const reviewRan: Ran[] = []
   const cacheRan: Ran[] = []
+  const indexRan: Ran[] = []
   const endSawRan: number[] = []
   const listed: string[] = []
   const readLog: string[] = []
@@ -267,6 +272,13 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
       if (state.cacheMs > 0) await clock.sleep(state.cacheMs)
       return { value: { stderr: '', ...state.cacheState, isStdoutTruncated: false, isStderrTruncated: false } }
     }
+    // Answers exit 0 whatever exitCode the test passed, so a test of another script's
+    // failure logs only that failure.
+    if (e.argv[0]?.endsWith('/transcript-index')) {
+      indexRan.push({ argv: e.argv, stdin: e.init?.stdin === undefined ? undefined : JSON.parse(e.init.stdin), timeoutMs: e.init?.timeoutMs })
+      if (state.indexMs > 0) await clock.sleep(state.indexMs)
+      return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     if (runThrows) throw new Error('spawn failed')
     const stdin = e.init?.stdin
     let parsed: unknown = stdin
@@ -304,7 +316,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('tool.check', () => ({ decision: state.verdict }))
   on('agent.spawn', () => ({ model: 'claude-haiku-4-5', agentId: 'a1' }))
-  return { ran, reviewRan, cacheRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, forked, statuses, fills }
+  return { ran, reviewRan, cacheRan, indexRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, forked, statuses, fills }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -867,7 +879,7 @@ const stdinShape = (stdin: unknown) => (typeof stdin === 'string' ? 'text' : Obj
 const callKey = (c: { script: string; args: readonly string[]; stdin: unknown }) => JSON.stringify([c.script, c.args, stdinShape(c.stdin)])
 
 test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) => {
-  const { ran, reviewRan, cacheRan, clock, state } = world(on, {
+  const { ran, reviewRan, cacheRan, indexRan, clock, state } = world(on, {
     contextTokens: 60_000,
     scripts: judging,
     reviews: reviewing(),
@@ -876,7 +888,7 @@ test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) 
   await $.command.run(backfill)
   await $.session.start(start)
   await clock.settle()
-  // A finished turn runs bin/cache-state once the arming delay has passed.
+  // A finished turn runs bin/cache-state and bin/transcript-index once their one-second delays have passed.
   await $.turn.complete(turnEnd())
   await clock.advance(1_000)
   // Only a measure after a /clear sends cleared_from, so the one measure here follows one.
@@ -888,7 +900,7 @@ test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) 
   await $.session.start({ ...start, isInteractive: false })
   await $.session.measure(measure([FIVE, WEEK]))
   await clock.settle()
-  const made = [...ran, ...reviewRan, ...cacheRan].map((r) =>
+  const made = [...ran, ...reviewRan, ...cacheRan, ...indexRan].map((r) =>
     callKey({ script: r.argv[0]?.split('/').pop() ?? '', args: r.argv.slice(1), stdin: r.stdin }),
   )
   expect([...new Set(made)].sort()).toEqual(contract.map(callKey).sort())
@@ -1768,6 +1780,64 @@ test('a second idle gap after the next turn gets its own status', async ($, on) 
 
 const RECENT = 60_000
 const DAY_MS = 24 * 60 * 60 * 1000
+
+const INDEX_OUT = '/home/u/.claude/cc-dashboard/transcript-index/s1.md'
+
+test('a main-thread turn runs transcript-index one second later with the transcript and out path', async ($, on) => {
+  const { indexRan, clock } = world(on)
+  await idleTurn($)
+  expect(indexRan).toEqual([])
+  await clock.advance(1_000)
+  expect(indexRan).toEqual([{ argv: ['/repo/bin/transcript-index'], timeoutMs: 10_000, stdin: { transcript: TRANSCRIPT, out: INDEX_OUT } }])
+})
+
+test('a subagent turn runs no transcript-index', async ($, on) => {
+  const { indexRan, clock } = world(on)
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(indexRan).toEqual([])
+})
+
+test('a non-interactive session runs no transcript-index', async ($, on) => {
+  const { indexRan, clock } = world(on)
+  await $.session.start({ ...start, isInteractive: false })
+  await idleTurn($)
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(indexRan).toEqual([])
+})
+
+test('a turn that ends while an index run is in flight gets exactly one more run', async ($, on) => {
+  const { indexRan, clock } = world(on, { indexMs: 5_000 })
+  await idleTurn($)
+  await clock.advance(1_000)
+  await idleTurn($)
+  await idleTurn($)
+  await clock.advance(1_000)
+  expect(indexRan.length).toBe(1)
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(indexRan.length).toBe(2)
+})
+
+test('no transcript found runs no transcript-index and logs nothing', async ($, on) => {
+  const { indexRan, logged, clock } = world(on, { exists: () => false })
+  await idleTurn($)
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(indexRan).toEqual([])
+  expect(logged).toEqual([])
+})
+
+test('a /clear before the delay passes cancels the index run', async ($, on) => {
+  const { indexRan, clock } = world(on)
+  await idleTurn($)
+  await $.session.end(clear)
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(indexRan).toEqual([])
+})
 
 test('a /clear after a ready handoff fills the transcript prompt 4 s later and clears the status', async ($, on) => {
   const { fills, statuses, state, clock } = world(on, timed())

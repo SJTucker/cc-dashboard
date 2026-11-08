@@ -21,6 +21,11 @@ export function resumePrompt(path: string) {
   )
 }
 
+// Where bin/transcript-index writes the index of a session's transcript.
+export function indexPath(configDir: string, sessionId: string) {
+  return `${configDir}/cc-dashboard/transcript-index/${sessionId}.md`
+}
+
 // What /transcript-handoff prints: the command that starts a fresh session in cwd, a blank line,
 // then the resume prompt. cwd is single-quoted when it holds a character outside
 // [A-Za-z0-9_./~-], with each embedded ' written as '\''.

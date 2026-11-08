@@ -10,7 +10,7 @@ import { backfillText, errorName, errorText, versionSpan } from './text'
 import type { Judged } from './text'
 import { headlessText, parseHeadless, parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep, HeadlessStep } from './steps'
-import { handoffText, handoffWaitMs, hourCacheExpiry, resumePrompt } from './handoff'
+import { handoffText, handoffWaitMs, hourCacheExpiry, indexPath, resumePrompt } from './handoff'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
@@ -21,8 +21,11 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // (checkSetup). It also shows a dismissable plan limit band above the prompt when the
 // Session or Week window passes 75% or 90%, and shares the dismissal between running
 // sessions through limit-warnings.json.
+// After each main-thread turn of an interactive session it runs bin/transcript-index,
+// which writes <config dir>/cc-dashboard/transcript-index/<session id>.md: the
+// session's turns with the transcript lines each covers.
 // A non-interactive session (claude -p) gets no activity file, no snapshot, no end
-// record and no handoff timer. It sends rate limits, and when it has no transcript it writes
+// record, no handoff timer and no transcript index. It sends rate limits, and when it has no transcript it writes
 // its usage to headless-usage/.
 // The mod reads settings.json in the same folder, which the dashboard writes. While its
 // setupLabels value is false, the mod makes no Haiku label call, no release judging
@@ -632,6 +635,7 @@ function forgetSession(id: string) {
   forgetHeadless(id)
   handoffs.delete(id)
   cancelHandoffTimer(id)
+  cancelIndex(id)
 }
 
 // The handoff before the prompt cache expires. 7 minutes before a 1h cache of a session
@@ -845,6 +849,59 @@ async function fillResume($: EngineInterface, resume: string) {
   const draft = await $.prompt.read()
   if (draft.text.trim()) return
   await $.prompt.fill({ text: resume })
+}
+
+// The transcript index. One second after each main-thread turn of an interactive
+// session, queueIndex runs bin/transcript-index, which rewrites
+// <config dir>/cc-dashboard/transcript-index/<session id>.md from the transcript. The
+// delay lets the turn.complete hook return first, so the transcript holds the turn's
+// last lines. A later turn during the delay replaces the timer. A run requested while
+// one is in flight marks the session pending, and the run that ends starts one more:
+// the index is rebuilt whole each time, so one follow-up covers any number of turns.
+// forgetSession cancels the timer and the pending mark. No model call is made.
+const INDEX_DELAY_MS = 1000
+const INDEX_TIMEOUT_MS = 10_000
+const indexTimers = new Map<string, Timer>()
+const indexing = new Set<string>()
+const indexPending = new Set<string>()
+
+function cancelIndex(id: string) {
+  indexTimers.get(id)?.cancel()
+  indexTimers.delete(id)
+  indexPending.delete(id)
+}
+
+function queueIndex($: EngineInterface, id: string) {
+  indexTimers.get(id)?.cancel()
+  const timer = $.clock.after(INDEX_DELAY_MS, () => {
+    if (indexTimers.get(id) !== timer) return
+    indexTimers.delete(id)
+    startIndex($, id)
+  })
+  indexTimers.set(id, timer)
+}
+
+function startIndex($: EngineInterface, id: string) {
+  if (indexing.has(id)) {
+    indexPending.add(id)
+    return
+  }
+  indexing.add(id)
+  writeIndex($, id)
+    .catch((err) => fail($, `transcript index failed (${errorName(err)})`))
+    .finally(() => {
+      indexing.delete(id)
+      if (indexPending.delete(id)) startIndex($, id)
+    })
+}
+
+// No transcript or no config dir writes nothing and logs nothing: the first turn of
+// a session can end before Claude Code has created its transcript.
+async function writeIndex($: EngineInterface, id: string) {
+  const transcript = await transcriptPath($, await $.session.root(), id)
+  const dir = await configDir($)
+  if (!transcript || !dir) return
+  await run($, 'transcript-index', { transcript, out: indexPath(dir, id) }, INDEX_TIMEOUT_MS)
 }
 
 // Setup change markers. At each interactive session start, checkSetup compares the
@@ -1270,7 +1327,7 @@ export const register: Register = (on) => {
   // A subagent's turn that ends changes the subagent count. Its agentId goes into
   // endedAgents, so the count leaves it out even while $.agent.list() still reports
   // it running, and the file is rewritten. A main-thread turn that ends arms the
-  // handoff timer.
+  // handoff timer and queues the transcript index.
   on('turn.complete', async ($, e, next) => {
     if (e.agentId) {
       const agentId = e.agentId
@@ -1292,7 +1349,11 @@ export const register: Register = (on) => {
       setState(a, 'waiting', now)
     })
     try {
-      if (!(await nonInteractive($))) armHandoff($, await $.session.id())
+      if (!(await nonInteractive($))) {
+        const id = await $.session.id()
+        armHandoff($, id)
+        queueIndex($, id)
+      }
     } catch (err) {
       fail($, `handoff timer failed (${errorName(err)})`)
     }

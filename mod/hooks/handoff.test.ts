@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { handoffText, handoffWaitMs, hourCacheExpiry, resumePrompt } from './handoff'
+import { handoffText, handoffWaitMs, hourCacheExpiry, indexPath, resumePrompt } from './handoff'
 
 const PATH = '/home/u/.claude/projects/-work-demo/s1.jsonl'
 
@@ -32,4 +32,8 @@ test('handoffWaitMs is the time until leadMs before expiry, and 0 once that has 
   expect(handoffWaitMs(10_000, 1_000, 6_000)).toBe(3_000)
   expect(handoffWaitMs(10_000, 4_000, 6_000)).toBe(0)
   expect(handoffWaitMs(10_000, 5_000, 6_000)).toBe(0)
+})
+
+test('indexPath puts the index under cc-dashboard/transcript-index', async () => {
+  expect(indexPath('/home/u/.claude', 's1')).toBe('/home/u/.claude/cc-dashboard/transcript-index/s1.md')
 })
