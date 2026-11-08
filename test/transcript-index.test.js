@@ -447,3 +447,16 @@ test('a task file entry ending in / covers every file under that folder', () => 
   }
   assert.deepEqual(watchEvents(linesWithEdit('/tmp/scratchy/x.js'), null, opts).events, ['DRIFT edit outside task files: /tmp/scratchy/x.js']);
 });
+
+test('recentSteps with full keeps a whole command on one line', () => {
+  const lines = [
+    rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } }),
+    assistant([tool('Bash', { command: `cd /r &&\n${'x'.repeat(200)} && npm test` }, 'b1')], at('01')),
+  ];
+  assert.equal(recentSteps(lines, 1, { full: true })[0], `2 14:02:01 Bash cd /r && ${'x'.repeat(200)} && npm test`);
+});
+
+test('recentSteps labels a SubagentHandback as REPORT', () => {
+  const lines = [...workerLines(), assistant([tool('SubagentHandback', { message: 'Report:\n done' }, 'h1')], at('12'))];
+  assert.equal(recentSteps(lines, 1)[0], '9 14:02:12 REPORT Report: done');
+});

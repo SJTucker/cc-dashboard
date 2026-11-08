@@ -16,7 +16,8 @@
 //
 // With `--steps <n>`, run by the orchestrate skill on a worker's transcript, it
 // prints a header from the agent-<id>.meta.json beside the file, the files the
-// worker read, and its last n steps. A missing file prints "no transcript yet" and
+// worker read, and its last n steps, each cut to one short line; `--full` prints
+// each step whole, still on one line. A missing file prints "no transcript yet" and
 // exits 0, because a worker launched a moment ago has no file yet.
 //
 // With `--watch`, run by the orchestrate skill through the Monitor tool, it polls
@@ -83,7 +84,7 @@ function writeIndex({ transcript, out }) {
 
 const USAGE = `usage: transcript-index                              read {"transcript","out"} on stdin, write the index to out
        transcript-index <transcript.jsonl>          print the index
-       transcript-index <transcript.jsonl> --steps <n>
+       transcript-index <transcript.jsonl> --steps <n> [--full]
                                                     print a worker's header, files read and last n steps
        transcript-index <transcript.jsonl> --watch [--files a,b] [--budget N] [--quiet-min M] [--board P] [--since-line N]
                                                     print one line per worker event until it finishes
@@ -108,8 +109,8 @@ function stepsHeader(file, lines, index) {
   return `Agent ${id}: "${meta.description ?? ''}" (${kind}) · finished: ${meta.finished === true ? 'yes' : 'no'} · ${tail}`;
 }
 
-function printSteps(file, n) {
-  const lines = readLines(file);
+function printSteps(file, n, full) {
+  const lines = completeLines(file);
   if (lines === null) {
     process.stdout.write(`no transcript yet: ${file}\n`);
     return;
@@ -117,7 +118,7 @@ function printSteps(file, n) {
   const index = buildIndex(lines);
   const read = [...new Set(index.turns.flatMap((t) => t.read))];
   const head = [stepsHeader(file, lines, index), `Read: ${read.length ? read.join(', ') : 'none'}`];
-  process.stdout.write([...head, '', ...recentSteps(lines, n)].join('\n') + '\n');
+  process.stdout.write([...head, '', ...recentSteps(lines, n, { full })].join('\n') + '\n');
 }
 
 // The file's complete lines: a last line with no newline is still being written.
@@ -200,6 +201,7 @@ function watchOptions(values) {
 
 const OPTIONS = {
   steps: { type: 'string' },
+  full: { type: 'boolean' },
   watch: { type: 'boolean' },
   files: { type: 'string' },
   budget: { type: 'string' },
@@ -220,11 +222,13 @@ function main() {
   if (values.help) return process.stdout.write(USAGE);
   const [file] = positionals;
   if (positionals.length > 1) return fail(`expected one transcript path, got ${positionals.length}`);
+  if (values.full && values.steps === undefined) return fail('--full works only with --steps');
+  if (values.steps !== undefined && values.watch) return fail('--steps and --watch cannot be used together');
   if (values.steps !== undefined) {
     const n = Number(values.steps);
     if (!Number.isInteger(n) || n < 1) return fail(`--steps needs a positive whole number, got ${values.steps}`);
     if (file === undefined) return fail('--steps needs a transcript path');
-    return printSteps(file, n);
+    return printSteps(file, n, values.full === true);
   }
   if (values.watch) {
     if (file === undefined) return fail('--watch needs a transcript path');
