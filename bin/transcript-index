@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+'use strict';
+
+// Writes or prints the Markdown index of one transcript, built by
+// lib/transcript-index.js.
+//
+// Run by the mod (mod/hooks/register.ts) one second after each main-thread turn
+// of an interactive session, with {"transcript": "<path>", "out": "<path>"} on
+// stdin. It writes the index to `out` through a temp file in the same folder and a
+// rename, so a reader never sees half a file, and prints nothing. A missing
+// transcript writes nothing and exits 0. Stdin that is not JSON with both paths
+// prints the reason on stderr and exits 1, and the mod logs it.
+//
+// Run by hand as `bin/transcript-index <transcript.jsonl>`, it prints the index to
+// stdout. A missing file prints the reason on stderr and exits 1.
+
+const fs = require('fs');
+const path = require('path');
+const { buildIndex, renderIndex } = require('../lib/transcript-index');
+const { readStdin } = require('../lib/stdin');
+
+function fail(message) {
+  process.stderr.write(`transcript-index: ${message}\n`);
+  process.exitCode = 1;
+}
+
+// The file's lines, without the empty string a final newline leaves. Null when
+// the file cannot be read.
+function readLines(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+  const lines = text.split('\n');
+  if (lines.at(-1) === '') lines.pop();
+  return lines;
+}
+
+function pathsOf(input) {
+  try {
+    const parsed = JSON.parse(input);
+    if (typeof parsed?.transcript !== 'string' || typeof parsed?.out !== 'string') return null;
+    return { transcript: parsed.transcript, out: parsed.out };
+  } catch {
+    return null;
+  }
+}
+
+function writeIndex({ transcript, out }) {
+  const lines = readLines(transcript);
+  if (lines === null) return;
+  const dir = path.dirname(out);
+  const md = renderIndex(buildIndex(lines), transcript, dir);
+  fs.mkdirSync(dir, { recursive: true });
+  const tmp = path.join(dir, `.${path.basename(out)}.${process.pid}.tmp`);
+  fs.writeFileSync(tmp, md);
+  fs.renameSync(tmp, out);
+}
+
+const arg = process.argv[2];
+if (arg !== undefined) {
+  const lines = readLines(arg);
+  if (lines === null) fail(`cannot read ${arg}`);
+  else process.stdout.write(renderIndex(buildIndex(lines), path.resolve(arg)));
+} else {
+  readStdin()
+    .then((input) => {
+      const paths = pathsOf(input);
+      if (paths === null) return fail('stdin is not JSON with transcript and out paths');
+      writeIndex(paths);
+    })
+    .catch((err) => fail(err.message));
+}
