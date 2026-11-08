@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildIndex, stepsOf, renderIndex, recentSteps, contextTokens } = require('../lib/transcript-index');
+const { buildIndex, stepsOf, renderIndex, recentSteps, contextTokens, watchEvents } = require('../lib/transcript-index');
 
 // Fixture lines in the shapes Claude Code writes. Each helper returns one JSON line.
 let clock = 0;
@@ -325,4 +325,75 @@ test('recentSteps puts each step on one line and cuts text at 160 and a tool arg
 test('contextTokens sums input, cache read and cache creation of the last assistant record', () => {
   assert.equal(contextTokens(workerLines()), 41_250);
   assert.equal(contextTokens([rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } })]), null);
+});
+
+// A worker that edits `file` `times` times after its task prompt.
+function linesWithEdit(file, times = 1) {
+  const edits = Array.from({ length: times }, (_, i) => assistant([tool('Edit', { file_path: file }, `e${i}`)], at('01')));
+  return [rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do task 3' } }), ...edits];
+}
+const NO_LIMITS = { files: null, budget: null };
+
+test('watchEvents reports an edit outside the task files once', () => {
+  let r = watchEvents(linesWithEdit('/r/other.ts'), null, { files: ['/r/a.ts'], budget: null });
+  assert.deepEqual(r.events, ['DRIFT edit outside task files: /r/other.ts']);
+  r = watchEvents(linesWithEdit('/r/other.ts', 2), r.seen, { files: ['/r/a.ts'], budget: null });
+  assert.deepEqual(r.events, []);
+  assert.deepEqual(watchEvents(linesWithEdit('/r/other.ts'), null, NO_LIMITS).events, [], 'no file list, no drift');
+});
+
+test('watchEvents matches a task file given relative to the worktree', () => {
+  assert.deepEqual(watchEvents(linesWithEdit('/wt/lib/a.js'), null, { files: ['lib/a.js'], budget: null }).events, []);
+  assert.deepEqual(watchEvents(linesWithEdit('/wt/xlib/a.js'), null, { files: ['lib/a.js'], budget: null }).events, ['DRIFT edit outside task files: /wt/xlib/a.js']);
+});
+
+test('watchEvents reports three identical failures in a row once', () => {
+  const fail = (i) => [assistant([tool('Bash', { command: 'npm test' }, `b${i}`)], at('02')), toolResult(`b${i}`, { isError: true, body: 'exit 1', extra: at('03') })];
+  const task = rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do task 3' } });
+  let r = watchEvents([task, ...fail(1), ...fail(2)], null, NO_LIMITS);
+  assert.deepEqual(r.events, []);
+  r = watchEvents([task, ...fail(1), ...fail(2), ...fail(3)], r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, ['STUCK Bash exit 1 failed 3 times in a row']);
+  r = watchEvents([task, ...fail(1), ...fail(2), ...fail(3), ...fail(4)], r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, [], 'a fourth failure in the same run is not reported again');
+});
+
+test('watchEvents does not count failures with different text as one run', () => {
+  const lines = [rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do task 3' } })];
+  ['exit 1', 'exit 2', 'exit 1'].forEach((body, i) => {
+    lines.push(assistant([tool('Bash', { command: 'npm test' }, `b${i}`)], at('02')), toolResult(`b${i}`, { isError: true, body, extra: at('03') }));
+  });
+  assert.deepEqual(watchEvents(lines, null, NO_LIMITS).events, []);
+});
+
+test('watchEvents reports the budget crossing once', () => {
+  const lines = workerLines();
+  assert.deepEqual(watchEvents(lines, null, { files: null, budget: 50_000 }).events.filter((e) => e.startsWith('BUDGET')), []);
+  let r = watchEvents(lines.slice(0, 7), null, { files: null, budget: 41_000 });
+  assert.deepEqual(r.events.filter((e) => e.startsWith('BUDGET')), []);
+  r = watchEvents(lines, r.seen, { files: null, budget: 41_000 });
+  assert.deepEqual(r.events, ['BUDGET context 41250 tokens, over 41000']);
+  r = watchEvents([...lines, assistant([text('more')], at('12'))], r.seen, { files: null, budget: 41_000 });
+  assert.deepEqual(r.events, []);
+});
+
+test('watchEvents reports a coordinator message with its line', () => {
+  const r = watchEvents(workerLines(), null, NO_LIMITS);
+  assert.deepEqual(r.events, ['MSG landed at line 6']);
+  assert.equal(r.done, false);
+});
+
+test('watchEvents reports DONE on a SubagentHandback and sets done', () => {
+  const lines = [...workerLines(), assistant([tool('SubagentHandback', { message: 'Report:\n  all done' }, 'h1')], at('12'))];
+  let r = watchEvents(lines.slice(0, 7), null, NO_LIMITS);
+  assert.equal(r.done, false);
+  r = watchEvents(lines, r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, ['DONE Report: all done']);
+  assert.equal(r.done, true);
+});
+
+test('watchEvents reports DONE with the last text when the meta file says finished', () => {
+  const r = watchEvents(workerLines(), null, { ...NO_LIMITS, finished: true });
+  assert.deepEqual(r.events, ['MSG landed at line 6', 'DONE Done; tests pass.']);
+  assert.equal(r.done, true);
 });

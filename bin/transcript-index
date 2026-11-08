@@ -18,11 +18,19 @@
 // prints a header from the agent-<id>.meta.json beside the file, the files the
 // worker read, and its last n steps. A missing file prints "no transcript yet" and
 // exits 0, because a worker launched a moment ago has no file yet.
+//
+// With `--watch`, run by the orchestrate skill through the Monitor tool, it polls
+// the worker's transcript every 2 seconds and prints one line per event (DRIFT,
+// STUCK, BUDGET, MSG, QUIET, DONE; see watchEvents), then exits 0 after DONE. It
+// waits for a missing file to appear, and leaves a last line that has no newline
+// yet for the next poll.
 
 const fs = require('fs');
 const path = require('path');
 const { parseArgs } = require('util');
-const { buildIndex, renderIndex, recentSteps, contextTokens } = require('../lib/transcript-index');
+const { buildIndex, renderIndex, recentSteps, contextTokens, watchEvents } = require('../lib/transcript-index');
+
+const POLL_MS = 2000;
 const { readStdin } = require('../lib/stdin');
 
 function fail(message) {
@@ -75,6 +83,8 @@ const USAGE = `usage: transcript-index                              read {"trans
        transcript-index <transcript.jsonl>          print the index
        transcript-index <transcript.jsonl> --steps <n>
                                                     print a worker's header, files read and last n steps
+       transcript-index <transcript.jsonl> --watch [--files a,b] [--budget N] [--quiet-min M]
+                                                    print one line per worker event until it finishes
 `;
 
 // The agent-<id>.meta.json beside a worker transcript, or null.
@@ -108,10 +118,74 @@ function printSteps(file, n) {
   process.stdout.write([...head, '', ...recentSteps(lines, n)].join('\n') + '\n');
 }
 
+// The file's complete lines: a last line with no newline is still being written.
+// Null when the file cannot be read.
+function completeLines(file) {
+  let text;
+  try {
+    text = fs.readFileSync(file, 'utf8');
+  } catch {
+    return null;
+  }
+  const lines = text.split('\n');
+  lines.pop();
+  return lines;
+}
+
+function positive(name, value) {
+  const n = Number(value);
+  if (!Number.isFinite(n) || n <= 0) throw new Error(`--${name} needs a positive number, got ${value}`);
+  return n;
+}
+
+async function watch(file, opts) {
+  const quietMs = opts.quietMin * 60_000;
+  let seen = null;
+  let lineCount = -1;
+  let grewAt = Date.now();
+  let quietSent = false;
+  for (;;) {
+    const lines = completeLines(file);
+    if (lines !== null) {
+      if (lines.length !== lineCount) {
+        lineCount = lines.length;
+        grewAt = Date.now();
+        quietSent = false;
+      }
+      const r = watchEvents(lines, seen, { files: opts.files, budget: opts.budget, finished: readMeta(file)?.finished === true });
+      seen = r.seen;
+      for (const e of r.events) process.stdout.write(e + '\n');
+      if (r.done) return;
+    }
+    if (!quietSent && Date.now() - grewAt >= quietMs) {
+      quietSent = true;
+      process.stdout.write(`QUIET no new lines for ${opts.quietMin} min\n`);
+    }
+    await new Promise((resolve) => setTimeout(resolve, POLL_MS));
+  }
+}
+
+function watchOptions(values) {
+  return {
+    files: values.files === undefined ? null : values.files.split(',').map((x) => x.trim()).filter(Boolean),
+    budget: values.budget === undefined ? null : positive('budget', values.budget),
+    quietMin: values['quiet-min'] === undefined ? 5 : positive('quiet-min', values['quiet-min']),
+  };
+}
+
+const OPTIONS = {
+  steps: { type: 'string' },
+  watch: { type: 'boolean' },
+  files: { type: 'string' },
+  budget: { type: 'string' },
+  'quiet-min': { type: 'string' },
+  help: { type: 'boolean' },
+};
+
 function main() {
   let args;
   try {
-    args = parseArgs({ allowPositionals: true, options: { steps: { type: 'string' }, help: { type: 'boolean' } } });
+    args = parseArgs({ allowPositionals: true, options: OPTIONS });
   } catch (err) {
     return fail(err.message);
   }
@@ -124,6 +198,16 @@ function main() {
     if (!Number.isInteger(n) || n < 1) return fail(`--steps needs a positive whole number, got ${values.steps}`);
     if (file === undefined) return fail('--steps needs a transcript path');
     return printSteps(file, n);
+  }
+  if (values.watch) {
+    if (file === undefined) return fail('--watch needs a transcript path');
+    let opts;
+    try {
+      opts = watchOptions(values);
+    } catch (err) {
+      return fail(err.message);
+    }
+    return watch(file, opts).catch((err) => fail(err.message));
   }
   if (file !== undefined) {
     const lines = readLines(file);

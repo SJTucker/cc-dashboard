@@ -4,7 +4,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
+const { spawn, spawnSync } = require('child_process');
 const { tmpDir } = require('./helpers');
 
 const BIN = path.join(__dirname, '..', 'bin', 'transcript-index');
@@ -178,4 +178,85 @@ test('--help prints usage and exits 0', () => {
   const r = runArgs(['--help']);
   assert.equal(r.status, 0, r.stderr);
   assert.match(r.stdout, /^usage: transcript-index/);
+});
+
+const HANDBACK = JSON.stringify({
+  type: 'assistant', agentId: 'a1', isSidechain: true, sessionId: 's1', timestamp: '2026-11-08T14:02:12.000Z',
+  message: { role: 'assistant', content: [{ type: 'tool_use', id: 'h1', name: 'SubagentHandback', input: { message: 'Report: done' } }] },
+});
+
+// Runs the script without blocking the test, and resolves with its exit code and
+// stdout once it exits or is killed.
+function start(args) {
+  const child = spawn(process.execPath, [BIN, ...args], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stdout = '';
+  child.stdout.on('data', (d) => { stdout += d; });
+  const exited = new Promise((resolve) => child.on('exit', (status) => resolve({ status, stdout: () => stdout })));
+  return { child, exited, stdout: () => stdout };
+}
+async function until(cond, ms) {
+  const end = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > end) return false;
+    await new Promise((r) => setTimeout(r, 50));
+  }
+  return true;
+}
+
+test('--watch on a finished worker prints DONE and exits 0', (t) => {
+  const file = worker(t, null);
+  fs.appendFileSync(file, HANDBACK + '\n');
+  const r = spawnSync(process.execPath, [BIN, file, '--watch', '--files', '/r/b.ts', '--budget', '40000'], { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, [
+    'MSG landed at line 6',
+    'DRIFT edit outside task files: /r/a.ts',
+    'BUDGET context 41250 tokens, over 40000',
+    'DONE Report: done',
+    '',
+  ].join('\n'));
+});
+
+test('--watch prints DONE when the meta file says finished', (t) => {
+  const file = worker(t, { agentType: 'general-purpose', description: 'Task 3', finished: true });
+  const r = spawnSync(process.execPath, [BIN, file, '--watch'], { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.endsWith('DONE Done; tests pass.\n'), r.stdout);
+});
+
+test('--watch waits for a transcript that does not exist yet', async (t) => {
+  const file = path.join(tmpDir(t, 'transcript-index-late'), 'agent-a1.jsonl');
+  const w = start([file, '--watch']);
+  t.after(() => w.child.kill());
+  await new Promise((r) => setTimeout(r, 500));
+  assert.equal(w.child.exitCode, null, 'still waiting');
+  const lines = fs.readFileSync(worker(t, null), 'utf8') + HANDBACK + '\n';
+  fs.writeFileSync(file, lines);
+  const { status } = await w.exited;
+  assert.equal(status, 0);
+  assert.ok(w.stdout().endsWith('DONE Report: done\n'), w.stdout());
+});
+
+test('--watch prints QUIET once per quiet stretch and ignores a line still being written', async (t) => {
+  const file = worker(t, null);
+  fs.appendFileSync(file, '{"type":"assist');
+  // 0.02 minutes is 1.2 seconds.
+  const w = start([file, '--watch', '--quiet-min', '0.02']);
+  t.after(() => w.child.kill());
+  assert.ok(await until(() => w.stdout().includes('QUIET'), 8_000), w.stdout());
+  await new Promise((r) => setTimeout(r, 3_000));
+  assert.equal(w.stdout(), 'MSG landed at line 6\nQUIET no new lines for 0.02 min\n');
+  fs.appendFileSync(file, HANDBACK.slice('{"type":"assist'.length) + '\n');
+  const { status } = await w.exited;
+  assert.equal(status, 0);
+  assert.ok(w.stdout().endsWith('DONE Report: done\n'), w.stdout());
+});
+
+test('--watch with a bad --budget or --quiet-min exits 1', (t) => {
+  const file = worker(t, null);
+  for (const args of [['--budget', 'x'], ['--quiet-min', '0'], ['--files']]) {
+    const r = runArgs([file, '--watch', ...args]);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, /^transcript-index: /);
+  }
 });
