@@ -23,12 +23,13 @@
 // the worker's transcript every 2 seconds and prints one line per event (DRIFT,
 // STUCK, BUDGET, MSG, QUIET, DONE; see watchEvents), then exits 0 after DONE. It
 // waits for a missing file to appear, and leaves a last line that has no newline
-// yet for the next poll.
+// yet for the next poll. With `--board <path>` it also prints a POST line for each
+// post bin/board-post adds to that file after the watch starts.
 
 const fs = require('fs');
 const path = require('path');
 const { parseArgs } = require('util');
-const { buildIndex, renderIndex, recentSteps, contextTokens, watchEvents } = require('../lib/transcript-index');
+const { buildIndex, renderIndex, recentSteps, contextTokens, watchEvents, boardEvents } = require('../lib/transcript-index');
 
 const POLL_MS = 2000;
 const { readStdin } = require('../lib/stdin');
@@ -83,7 +84,7 @@ const USAGE = `usage: transcript-index                              read {"trans
        transcript-index <transcript.jsonl>          print the index
        transcript-index <transcript.jsonl> --steps <n>
                                                     print a worker's header, files read and last n steps
-       transcript-index <transcript.jsonl> --watch [--files a,b] [--budget N] [--quiet-min M]
+       transcript-index <transcript.jsonl> --watch [--files a,b] [--budget N] [--quiet-min M] [--board P]
                                                     print one line per worker event until it finishes
 `;
 
@@ -138,13 +139,28 @@ function positive(name, value) {
   return n;
 }
 
+function readText(file) {
+  try {
+    return fs.readFileSync(file, 'utf8');
+  } catch {
+    return '';
+  }
+}
+
 async function watch(file, opts) {
   const quietMs = opts.quietMin * 60_000;
+  // Posts from before the watch started are not news.
+  let boardSeen = opts.board === null ? 0 : boardEvents(readText(opts.board), 0).seenLines;
   let seen = null;
   let lineCount = -1;
   let grewAt = Date.now();
   let quietSent = false;
   for (;;) {
+    if (opts.board !== null) {
+      const b = boardEvents(readText(opts.board), boardSeen);
+      boardSeen = b.seenLines;
+      for (const e of b.events) process.stdout.write(e + '\n');
+    }
     const lines = completeLines(file);
     if (lines !== null) {
       if (lines.length !== lineCount) {
@@ -170,6 +186,7 @@ function watchOptions(values) {
     files: values.files === undefined ? null : values.files.split(',').map((x) => x.trim()).filter(Boolean),
     budget: values.budget === undefined ? null : positive('budget', values.budget),
     quietMin: values['quiet-min'] === undefined ? 5 : positive('quiet-min', values['quiet-min']),
+    board: values.board ?? null,
   };
 }
 
@@ -179,6 +196,7 @@ const OPTIONS = {
   files: { type: 'string' },
   budget: { type: 'string' },
   'quiet-min': { type: 'string' },
+  board: { type: 'string' },
   help: { type: 'boolean' },
 };
 
