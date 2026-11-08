@@ -1,0 +1,182 @@
+'use strict';
+
+const test = require('node:test');
+const assert = require('node:assert');
+const { buildIndex, stepsOf } = require('../lib/transcript-index');
+
+// Fixture lines in the shapes Claude Code writes. Each helper returns one JSON line.
+let clock = 0;
+function stamp() {
+  clock += 1;
+  return new Date(Date.UTC(2026, 10, 8, 10, 0, clock)).toISOString();
+}
+function rec(obj) {
+  return JSON.stringify({ sessionId: 's1', cwd: '/r', gitBranch: 'main', timestamp: stamp(), ...obj });
+}
+function typed(text, { uuid = 'u-' + text, parentUuid = 'p-' + text, extra = {} } = {}) {
+  return rec({ type: 'user', uuid, parentUuid, origin: { kind: 'human' }, promptSource: 'typed', message: { role: 'user', content: text }, ...extra });
+}
+function queued(text) {
+  return rec({ type: 'attachment', uuid: 'q-' + text, attachment: { type: 'queued_command', commandMode: 'prompt', origin: { kind: 'human' }, prompt: text } });
+}
+function tool(name, input, id = 'id-' + name) {
+  return { type: 'tool_use', id, name, input };
+}
+function text(t) {
+  return { type: 'text', text: t };
+}
+function assistant(blocks, extra = {}) {
+  return rec({ type: 'assistant', message: { role: 'assistant', content: blocks }, ...extra });
+}
+function toolResult(id, { isError = false, agentId, body = 'ok', extra = {} } = {}) {
+  const r = { type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: body, is_error: isError }] }, ...extra };
+  if (agentId) r.toolUseResult = { agentId, status: 'completed' };
+  return rec(r);
+}
+function compact() {
+  return rec({ type: 'system', subtype: 'compact_boundary', content: 'Conversation compacted' });
+}
+function coordinator(message, extra = {}) {
+  const content = `The coordinator sent a message while you were working:\n${message}`;
+  return rec({ type: 'user', isMeta: true, origin: { kind: 'coordinator' }, message: { role: 'user', content }, ...extra });
+}
+const META = JSON.stringify({ type: 'mode', mode: 'normal', sessionId: 's1' });
+const WORKER = { agentId: 'w1', isSidechain: true };
+
+test('splits turns at typed and mid-turn prompts with 1-based line ranges', () => {
+  const lines = [META, typed('A'), assistant([text('hi')]), toolResult('x'), queued('B'), assistant([text('ok')])];
+  const idx = buildIndex(lines);
+  assert.deepEqual(idx.turns.map((t) => [t.n, t.startLine, t.endLine, t.prompt]), [[1, 2, 4, 'A'], [2, 5, 6, 'B']]);
+  assert.equal(idx.lineCount, 6);
+  assert.equal(idx.worker, false);
+});
+
+test('counts edits, reads, bash groups, skills and errors per turn', () => {
+  const lines = [
+    typed('go'),
+    assistant([tool('Edit', { file_path: 'a.ts' }, 'e1'), tool('Write', { file_path: 'b.md' }, 'w1'), tool('Edit', { file_path: 'a.ts' }, 'e2')]),
+    assistant([tool('Read', { file_path: 'c.ts' }, 'r1'), tool('Read', { file_path: 'c.ts' }, 'r2')]),
+    assistant([tool('Bash', { command: 'pnpm vitest run f' }, 'b1'), tool('Bash', { command: 'cd /x && git status' }, 'b2'), tool('Bash', { command: 'cd /x && git status' }, 'b3')]),
+    assistant([tool('Skill', { skill: 'superpowers:writing-plans' }, 's1')]),
+    toolResult('b1', { isError: true, body: 'exit 1' }),
+  ];
+  const t = buildIndex(lines).turns[0];
+  assert.deepEqual(t.edited, [['a.ts', 2], ['b.md', 1]]);
+  assert.deepEqual(t.read, ['c.ts']);
+  assert.deepEqual(t.commands, [['git status', 2], ['pnpm vitest', 1]]);
+  assert.deepEqual(t.skills, ['superpowers:writing-plans']);
+  assert.equal(t.errors, 1);
+});
+
+test('links an Agent call to its agentId from the tool result', () => {
+  const lines = [
+    typed('map it'),
+    assistant([tool('Agent', { description: 'Map mod', subagent_type: 'Explore', model: 'sonnet', prompt: 'p' }, 'ag1')]),
+    toolResult('ag1', { agentId: 'a9f6' }),
+  ];
+  const idx = buildIndex(lines);
+  const t = idx.turns[0];
+  assert.deepEqual(t.agents, [{ description: 'Map mod', type: 'Explore', model: 'sonnet', agentId: 'a9f6' }]);
+  assert.equal(idx.agentCount, 1);
+});
+
+test('records compaction lines and skips sidechain and compact-summary lines', () => {
+  const lines = [
+    typed('A'),
+    assistant([tool('Edit', { file_path: '/r/side.ts' })], { isSidechain: true }),
+    assistant([tool('Edit', { file_path: '/r/a.ts' })]),
+    compact(),
+    typed('This session is being continued from a previous conversation', { extra: { isCompactSummary: true } }),
+    typed('B', { extra: { isSidechain: true } }),
+  ];
+  const idx = buildIndex(lines);
+  assert.deepEqual(idx.compactions, [4]);
+  assert.equal(idx.turns.length, 1);
+  assert.deepEqual(idx.turns[0].edited, [['/r/a.ts', 1]]);
+  assert.equal(idx.turns[0].endLine, 6);
+});
+
+test('a line that is not JSON is skipped but still counted', () => {
+  const lines = [typed('A'), assistant([text('working')]), '{"type":"assist'];
+  const idx = buildIndex(lines);
+  assert.equal(idx.lineCount, lines.length);
+  assert.equal(idx.turns.at(-1).endLine, lines.length);
+});
+
+test('a worker transcript starts turns at the task prompt and at coordinator messages', () => {
+  const lines = [
+    rec({ type: 'user', ...WORKER, message: { role: 'user', content: 'Do task 3' } }),
+    rec({ type: 'user', ...WORKER, isMeta: true, message: { role: 'user', content: '<system-reminder>handback</system-reminder>' } }),
+    assistant([tool('Read', { file_path: '/r/x.ts' })], WORKER),
+    toolResult('id-Read', { extra: WORKER }),
+    assistant([text('reading more')], WORKER),
+    coordinator('Stop after this.', WORKER),
+    assistant([text('stopping')], WORKER),
+  ];
+  const idx = buildIndex(lines);
+  assert.equal(idx.worker, true);
+  assert.deepEqual(idx.turns.map((t) => [t.startLine, t.prompt]), [[1, 'Do task 3'], [6, 'Stop after this.']]);
+});
+
+test('a resubmitted prompt with the same parentUuid and no reply between starts no new turn', () => {
+  const lines = [
+    typed('fix it', { uuid: 'u1', parentUuid: 'p0' }),
+    rec({ type: 'system', subtype: 'informational', content: 'note' }),
+    typed('fix it', { uuid: 'u2', parentUuid: 'p0' }),
+    assistant([text('on it')]),
+  ];
+  const idx = buildIndex(lines);
+  assert.equal(idx.turns.length, 1);
+  assert.equal(idx.turns[0].endLine, 4);
+});
+
+test("a worker's SubagentHandback report is its turn's last text", () => {
+  const lines = [
+    rec({ type: 'user', ...WORKER, message: { role: 'user', content: 'Do task 3' } }),
+    assistant([text('thinking  out\n loud')], WORKER),
+    assistant([tool('SubagentHandback', { message: 'Report:\n  done' })], WORKER),
+  ];
+  const workerIdx = buildIndex(lines);
+  assert.equal(workerIdx.turns.at(-1).lastText, 'Report: done');
+});
+
+test('stepsOf gives typed steps with line numbers, tools, errors and coordinator messages', () => {
+  const lines = [
+    assistant([tool('Bash', { command: 'false' }, 'b1')]),
+    typed('A'),
+    assistant([tool('Edit', { file_path: '/r/a.ts' }, 'e1')]),
+    toolResult('b1', { isError: true, body: 'exit 1' }),
+    coordinator('Stop after this.'),
+  ];
+  assert.deepEqual(stepsOf(lines, 2, 5).map((s) => [s.line, s.kind, s.tool, s.text]), [
+    [2, 'user', null, 'A'],
+    [3, 'tool', 'Edit', '/r/a.ts'],
+    [4, 'error', 'Bash', 'exit 1'],
+    [5, 'msg', null, 'Stop after this.'],
+  ]);
+});
+
+test('records the transcript a resumed session started from', () => {
+  const resume =
+    'Read /p/old.jsonl, the transcript of an earlier Claude Code session, to find what it was working on, and continue from where it stopped.\n\nTips:\n';
+  const idx = buildIndex([typed(resume), assistant([text('reading')])]);
+  assert.equal(idx.facts.resumedFrom, '/p/old.jsonl');
+  assert.equal(buildIndex([typed('hello')]).facts.resumedFrom, null);
+});
+
+test('collects facts and docs written under docs/superpowers or .claude/handoffs', () => {
+  const lines = [
+    JSON.stringify({ type: 'ai-title', aiTitle: 'First title', sessionId: 's1' }),
+    typed('plan it'),
+    assistant([tool('Write', { file_path: '/r/docs/superpowers/plans/p.md' }, 'w1'), tool('Write', { file_path: '/r/src/x.ts' }, 'w2')]),
+    assistant([tool('Write', { file_path: '/r/docs/superpowers/plans/p.md' }, 'w3')], { gitBranch: 'feature' }),
+    JSON.stringify({ type: 'ai-title', aiTitle: 'Second title', sessionId: 's1' }),
+  ];
+  const idx = buildIndex(lines);
+  assert.equal(idx.facts.title, 'Second title');
+  assert.equal(idx.facts.branch, 'feature');
+  assert.equal(idx.facts.cwd, '/r');
+  assert.equal(idx.facts.sessionId, 's1');
+  assert.ok(idx.facts.startedAt < idx.facts.updatedAt);
+  assert.deepEqual(idx.written, ['/r/docs/superpowers/plans/p.md']);
+});
