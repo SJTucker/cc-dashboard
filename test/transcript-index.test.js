@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildIndex, stepsOf } = require('../lib/transcript-index');
+const { buildIndex, stepsOf, renderIndex } = require('../lib/transcript-index');
 
 // Fixture lines in the shapes Claude Code writes. Each helper returns one JSON line.
 let clock = 0;
@@ -179,4 +179,80 @@ test('collects facts and docs written under docs/superpowers or .claude/handoffs
   assert.equal(idx.facts.sessionId, 's1');
   assert.ok(idx.facts.startedAt < idx.facts.updatedAt);
   assert.deepEqual(idx.written, ['/r/docs/superpowers/plans/p.md']);
+});
+
+// A session with a title, a compaction, an Agent call and a doc written, for the
+// renderIndex tests.
+function sessionLines() {
+  return [
+    JSON.stringify({ type: 'ai-title', aiTitle: 'First title', sessionId: 's1' }),
+    typed('Build the index'),
+    assistant([tool('Edit', { file_path: '/r/a.ts' }, 'e1'), tool('Edit', { file_path: '/r/a.ts' }, 'e2'), tool('Write', { file_path: '/r/docs/superpowers/plans/p.md' }, 'w1')]),
+    compact(),
+    assistant([tool('Agent', { description: 'Map mod', subagent_type: 'Explore', model: 'sonnet' }, 'ag1')]),
+    toolResult('ag1', { agentId: 'a9f6' }),
+    assistant([text('Done.')]),
+  ];
+}
+
+test('renders the title, the transcript path and the how-to-read commands', () => {
+  const idx = buildIndex(sessionLines());
+  const md = renderIndex(idx, '/p/s1.jsonl');
+  assert.match(md, /^# Transcript index: First title\n/);
+  assert.ok(md.includes("Transcript: '/p/s1.jsonl' (7 lines)"));
+  assert.ok(md.includes("sed -n 'A,Bp' '/p/s1.jsonl' | cut -c1-400"));
+  assert.ok(md.includes(`grep -n '"uuid":"<uuid>"' '/p/s1.jsonl'`));
+  assert.ok(md.includes('## Turn 1 · lines 2–7 · '));
+  const untitled = renderIndex(buildIndex([typed('Fix   the\nbug')]), '/p/s1.jsonl');
+  assert.match(untitled, /^# Transcript index: Fix the bug\n/);
+});
+
+test('quotes a transcript path with a space or a single quote', () => {
+  const idx = buildIndex(sessionLines());
+  assert.ok(renderIndex(idx, "/p/it's here/s1.jsonl").includes(`'/p/it'\\''s here/s1.jsonl'`));
+});
+
+test('caps each turn: prompt 300 chars, reads 8 then +k more, bash groups 6', () => {
+  const reads = Array.from({ length: 10 }, (_, i) => tool('Read', { file_path: `f${i + 1}` }, `r${i}`));
+  const edits = Array.from({ length: 12 }, (_, i) => tool('Edit', { file_path: `e${i + 1}` }, `e${i}`));
+  const bash = ['ls', 'pwd', 'git status', 'git diff', 'npm test', 'node -v', 'make all'].map((c, i) => tool('Bash', { command: c }, `b${i}`));
+  const md = renderIndex(buildIndex([typed('x'.repeat(400)), assistant([...reads, ...edits, ...bash])]), '/p/s1.jsonl');
+  assert.ok(md.includes('Read: f1, f2, f3, f4, f5, f6, f7, f8 (+2 more)'));
+  const prompt = md.split('\n').find((l) => l.startsWith('Prompt: '));
+  assert.equal(prompt.length, 'Prompt: '.length + 300);
+  const edited = md.split('\n').find((l) => l.startsWith('Edited: '));
+  assert.equal(edited.split(', ').length, 10);
+  const commands = md.split('\n').find((l) => l.startsWith('Commands: '));
+  assert.equal(commands.split(', ').length, 6);
+});
+
+test('lists a subagent with its transcript path', () => {
+  const md = renderIndex(buildIndex(sessionLines()), '/p/s1.jsonl');
+  assert.ok(md.includes('"Map mod" (Explore, sonnet): /p/s1/subagents/agent-a9f6.jsonl'));
+});
+
+test('overview carries the goal, compactions, top edited files and docs written', () => {
+  const md = renderIndex(buildIndex(sessionLines()), '/p/s1.jsonl');
+  const overview = md.slice(md.indexOf('## Overview'), md.indexOf('## Turn 1'));
+  assert.ok(overview.includes('Goal: Build the index'));
+  assert.ok(overview.includes('Turns: 1'));
+  assert.ok(overview.includes('Compactions at lines: 4'));
+  assert.ok(overview.includes('Most edited: /r/a.ts (2), /r/docs/superpowers/plans/p.md (1)'));
+  assert.ok(overview.includes('Docs written: /r/docs/superpowers/plans/p.md'));
+  assert.ok(overview.includes("Subagents: 1, transcripts in '/p/s1/subagents/'"));
+});
+
+test('names the resumed-from transcript and its index', () => {
+  const resume = 'Read /p/old.jsonl, the transcript of an earlier Claude Code session, to find what it was working on.';
+  const resumedIdx = buildIndex([typed(resume)]);
+  assert.ok(renderIndex(resumedIdx, '/p/s2.jsonl', '/c/idx').includes("Resumed from: '/p/old.jsonl'; its index: /c/idx/old.md"));
+  assert.ok(renderIndex(resumedIdx, '/p/s2.jsonl').includes("Resumed from: '/p/old.jsonl'\n"));
+});
+
+test('omits empty rows in a turn', () => {
+  const onlyTextTurnMd = renderIndex(buildIndex([typed('hi'), assistant([text('Hello.')])]), '/p/s1.jsonl');
+  for (const row of ['Agents:', 'Edited:', 'Read:', 'Commands:', 'Skills:', 'Tool errors:']) {
+    assert.ok(!new RegExp(`^${row}`, 'm').test(onlyTextTurnMd), row);
+  }
+  assert.ok(onlyTextTurnMd.includes('Last reply: Hello.'));
 });
