@@ -494,3 +494,22 @@ test('filesRead resolves a Bash read against the record cwd', () => {
   ];
   assert.deepEqual(filesRead(lines), ['/main/docs/plan.md']);
 });
+
+test('bashReadPaths keeps a sed script whole when it holds ; or |', () => {
+  assert.deepEqual(bashReadPaths("sed -n '10,20p;30,40p' /r/plan.md"), ['/r/plan.md']);
+  assert.deepEqual(bashReadPaths("sed -n '/foo\\|bar/p' plan.md", '/r'), ['/r/plan.md']);
+});
+
+test('bashReadPaths reads on after a heredoc body', () => {
+  assert.deepEqual(bashReadPaths("cat > f <<'EOF'\ncat inside.md\nEOF\ncat results/table.md | head -30", '/r'), ['/r/results/table.md']);
+  assert.deepEqual(bashReadPaths('cat <<EOF\nEOF\ncat /r/a.md'), ['/r/a.md']);
+});
+
+test('bashReadPaths handles &>, subshells, backslashes, sed -ne and cd -', () => {
+  assert.deepEqual(bashReadPaths('cat /r/f.md &>/dev/null'), ['/r/f.md']);
+  assert.deepEqual(bashReadPaths('(cd /r && cat f.md)', '/x'), ['/r/f.md']);
+  assert.deepEqual(bashReadPaths('cat /r/a\\ b.md'), ['/r/a b.md']);
+  assert.deepEqual(bashReadPaths('cat /r/f.md \\\n  /r/g.md'), ['/r/f.md', '/r/g.md']);
+  assert.deepEqual(bashReadPaths("sed -ne '1,5p' /r/f.md && sed -n -e '1p' /r/g.md"), ['/r/f.md', '/r/g.md']);
+  assert.deepEqual(bashReadPaths('cd /r; cd sub; cd -; cat f.md'), ['f.md']);
+});
