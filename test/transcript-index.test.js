@@ -392,10 +392,23 @@ test('watchEvents reports DONE on a SubagentHandback and sets done', () => {
   assert.equal(r.done, true);
 });
 
-test('watchEvents reports DONE with the last text when the meta file says finished', () => {
-  const r = watchEvents(workerLines(), null, { ...NO_LIMITS, finished: true });
-  assert.deepEqual(r.events, ['MSG landed at line 6', 'DONE Done; tests pass.']);
+test('watchEvents ends on the finished flag only after a poll with no new lines', () => {
+  const opts = { ...NO_LIMITS, finished: true };
+  let r = watchEvents(workerLines(), null, opts);
+  assert.deepEqual(r.events, ['MSG landed at line 6']);
+  assert.equal(r.done, false);
+  r = watchEvents(workerLines(), r.seen, opts);
+  assert.deepEqual(r.events, ['DONE Done; tests pass.']);
   assert.equal(r.done, true);
+});
+
+test('watchEvents waits again when lines arrive after the finished flag', () => {
+  const opts = { ...NO_LIMITS, finished: true };
+  let r = watchEvents(workerLines().slice(0, 7), null, opts);
+  r = watchEvents(workerLines(), r.seen, opts);
+  assert.equal(r.done, false, 'line 8 arrived after the flag');
+  r = watchEvents(workerLines(), r.seen, opts);
+  assert.deepEqual(r.events, ['DONE Done; tests pass.']);
 });
 
 // A steer sent while a worker runs is written as a queued_command attachment.
