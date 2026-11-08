@@ -269,3 +269,38 @@ test('--watch --since-line skips events up to that line', (t) => {
   assert.equal(r.stdout, 'DONE Report: done\n');
   assert.equal(runArgs([file, '--watch', '--since-line', '-1']).status, 1);
 });
+
+test('--steps --full prints whole steps', (t) => {
+  const file = worker(t, null);
+  const command = 'echo ' + 'y'.repeat(300);
+  fs.appendFileSync(file, JSON.stringify({
+    type: 'assistant', agentId: 'a1', isSidechain: true, sessionId: 's1', timestamp: '2026-11-08T14:02:12.000Z',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'b9', name: 'Bash', input: { command } }] },
+  }) + '\n');
+  assert.ok(runArgs([file, '--steps', '1', '--full']).stdout.endsWith(`9 14:02:12 Bash ${command}\n`));
+  assert.ok(!runArgs([file, '--steps', '1']).stdout.includes(command));
+});
+
+test('--full without --steps, and --steps with --watch, exit 1', (t) => {
+  const file = worker(t, null);
+  for (const args of [[file, '--full'], [file, '--steps', '5', '--watch']]) {
+    const r = runArgs(args);
+    assert.equal(r.status, 1, args.join(' '));
+    assert.match(r.stderr, /^transcript-index: /);
+  }
+});
+
+test('--steps leaves a half-written last line out of the line count', (t) => {
+  const file = worker(t, null);
+  fs.appendFileSync(file, '{"type":"assist');
+  assert.match(runArgs([file, '--steps', '1']).stdout, / · 8 lines · /);
+});
+
+test('--steps lists files read through Bash on the Read: line', (t) => {
+  const file = worker(t, null);
+  fs.appendFileSync(file, JSON.stringify({
+    type: 'assistant', agentId: 'a1', isSidechain: true, sessionId: 's1', timestamp: '2026-11-08T14:02:12.000Z',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'b9', name: 'Bash', input: { command: "cd /r && sed -n '1,9p' notes.md" } }] },
+  }) + '\n');
+  assert.equal(runArgs([file, '--steps', '1']).stdout.split('\n')[1], 'Read: /r/spec.md, /r/a.ts, /r/notes.md');
+});

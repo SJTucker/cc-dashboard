@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { buildIndex, stepsOf, renderIndex, recentSteps, contextTokens, watchEvents } = require('../lib/transcript-index');
+const { buildIndex, stepsOf, renderIndex, recentSteps, contextTokens, watchEvents, bashReadPaths, filesRead } = require('../lib/transcript-index');
 
 // Fixture lines in the shapes Claude Code writes. Each helper returns one JSON line.
 let clock = 0;
@@ -392,10 +392,23 @@ test('watchEvents reports DONE on a SubagentHandback and sets done', () => {
   assert.equal(r.done, true);
 });
 
-test('watchEvents reports DONE with the last text when the meta file says finished', () => {
-  const r = watchEvents(workerLines(), null, { ...NO_LIMITS, finished: true });
-  assert.deepEqual(r.events, ['MSG landed at line 6', 'DONE Done; tests pass.']);
+test('watchEvents ends on the finished flag only after a poll with no new lines', () => {
+  const opts = { ...NO_LIMITS, finished: true };
+  let r = watchEvents(workerLines(), null, opts);
+  assert.deepEqual(r.events, ['MSG landed at line 6']);
+  assert.equal(r.done, false);
+  r = watchEvents(workerLines(), r.seen, opts);
+  assert.deepEqual(r.events, ['DONE Done; tests pass.']);
   assert.equal(r.done, true);
+});
+
+test('watchEvents waits again when lines arrive after the finished flag', () => {
+  const opts = { ...NO_LIMITS, finished: true };
+  let r = watchEvents(workerLines().slice(0, 7), null, opts);
+  r = watchEvents(workerLines(), r.seen, opts);
+  assert.equal(r.done, false, 'line 8 arrived after the flag');
+  r = watchEvents(workerLines(), r.seen, opts);
+  assert.deepEqual(r.events, ['DONE Done; tests pass.']);
 });
 
 // A steer sent while a worker runs is written as a queued_command attachment.
@@ -433,4 +446,51 @@ test('a task file entry ending in / covers every file under that folder', () => 
     assert.deepEqual(watchEvents(linesWithEdit(file), null, opts).events, [], file);
   }
   assert.deepEqual(watchEvents(linesWithEdit('/tmp/scratchy/x.js'), null, opts).events, ['DRIFT edit outside task files: /tmp/scratchy/x.js']);
+});
+
+test('recentSteps with full keeps a whole command on one line', () => {
+  const lines = [
+    rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } }),
+    assistant([tool('Bash', { command: `cd /r &&\n${'x'.repeat(200)} && npm test` }, 'b1')], at('01')),
+  ];
+  assert.equal(recentSteps(lines, 1, { full: true })[0], `2 14:02:01 Bash cd /r && ${'x'.repeat(200)} && npm test`);
+});
+
+test('recentSteps labels a SubagentHandback as REPORT', () => {
+  const lines = [...workerLines(), assistant([tool('SubagentHandback', { message: 'Report:\n done' }, 'h1')], at('12'))];
+  assert.equal(recentSteps(lines, 1)[0], '9 14:02:12 REPORT Report: done');
+});
+
+test('bashReadPaths finds files read with cat, head, tail and sed -n', () => {
+  assert.deepEqual(bashReadPaths('cat /r/a.js'), ['/r/a.js']);
+  assert.deepEqual(bashReadPaths("cd /r && sed -n '10,20p' lib/a.js | cut -c1-400"), ['/r/lib/a.js']);
+  assert.deepEqual(bashReadPaths('head -n 5 x.md; tail -20 /r/y.log 2>&1'), ['x.md', '/r/y.log']);
+  assert.deepEqual(bashReadPaths('rtk read /r/a.js && cat "/r/b c.md"'), ['/r/a.js', '/r/b c.md']);
+});
+
+test('bashReadPaths skips writes, heredocs, globs and variables', () => {
+  assert.deepEqual(bashReadPaths("sed -i 's/a/b/' f.js && cat > g.js <<'EOF'\nbody\nEOF"), []);
+  assert.deepEqual(bashReadPaths('cat docs/*.md $F `ls`'), []);
+  assert.deepEqual(bashReadPaths('cat a.txt > b.txt'), ['a.txt']);
+});
+
+test('filesRead merges Read-tool and Bash reads in first-read order', () => {
+  const lines = [
+    rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } }),
+    assistant([tool('Bash', { command: 'cd /r && cat lib/a.js' }, 'b1'), tool('Read', { file_path: '/r/spec.md' }, 'r1')], at('01')),
+    assistant([tool('Read', { file_path: '/r/lib/a.js' }, 'r2')], at('02')),
+  ];
+  assert.deepEqual(filesRead(lines), ['/r/lib/a.js', '/r/spec.md']);
+});
+
+test('bashReadPaths starts from the shell folder it is given', () => {
+  assert.deepEqual(bashReadPaths('cat a.js && cd sub && head b.js', '/r'), ['/r/a.js', '/r/sub/b.js']);
+});
+
+test('filesRead resolves a Bash read against the record cwd', () => {
+  const lines = [
+    rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } }),
+    assistant([tool('Bash', { command: 'cat docs/plan.md' }, 'b1')], { ...at('01'), cwd: '/main' }),
+  ];
+  assert.deepEqual(filesRead(lines), ['/main/docs/plan.md']);
 });
