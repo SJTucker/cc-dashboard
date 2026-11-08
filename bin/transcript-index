@@ -31,7 +31,7 @@
 const fs = require('fs');
 const path = require('path');
 const { parseArgs } = require('util');
-const { buildIndex, renderIndex, recentSteps, contextTokens, watchEvents, boardEvents } = require('../lib/transcript-index');
+const { buildIndex, renderIndex, recentSteps, contextTokens, watchEvents, boardEvents, filesRead } = require('../lib/transcript-index');
 
 const POLL_MS = 2000;
 const { readStdin } = require('../lib/stdin');
@@ -116,7 +116,7 @@ function printSteps(file, n, full) {
     return;
   }
   const index = buildIndex(lines);
-  const read = [...new Set(index.turns.flatMap((t) => t.read))];
+  const read = filesRead(lines);
   const head = [stepsHeader(file, lines, index), `Read: ${read.length ? read.join(', ') : 'none'}`];
   process.stdout.write([...head, '', ...recentSteps(lines, n, { full })].join('\n') + '\n');
 }

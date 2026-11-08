@@ -295,3 +295,12 @@ test('--steps leaves a half-written last line out of the line count', (t) => {
   fs.appendFileSync(file, '{"type":"assist');
   assert.match(runArgs([file, '--steps', '1']).stdout, / · 8 lines · /);
 });
+
+test('--steps lists files read through Bash on the Read: line', (t) => {
+  const file = worker(t, null);
+  fs.appendFileSync(file, JSON.stringify({
+    type: 'assistant', agentId: 'a1', isSidechain: true, sessionId: 's1', timestamp: '2026-11-08T14:02:12.000Z',
+    message: { role: 'assistant', content: [{ type: 'tool_use', id: 'b9', name: 'Bash', input: { command: "cd /r && sed -n '1,9p' notes.md" } }] },
+  }) + '\n');
+  assert.equal(runArgs([file, '--steps', '1']).stdout.split('\n')[1], 'Read: /r/spec.md, /r/a.ts, /r/notes.md');
+});
