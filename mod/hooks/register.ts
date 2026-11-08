@@ -674,7 +674,7 @@ async function readyHandoff($: EngineInterface, id: string) {
       note($, 'handoff skipped (transcript not found)')
       return
     }
-    const resume = resumePrompt(path)
+    const resume = resumePrompt(path, await existingIndex($, id))
     const ready: Handoff = { resume }
     handoffs.set(id, ready)
     $.ui.status(HANDOFF_STATUS)
@@ -893,6 +893,15 @@ function startIndex($: EngineInterface, id: string) {
       indexing.delete(id)
       if (indexPending.delete(id)) startIndex($, id)
     })
+}
+
+// The session's index file, or undefined when bin/transcript-index has not written
+// it, as after a first turn that ended before the transcript existed. The resume
+// prompt then keeps its text without an index.
+async function existingIndex($: EngineInterface, id: string) {
+  const dir = await configDir($)
+  const file = dir ? indexPath(dir, id) : null
+  return file && (await $.fs.exists(file)) ? file : undefined
 }
 
 // No transcript or no config dir writes nothing and logs nothing: the first turn of
@@ -1230,7 +1239,7 @@ export const register: Register = (on) => {
   on('command.run', { command: 'transcript-handoff' }, async ($) => {
     const path = await transcriptPath($, await $.session.root(), await $.session.id())
     if (!path) return { text: 'transcript-handoff: transcript not found. Send a prompt first, then run /transcript-handoff again.' }
-    return { text: handoffText(await $.session.cwd(), path) }
+    return { text: handoffText(await $.session.cwd(), path, await existingIndex($, await $.session.id())) }
   })
 
   // Fires after each main-thread turn and when a rate-limit window moves a whole

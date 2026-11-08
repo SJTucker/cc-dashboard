@@ -64,6 +64,9 @@ type World = {
   rootFails: boolean
   // How long a bin/transcript-index run takes on the mock clock. Its runs go to indexRan.
   indexMs: number
+  // The index files fs.exists finds. Any other path under cc-dashboard/transcript-index/
+  // is missing, whatever `exists` answers.
+  indexes: string[]
 }
 
 const entry = (name: string): Entry => ({ name, kind: name.endsWith('.md') ? 'file' : 'dir', size: 0, mtimeMs: 0, isLink: false })
@@ -146,6 +149,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     nowOffset: 0,
     rootFails: false,
     indexMs: 0,
+    indexes: [],
     ...w,
   }
   const ran: Ran[] = []
@@ -174,7 +178,9 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     if (mtimeMs !== undefined) return { value: { kind: 'file' as const, size: 1, mtimeMs, isLink: false } }
     return { value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: true, realPath: '/repo/mod' } }
   })
-  on('fs.exists', (_$, e) => ({ value: state.exists(e.path) }))
+  on('fs.exists', (_$, e) => ({
+    value: e.path.includes('/cc-dashboard/transcript-index/') ? state.indexes.includes(e.path) : state.exists(e.path),
+  }))
   on('fs.list', (_$, e) => {
     listed.push(e.path)
     return { value: (state.dirs[e.path] ?? []).map(entry) }
@@ -1839,6 +1845,13 @@ test('a /clear before the delay passes cancels the index run', async ($, on) => 
   expect(indexRan).toEqual([])
 })
 
+test('a ready handoff names the index when it exists', async ($, on) => {
+  const { state, clock } = world(on, timed({ indexes: [INDEX_OUT] }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  expect(state.store['handoff:s1']).toEqual({ resume: resumePrompt(TRANSCRIPT, INDEX_OUT), at: FIRE })
+})
+
 test('a /clear after a ready handoff fills the transcript prompt 4 s later and clears the status', async ($, on) => {
   const { fills, statuses, state, clock } = world(on, timed())
   await idleTurn($)
@@ -1963,6 +1976,12 @@ test('/transcript-handoff prints the cd command, the transcript path and the res
   expect(result).toEqual({ text: handoffText('/work/my.demo', TRANSCRIPT) })
   expect(result.text).toContain('cd /work/my.demo && claude')
   expect(result.text).toContain(TRANSCRIPT)
+})
+
+test('/transcript-handoff names the index when it exists', async ($, on) => {
+  world(on, { indexes: [INDEX_OUT] })
+  const result = await $.command.run(handoffCmd)
+  expect(result).toEqual({ text: handoffText('/work/my.demo', TRANSCRIPT, INDEX_OUT) })
 })
 
 test('/transcript-handoff with no transcript prints the error text', async ($, on) => {
