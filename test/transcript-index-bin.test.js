@@ -260,3 +260,12 @@ test('--watch with a bad --budget or --quiet-min exits 1', (t) => {
     assert.match(r.stderr, /^transcript-index: /);
   }
 });
+
+test('--watch --since-line skips events up to that line', (t) => {
+  const file = worker(t, null);
+  fs.appendFileSync(file, HANDBACK + '\n');
+  const r = spawnSync(process.execPath, [BIN, file, '--watch', '--since-line', '6'], { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, 'DONE Report: done\n');
+  assert.equal(runArgs([file, '--watch', '--since-line', '-1']).status, 1);
+});

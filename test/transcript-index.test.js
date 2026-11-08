@@ -397,3 +397,40 @@ test('watchEvents reports DONE with the last text when the meta file says finish
   assert.deepEqual(r.events, ['MSG landed at line 6', 'DONE Done; tests pass.']);
   assert.equal(r.done, true);
 });
+
+// A steer sent while a worker runs is written as a queued_command attachment.
+function steer(message, s) {
+  return rec({ type: 'attachment', ...at(s), attachment: { type: 'queued_command', prompt: message, origin: { kind: 'coordinator' }, isMeta: true } });
+}
+function handback(message, s) {
+  return assistant([tool('SubagentHandback', { message }, 'h' + s)], at(s));
+}
+
+test('a steer that lands mid-run is a msg step and a MSG event', () => {
+  const lines = [...linesWithEdit('/r/a.ts'), steer('Stop after this file.', '04'), assistant([text('STEERED')], at('05'))];
+  assert.deepEqual(stepsOf(lines, 3, 3).map((s) => [s.kind, s.text]), [['msg', 'Stop after this file.']]);
+  assert.deepEqual(watchEvents(lines, null, NO_LIMITS).events, ['MSG landed at line 3']);
+  assert.deepEqual(buildIndex(lines).turns.map((t) => t.startLine), [1, 3]);
+});
+
+test('watchEvents with sinceLine reports only events after that line', () => {
+  const lines = [...workerLines(), handback('Report: done', '12')];
+  const r = watchEvents(lines, null, { ...NO_LIMITS, sinceLine: 6 });
+  assert.deepEqual(r.events, ['DONE Report: done']);
+});
+
+test('watchEvents follows a worker resumed after its report to its last report', () => {
+  const lines = [...workerLines(), handback('first report', '12'), coordinator('Fix the test.', at('13')), handback('second report', '14')];
+  assert.deepEqual(watchEvents(lines, null, NO_LIMITS).events, ['MSG landed at line 6', 'MSG landed at line 10', 'DONE second report']);
+  const resumed = lines.slice(0, 10);
+  const r = watchEvents(resumed, null, { ...NO_LIMITS, finished: true });
+  assert.equal(r.done, false, 'a finished flag left from the first run does not end a resumed worker');
+});
+
+test('a task file entry ending in / covers every file under that folder', () => {
+  const opts = { files: ['lib/a.js', '/tmp/scratch/', 'docs/superpowers/'], budget: null };
+  for (const file of ['/tmp/scratch/x.js', '/wt/docs/superpowers/plans/p.md']) {
+    assert.deepEqual(watchEvents(linesWithEdit(file), null, opts).events, [], file);
+  }
+  assert.deepEqual(watchEvents(linesWithEdit('/tmp/scratchy/x.js'), null, opts).events, ['DRIFT edit outside task files: /tmp/scratchy/x.js']);
+});

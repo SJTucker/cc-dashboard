@@ -23,7 +23,8 @@
 // the worker's transcript every 2 seconds and prints one line per event (DRIFT,
 // STUCK, BUDGET, MSG, QUIET, DONE; see watchEvents), then exits 0 after DONE. It
 // waits for a missing file to appear, and leaves a last line that has no newline
-// yet for the next poll. With `--board <path>` it also prints a POST line for each
+// yet for the next poll. `--since-line <n>` skips events up to line n, for a
+// watch re-armed after the Monitor tool's time limit. With `--board <path>` it also prints a POST line for each
 // post bin/board-post adds to that file after the watch starts.
 
 const fs = require('fs');
@@ -84,7 +85,7 @@ const USAGE = `usage: transcript-index                              read {"trans
        transcript-index <transcript.jsonl>          print the index
        transcript-index <transcript.jsonl> --steps <n>
                                                     print a worker's header, files read and last n steps
-       transcript-index <transcript.jsonl> --watch [--files a,b] [--budget N] [--quiet-min M] [--board P]
+       transcript-index <transcript.jsonl> --watch [--files a,b] [--budget N] [--quiet-min M] [--board P] [--since-line N]
                                                     print one line per worker event until it finishes
 `;
 
@@ -133,6 +134,12 @@ function completeLines(file) {
   return lines;
 }
 
+function wholeNumber(name, value) {
+  const n = Number(value);
+  if (!Number.isInteger(n) || n < 0) throw new Error(`--${name} needs a whole number, got ${value}`);
+  return n;
+}
+
 function positive(name, value) {
   const n = Number(value);
   if (!Number.isFinite(n) || n <= 0) throw new Error(`--${name} needs a positive number, got ${value}`);
@@ -168,7 +175,7 @@ async function watch(file, opts) {
         grewAt = Date.now();
         quietSent = false;
       }
-      const r = watchEvents(lines, seen, { files: opts.files, budget: opts.budget, finished: readMeta(file)?.finished === true });
+      const r = watchEvents(lines, seen, { files: opts.files, budget: opts.budget, sinceLine: opts.sinceLine, finished: readMeta(file)?.finished === true });
       seen = r.seen;
       for (const e of r.events) process.stdout.write(e + '\n');
       if (r.done) return;
@@ -187,6 +194,7 @@ function watchOptions(values) {
     budget: values.budget === undefined ? null : positive('budget', values.budget),
     quietMin: values['quiet-min'] === undefined ? 5 : positive('quiet-min', values['quiet-min']),
     board: values.board ?? null,
+    sinceLine: values['since-line'] === undefined ? 0 : wholeNumber('since-line', values['since-line']),
   };
 }
 
@@ -197,6 +205,7 @@ const OPTIONS = {
   budget: { type: 'string' },
   'quiet-min': { type: 'string' },
   board: { type: 'string' },
+  'since-line': { type: 'string' },
   help: { type: 'boolean' },
 };
 
