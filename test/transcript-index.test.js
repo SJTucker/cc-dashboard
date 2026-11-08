@@ -140,6 +140,19 @@ test("a worker's SubagentHandback report is its turn's last text", () => {
   assert.equal(workerIdx.turns.at(-1).lastText, 'Report: done');
 });
 
+test('stepsOf marks a SubagentHandback text step with its tool name, so a watcher can tell the report from other text', () => {
+  const lines = [
+    rec({ type: 'user', ...WORKER, message: { role: 'user', content: 'Do task 3' } }),
+    assistant([text('working')], WORKER),
+    assistant([tool('SubagentHandback', { message: 'Report: done' })], WORKER),
+  ];
+  assert.deepEqual(stepsOf(lines, 1, 3).map((s) => [s.kind, s.tool, s.text]), [
+    ['user', null, 'Do task 3'],
+    ['text', null, 'working'],
+    ['text', 'SubagentHandback', 'Report: done'],
+  ]);
+});
+
 test('stepsOf gives typed steps with line numbers, tools, errors and coordinator messages', () => {
   const lines = [
     assistant([tool('Bash', { command: 'false' }, 'b1')]),
