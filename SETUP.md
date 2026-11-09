@@ -12,6 +12,8 @@ what each panel shows.
 - **`node` on the PATH that Claude Code sees.** The mod runs the scripts in `bin/`
   directly, through their `#!/usr/bin/env node` line. A clone keeps their exec bit.
 - **`git` on the PATH (optional).** The server runs `git rev-parse`, `git log HEAD` (then `git log --all` when HEAD has nothing in the window), `git log -g HEAD` (the reflog, for amends), `git diff --numstat`, `git patch-id` and `git check-attr` in each repo of a Bash `git commit` call to count the lines that commit added and removed. `.gitattributes` decides which files are generated or vendored and count 0. All of these only read. Without `git`, lines come from Edit and Write calls only. A lookup that times out is retried once per server start.
+- **`wt` (worktrunk), for the orchestrate skill only.** The skill creates every
+  worker's worktree with `wt switch --create`. The dashboard and the mod do not use it.
 - **Claude Code.** The mod uses Claude Code's function hooks, which are early access.
   No minimum version is known. The mod was last run on 2.1.294.
 
@@ -30,7 +32,8 @@ Then open **http://localhost:3600**.
 
 `bin/setup` checks for Node 22.13 or later, `npm` and `claude` on your PATH, and
 stops before changing anything if one is missing. Then it runs `npm install`,
-links `mod/` to `~/.claude/skills/cc-dashboard`, and runs `claude plugin validate`.
+links `mod/` to `~/.claude/skills/cc-dashboard` and `skills/orchestrate/` to
+`~/.claude/skills/orchestrate`, and runs `claude plugin validate` on the mod.
 `bin/setup` reads `CLAUDE_CONFIG_DIR` from the shell that runs it, so set it there to
 the same value Claude Code uses. It is safe to run again. When a file, folder or link
 already sits at the link path, `bin/setup` stops, names the path and leaves it in
@@ -104,6 +107,26 @@ your statusline script or to `settings.json`.
 Without the mod, the Plan usage panel reads only the usage cache in `~/.claude.json`,
 which the server refreshes while a page is open. Live sessions has no Length column data and no
 cleared or ended marks.
+
+## Install the orchestrate skill
+
+`skills/orchestrate/` is a Claude Code skill that runs an approved plan with
+background workers, each in its own `wt` worktree. It calls `bin/transcript-index`
+and `bin/board-post` from this clone. Link it from the clone:
+
+```bash
+ln -s "$PWD/skills/orchestrate" ~/.claude/skills/orchestrate
+```
+
+`bin/setup` runs this line.
+
+- **`skills/orchestrate/` must stay inside the clone.** The skill finds `bin/`
+  through its own real path, two folders up. A copy of the folder elsewhere finds no
+  scripts.
+- **Moving the clone breaks the link.** Remove `~/.claude/skills/orchestrate` and run
+  the `ln -s` line again from the new location, or run `bin/setup` again after
+  removing the link.
+- **It needs `wt`.** See Requirements.
 
 ## Cache countdown in the statusline
 
@@ -211,6 +234,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/plugins/store/cc-dashboard_<id>.json` | `CLAUDE_CONFIG_DIR` | Claude Code, for the mod's key-value store. It holds the update check, the setup snapshots, and a ready handoff's resume prompt per session until that session's next prompt or end. |
 | `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, run by the mod |
 | `<cfg>/skills/cc-dashboard` (a symlink to the clone's `mod/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
+| `<cfg>/skills/orchestrate` (a symlink to the clone's `skills/orchestrate/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
 | `<cfg>/cc-dashboard/cache/` | `CLAUDE_CONFIG_DIR` | `bin/cache-line`, one `<session id>.json` per session holding the cache TTL, its expiry and when that expiry was first seen. `bin/cache-line` deletes files older than a day. |
 | `<cfg>/cc-dashboard/transcript-index/` | `CLAUDE_CONFIG_DIR` | `bin/transcript-index`, run by the mod one second after each main-thread turn of an interactive session. One `<session id>.md` per session: the session's turns with the transcript lines each covers, the files edited and read, the commands run and the subagents launched. A resumed session reads it through the resume prompt. Nothing deletes these files. |

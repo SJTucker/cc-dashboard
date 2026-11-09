@@ -154,6 +154,9 @@ recently. It makes no network request of its own.
 The dashboard ships a Claude Code mod in `mod/`. SETUP.md has the steps to link it
 into your skills folder. Every Claude Code session started after that loads it.
 
+`skills/orchestrate` is a separate Claude Code skill that runs an approved plan with
+background workers. `bin/setup` links it too, and SETUP.md has the manual steps.
+
 After each main turn, and whenever a rate-limit window moves by 1%, the mod runs
 `bin/record-statusline`. When a session ends, it runs `bin/record-session-end`. It
 writes each session's live state itself (see "Live state").
@@ -701,6 +704,7 @@ bin/judge-updates      Lists Claude Code versions to judge and records Haiku's v
 bin/record-session-end Marks a session snapshot ended, from the mod's session-end JSON on stdin
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/review-session     Lists ended sessions to review and records Haiku's suggestions in transcripts.db
+skills/orchestrate/    Claude Code skill that runs an approved plan with background workers, each in its own worktree; SETUP.md has the install steps
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
 public/apple-touch-icon.png  Home-screen icon, linked from index.html

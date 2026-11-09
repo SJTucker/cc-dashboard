@@ -9,6 +9,7 @@ const path = require('path');
 
 const SCRIPT = path.join(__dirname, '..', 'bin', 'setup');
 const MOD = fs.realpathSync(path.join(__dirname, '..', 'mod'));
+const SKILL = fs.realpathSync(path.join(__dirname, '..', 'skills', 'orchestrate'));
 
 // A fake HOME with stub node, npm and claude on PATH. Each stub appends its name
 // and arguments to calls.log, so a test can tell what ran. /usr/bin and /bin
@@ -35,11 +36,14 @@ function run(box, env = {}, script = SCRIPT) {
 
 const linkPath = (home, cfg = path.join(home, '.claude')) => path.join(cfg, 'skills', 'cc-dashboard');
 
-test('a fresh run installs, links the mod and validates it', (t) => {
+const skillLinkPath = (home, cfg = path.join(home, '.claude')) => path.join(cfg, 'skills', 'orchestrate');
+
+test('a fresh run installs, links the mod and the skill and validates the mod', (t) => {
   const box = sandbox(t);
   const { code, out, calls } = run(box);
   assert.strictEqual(code, 0, out);
   assert.strictEqual(fs.readlinkSync(linkPath(box.home)), MOD);
+  assert.strictEqual(fs.readlinkSync(skillLinkPath(box.home)), SKILL);
   assert.match(calls, /^npm install$/m);
   assert.match(calls, new RegExp(`^claude plugin validate ${MOD}$`, 'm'));
   assert.match(out, /npm start/);
@@ -71,7 +75,7 @@ test('a fresh run leaves the rest of the config folder alone', (t) => {
   assert.strictEqual(code, 0, out);
   for (const [rel, body] of Object.entries(seeded)) assert.strictEqual(fs.readFileSync(path.join(cfg, rel), 'utf8'), body);
   assert.deepStrictEqual(fs.readdirSync(cfg).sort(), ['plugins', 'settings.json', 'skills']);
-  assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'skills')).sort(), ['cc-dashboard', 'other']);
+  assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'skills')).sort(), ['cc-dashboard', 'orchestrate', 'other']);
   assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'plugins')), ['installed_plugins.json']);
 });
 
@@ -83,9 +87,11 @@ test('a second run leaves the link alone', (t) => {
   const box = sandbox(t);
   run(box);
   const before = fs.lstatSync(linkPath(box.home)).ino;
+  const skillBefore = fs.lstatSync(skillLinkPath(box.home)).ino;
   const { code, out } = run(box);
   assert.strictEqual(code, 0, out);
   assert.strictEqual(fs.lstatSync(linkPath(box.home)).ino, before);
+  assert.strictEqual(fs.lstatSync(skillLinkPath(box.home)).ino, skillBefore);
   assert.match(out, /already points at/);
 });
 
@@ -111,6 +117,22 @@ test('a link that points elsewhere stops the script before npm install', (t) => 
   assert.match(out, /FAIL/);
   assert.ok(out.includes(other), out);
   assert.strictEqual(fs.readlinkSync(link), other);
+  assert.doesNotMatch(calls, /npm install/);
+});
+
+test('a skill link that points elsewhere stops the script before npm install and changes nothing', (t) => {
+  const box = sandbox(t);
+  const link = skillLinkPath(box.home);
+  const other = path.join(box.home, 'other-skill');
+  fs.mkdirSync(other);
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(other, link);
+  const { code, out, calls } = run(box);
+  assert.strictEqual(code, 1);
+  assert.match(out, /FAIL/);
+  assert.ok(out.includes(other), out);
+  assert.strictEqual(fs.readlinkSync(link), other);
+  assert.ok(!fs.existsSync(linkPath(box.home)), 'the mod link was created');
   assert.doesNotMatch(calls, /npm install/);
 });
 
@@ -197,9 +219,11 @@ test('a clone path with a space links the right folder', (t) => {
   const clone = path.join(box.home, 'My Projects', 'cc-dashboard');
   fs.mkdirSync(path.join(clone, 'bin'), { recursive: true });
   fs.mkdirSync(path.join(clone, 'mod'));
+  fs.mkdirSync(path.join(clone, 'skills', 'orchestrate'), { recursive: true });
   fs.copyFileSync(SCRIPT, path.join(clone, 'bin', 'setup'));
   const { code, out, calls } = run(box, {}, path.join(clone, 'bin', 'setup'));
   assert.strictEqual(code, 0, out);
   assert.strictEqual(fs.readlinkSync(linkPath(box.home)), path.join(clone, 'mod'));
+  assert.strictEqual(fs.readlinkSync(skillLinkPath(box.home)), path.join(clone, 'skills', 'orchestrate'));
   assert.ok(calls.includes(`claude plugin validate ${path.join(clone, 'mod')}`), calls);
 });
