@@ -461,55 +461,122 @@ test('recentSteps labels a SubagentHandback as REPORT', () => {
   assert.equal(recentSteps(lines, 1)[0], '9 14:02:12 REPORT Report: done');
 });
 
+// Bash reads count only files that exist, so these tests read real files.
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const D = fs.mkdtempSync(path.join(os.tmpdir(), 'ti-reads-'));
+test.after(() => fs.rmSync(D, { recursive: true, force: true }));
+fs.mkdirSync(path.join(D, 'lib'));
+fs.mkdirSync(path.join(D, 'sub'));
+fs.mkdirSync(path.join(D, 'results'));
+for (const f of ['a.js', 'b c.md', 'a b.md', 'f.md', 'g.md', 'plan.md', 'x.md', 'y.log', 'a.txt', 'b.txt', 'sub/b.js', 'lib/a.js', 'results/table.md', 'spec.md', 'notes.md', 'data.json', 'inside.md']) {
+  fs.writeFileSync(path.join(D, f), 'x\n');
+}
+const P = (f) => path.join(D, f);
+
 test('bashReadPaths finds files read with cat, head, tail and sed -n', () => {
-  assert.deepEqual(bashReadPaths('cat /r/a.js'), ['/r/a.js']);
-  assert.deepEqual(bashReadPaths("cd /r && sed -n '10,20p' lib/a.js | cut -c1-400"), ['/r/lib/a.js']);
-  assert.deepEqual(bashReadPaths('head -n 5 x.md; tail -20 /r/y.log 2>&1'), ['x.md', '/r/y.log']);
-  assert.deepEqual(bashReadPaths('rtk read /r/a.js && cat "/r/b c.md"'), ['/r/a.js', '/r/b c.md']);
+  assert.deepEqual(bashReadPaths(`cat ${P('a.js')}`), [P('a.js')]);
+  assert.deepEqual(bashReadPaths(`cd ${D} && sed -n '10,20p' lib/a.js | cut -c1-400`), [P('lib/a.js')]);
+  assert.deepEqual(bashReadPaths(`cd ${D}; head -n 5 f.md; tail -20 ${P('y.log')} 2>&1`), [P('f.md'), P('y.log')]);
+  assert.deepEqual(bashReadPaths(`rtk read ${P('a.js')} && cat "${P('b c.md')}"`), [P('a.js'), P('b c.md')]);
 });
 
 test('bashReadPaths skips writes, heredocs, globs and variables', () => {
-  assert.deepEqual(bashReadPaths("sed -i 's/a/b/' f.js && cat > g.js <<'EOF'\nbody\nEOF"), []);
-  assert.deepEqual(bashReadPaths('cat docs/*.md $F `ls`'), []);
-  assert.deepEqual(bashReadPaths('cat a.txt > b.txt'), ['a.txt']);
+  assert.deepEqual(bashReadPaths(`cd ${D} && sed -i 's/a/b/' f.md && cat > g.md <<'EOF'\nbody\nEOF`), []);
+  assert.deepEqual(bashReadPaths('cat docs/*.md $F `ls`', D), []);
+  assert.deepEqual(bashReadPaths('cat a.txt > b.txt', D), [P('a.txt')]);
+});
+
+test('bashReadPaths lists the files that any command takes as arguments', () => {
+  const f = P('f.md');
+  assert.deepEqual(bashReadPaths(`grep -n "Task 2" -A40 ${P('plan.md')}`), [P('plan.md')]);
+  assert.deepEqual(bashReadPaths(`rg foo ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`awk '{print}' ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`nl ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`cut -c1-400 ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`jq . ${P('data.json')}`), [P('data.json')]);
+  assert.deepEqual(bashReadPaths(`diff ${f} ${P('g.md')}`), [f, P('g.md')]);
+  assert.deepEqual(bashReadPaths(`sort < ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`sort <${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`grep foo ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`grep foo ${f}`, D), [f]);
+  assert.deepEqual(bashReadPaths('grep zzz f.md', D), [P('f.md')]);
+});
+
+test('bashReadPaths looks through wrapper commands', () => {
+  const f = P('f.md');
+  assert.deepEqual(bashReadPaths(`timeout 5 cat ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`timeout -s KILL 5 cat ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`FOO=1 cat ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`sudo nice -n 5 env A=1 cat ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`rtk bypass cat ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`rtk proxy cat ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`perl -e 'alarm 60; exec @ARGV' cat ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`tool --file=${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`ls | xargs -n1 cat ${f}`), [f]);
+});
+
+test('bashReadPaths ignores commands that do not read, and missing files', () => {
+  const f = P('f.md');
+  assert.deepEqual(bashReadPaths(`rm ${f}`), []);
+  assert.deepEqual(bashReadPaths(`git add ${f}`), []);
+  assert.deepEqual(bashReadPaths(`node ${f}`), []);
+  assert.deepEqual(bashReadPaths(`wc -l ${f}`), []);
+  assert.deepEqual(bashReadPaths(`ls ${D}`), []);
+  assert.deepEqual(bashReadPaths(`sed -i '' 's/a/b/' ${f}`), []);
+  assert.deepEqual(bashReadPaths(`sed -i.bak 's/a/b/' ${f}`), []);
+  assert.deepEqual(bashReadPaths(`perl -pi -e 's/a/b/' ${f}`), []);
+  assert.deepEqual(bashReadPaths(`cat ${P('missing.md')}`), []);
+  assert.deepEqual(bashReadPaths(`cat ${D}`), []);
+  assert.deepEqual(bashReadPaths('cat f.md'), []);
+  assert.deepEqual(bashReadPaths('cat f.md', null), []);
+});
+
+test('bashReadPaths expands a leading ~/ to the home folder', (t) => {
+  const home = os.homedir();
+  const entry = fs.readdirSync(home, { withFileTypes: true }).find((e) => e.isFile() && /^[\w.-]+$/.test(e.name));
+  if (!entry) return t.skip('no plain file in the home folder');
+  assert.deepEqual(bashReadPaths(`cat ~/${entry.name}`), [path.join(home, entry.name)]);
+  assert.deepEqual(bashReadPaths(`cat a~/${entry.name}`), []);
 });
 
 test('filesRead merges Read-tool and Bash reads in first-read order', () => {
   const lines = [
     rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } }),
-    assistant([tool('Bash', { command: 'cd /r && cat lib/a.js' }, 'b1'), tool('Read', { file_path: '/r/spec.md' }, 'r1')], at('01')),
-    assistant([tool('Read', { file_path: '/r/lib/a.js' }, 'r2')], at('02')),
+    assistant([tool('Bash', { command: `cd ${D} && cat lib/a.js` }, 'b1'), tool('Read', { file_path: P('spec.md') }, 'r1')], at('01')),
+    assistant([tool('Read', { file_path: P('lib/a.js') }, 'r2')], at('02')),
   ];
-  assert.deepEqual(filesRead(lines), ['/r/lib/a.js', '/r/spec.md']);
+  assert.deepEqual(filesRead(lines), [P('lib/a.js'), P('spec.md')]);
 });
 
 test('bashReadPaths starts from the shell folder it is given', () => {
-  assert.deepEqual(bashReadPaths('cat a.js && cd sub && head b.js', '/r'), ['/r/a.js', '/r/sub/b.js']);
+  assert.deepEqual(bashReadPaths('cat a.js && cd sub && head b.js', D), [P('a.js'), P('sub/b.js')]);
 });
 
 test('filesRead resolves a Bash read against the record cwd', () => {
   const lines = [
     rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do it' } }),
-    assistant([tool('Bash', { command: 'cat docs/plan.md' }, 'b1')], { ...at('01'), cwd: '/main' }),
+    assistant([tool('Bash', { command: 'cat plan.md' }, 'b1')], { ...at('01'), cwd: D }),
   ];
-  assert.deepEqual(filesRead(lines), ['/main/docs/plan.md']);
+  assert.deepEqual(filesRead(lines), [P('plan.md')]);
 });
 
 test('bashReadPaths keeps a sed script whole when it holds ; or |', () => {
-  assert.deepEqual(bashReadPaths("sed -n '10,20p;30,40p' /r/plan.md"), ['/r/plan.md']);
-  assert.deepEqual(bashReadPaths("sed -n '/foo\\|bar/p' plan.md", '/r'), ['/r/plan.md']);
+  assert.deepEqual(bashReadPaths(`sed -n '10,20p;30,40p' ${P('plan.md')}`), [P('plan.md')]);
+  assert.deepEqual(bashReadPaths("sed -n '/foo\\|bar/p' plan.md", D), [P('plan.md')]);
 });
 
 test('bashReadPaths reads on after a heredoc body', () => {
-  assert.deepEqual(bashReadPaths("cat > f <<'EOF'\ncat inside.md\nEOF\ncat results/table.md | head -30", '/r'), ['/r/results/table.md']);
-  assert.deepEqual(bashReadPaths('cat <<EOF\nEOF\ncat /r/a.md'), ['/r/a.md']);
+  assert.deepEqual(bashReadPaths("cat > f <<'EOF'\ncat inside.md\nEOF\ncat results/table.md | head -30", D), [P('results/table.md')]);
+  assert.deepEqual(bashReadPaths(`cat <<EOF\nEOF\ncat ${P('a.js')}`), [P('a.js')]);
 });
 
 test('bashReadPaths handles &>, subshells, backslashes, sed -ne and cd -', () => {
-  assert.deepEqual(bashReadPaths('cat /r/f.md &>/dev/null'), ['/r/f.md']);
-  assert.deepEqual(bashReadPaths('(cd /r && cat f.md)', '/x'), ['/r/f.md']);
-  assert.deepEqual(bashReadPaths('cat /r/a\\ b.md'), ['/r/a b.md']);
-  assert.deepEqual(bashReadPaths('cat /r/f.md \\\n  /r/g.md'), ['/r/f.md', '/r/g.md']);
-  assert.deepEqual(bashReadPaths("sed -ne '1,5p' /r/f.md && sed -n -e '1p' /r/g.md"), ['/r/f.md', '/r/g.md']);
-  assert.deepEqual(bashReadPaths('cd /r; cd sub; cd -; cat f.md'), ['f.md']);
+  assert.deepEqual(bashReadPaths(`cat ${P('f.md')} &>/dev/null`), [P('f.md')]);
+  assert.deepEqual(bashReadPaths(`(cd ${D} && cat f.md)`, '/x'), [P('f.md')]);
+  assert.deepEqual(bashReadPaths(`cat ${D}/a\\ b.md`), [P('a b.md')]);
+  assert.deepEqual(bashReadPaths(`cat ${P('f.md')} \\\n  ${P('g.md')}`), [P('f.md'), P('g.md')]);
+  assert.deepEqual(bashReadPaths(`sed -ne '1,5p' ${P('f.md')} && sed -n -e '1p' ${P('g.md')}`), [P('f.md'), P('g.md')]);
+  assert.deepEqual(bashReadPaths(`cd ${D}; cd sub; cd -; cat f.md`), []);
 });
