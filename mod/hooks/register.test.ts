@@ -179,7 +179,11 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     return { value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: true, realPath: '/repo/mod' } }
   })
   on('fs.exists', (_$, e) => ({
-    value: e.path.includes('/cc-dashboard/transcript-index/') ? state.indexes.includes(e.path) : state.exists(e.path),
+    value: e.path.includes('/cc-dashboard/transcript-index/')
+      ? state.indexes.includes(e.path)
+      : e.path.includes('/cc-dashboard/reset-prompt/')
+        ? e.path in state.files
+        : state.exists(e.path),
   }))
   on('fs.list', (_$, e) => {
     listed.push(e.path)
@@ -1897,6 +1901,70 @@ test('text typed after the /clear is not replaced', async ($, on) => {
   await clock.settle()
   expect(fills).toEqual([])
   expect(statuses).toEqual([undefined, READY, undefined])
+})
+
+// The orchestrate skill queues its reset line here. The mock has no delete, so the
+// mod's consuming write is what the tests look for.
+const RESET_FILE = '/home/u/.claude/cc-dashboard/reset-prompt/s1.txt'
+const RESET = 'Read /img.md. You are the orchestrator for /plan.md.'
+
+test('a queued reset line fills the box 4 s after a /clear with no handoff', async ($, on) => {
+  const { fills, logged, state, clock } = world(on, { files: { [RESET_FILE]: `${RESET}\n` }, stats: { [RESET_FILE]: 60_000 } })
+  await idleTurn($)
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(3_999)
+  expect(fills).toEqual([])
+  await clock.advance(1)
+  await clock.settle()
+  expect(fills).toEqual([RESET])
+  expect(logged).toEqual([])
+})
+
+test('a queued reset line wins over a ready handoff, and the handoff entry is still deleted', async ($, on) => {
+  const { fills, statuses, state, clock } = world(on, timed({ files: { [RESET_FILE]: RESET }, stats: { [RESET_FILE]: 60_000 } }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(4_000)
+  await clock.settle()
+  expect(fills).toEqual([RESET])
+  expect(statuses).toEqual([undefined, READY, undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('a session.end that is not a /clear consumes the reset line and fills nothing', async ($, on) => {
+  const { fills, writes, clock } = world(on, { files: { [RESET_FILE]: RESET }, stats: { [RESET_FILE]: 60_000 } })
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(writes[RESET_FILE]).toBe('')
+  expect(fills).toEqual([])
+})
+
+test('a reset line older than 24 hours is ignored', async ($, on) => {
+  const { fills, clock } = world(on, { files: { [RESET_FILE]: RESET }, stats: { [RESET_FILE]: 61_000 - 24 * 3_600_000 - 1 } })
+  await idleTurn($)
+  await $.session.end(clear)
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+})
+
+test('the reset line is consumed after a /clear, so a second end of the session finds nothing', async ($, on) => {
+  const { fills, writes, state, clock } = world(on, { files: { [RESET_FILE]: RESET }, stats: { [RESET_FILE]: 60_000 } })
+  await idleTurn($)
+  await $.session.end(clear)
+  await clock.advance(4_000)
+  await clock.settle()
+  expect(fills).toEqual([RESET])
+  expect(writes[RESET_FILE]).toBe('')
+  state.files[RESET_FILE] = writes[RESET_FILE]!
+  await $.session.end(clear)
+  await clock.advance(4_000)
+  await clock.settle()
+  expect(fills).toEqual([RESET])
 })
 
 test('a /clear after the user kept working fills nothing', async ($, on) => {

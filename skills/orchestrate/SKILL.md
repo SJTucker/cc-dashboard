@@ -86,8 +86,17 @@ Then tell the user, in one sentence each:
 
 - The reset drops the planning history from your context and tests whether the
   image is enough to continue from.
-- If the input box fills with a transcript resume prompt a few seconds after
-  `/clear`, clear the box and send the reset line instead.
+- After `/clear` the input box fills with the reset line about 4 s later. If it
+  does not, send the line below by hand.
+
+Before the final message, queue the reset line for the mod to fill. Run this with
+`<image>` and `<plan path>` filled in. The quoted heredoc keeps the text as typed:
+
+```bash
+mkdir -p <cfg>/cc-dashboard/reset-prompt && cat > <cfg>/cc-dashboard/reset-prompt/$CLAUDE_CODE_SESSION_ID.txt <<'EOF'
+Read <image>. You are the orchestrator for <plan path>. Continue at "Plan the waves" in the orchestrate skill.
+EOF
+```
 
 End the message with the line to send after `/clear`, in a code block of its
 own. Nothing comes after it, so it is the last thing the user sees:
