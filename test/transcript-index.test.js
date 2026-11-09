@@ -513,14 +513,26 @@ test('bashReadPaths looks through wrapper commands', () => {
   assert.deepEqual(bashReadPaths(`rtk bypass cat ${f}`), [f]);
   assert.deepEqual(bashReadPaths(`rtk proxy cat ${f}`), [f]);
   assert.deepEqual(bashReadPaths(`perl -e 'alarm 60; exec @ARGV' cat ${f}`), [f]);
-  assert.deepEqual(bashReadPaths(`tool --file=${f}`), [f]);
   assert.deepEqual(bashReadPaths(`ls | xargs -n1 cat ${f}`), [f]);
+  assert.deepEqual(bashReadPaths(`for x in 1 2; do cat ${f}; done`), [f]);
+  assert.deepEqual(bashReadPaths(`if true; then head ${f}; else tail ${f}; fi`), [f, f]);
+});
+
+test('bashReadPaths ignores runners behind shell keywords, for lists and option values', () => {
+  const f = P('f.md');
+  assert.deepEqual(bashReadPaths(`for x in 1 2; do .venv/bin/python ${f}; done`), []);
+  assert.deepEqual(bashReadPaths(`for x in ${f}; do echo $x; done`), []);
+  assert.deepEqual(bashReadPaths(`uv run python -I ${f} && uv run pytest ${f}`), []);
+  assert.deepEqual(bashReadPaths(`pw snapshot --filename=${f}`), []);
+  assert.deepEqual(bashReadPaths(`pnpm vitest run $(cat ${P('missing.txt')}) ${f} ${f}`), []);
+  assert.deepEqual(bashReadPaths(`(cd ${D} && ls) && cat ${f}`), [f]);
 });
 
 test('bashReadPaths ignores commands that do not read, and missing files', () => {
   const f = P('f.md');
   assert.deepEqual(bashReadPaths(`rm ${f}`), []);
   assert.deepEqual(bashReadPaths(`git add ${f}`), []);
+  assert.deepEqual(bashReadPaths(`/x/cc-dashboard/bin/board-post ${f} --from "Task 2" --title t --body b`), []);
   assert.deepEqual(bashReadPaths(`node ${f}`), []);
   assert.deepEqual(bashReadPaths(`wc -l ${f}`), []);
   assert.deepEqual(bashReadPaths(`ls ${D}`), []);
