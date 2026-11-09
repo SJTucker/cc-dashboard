@@ -110,3 +110,19 @@ test('cache-state ignores a saved expiry older than the last main call', (t) => 
   assert.strictEqual(result.status, 0, result.stderr);
   assert.deepStrictEqual(JSON.parse(result.stdout), { ttl: '1h', expiresAt: T + HOUR });
 });
+
+test('cache-state starts no git process for a transcript with a git commit call', (t) => {
+  const dir = tmpDir(t, 'cache-state-shim');
+  const log = path.join(dir, 'calls.log');
+  fs.writeFileSync(path.join(dir, 'git'), `#!/bin/sh\necho "$@" >> "${log}"\nexit 1\n`, { mode: 0o755 });
+  const commit = JSON.stringify({
+    type: 'assistant', sessionId: 'abc', timestamp: new Date(T + 1000).toISOString(), requestId: 'r2', isSidechain: false,
+    message: { id: 'm2', model: 'claude-opus-5-5', content: [{ type: 'tool_use', id: 'toolu_c', name: 'Bash', input: { command: `cd ${dir} && git commit -m x` } }], usage: { input_tokens: 10, output_tokens: 5, cache_read_input_tokens: 50_000, cache_creation_input_tokens: 0, cache_creation: { ephemeral_1h_input_tokens: 0, ephemeral_5m_input_tokens: 0 } } },
+  });
+  const result = JSON.stringify({ type: 'user', sessionId: 'abc', timestamp: new Date(T + 2000).toISOString(), message: { content: [{ type: 'tool_result', tool_use_id: 'toolu_c', content: 'ok' }] } });
+  const file = transcript(t, [line({ t: T, id: 'm1', req: 'r1', w1h: 50_000 }), commit, result]);
+  const out = spawnSync(process.execPath, [SCRIPT], { input: JSON.stringify({ transcript: file }), encoding: 'utf8', env: { ...process.env, PATH: `${dir}${path.delimiter}${process.env.PATH}`, CLAUDE_CONFIG_DIR: tmpDir(t, 'cache-state-cfg') } });
+  assert.strictEqual(out.status, 0, out.stderr);
+  assert.deepStrictEqual(JSON.parse(out.stdout), { ttl: '1h', expiresAt: T + 1000 + HOUR });
+  assert.ok(!fs.existsSync(log), 'git was started');
+});
