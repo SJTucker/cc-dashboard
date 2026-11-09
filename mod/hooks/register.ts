@@ -32,6 +32,9 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // call and no changelog fetch.
 // The bin/ scripts write the session, usage, update-verdict and review files, so the
 // formats, the atomic writes and the freshness checks of those files are theirs.
+// The orchestrate skill writes reset-prompt/<session id>.txt, the line to send after a
+// /clear. On that session's end the mod reads it, and empties it because $.fs has no
+// delete. After a /clear it fills the next session's input box with the line.
 // The mod writes six formats itself with $.fs.write, under <config dir>/cc-dashboard/:
 //   activity/<session id>.json   the session's state. Read by lib/activity.js.
 //   agent-usage/<agent id>.json  each model request of a subagent (steps.ts). Read by lib/agent-steps.js.
@@ -709,6 +712,39 @@ async function storedResume($: EngineInterface, id: string): Promise<string | un
   }
 }
 
+// The reset line that the orchestrate skill queued for the session in
+// <config dir>/cc-dashboard/reset-prompt/<session id>.txt. A missing file is the normal
+// case and gives undefined without a log. So does a file older than 24 hours, an empty
+// file, and any failure, which is logged.
+const RESET_PROMPT_MAX_AGE_MS = 24 * 60 * 60 * 1000
+
+async function resetPromptPath($: EngineInterface, id: string) {
+  const dir = await configDir($)
+  return dir ? `${dir}/cc-dashboard/reset-prompt/${id}.txt` : null
+}
+
+async function queuedReset($: EngineInterface, path: string): Promise<string | undefined> {
+  try {
+    if (!(await $.fs.exists(path))) return undefined
+    const stat = await $.fs.stat(path)
+    if ((await $.clock.now()) - stat.mtimeMs > RESET_PROMPT_MAX_AGE_MS) return undefined
+    return String(await $.fs.read(path)).trim() || undefined
+  } catch (err) {
+    note($, `reset prompt read failed (${errorText(err)})`)
+    return undefined
+  }
+}
+
+// $.fs has no delete, so an empty write consumes the file. queuedReset reads empty text
+// as nothing queued. A file that is already gone is not written.
+async function consumeReset($: EngineInterface, path: string) {
+  try {
+    if (await $.fs.exists(path)) await $.fs.write(path, '')
+  } catch (err) {
+    note($, `reset prompt clear failed (${errorText(err)})`)
+  }
+}
+
 async function deleteStoredHandoff($: EngineInterface, id: string) {
   try {
     await $.store.delete(HANDOFF_KEY + id)
@@ -1288,6 +1324,8 @@ export const register: Register = (on) => {
   // /clear, and its status is cleared on any other end. The handoff is the map's
   // entry, or else the stored one, which survives a reload. The stored entry is deleted
   // either way. A store failure is logged and does not stop the rest of the hook.
+  // A reset line queued in reset-prompt/<session id>.txt wins over the handoff on a
+  // /clear and is emptied on any end, so a later end of the same session finds nothing.
   on('session.end', async ($, e, next) => {
     const handoff = handoffs.get(e.sessionId)
     const interactive = sessionModes.get(e.sessionId)?.interactive !== false
@@ -1303,12 +1341,14 @@ export const register: Register = (on) => {
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
     // The store reads follow run, so the script is not delayed by them.
-    const resume = handoff?.resume ?? (await storedResume($, e.sessionId))
-    if (resume !== undefined) {
-      if (e.reason === 'clear') prefillAfterClear($, resume)
-      else $.ui.status()
-      await deleteStoredHandoff($, e.sessionId)
-    }
+    const stored = handoff?.resume ?? (await storedResume($, e.sessionId))
+    const resetPath = await resetPromptPath($, e.sessionId)
+    const reset = resetPath ? await queuedReset($, resetPath) : undefined
+    if (resetPath) await consumeReset($, resetPath)
+    const fill = e.reason === 'clear' ? (reset ?? stored) : undefined
+    if (fill !== undefined) prefillAfterClear($, fill)
+    else if (stored !== undefined) $.ui.status()
+    if (stored !== undefined) await deleteStoredHandoff($, e.sessionId)
     // The lookup follows run, so the script is not delayed, and follows forgetSession,
     // so transcriptPath checks the file system instead of the dropped cache.
     if (e.reason !== 'clear') clearedFrom = undefined

@@ -129,7 +129,9 @@ ln -s "$PWD/skills/orchestrate" ~/.claude/skills/orchestrate
 - **It needs `wt`.** See Requirements.
 - **It needs the mod.** The skill reviews the planning session's messages from the
   transcript index in `<cfg>/cc-dashboard/transcript-index/`, which the mod writes
-  after each turn.
+  after each turn. The skill also queues its reset line in
+  `<cfg>/cc-dashboard/reset-prompt/`, and the mod fills the input box with it after
+  `/clear`.
 
 ## Cache countdown in the statusline
 
@@ -241,6 +243,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
 | `<cfg>/cc-dashboard/cache/` | `CLAUDE_CONFIG_DIR` | `bin/cache-line`, one `<session id>.json` per session holding the cache TTL, its expiry and when that expiry was first seen. `bin/cache-line` deletes files older than a day. |
 | `<cfg>/cc-dashboard/transcript-index/` | `CLAUDE_CONFIG_DIR` | `bin/transcript-index`, run by the mod one second after each main-thread turn of an interactive session. One `<session id>.md` per session: the session's turns with the transcript lines each covers, the files edited and read, the commands run and the subagents launched. A resumed session reads it through the resume prompt. Nothing deletes these files. |
+| `<cfg>/cc-dashboard/reset-prompt/` | `CLAUDE_CONFIG_DIR` | the orchestrate skill writes one `<session id>.txt` holding the reset line it offers. The mod reads it when that session ends. A `/clear` fills the next session's input box with the line, unless the file is over 24 hours old. The mod then empties the file, on any end, because the mod engine has no delete. |
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod. The server deletes files older than a day when the page shows the Today range. |
 | `<cfg>/cc-dashboard/agent-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per subagent. Each holds the agent id and, for each model request the subagent made, its time, model, turn id, step index and four token counts. The server reads them into `transcripts.db` and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/headless-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<session id>.json` per headless session (`claude -p` with no transcript). Each holds the session id, its working folder, the cost Claude Code last reported and, for each model request, its time, model, subagent id when there is one, turn id, step index and four token counts. The server reads them into `transcripts.db` as call rows and deletes each file a day after it was last written. |
