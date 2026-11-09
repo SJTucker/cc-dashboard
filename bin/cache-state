@@ -8,6 +8,8 @@
 // it passes cacheOf the expiry bin/cache-line saved for the transcript's session. Prints {} when the
 // transcript is missing or has no main-thread call. Stdin that is not JSON with a
 // transcript path prints the reason on stderr and exits 1, and the mod logs it.
+// It reads only `calls`, so it asks extractFile to skip commit tracking: that runs git
+// for every commit in the transcript, and this process starts fresh on every turn.
 
 const path = require('path');
 const { loadConfig } = require('../lib/config-dir');
@@ -34,7 +36,7 @@ readStdin()
   .then(async (input) => {
     const transcript = transcriptOf(input);
     if (transcript === null) return fail('stdin is not JSON with a transcript path');
-    const { calls } = await extractFile(transcript);
+    const { calls } = await extractFile(transcript, { commits: false });
     const saved = readCacheState(getCacheDir(loadConfig().configDir), path.basename(transcript, '.jsonl'));
     const cache = cacheOf(cacheCallsOf(calls), Date.now(), saved);
     process.stdout.write(JSON.stringify(cache ? { ttl: cache.ttl, expiresAt: cache.expiresAt } : {}) + '\n');

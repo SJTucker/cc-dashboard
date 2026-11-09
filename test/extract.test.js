@@ -1321,3 +1321,39 @@ test('git reset to a revision marks the commit after it, and a reset --soft with
   const plain = await extractFile(writeTranscript([commitCall(`cd ${repo} && git reset -q --soft && git commit -m s`), commitResult()]));
   assert.ok(!('squash' in plain.commits[0]));
 });
+
+// Counts git starts through a `git` shim first on PATH. Wrapping child_process.execFileSync
+// would miss them, because lib/commits.js destructures it when it is required.
+function withGitShim(t) {
+  const dir = helpers.tmpDir(t, 'git-shim');
+  const log = path.join(dir, 'calls.log');
+  const shim = path.join(dir, 'git');
+  fs.writeFileSync(shim, `#!/bin/sh\necho "$@" >> "${log}"\nexit 1\n`, { mode: 0o755 });
+  const saved = process.env.PATH;
+  process.env.PATH = `${dir}${path.delimiter}${saved}`;
+  t.after(() => { process.env.PATH = saved; });
+  return () => (fs.existsSync(log) ? fs.readFileSync(log, 'utf8').trim().split('\n').length : 0);
+}
+
+test('extractFile with commits: false returns the same calls, no commit rows, and starts no git', { skip: !hasGit }, async (t) => {
+  const repo = commitRepo(t);
+  const lines = [
+    cached({ msg: 'a', write: 100 }),
+    commitCall(`cd ${repo} && git commit -m "feat: x"`),
+    commitResult(),
+    callAt('rs', T0, `cd ${repo} && git reset main`),
+    resultAt('rs', T1),
+  ];
+  const file = writeTranscript(lines);
+  const spawned = withGitShim(t);
+  require('../lib/commits').resetCommitState();
+
+  const off = await extractFile(file, { commits: false });
+  assert.strictEqual(spawned(), 0);
+  assert.deepStrictEqual(off.commits, []);
+
+  const on = await extractFile(file);
+  assert.ok(spawned() > 0, 'the shim sees git starts when commits are on');
+  assert.deepStrictEqual(off.calls, on.calls);
+  assert.ok(off.calls.length > 0);
+});
