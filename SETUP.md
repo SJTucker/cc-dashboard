@@ -127,6 +127,9 @@ ln -s "$PWD/skills/orchestrate" ~/.claude/skills/orchestrate
   the `ln -s` line again from the new location, or run `bin/setup` again after
   removing the link.
 - **It needs `wt`.** See Requirements.
+- **It needs the mod.** The skill reviews the planning session's messages from the
+  transcript index in `<cfg>/cc-dashboard/transcript-index/`, which the mod writes
+  after each turn.
 
 ## Cache countdown in the statusline
 

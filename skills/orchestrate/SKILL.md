@@ -126,8 +126,8 @@ For each task in the wave:
    Never use the Agent tool's `isolation` option: it skips the `wt` hooks that
    give a worktree its ports and database.
 2. Start a worker with the Agent tool: `subagent_type: "general-purpose"`,
-   `model: "sonnet"`, `run_in_background: true`, and this prompt, filled in. A worker has no `<clone>`, so fill in `<POST>` with the
-   absolute path of `POST`.
+   `model: "sonnet"`, `run_in_background: true`, and this prompt, filled in.
+   A worker has no `<clone>`, so fill in `<POST>` with the absolute path of `POST`.
    Keep the prompt under 1,600 characters, not counting the absolute paths in it. Never
    drop one of its lines to fit. Everything else comes from the image.
 

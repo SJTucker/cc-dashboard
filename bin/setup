@@ -1,6 +1,7 @@
 #!/bin/sh
 # Takes a fresh clone to installed dependencies, a linked, validated mod and a linked
-# orchestrate skill. It runs the steps in SETUP.md, so a change to those steps changes this script too.
+# orchestrate skill. It runs the steps in SETUP.md, so a change to those steps
+# changes this script too.
 # Preflight changes nothing on disk, so a failed check leaves nothing half done.
 # It does not start the server or edit settings.json.
 
