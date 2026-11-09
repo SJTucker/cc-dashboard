@@ -1,0 +1,272 @@
+---
+name: orchestrate
+description: Use when the user asks to orchestrate an approved implementation plan with workers started from a context image, in place of subagent-driven-development. The main thread writes the image, offers a context reset, then runs Sonnet workers in parallel waves, each in its own wt worktree, watches and steers them, and collects their feedback on the image.
+---
+
+# Orchestrate
+
+You are the orchestrator. You write a context image from the approved plan and
+this conversation, then run the plan's tasks as background Sonnet workers that
+start from that image. You do not implement tasks yourself.
+
+Paths used below:
+
+- `<cfg>`: `${CLAUDE_CONFIG_DIR:-$HOME/.claude}`.
+- `<index>`: this session's transcript index,
+  `<cfg>/cc-dashboard/transcript-index/$CLAUDE_CODE_SESSION_ID.md`, written by the
+  cc-dashboard mod after each turn.
+- `<transcript>`: this session's transcript. Find it with
+  `ls <cfg>/projects/*/$CLAUDE_CODE_SESSION_ID.jsonl`. `<project dir>` is the
+  folder that holds it.
+- `<image>`: `<project>/docs/superpowers/images/YYYY-MM-DD-<topic>.md`, untracked.
+- `<board>`: `<image>` with `.md` replaced by `.board.jsonl`.
+- `<feedback>`: `<image>` with `.md` replaced by `.feedback.md`.
+- `<clone>`: the cc-dashboard clone that holds this skill. Claude Code prints
+  "Base directory for this skill: <dir>" when it loads the skill, and `<dir>` may be
+  a symlink. Resolve it once, at the start, with
+  `cd "$(realpath '<dir>')/../.." && pwd -P`, and use that absolute path everywhere
+  below.
+- `TI`: `<clone>/bin/transcript-index`.
+- `POST`: `<clone>/bin/board-post`.
+
+Never read a worker transcript raw: one line can hold a megabyte. Use the index
+(`TI <path>`), `TI <path> --steps <n>`, or `sed -n 'A,Bp' <path> | cut -c1-400` on
+line ranges the index or `--steps` names.
+
+## 1. When to use
+
+Only when the user asks for it. Otherwise superpowers' own execution skills
+(subagent-driven-development, executing-plans) apply.
+
+## 2. Review the messages
+
+Read `<index>`. Go through every turn's prompt. When a prompt's preview is not
+enough to judge it, read the transcript lines the index names for that turn.
+Sort each user message into one of three:
+
+- **Quote:** it states intent, a constraint, a correction or a decision.
+- **Conclusion only:** it was part of a back-and-forth whose outcome is a
+  decision you will record. Nothing from it is quoted.
+- **Leave out:** a go-ahead ("yes", "go on"), chatter about the harness,
+  something a later message replaced, or a message the user asked to keep out
+  of the image.
+
+Do the review from the index, not from memory: the index lists every message,
+and your memory of a long session does not.
+
+## 3. Write the image
+
+Copy `image-template.md` from this skill's folder to `<image>` and fill every
+section. Remove the HTML comments once a section is filled. A section with
+nothing to say gets "None." "Updates" stays empty until a wave changes
+something.
+
+- Quoted messages go in verbatim, each with its transcript line number. A
+  message stating intent, a constraint or a correction goes in "Goal and
+  principles". A message that only makes a decision goes in "Decisions". A
+  message that is both is quoted once, in "Goal and principles", and the
+  decision refers to its line.
+- Each left-out message gets one line in "Left out": its line number, its first
+  few words, and why it was left out. A left-out message is quoted nowhere else
+  in the image. A decision or dead end it led to may refer to its line number.
+- "Read before starting" names the spec, the plan, the project's CLAUDE.md, and
+  the source files the work centers on with their immediate call paths (the
+  files that call them and that they call), as absolute paths in reading order.
+- "Lookup" carries `<index>` and `<transcript>` filled in.
+
+Run `wc -w <image>`. Over 4,000 words means cut, starting with anything a worker
+can read from a file instead.
+
+## 4. Offer a reset
+
+Show the user the "Left out" list and ask whether anything should go back in.
+Update the image from their answer.
+
+Then tell the user, in one sentence each:
+
+- The reset drops the planning history from your context and tests whether the
+  image is enough to continue from.
+- If the input box fills with a transcript resume prompt a few seconds after
+  `/clear`, clear the box and send the reset line instead.
+
+End the message with the line to send after `/clear`, in a code block of its
+own. Nothing comes after it, so it is the last thing the user sees:
+
+    Read <image>. You are the orchestrator for <plan path>. Continue at "Plan the waves" in the orchestrate skill.
+
+After a reset you have a new session id, so `<index>` and `<transcript>` now
+point at the new session. The image's Sources keep the old ones.
+
+## 5. Plan the waves
+
+From the plan's Interfaces blocks and file lists, group the tasks into waves:
+
+- A task joins the earliest wave after every task it consumes from.
+- Two tasks that share a file never share a wave.
+- At most 3 tasks per wave. Split a larger wave.
+
+A task step that needs the user (a decision, a manual check) is not a worker's.
+Do that step with the user before the task's wave, and put the answer in the
+worker's prompt or the image's "Updates".
+
+Show the user the waves in one short list before dispatching. Create the plan
+branch if it does not exist, with the name and base the plan's Global
+Constraints give. When the plan names no base, use the base the project's
+CLAUDE.md names for worktrees, else local `main`:
+`wt switch --create <plan branch> --base <base> --no-cd`.
+
+## 6. Dispatch a wave
+
+For each task in the wave:
+
+1. Create its worktree:
+   `wt switch --create <plan branch>-t<N> --base <plan branch> --no-cd`. Print its
+   path with
+   `wt list --format json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const w of JSON.parse(s).items)if(w.branch===process.argv[1])console.log(w.worktree.path)})' <plan branch>-t<N>`.
+   Never use the Agent tool's `isolation` option: it skips the `wt` hooks that
+   give a worktree its ports and database.
+2. Start a worker with the Agent tool: `subagent_type: "general-purpose"`,
+   `model: "sonnet"`, `run_in_background: true`, and this prompt, filled in.
+   A worker has no `<clone>`, so fill in `<POST>` with the absolute path of `POST`.
+   Keep the prompt under 1,600 characters, not counting the absolute paths in it. Never
+   drop one of its lines to fit. Everything else comes from the image.
+
+```
+Your worktree is <path>; run every command there and touch no other checkout. Read <image> in full, then every file it lists under "Read before starting". Then do Task <N> of <plan path>, "<task title>".
+Files this task touches: <list>.
+Done when: <one narrow check, as a command and its expected result>.
+Image sections that matter most here: <names>.
+If you find something that affects work beyond this task (a fact that contradicts the image or plan, a problem in shared code, a name or interface other tasks depend on), post it and keep going: <POST> <board> --from "Task <N>" --title "<one line>" --body "<details>". If it blocks this task, stop and report instead.
+If the image or the plan contradicts the code, stop and report the contradiction instead of guessing.
+Commit on your branch with no attribution trailer. End your report with: files changed; the check you ran and its result; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
+```
+
+## 7. Watch
+
+For each worker, its transcript is
+`<project dir>/$CLAUDE_CODE_SESSION_ID/subagents/agent-<agentId>.jsonl`, with
+`agentId` from the Agent result. Start one Monitor tool watch per worker:
+
+- `command`: `TI <worker transcript> --watch --files <task files, comma separated> --budget 120000`,
+  plus `--board <board>` on exactly one watch per wave, so each post wakes you
+  once. A `--files` entry ending in `/` covers a whole folder: add this
+  session's scratchpad folder, so a worker's scratch files are not reported as
+  drift.
+- `timeout_ms`: 1800000.
+- `description`: `Task <N> worker`.
+
+The watch waits for a transcript that does not exist yet, so start it right
+after the Agent call. It prints one line per event and exits after `DONE`.
+
+A watch expires after 30 minutes. Re-arm it until its `DONE`, adding
+`--since-line <n>`, with `<n>` the line count from the worker's `--steps`
+header, so the new watch does not repeat events you already handled. Do the
+same when you resume a finished worker with SendMessage: its watch exited at
+`DONE`, so start a new one from the line count at that `DONE`.
+
+## 8. On each watch event
+
+Run `TI <worker transcript> --steps 20` and decide:
+
+- `DRIFT edit outside task files: <path>`: steer, unless the steps show the edit
+  is a file the plan missed and the task needs. Then note it for Updates.
+- `STUCK <tool> <text> failed 3 times in a row`: steer with the fix, or tell the
+  worker to stop and report if you do not know it.
+- `BUDGET context <n> tokens, over 120000`: steer the worker to finish its
+  current step, commit, and report. Then split the rest of its task into a new
+  task for a later wave.
+- `QUIET no new lines for 5 min`: look. Steer only if the steps show the worker
+  is lost.
+- `MSG landed at line <n>`: confirms where a steer arrived. Nothing to do.
+- `DONE <report>`: go to Review and merge. In `--steps`, the worker's final
+  report is the `REPORT` step.
+- `POST <from>: <title>`: go to section 9.
+
+A worker that is killed, or whose Agent call fails, never prints `DONE`. When
+the Agent tool reports that a worker failed or was stopped, stop its watch with
+TaskStop.
+
+The `--steps` header shows the worker's context size, and its `Read:` line lists
+every file the worker read, so you can see which reads the image could have
+listed. A Bash command counts as a read of each existing file it names, unless
+the command only runs, lists or changes files (`rm`, `git`, `node`, `wc`,
+`sed -i` and the like). Paths are checked against the disk when `--steps` runs,
+so a file deleted since does not show. A
+step is cut to one short line; `--steps <n> --full` prints each step whole.
+
+## 9. On each board post
+
+Read the post's full entry in `<board>` (the last lines of the file). Then:
+
+- Steer each running worker the post affects.
+- Add it to the image's "Updates" section, so later waves start with it.
+- If it changes the plan itself, stop dispatching new waves and bring it to the
+  user.
+
+A post or a stopped worker's report can show a bug in shared code: a file no
+task owns that the plan treats as done. Ask the user before anything changes
+that file. If they want it fixed:
+
+1. Start one worker in the plan branch's worktree to fix it test-first and
+   commit, with a watch and a review like any task. Do not fix it yourself. Your
+   context stays on coordination, and a worker's fix leaves a transcript the
+   reviewer can check.
+2. Add the fix commit to "Updates".
+3. In each task worktree that branched before the fix, run
+   `git merge --ff-only <plan branch>`, or `git merge <plan branch>` if the
+   worker has already committed. Uncommitted work stays in place unless it
+   touches the fixed files.
+4. Resume each stopped worker with SendMessage, naming the fix commit and the
+   Updates entry, and re-arm its watch (section 7). Steer each running worker
+   the same way.
+
+## 10. Steer
+
+SendMessage to the worker with one concrete correction, and the image section
+or board post it rests on.
+
+## 11. Review and merge
+
+When a worker reports, start a reviewer worker: `general-purpose`, `model:
+"sonnet"`, `run_in_background: true`, in the same worktree. Its prompt gives the
+worktree path, `<image>`, the task (plan path, number and title), and the
+implementer's transcript path. It tells the reviewer to:
+
+- check the diff against the task and the image,
+- check how the work was done, reading the implementer's work only through
+  `TI <transcript>` and `TI <transcript> --steps 60 --full`. A step it doubts
+  can be read with `sed -n '<line>p' <transcript> | cut -c1-2000`. Never read
+  the transcript file whole,
+- report pass, or each problem with file, line and why.
+
+Read the whole review. When it fails, steer or relaunch the implementer with the
+findings. When it passes, merge the worker's branch into the plan branch. Check
+`git merge-base --is-ancestor <plan branch>-t<N> <plan branch>`, then run
+`wt remove -D <plan branch>-t<N>`. Without `-D`, `wt` keeps the branch, because
+it checks merges against the default branch, not the plan branch.
+
+A merge conflict that is trivial, you resolve. Otherwise abort the merge, and
+rerun the later task on the merged plan branch.
+
+## 12. Between waves
+
+Add to the image's "Updates" section what the wave changed that later tasks
+need: new names, moved files, board posts. Then dispatch the next wave.
+
+## 13. Feedback
+
+For each worker, append one entry to `<feedback>`:
+
+```
+## Task <N>: <title> (<date>)
+- Used / missing: <the worker's own answer, quoted>
+- Peak context: <tokens from the --steps header>
+- Read outside the image: <files on the --steps Read: line that the image did not list>
+```
+
+The user reviews these across sessions before redesigning the image.
+
+## 14. Finish
+
+After the last wave, use superpowers:finishing-a-development-branch on the plan
+branch.

@@ -1,6 +1,7 @@
 #!/bin/sh
-# Takes a fresh clone to installed dependencies and a linked, validated mod. It runs
-# the steps in SETUP.md, so a change to those steps changes this script too.
+# Takes a fresh clone to installed dependencies, a linked, validated mod and a linked
+# orchestrate skill. It runs the steps in SETUP.md, so a change to those steps
+# changes this script too.
 # Preflight changes nothing on disk, so a failed check leaves nothing half done.
 # It does not start the server or edit settings.json.
 
@@ -9,6 +10,7 @@ unset CDPATH
 
 clone=$(cd "$(dirname "$0")/.." && pwd -P)
 mod="$clone/mod"
+skill="$clone/skills/orchestrate"
 
 # <cfg> as lib/config-dir.js resolves it: a leading ~ is expanded, empty is unset.
 case "${CLAUDE_CONFIG_DIR:-}" in
@@ -17,6 +19,7 @@ case "${CLAUDE_CONFIG_DIR:-}" in
   *) cfg="$CLAUDE_CONFIG_DIR" ;;
 esac
 link="$cfg/skills/cc-dashboard"
+skill_link="$cfg/skills/orchestrate"
 
 # Each step line prints as it happens and is also kept for the summary at the end.
 results=
@@ -59,36 +62,51 @@ ok "npm"
 command -v claude >/dev/null 2>&1 || stop "claude is not on PATH. The mod needs Claude Code. bin/setup cannot use a shell alias, so the folder holding claude must be on PATH."
 ok "claude"
 
-if [ -L "$link" ]; then
-  target=$(readlink "$link")
-  # cd from the link's folder so a relative target resolves the way the link does.
-  resolved=$(cd "$(dirname "$link")" 2>/dev/null && cd "$target" 2>/dev/null && pwd -P)
-  if [ "$resolved" = "$mod" ]; then
-    link_exists=yes
+# Sets exists to yes or no for the link at $1 that should point at $2. Stops when
+# the path holds a link to somewhere else, a dangling link, a folder or a file.
+check_link() {
+  if [ -L "$1" ]; then
+    target=$(readlink "$1")
+    # cd from the link's folder so a relative target resolves the way the link does.
+    resolved=$(cd "$(dirname "$1")" 2>/dev/null && cd "$target" 2>/dev/null && pwd -P)
+    if [ "$resolved" = "$2" ]; then
+      exists=yes
+    else
+      stop "$1 points at $target, not $2. Remove the link and run bin/setup again."
+    fi
+  elif [ -d "$1" ]; then
+    stop "$1 is a folder. Move it aside and run bin/setup again."
+  elif [ -e "$1" ]; then
+    stop "$1 is a file. Move it aside and run bin/setup again."
   else
-    stop "$link points at $target, not $mod. Remove the link and run bin/setup again."
+    exists=no
   fi
-elif [ -d "$link" ]; then
-  stop "$link is a folder. Move it aside and run bin/setup again."
-elif [ -e "$link" ]; then
-  stop "$link is a file. Move it aside and run bin/setup again."
-else
-  link_exists=no
-fi
-ok "link path $link"
+  ok "link path $1"
+}
+
+# Creates the link at $1 to $2 unless check_link found it ($3 is yes).
+make_link() {
+  if [ "$3" = yes ]; then
+    ok "$1 already points at $2"
+  else
+    mkdir -p "$cfg/skills" || stop "could not create $cfg/skills"
+    ln -s "$2" "$1" || stop "could not create $1"
+    ok "linked $1 -> $2"
+  fi
+}
+
+check_link "$link" "$mod"
+link_exists=$exists
+check_link "$skill_link" "$skill"
+skill_link_exists=$exists
 
 # Steps
 
 (cd "$clone" && npm install) || stop "npm install failed"
 ok "npm install"
 
-if [ "$link_exists" = yes ]; then
-  ok "$link already points at $mod"
-else
-  mkdir -p "$cfg/skills" || stop "could not create $cfg/skills"
-  ln -s "$mod" "$link" || stop "could not create $link"
-  ok "linked $link -> $mod"
-fi
+make_link "$link" "$mod" "$link_exists"
+make_link "$skill_link" "$skill" "$skill_link_exists"
 
 status=0
 if claude plugin validate "$mod"; then
