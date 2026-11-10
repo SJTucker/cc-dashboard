@@ -1,5 +1,5 @@
 // Pure helpers for the Live sessions activity state in register.ts. Nothing here
-// takes $, and nothing reads the session maps that live in register.ts.
+// takes $, and nothing reads the session records that live in register.ts.
 
 export type ToolRun = { name: string; detail: string; startedAt: number }
 export type Activity = {
@@ -12,16 +12,6 @@ export type Activity = {
 }
 
 export const DETAIL_MAX = 60
-
-// The running tools of one session in `all`, created empty on first use.
-export function toolsOf(all: Map<string, Map<string, ToolRun>>, id: string) {
-  let tools = all.get(id)
-  if (!tools) {
-    tools = new Map()
-    all.set(id, tools)
-  }
-  return tools
-}
 
 export const newestTool = (tools: Map<string, ToolRun>) => [...tools.values()].pop() ?? null
 

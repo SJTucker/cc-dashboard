@@ -1,20 +1,10 @@
 import { test, expect } from 'claude-code/testing'
-import { DETAIL_MAX, newestTool, setState, toolDetail, toolsOf } from './activity'
+import { DETAIL_MAX, newestTool, setState, toolDetail } from './activity'
 import type { Activity, ToolRun } from './activity'
 
 const run = (name: string): ToolRun => ({ name, detail: '', startedAt: 1 })
 const activity = (state: Activity['state'], since: number): Activity => ({
   sessionId: 's', state, since, tool: null, subagents: 0, updatedAt: since,
-})
-
-test('toolsOf creates one map per session and returns the same map after', async () => {
-  const all = new Map<string, Map<string, ToolRun>>()
-  const a = toolsOf(all, 's1')
-  expect(a.size).toBe(0)
-  a.set('t1', run('Bash'))
-  expect(toolsOf(all, 's1')).toBe(a)
-  expect(toolsOf(all, 's2')).not.toBe(a)
-  expect(all.size).toBe(2)
 })
 
 test('newestTool is the last started tool, or null with none', async () => {
