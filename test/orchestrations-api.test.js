@@ -4,7 +4,8 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { bootServer } = require('./helpers');
+const { bootServer, testConfig } = require('./helpers');
+const { createOrchestrations } = require('../lib/orchestrations/discover');
 const { writeOrchestration } = require('./orchestration-fixture');
 
 function install(config) {
@@ -30,6 +31,17 @@ test('not installed: one cheap answer', async (t) => {
   const { url, config } = await bootServer(t);
   writeOrchestration(config.configDir, { live: true, workers: [{ steps: working('lib/x.js') }] });
   assert.deepEqual((await get(url + '/api/orchestrations')).body, { installed: false, orchestrations: [] });
+});
+
+test('not installed: list() reads no session and finds no transcript', (t) => {
+  const { config } = { config: testConfig(t) };
+  writeOrchestration(config.configDir, { live: true, workers: [{ steps: working('lib/x.js') }] });
+  const o = createOrchestrations(config.configDir);
+  assert.deepEqual(o.list(), []);
+  assert.deepEqual(o.sizes(), { transcripts: 0, scans: 0, parsed: 0, seen: 0, misses: 0, lines: 0 });
+  const readdir = t.mock.method(fs, 'readdirSync');
+  o.list();
+  assert.equal(readdir.mock.callCount(), 0);
 });
 
 test('lists an orchestration with its counts', async (t) => {
@@ -177,4 +189,69 @@ test('a waiting orchestration sorts first and is marked waiting', async (t) => {
   const { body } = await get(url + '/api/orchestrations');
   assert.deepEqual(body.orchestrations.map((s) => [s.id, s.waiting]), [[b.sessionId, true], [a.sessionId, false]]);
   assert.equal((await get(`${url}/api/orchestrations/${b.sessionId}`)).body.now.text, 'Waiting for you');
+});
+
+function plainSession(config, id, content = 'hello') {
+  const dir = path.join(config.configDir, 'projects', '-p');
+  fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `${id}.jsonl`);
+  fs.writeFileSync(file, JSON.stringify({ type: 'user', message: { role: 'user', content }, timestamp: new Date().toISOString() }) + '\n');
+  fs.mkdirSync(path.join(config.configDir, 'cc-dashboard', 'sessions'), { recursive: true });
+  fs.writeFileSync(path.join(config.configDir, 'cc-dashboard', 'sessions', `${id}.json`), JSON.stringify({ sessionId: id, lastActiveAt: Date.now(), project: 'p', costUsd: 0, durationMs: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0 }));
+  return file;
+}
+
+test('a non-orchestrator session keeps no lines after list()', (t) => {
+  const config = testConfig(t);
+  install(config);
+  plainSession(config, 'plain-1');
+  const o = createOrchestrations(config.configDir);
+  assert.deepEqual(o.list(), []);
+  const sizes = o.sizes();
+  assert.equal(sizes.lines, 0);
+  assert.equal(sizes.parsed, 0);
+});
+
+test('a session that calls the orchestrate Skill later is listed on the next list()', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const file = plainSession(config, 'late-1');
+  const o = createOrchestrations(config.configDir);
+  assert.deepEqual(o.list(), []);
+  const call = { type: 'assistant', timestamp: new Date().toISOString(), message: { role: 'assistant', content: [{ type: 'tool_use', id: 's1', name: 'Skill', input: { skill: 'orchestrate' } }] } };
+  fs.appendFileSync(file, JSON.stringify(call) + '\n');
+  assert.deepEqual(o.list().map((s) => s.id), ['late-1']);
+});
+
+test('an id with no transcript is looked up at most once per 60 s', (t) => {
+  const config = testConfig(t);
+  install(config);
+  fs.mkdirSync(path.join(config.configDir, 'cc-dashboard', 'sessions'), { recursive: true });
+  fs.writeFileSync(path.join(config.configDir, 'cc-dashboard', 'sessions', 'headless-1.json'), JSON.stringify({ sessionId: 'headless-1', lastActiveAt: Date.now(), project: 'p', costUsd: 0, durationMs: 0, apiDurationMs: 0, linesAdded: 0, linesRemoved: 0 }));
+  let clock = Date.now();
+  const o = createOrchestrations(config.configDir, { now: () => clock });
+  const projects = path.join(config.configDir, 'projects');
+  const readdir = t.mock.method(fs, 'readdirSync');
+  const scans = () => readdir.mock.calls.filter((c) => c.arguments[0] === projects).length;
+  o.list();
+  o.list();
+  assert.equal(scans(), 1);
+  clock += 61000;
+  o.list();
+  assert.equal(scans(), 2);
+});
+
+test('state for a session that left the snapshot window is dropped', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o1 = writeOrchestration(config.configDir, { live: true, workers: [{ steps: working('lib/a.js') }] });
+  plainSession(config, 'plain-2');
+  const o = createOrchestrations(config.configDir);
+  assert.equal(o.list().length, 1);
+  const before = o.sizes();
+  assert.ok(before.transcripts > 0 && before.parsed > 0 && before.seen > 0 && before.scans > 0);
+  fs.rmSync(path.join(config.configDir, 'cc-dashboard', 'sessions', `${o1.sessionId}.json`));
+  fs.rmSync(path.join(config.configDir, 'cc-dashboard', 'sessions', 'plain-2.json'));
+  assert.deepEqual(o.list(), []);
+  assert.deepEqual(o.sizes(), { transcripts: 0, scans: 0, parsed: 0, seen: 0, misses: 0, lines: o.sizes().lines });
 });
