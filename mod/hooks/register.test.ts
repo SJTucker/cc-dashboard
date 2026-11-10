@@ -69,6 +69,8 @@ type World = {
   // The index files fs.exists finds. Any other path under cc-dashboard/transcript-index/
   // is missing, whatever `exists` answers.
   indexes: string[]
+  // The stderr the generic process.run branch returns, as a failing bin script prints a reason.
+  runStderr: string
   // What $.model.fork answers, and how long it takes on the mock clock.
   forkReply: { isAnswered: true; text: string } | { isAnswered: false; reason: 'nothing-to-fork' | 'aborted' }
   forkMs: number
@@ -168,6 +170,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     rootFails: false,
     indexMs: 0,
     indexes: [],
+    runStderr: '',
     forkReply: { isAnswered: false, reason: 'nothing-to-fork' },
     forkMs: 0,
     readMs: [],
@@ -346,7 +349,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     }
     ran.push({ argv: e.argv, stdin: parsed, timeoutMs: e.init?.timeoutMs })
     const script = e.argv[0]?.endsWith('/judge-updates') ? state.scripts[e.argv[1] ?? ''] : undefined
-    const out = script ?? { exitCode, stdout: '', stderr: '' }
+    const out = script ?? { exitCode, stdout: '', stderr: state.runStderr }
     return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
   })
   const writes: Record<string, string> = {}
@@ -698,6 +701,12 @@ test('a failing run logs once, and a second failure logs nothing', async ($, on)
   await $.session.measure(measure([FIVE]))
   expect(ran.length).toBe(2)
   expect(logged).toEqual(['record-statusline failed (exit 1)'])
+})
+
+test('a failing script logs the first line of its stderr', async ($, on) => {
+  const { logged } = world(on, { runStderr: 'record-statusline: cannot read /x\nstack\n' }, 1)
+  await $.session.measure(measure([FIVE]))
+  expect(logged).toEqual(['record-statusline failed (exit 1): record-statusline: cannot read /x'])
 })
 
 test('a different failure logs after the first one, and each message logs once', async ($, on) => {

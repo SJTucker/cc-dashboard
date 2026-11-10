@@ -120,13 +120,19 @@ async function scriptPath($: EngineInterface, name: string) {
   return `${binDir}/${name}`
 }
 
+// A bin/ script's fail() prints its own reason to stderr. An uncaught exception prints
+// a file path first, so the first stderr line may hold a path. The 200-character cap
+// keeps the log line short.
 async function run($: EngineInterface, name: string, input: object, timeoutMs: number) {
   try {
-    const { exitCode } = await $.process.run([await scriptPath($, name)], {
+    const { exitCode, stderr } = await $.process.run([await scriptPath($, name)], {
       stdin: JSON.stringify(input),
       timeoutMs,
     })
-    if (exitCode !== 0) fail($, `${name} failed (exit ${exitCode})`)
+    if (exitCode !== 0) {
+      const reason = (stderr ?? '').split('\n')[0]?.trim().slice(0, 200)
+      fail($, `${name} failed (exit ${exitCode})${reason ? `: ${reason}` : ''}`)
+    }
   } catch (err) {
     fail($, `${name} failed (${err instanceof Error ? err.name : 'error'})`)
   }
