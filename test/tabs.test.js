@@ -33,8 +33,19 @@ test('summaryPanelsFor: each tab draws only its own summary panels', async () =>
 
 test('the High scores tab has its own hash and range', async () => {
   const { tabFromHash, rangeForTab, summaryPanelsFor, TABS } = await load();
-  assert.deepEqual(TABS, ['now', 'analysis', 'highscores']);
+  assert.deepEqual(TABS, ['now', 'analysis', 'highscores', 'mod']);
   assert.equal(tabFromHash('#highscores'), 'highscores');
   assert.equal(rangeForTab('highscores', 30), 'highscores');
   assert.deepEqual(summaryPanelsFor('highscores'), []);
+});
+
+test('the Mod tab has its own hash and range, and no range summary', async () => {
+  const { tabFromHash, rangeForTab, summaryPanelsFor, hasRange } = await load();
+  assert.equal(tabFromHash('#mod'), 'mod');
+  assert.equal(rangeForTab('mod', 30), 'mod');
+  assert.deepEqual(summaryPanelsFor('mod'), []);
+  assert.equal(hasRange('mod'), false);
+  assert.equal(hasRange('highscores'), false);
+  assert.equal(hasRange('now'), true);
+  assert.equal(hasRange('analysis'), true);
 });

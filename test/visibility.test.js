@@ -60,3 +60,7 @@ test('keys that feed no request change nothing', () => {
 test('the High scores tab needs only /api/records', () => {
   assert.deepEqual(needed([], 'highscores'), ['records']);
 });
+
+test('the Mod tab needs no optional request', () => {
+  assert.strictEqual(neededRequests(new Set(), 'mod').size, 0);
+});
