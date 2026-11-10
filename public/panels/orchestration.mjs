@@ -26,3 +26,28 @@ export function pickSelected(list, savedId) {
 export function liveCount(list) {
   return list.filter((entry) => entry.live).length;
 }
+
+// POSTs a JSON body. Resolves to { ok, status, data }: data is the parsed answer, or
+// null when the body is not JSON or no answer arrived (status 0). It never rejects.
+async function postJson(url, body, fetchImpl = (...args) => fetch(...args)) {
+  try {
+    const res = await fetchImpl(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    return { ok: res.ok, status: res.status, data: await res.json().catch(() => null) };
+  } catch {
+    return { ok: false, status: 0, data: null };
+  }
+}
+
+// The owner's board post. 201 answers with the post as stored.
+export function sendBoardPost(id, { title, body }, { fetchImpl } = {}) {
+  return postJson(`/api/orchestrations/${encodeURIComponent(id)}/board`, { title, body }, fetchImpl);
+}
+
+// A steer for one worker. 202 answers with { id }, the request id.
+export function sendSteer(id, { agentId, text }, { fetchImpl } = {}) {
+  return postJson(`/api/orchestrations/${encodeURIComponent(id)}/steer`, { agentId, text }, fetchImpl);
+}

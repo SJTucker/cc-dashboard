@@ -6,6 +6,7 @@
 import { el } from '../dom.mjs';
 import { formatDuration, formatTokens } from '../format.mjs';
 import { enter, fadeIn, swapText } from './motion.mjs';
+import { sendBoardPost, sendSteer } from '../panels/orchestration.mjs';
 
 export const CONTEXT_BUDGET = 120000;
 export const EMPTY_TEXT = 'No orchestration ran today. Start one with the orchestrate skill.';
@@ -107,6 +108,36 @@ export function reviewLabel(review, now = Date.now()) {
   return `${view.glyph} Reviewer ${word} · ${formatDuration(Math.max(0, now - new Date(review.startedAt).getTime()))}`;
 }
 
+// { word, tone } for a worker's lastSteer, or null when it has none. Warn states
+// say what went wrong in words.
+export function steerView(lastSteer) {
+  if (!lastSteer) return null;
+  switch (lastSteer.state) {
+    case 'pending': return { word: 'Sending…', tone: 'plain' };
+    case 'delivered': return { word: `Delivered ${clock(lastSteer.at)}`, tone: 'plain' };
+    case 'failed':
+      if (lastSteer.reason === 'expired') return { word: 'Not sent: it reached the orchestrator too late. Send it again.', tone: 'warn' };
+      return { word: `Not delivered: ${lastSteer.reason}`, tone: 'warn' };
+    case 'unclaimed': return { word: 'Not picked up. Is the orchestrator session still open?', tone: 'warn' };
+    default: return null;
+  }
+}
+
+// The message under the board composer after a refused post.
+export function boardError(status, data) {
+  if (status === 409 && data?.error === 'no board yet') return 'This orchestration has no board yet. It gets one when the context image is written.';
+  if (status === 400) return 'Write a title first.';
+  return `Could not post. The server said ${status}.`;
+}
+
+// The message under the steer composer after a refused steer.
+export function steerError(status, data) {
+  if (status === 409 && data?.error === 'worker finished') return 'This worker has finished, so it was not steered.';
+  if (status === 409 && data?.error === 'orchestrator not live') return 'The orchestrator session is not running, so nothing can deliver the message.';
+  if (status === 400) return 'Write a message first.';
+  return `Could not send. The server said ${status}.`;
+}
+
 const ATTENTION = new Set(['STUCK', 'DRIFT', 'BUDGET']);
 
 // What a worker card shows as its current action: the latest attention event for
@@ -146,7 +177,8 @@ function reconcile(parent, items, keyOf, create, update) {
     if (node !== wanted) parent.insertBefore(node, wanted);
     previous = node;
   }
-  for (const [key, child] of existing) if (!used.has(key)) child.remove();
+  // A board post the owner just sent has no entry in items until a poll reads it.
+  for (const [key, child] of existing) if (!used.has(key) && !child.hasAttribute('data-pending')) child.remove();
   return created;
 }
 
@@ -243,6 +275,8 @@ function buildSkeleton(root, id) {
   const boardEmpty = el('p', { class: 'orch-empty', text: 'Workers post here when they find something that affects other tasks.' });
   const board = panel('board', 'Board', [boardList, boardEmpty]);
   board.node.classList.add('orch-board');
+  const composer = buildBoardComposer(root);
+  board.node.appendChild(composer.node);
 
   const layout = el('div', { class: 'orch-layout' }, [
     el('div', { class: 'orch-main' }, [orch.node, workers.node, actions.node]),
@@ -254,7 +288,8 @@ function buildSkeleton(root, id) {
     open: new Set(),
     orchMeta: orch.meta, title, project, branch, phases, nowBox, nowDot, nowWhat, nowDetail, nowSince,
     workersMeta: workers.meta, waves, wavesEmpty,
-    feed, boardMeta: board.meta, boardList, boardEmpty,
+    feed, boardMeta: board.meta, boardList, boardEmpty, composer,
+    root,
   };
   return root._orch;
 }
@@ -276,6 +311,7 @@ export function renderDetail(root, detail, { seenBoard = 0, firstRender = false,
   renderWaves(r, detail, animate, now);
   renderFeed(r.feed, detail.feed);
   renderBoard(r, detail, seenBoard, animate, now);
+  r.composer.node.hidden = !detail.live;
 }
 
 function renderPhases(node, detail) {
@@ -369,8 +405,8 @@ function updateWave(node, { mode, wave }, r, animate, now) {
 }
 
 // A worker card. Every node below is built once and updated in place on each poll,
-// so a text selection or an open composer survives it. .w-slot is empty here and
-// no poll touches it: the steer composer goes in it.
+// so a text selection or an open composer survives it. .w-slot holds the steer
+// status row and composer, which buildSteer builds once.
 function buildWorker(r) {
   const filesValue = el('b', { class: 'num' });
   const steerValue = el('b', { class: 'num' });
@@ -411,8 +447,9 @@ function buildWorker(r) {
   more.hidden = true;
   const review = el('div', { class: 'review' }, [r2.reviewText, r2.reviewTask]);
   review.hidden = true;
-  const card = el('div', { class: 'worker' }, [head, review, el('div', { class: 'w-slot' }), more]);
-  Object.assign(r2, { head, more, review });
+  const steer = buildSteer(r, () => card);
+  const card = el('div', { class: 'worker' }, [head, review, steer.node, more]);
+  Object.assign(r2, { head, more, review, steer });
   card._r = r2;
   head.addEventListener('click', () => {
     const id = card.dataset.key;
@@ -459,6 +496,7 @@ function updateWorker(card, w, r, animate, now) {
     setText(c.reviewText, reviewLabel(w.review, now));
     setText(c.reviewTask, `Task ${w.task}`);
   }
+  updateSteer(card, w, animate);
   const open = r.open.has(card.dataset.key);
   c.head.setAttribute('aria-expanded', String(open));
   c.more.hidden = !open;
@@ -511,17 +549,26 @@ function renderBoard(r, detail, seenBoard, animate, now) {
     ({ post }) => `${post.t}${post.from}`,
     ({ post }) => buildPost(post),
     (li, { post, isNew }) => {
-      const p = li._r;
-      setText(p.from, post.from);
-      setClass(p.from, 'you', post.from === 'You');
-      setText(p.when, postTime(post.t, now));
-      setText(p.title, post.title);
-      setText(p.body, post.body ?? '');
+      fillPost(li, post, now);
+      li.removeAttribute('data-pending');
       if (isNew) li.classList.add('new');
       else if (li.classList.contains('new')) li.classList.add('seen');
     },
   );
   for (const li of created) enter(li, { animate });
+  // Posts still waiting for a poll to confirm them stay at the top.
+  const pending = [...r.boardList.querySelectorAll(':scope > [data-pending]')];
+  for (const li of pending.reverse()) if (li !== r.boardList.firstChild) r.boardList.prepend(li);
+  r.boardEmpty.hidden = board.length > 0 || pending.length > 0;
+}
+
+function fillPost(li, post, now) {
+  const p = li._r;
+  setText(p.from, post.from);
+  setClass(p.from, 'you', post.from === 'You');
+  setText(p.when, postTime(post.t, now));
+  setText(p.title, post.title);
+  setText(p.body, post.body ?? '');
 }
 
 function buildPost(post) {
@@ -541,4 +588,177 @@ function buildPost(post) {
     li.appendChild(more);
   }
   return li;
+}
+
+// ---------- Composers ----------
+
+function button(label, extra = '', attrs = {}) {
+  return el('button', { class: `orch-btn${extra}`, type: 'button', text: label, ...attrs });
+}
+
+// The board composer at the foot of the Board panel. Built once, so a poll leaves
+// the typed text and focus alone. A post shows at once at 60% opacity with
+// data-pending. The 201 answer gives it the key a poll will use, and that poll
+// replaces its content and removes data-pending. A refused post removes it and puts
+// the typed text back.
+function buildBoardComposer(root) {
+  const title = el('input', { class: 'orch-field', maxlength: '120', placeholder: 'Post to the board', 'aria-label': 'Post title' });
+  const body = el('textarea', { class: 'orch-field', rows: '3', maxlength: '2000', placeholder: 'Details', 'aria-label': 'Post details' });
+  body.hidden = true;
+  const toggle = el('button', { class: 'orch-link', type: 'button', text: 'Add details', 'aria-expanded': 'false' });
+  const post = el('button', { class: 'orch-btn primary', type: 'submit', text: 'Post' });
+  const error = el('p', { class: 'orch-error', role: 'alert' });
+  error.hidden = true;
+  const form = el('form', { class: 'orch-composer' }, [
+    title,
+    body,
+    el('div', { class: 'row' }, [toggle, post]),
+    error,
+    el('span', { class: 'hint', text: 'The orchestrator reads the board while a wave runs.' }),
+  ]);
+  form.hidden = true;
+  const showError = (text) => {
+    error.textContent = text ?? '';
+    error.hidden = !text;
+  };
+  toggle.addEventListener('click', () => {
+    body.hidden = !body.hidden;
+    toggle.textContent = body.hidden ? 'Add details' : 'Hide details';
+    toggle.setAttribute('aria-expanded', String(!body.hidden));
+    if (!body.hidden) body.focus();
+  });
+  let sequence = 0;
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const text = { title: title.value.trim(), body: body.value.trim() };
+    if (!text.title) {
+      showError(boardError(400, null));
+      title.focus();
+      return;
+    }
+    showError('');
+    const id = root.dataset.id;
+    const list = root._orch.boardList;
+    const li = buildPost(text);
+    li.dataset.key = `pending-${++sequence}`;
+    li.setAttribute('data-pending', '');
+    fillPost(li, { t: new Date().toISOString(), from: 'You', ...text }, Date.now());
+    list.prepend(li);
+    root._orch.boardEmpty.hidden = true;
+    enter(li, { animate: true, opacity: 0.6 });
+    const typed = { title: title.value, body: body.value };
+    title.value = '';
+    body.value = '';
+    const result = await sendBoardPost(id, text);
+    if (result.ok && result.data?.t) {
+      const key = `${result.data.t}You`;
+      const same = [...list.children].find((child) => child !== li && child.dataset.key === key);
+      if (same) li.remove();
+      else li.dataset.key = key;
+      body.hidden = true;
+      toggle.textContent = 'Add details';
+      toggle.setAttribute('aria-expanded', 'false');
+      return;
+    }
+    li.remove();
+    if (!title.value) title.value = typed.title;
+    if (!body.value) body.value = typed.body;
+    showError(boardError(result.status, result.data));
+    title.focus();
+  });
+  return { node: form };
+}
+
+// The steer status row and composer inside a worker card's .w-slot. getCard
+// returns the card, which does not exist yet when this runs. The composer is
+// built once and only shown or hidden, so a poll never rebuilds it.
+function buildSteer(r, getCard) {
+  const status = el('span', { class: 'steer-status', 'aria-live': 'polite' });
+  const open = button('Steer', '', { 'aria-expanded': 'false' });
+  const row = el('div', { class: 'w-steer-row' }, [status, open]);
+  const input = el('textarea', { class: 'orch-field', rows: '2' });
+  const send = el('button', { class: 'orch-btn primary', type: 'submit', text: 'Send' });
+  const cancel = button('Cancel');
+  const error = el('p', { class: 'orch-error', role: 'alert' });
+  error.hidden = true;
+  const form = el('form', { class: 'steer-form' }, [
+    input,
+    el('div', { class: 'row' }, [
+      el('span', { class: 'keys', text: '⌘Enter to send · Esc to cancel' }),
+      el('span', { class: 'btns' }, [cancel, send]),
+    ]),
+    error,
+  ]);
+  form.hidden = true;
+  const node = el('div', { class: 'w-slot' }, [row, form]);
+  const s = { node, row, status, open, form, input, error };
+
+  const showError = (text) => {
+    error.textContent = text ?? '';
+    error.hidden = !text;
+  };
+  const close = () => {
+    form.hidden = true;
+    input.value = '';
+    showError('');
+    open.hidden = !getCard()._worker?.canSteer;
+    open.setAttribute('aria-expanded', 'false');
+    open.focus();
+  };
+  open.addEventListener('click', () => {
+    const card = getCard();
+    input.setAttribute('aria-label', `Message to the ${card._worker ? `Task ${card._worker.task}` : 'task'} worker`);
+    input.placeholder = input.getAttribute('aria-label');
+    form.hidden = false;
+    open.hidden = true;
+    open.setAttribute('aria-expanded', 'true');
+    fadeIn(form, { animate: true });
+    input.focus();
+  });
+  cancel.addEventListener('click', close);
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      close();
+    } else if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) {
+      event.preventDefault();
+      form.requestSubmit();
+    }
+  });
+  form.addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const card = getCard();
+    const text = input.value.trim();
+    if (!text) {
+      showError(steerError(400, null));
+      input.focus();
+      return;
+    }
+    showError('');
+    send.disabled = true;
+    const result = await sendSteer(r.root.dataset.id, { agentId: card.dataset.key, text });
+    send.disabled = false;
+    if (!result.ok) {
+      showError(steerError(result.status, result.data));
+      input.focus();
+      return;
+    }
+    card._sending = result.data?.id ?? true;
+    close();
+    updateSteer(card, card._worker, true);
+  });
+  return s;
+}
+
+// Shows the worker's lastSteer in the status row and the Steer button when the
+// worker can be steered. After a send, the card says "Sending…" until a poll
+// returns that request.
+function updateSteer(card, w, animate) {
+  const s = card._r.steer;
+  if (card._sending && card._sending === w.lastSteer?.id) card._sending = null;
+  const view = card._sending ? { word: 'Sending…', tone: 'plain' } : steerView(w.lastSteer);
+  swapText(s.status, view?.word ?? '', { animate });
+  setClass(s.status, 'warn', view?.tone === 'warn');
+  if (s.form.hidden) s.open.hidden = !w.canSteer;
+  s.row.hidden = !view && s.open.hidden;
 }

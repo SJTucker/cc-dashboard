@@ -19,11 +19,12 @@ export function fadeIn(node, { animate }) {
   node.animate([{ opacity: 0 }, { opacity: 1 }], { duration: 160, easing: EASE });
 }
 
-// Moves a new node in from 6px above over 240ms (a new board post).
-export function enter(node, { animate }) {
+// Moves a new node in from 6px above over 240ms (a new board post). opacity is
+// the resting opacity, 0.6 for a post still waiting to be confirmed.
+export function enter(node, { animate, opacity = 1 }) {
   if (!animate || !canAnimate(node)) return;
   const from = reducedMotion() ? { opacity: 0 } : { opacity: 0, transform: 'translateY(-6px)' };
-  const to = reducedMotion() ? { opacity: 1 } : { opacity: 1, transform: 'none' };
+  const to = reducedMotion() ? { opacity } : { opacity, transform: 'none' };
   node.animate([from, to], { duration: 240, easing: EASE });
 }
 

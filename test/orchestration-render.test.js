@@ -64,3 +64,34 @@ test('reviewLabel says Reviewer running for a running review', async () => {
   assert.equal(reviewLabel({ status: 'passed', startedAt }, now), '✓ Reviewer passed · 2m');
   assert.equal(reviewLabel({ status: 'changes', startedAt }, now), '◐ Reviewer changes asked · 2m');
 });
+
+test('steerView covers every state', async () => {
+  const { steerView } = await load();
+  assert.equal(steerView(null), null);
+  assert.deepEqual(steerView({ state: 'pending' }), { word: 'Sending…', tone: 'plain' });
+  const delivered = steerView({ state: 'delivered', at: Date.parse('2026-11-10T14:06:00') });
+  assert.match(delivered.word, /^Delivered \d\d:\d\d$/);
+  assert.equal(delivered.tone, 'plain');
+  assert.deepEqual(steerView({ state: 'failed', reason: 'no such session' }), { word: 'Not delivered: no such session', tone: 'warn' });
+  assert.deepEqual(steerView({ state: 'unclaimed' }), { word: 'Not picked up. Is the orchestrator session still open?', tone: 'warn' });
+});
+
+test('steerView tells an expired steer to be sent again', async () => {
+  const { steerView } = await load();
+  assert.deepEqual(steerView({ state: 'failed', reason: 'expired' }), { word: 'Not sent: it reached the orchestrator too late. Send it again.', tone: 'warn' });
+});
+
+test('boardError explains a missing board, a missing title and any other refusal', async () => {
+  const { boardError } = await load();
+  assert.match(boardError(409, { error: 'no board yet' }), /no board yet/);
+  assert.equal(boardError(400, { error: 'x' }), 'Write a title first.');
+  assert.equal(boardError(500, {}), 'Could not post. The server said 500.');
+});
+
+test('steerError words each refusal of a steer', async () => {
+  const { steerError } = await load();
+  assert.equal(steerError(409, { error: 'worker finished' }), 'This worker has finished, so it was not steered.');
+  assert.equal(steerError(409, { error: 'orchestrator not live' }), 'The orchestrator session is not running, so nothing can deliver the message.');
+  assert.equal(steerError(400, {}), 'Write a message first.');
+  assert.equal(steerError(404, {}), 'Could not send. The server said 404.');
+});

@@ -27,3 +27,22 @@ test('the requests are optional and the detail id is URL-encoded', async () => {
   assert.equal(await requestOrchestration('a b/c', { fetchImpl }), null);
   assert.deepEqual(seen, ['/api/orchestrations', '/api/orchestrations/a%20b%2Fc']);
 });
+
+test('sendBoardPost and sendSteer POST JSON to the id-encoded routes and never reject', async () => {
+  const { sendBoardPost, sendSteer } = await load();
+  const seen = [];
+  const fetchImpl = async (url, init) => {
+    seen.push([url, init.method, init.headers['Content-Type'], JSON.parse(init.body)]);
+    return { ok: true, status: 201, json: async () => ({ t: 'x' }) };
+  };
+  assert.deepEqual(await sendBoardPost('a b', { title: 'T', body: 'B' }, { fetchImpl }), { ok: true, status: 201, data: { t: 'x' } });
+  await sendSteer('a b', { agentId: 'ag1', text: 'go' }, { fetchImpl });
+  assert.deepEqual(seen, [
+    ['/api/orchestrations/a%20b/board', 'POST', 'application/json', { title: 'T', body: 'B' }],
+    ['/api/orchestrations/a%20b/steer', 'POST', 'application/json', { agentId: 'ag1', text: 'go' }],
+  ]);
+  const refused = async () => ({ ok: false, status: 409, json: async () => ({ error: 'no board yet' }) });
+  assert.deepEqual(await sendBoardPost('a', { title: 'T' }, { fetchImpl: refused }), { ok: false, status: 409, data: { error: 'no board yet' } });
+  const down = async () => { throw new Error('offline'); };
+  assert.deepEqual(await sendSteer('a', { agentId: 'b', text: 'c' }, { fetchImpl: down }), { ok: false, status: 0, data: null });
+});

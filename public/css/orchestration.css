@@ -116,8 +116,8 @@
 .review[hidden] { display: none; }
 
 /* Board. The topbar is sticky, so the board sticks below it. */
-.orch-board { position: sticky; top: 96px; max-height: calc(100vh - 112px); display: grid; grid-template-rows: auto minmax(0, 1fr); }
-.board-list { overflow-y: auto; margin: 0; padding: var(--sp-1) 0; list-style: none; }
+.orch-board { position: sticky; top: 96px; max-height: calc(100vh - 112px); display: flex; flex-direction: column; }
+.board-list { flex: 1 1 auto; min-height: 0; overflow-y: auto; margin: 0; padding: var(--sp-1) 0; list-style: none; }
 .board-list:empty { display: none; }
 .post { padding: 10px 14px; display: grid; gap: var(--sp-1); border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); position: relative; }
 .post:first-child { border-top: 0; }
@@ -133,6 +133,32 @@
 .post button.more { all: unset; cursor: pointer; justify-self: start; color: var(--text-tertiary); font-size: var(--fs-caption); }
 .post button.more:focus-visible { outline: 1px solid var(--accent-cyan); }
 
+/* Composers: the board composer and the steer composer in a worker card. */
+.orch-btn { all: unset; box-sizing: border-box; cursor: pointer; font-family: var(--font-data); font-size: var(--fs-caption); color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 3px 10px; transition: transform 140ms var(--orch-ease), background-color 150ms ease; }
+.orch-btn.primary { border-color: var(--accent-cyan-dim); color: var(--accent-cyan); }
+.orch-btn:active { transform: scale(0.97); }
+.orch-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.orch-btn:focus-visible, .orch-link:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 1px; }
+@media (hover: hover) and (pointer: fine) { .orch-btn:not(:disabled):hover { background: var(--surface-hover); } }
+.orch-link { all: unset; cursor: pointer; font-size: var(--fs-caption); color: var(--text-tertiary); }
+.orch-field { box-sizing: border-box; width: 100%; font: var(--fs-body)/1.5 var(--font-data); color: var(--text-primary); background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 6px 8px; resize: vertical; }
+.orch-field::placeholder { color: var(--text-tertiary); }
+.orch-field:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: -1px; }
+.orch-composer { flex: none; border-top: 1px solid var(--border); padding: 10px 14px 12px; display: grid; gap: 6px; }
+.orch-composer[hidden], .steer-form[hidden], .w-steer-row[hidden], .orch-error[hidden], .orch-field[hidden] { display: none; }
+.orch-composer .row, .steer-form .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.orch-composer .hint, .steer-form .keys { font-size: var(--fs-caption); color: var(--text-tertiary); }
+.steer-form .btns { display: flex; gap: 6px; }
+.orch-error { margin: 0; font-size: var(--fs-caption); color: var(--warning); }
+.w-slot { display: grid; gap: 6px; padding: 0 var(--sp-3) 10px; }
+.w-slot:not(:has(> :not([hidden]))) { display: none; }
+.w-steer-row { display: flex; justify-content: space-between; align-items: center; gap: 8px; min-height: 22px; }
+.steer-status { font-size: var(--fs-caption); color: var(--text-secondary); min-width: 0; }
+.steer-status.warn { color: var(--warning); font-weight: 600; }
+.steer-form { display: grid; gap: 6px; }
+.post[data-pending] { opacity: 0.6; }
+.post { transition: opacity 300ms ease; }
+
 @media (max-width: 1000px) {
   .orch-layout { grid-template-columns: 1fr; }
   .orch-board { position: static; max-height: none; }
@@ -144,5 +170,5 @@
 }
 @media (prefers-reduced-motion: reduce) {
   .orch-dot::after { animation: none; }
-  .meter .fill, .run { transition: none; }
+  .meter .fill, .run, .orch-btn, .post { transition: none; }
 }
