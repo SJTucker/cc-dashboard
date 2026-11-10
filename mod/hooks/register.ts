@@ -254,9 +254,10 @@ async function findTranscript($: EngineInterface, root: string, id: string): Pro
 // Records when the projects/ scan last found nothing for a session id, and the turn
 // count at that time. While the miss is under TRANSCRIPT_MISS_MS old and the turn
 // count is the same, transcriptPath checks only the built path, so a transcript that
-// does not exist yet does not cost a folder scan on every measure. A new turn or the end of the window
-// searches again. forgetSession drops the entry. It stays outside the session record,
-// so recording a miss creates no record. Only a hit stores a path in the record.
+// does not exist yet does not cost a folder scan on every measure. A new turn or the
+// end of the window searches again. forgetSession drops the entry. It stays outside
+// the session record, so recording a miss creates no record. Only a hit stores a path
+// in the record.
 const TRANSCRIPT_MISS_MS = 30_000
 const transcriptMisses = new Map<string, { at: number; turns: number }>()
 
