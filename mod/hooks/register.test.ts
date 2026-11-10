@@ -2350,6 +2350,23 @@ test('a dismissal another session wrote hides the band within a minute', async (
   await ui.unmount()
 })
 
+test('a failed Dismiss write during a measure stays unsaved, so the next recheck keeps the band hidden', async ($, on) => {
+  const { state, clock } = world(on, { files: {}, writeFails: true })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80)]))
+  state.limitReadMs = [150, 0]
+  const measured = $.session.measure(measure([at(80)]))
+  await clock.advance(10)
+  await ui.press({ key: 'dismiss-limits' })
+  await clock.advance(300)
+  await measured
+  await clock.settle()
+  expect(await bandLine(ui)).toBeUndefined()
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
 test('a Dismiss that lands while recheckBand reads the levels file stays dismissed', async ($, on) => {
   const { state, writes, clock } = world(on, { files: {} })
   const ui = await $.ui.mount(BAND)

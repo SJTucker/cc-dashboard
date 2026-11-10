@@ -1325,12 +1325,16 @@ async function measureBand($: EngineInterface, limits: readonly SessionRateLimit
   // read keeps its levels, and its own write holds them.
   let levels = NO_LEVELS
   await update($, band, (b) => {
-    levels = bandDismissals !== seq ? b.levels : resetLevels(readings, b.unsaved ? maxLevels(stored, b.levels) : stored)
+    levels = bandDismissals !== seq ? resetLevels(readings, b.levels) : resetLevels(readings, b.unsaved ? maxLevels(stored, b.levels) : stored)
     return { readings, levels, unsaved: b.unsaved, fetchedAtMs: now }
   })
   if (path) {
-    if (bandDismissals === seq && !sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
-    await update($, band, (b) => ({ ...b, unsaved: false }))
+    // After a Dismiss the Dismiss owns the write and the unsaved flag. A failed Dismiss
+    // write stays unsaved.
+    if (bandDismissals === seq) {
+      if (!sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
+      await update($, band, (b) => ({ ...b, unsaved: false }))
+    }
   }
   // A claude -p session shows no band, so it reads nothing on a timer.
   if (!(await nonInteractive($))) startRecheck($)
