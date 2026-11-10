@@ -70,6 +70,12 @@ type World = {
   // What $.model.fork answers, and how long it takes on the mock clock.
   forkReply: { isAnswered: true; text: string } | { isAnswered: false; reason: 'nothing-to-fork' | 'aborted' }
   forkMs: number
+  // Delays on the mock clock: each read of the dashboard settings file takes the next
+  // entry of readMs, and an fs.exists of a transcript index path takes indexExistsMs, then
+  // throws when indexExistsFails is set. The transcript fallback awaits that check last.
+  readMs: number[]
+  indexExistsMs: number
+  indexExistsFails: boolean
   // Stdout of each git or date command the document handoff runs, by its argv joined with
   // spaces. Their runs go to repoRan, and a command not listed prints nothing.
   repo: Record<string, string>
@@ -158,6 +164,9 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     indexes: [],
     forkReply: { isAnswered: false, reason: 'nothing-to-fork' },
     forkMs: 0,
+    readMs: [],
+    indexExistsMs: 0,
+    indexExistsFails: false,
     repo: {},
     ...w,
   }
@@ -188,13 +197,19 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     if (mtimeMs !== undefined) return { value: { kind: 'file' as const, size: 1, mtimeMs, isLink: false } }
     return { value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: true, realPath: '/repo/mod' } }
   })
-  on('fs.exists', (_$, e) => ({
-    value: e.path.includes('/cc-dashboard/transcript-index/')
-      ? state.indexes.includes(e.path)
-      : e.path.includes('/cc-dashboard/reset-prompt/')
-        ? e.path in state.files
-        : state.exists(e.path),
-  }))
+  on('fs.exists', async (_$, e) => {
+    if (e.path.includes('/cc-dashboard/transcript-index/')) {
+      if (state.indexExistsMs > 0) await clock.sleep(state.indexExistsMs)
+      if (state.indexExistsFails) throw new Error('exists failed')
+    }
+    return {
+      value: e.path.includes('/cc-dashboard/transcript-index/')
+        ? state.indexes.includes(e.path)
+        : e.path.includes('/cc-dashboard/reset-prompt/')
+          ? e.path in state.files
+          : state.exists(e.path),
+    }
+  })
   on('fs.list', (_$, e) => {
     listed.push(e.path)
     return { value: (state.dirs[e.path] ?? []).map(entry) }
@@ -204,8 +219,12 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const asked: Array<{ model: string; system?: string; prompt: string; maxTokens?: number; effort?: string; timeoutMs?: number }> = []
   const registered: string[] = []
   const logged: string[] = []
-  on('fs.read', (_$, e) => {
+  on('fs.read', async (_$, e) => {
     readLog.push(e.path)
+    if (e.path.endsWith('/cc-dashboard/settings.json')) {
+      const ms = state.readMs.shift() ?? 0
+      if (ms > 0) await clock.sleep(ms)
+    }
     const text = state.files[e.path]
     if (text === undefined) throw new Error(`ENOENT ${e.path}`)
     return { value: text }
@@ -1587,10 +1606,10 @@ const cache = (ttl: '1h' | '5m', expiresAt: number) => ({ exitCode: 0, stdout: J
 // Defaults to the transcript handoff, which the tests below that predate the document
 // mode cover. A test of the document mode passes its own files.
 const timed = (over: Partial<World> = {}): Partial<World> => ({
-  files: { [DASH_SETTINGS]: '{"handoff":"transcript"}' },
   contextTokens: 103_224,
   cacheState: cache('1h', EXPIRES),
   ...over,
+  files: { [DASH_SETTINGS]: '{"handoff":"transcript"}', ...over.files },
 })
 
 test('an idle turn over 50k tokens on a 1h cache shows the status 7 minutes before the cache expires, with no fork', async ($, on) => {
@@ -2919,4 +2938,67 @@ test('a transcriptIndex switched to off while the index timer is pending runs no
   await clock.advance(1_000)
   await clock.settle()
   expect(indexRan).toEqual([])
+})
+
+test('a turn during the transcript fallback leaves no ready entry, status or store key', async ($, on) => {
+  const { statuses, state, clock } = world(on, docWorld({ forkReply: { isAnswered: false, reason: 'nothing-to-fork' }, indexExistsMs: 1_000 }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(statuses).toEqual([undefined, undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('a failed fallback that ends after the turn plants no failed entry, so the next idle gap gets its handoff', async ($, on) => {
+  const { forked, state, clock } = world(on, docWorld({ forkReply: { isAnswered: false, reason: 'nothing-to-fork' }, indexExistsMs: 1_000 }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await $.turn.complete(turnEnd({ turnId: 't2' }))
+  state.indexExistsFails = true
+  await clock.advance(1_000)
+  await clock.settle()
+  state.indexExistsFails = false
+  state.indexExistsMs = 0
+  await clock.set(FIRE + 1_000_000)
+  await clock.settle()
+  expect(forked.length).toBe(2)
+})
+
+test('a /clear during the transcript fallback adds no entry and no store key for the dead session', async ($, on) => {
+  const { statuses, state, clock } = world(on, docWorld({ forkReply: { isAnswered: false, reason: 'nothing-to-fork' }, indexExistsMs: 1_000 }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await $.session.end(clear)
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(statuses).toEqual([undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('a fork that ends after a turn, then a failed write, sets no fallback status', async ($, on) => {
+  const { statuses, state, clock } = world(on, docWorld({ forkMs: 5_000, writeFails: true }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(statuses).toEqual([undefined, undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('a turn.start while fireHandoff reads the settings starts no fork', async ($, on) => {
+  const { forked, statuses, clock, state } = world(on, docWorld())
+  await idleTurn($)
+  await clock.advance(ARM)
+  await clock.settle()
+  state.readMs = [0, 1_000]
+  await clock.set(FIRE)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(forked).toEqual([])
+  expect(statuses).toEqual([undefined])
 })

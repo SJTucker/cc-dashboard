@@ -678,10 +678,12 @@ type Handoff = { state: 'writing' | 'failed' } | { state: 'ready'; resume: strin
 const handoffs = new Map<string, Handoff>()
 
 // Makes the session's handoff ready: the map entry, the status and the stored copy.
-// A prompt or an end during the awaits replaces or removes the map entry, and then
+// A guard is the entry the caller set: when the map holds another one, or none, nothing
+// is made ready. A prompt or an end during the awaits replaces or removes the map entry, and then
 // the status stays as that event left it and the stored key is deleted again, so a
 // handoff from an earlier idle gap cannot outlive its gap.
-async function markReady($: EngineInterface, id: string, resume: string, status: string) {
+async function markReady($: EngineInterface, id: string, resume: string, status: string, guard?: Handoff) {
+  if (guard && handoffs.get(id) !== guard) return
   const ready: Handoff = { state: 'ready', resume }
   handoffs.set(id, ready)
   $.ui.status(status)
@@ -692,14 +694,15 @@ async function markReady($: EngineInterface, id: string, resume: string, status:
 }
 
 // The transcript handoff. A session with no transcript gets none, and the skip is logged.
-async function readyHandoff($: EngineInterface, id: string) {
+async function readyHandoff($: EngineInterface, id: string, guard?: Handoff) {
   try {
     const path = await transcriptPath($, await $.session.root(), id)
     if (!path) {
       note($, 'handoff skipped (transcript not found)')
       return
     }
-    await markReady($, id, resumePrompt(path, await existingIndex($, id)), HANDOFF_STATUS_TRANSCRIPT)
+    const index = await existingIndex($, id)
+    await markReady($, id, resumePrompt(path, index), HANDOFF_STATUS_TRANSCRIPT, guard)
   } catch (err) {
     note($, `handoff failed (${errorText(err)})`)
   }
@@ -748,9 +751,10 @@ async function startHandoff($: EngineInterface, id: string) {
   } catch (err) {
     note($, `handoff document failed (${errorText(err)})`)
     if (handoffs.get(id) !== entry) return
-    handoffs.delete(id)
-    await readyHandoff($, id)
-    if (handoffs.get(id)?.state !== 'ready') handoffs.set(id, { state: 'failed' })
+    // The 'writing' entry stays during the fallback, so a turn.start or a /clear in its
+    // awaits removes it and the guard then stops the fallback from changing anything.
+    await readyHandoff($, id, entry)
+    if (handoffs.get(id) === entry) handoffs.set(id, { state: 'failed' })
   }
 }
 
@@ -910,6 +914,8 @@ async function fireHandoff($: EngineInterface, id: string, expiresAt: number, fi
   if (renewed === null || activities.get(id)?.state !== 'waiting' || handoffs.has(id)) return
   // Read again after the wait, so a switch to off during bin/cache-state sets no status.
   const mode = (await dashboardSettings($)).handoff
+  // A turn.start or a /clear during that read changed the session, so check again.
+  if (activities.get(id)?.state !== 'waiting' || handoffs.has(id)) return
   if (mode === 'document') await startHandoff($, id)
   else if (mode === 'transcript') await readyHandoff($, id)
 }
