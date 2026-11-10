@@ -76,6 +76,9 @@ type World = {
   // entry of readMs, and an fs.exists of a transcript index path takes indexExistsMs, then
   // throws when indexExistsFails is set. The transcript fallback awaits that check last.
   readMs: number[]
+  // Each read of limit-warnings.json takes the next entry of limitReadMs on the mock clock.
+  // The read returns the file as it was when the read began.
+  limitReadMs: number[]
   indexExistsMs: number
   indexExistsFails: boolean
   // Stdout of each git or date command the document handoff runs, by its argv joined with
@@ -168,6 +171,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     forkReply: { isAnswered: false, reason: 'nothing-to-fork' },
     forkMs: 0,
     readMs: [],
+    limitReadMs: [],
     indexExistsMs: 0,
     indexExistsFails: false,
     repo: {},
@@ -229,6 +233,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
       if (ms > 0) await clock.sleep(ms)
     }
     const text = state.files[e.path]
+    if (e.path.endsWith('/cc-dashboard/limit-warnings.json')) {
+      const ms = state.limitReadMs.shift() ?? 0
+      if (ms > 0) await clock.sleep(ms)
+    }
     if (text === undefined) throw new Error(`ENOENT ${e.path}`)
     return { value: text }
   })
@@ -348,6 +356,8 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     const ms = state.writeMs.shift() ?? 0
     if (ms > 0) await clock.sleep(ms)
     writes[e.path] = e.text
+    // The limit levels file is read back by the band, so a read after this write sees it.
+    if (e.path.endsWith('/cc-dashboard/limit-warnings.json')) state.files[e.path] = e.text
     writeLog.push({ path: e.path, text: e.text })
     return { value: undefined }
   })
@@ -1669,6 +1679,18 @@ test('a failed marker write leaves the snapshots and the index as they were', as
   expect(logged.some((line) => line.startsWith('setup check failed'))).toBe(true)
 })
 
+test('a corrupt changes file from an earlier run does not stop the setup markers', async ($, on) => {
+  const { writes, logged, clock } = world(on, {
+    files: { ...judged, [CLAUDE_MD]: 'a\nb', [snap(CLAUDE_MD)]: snapText(CLAUDE_MD, 1000, 'a'), [CHANGES]: '{broken' },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+    replies: [{ isAnswered: true, text: 'add b' }],
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? 'null')).toHaveLength(1)
+  expect(logged.some((line) => line.startsWith('setup check failed'))).toBe(false)
+})
+
 test('a non-interactive session runs no setup check', async ($, on) => {
   const { state, clock } = world(on, { files: { ...judged, [CLAUDE_MD]: 'a' }, stats: { [CLAUDE_MD]: 1000 } })
   await $.session.start({ ...start, isInteractive: false })
@@ -2251,6 +2273,24 @@ test('Dismiss records the shown levels in limit-warnings.json and hides the band
   await ui.unmount()
 })
 
+test('a Dismiss that lands while measureBand reads the levels file stays dismissed', async ($, on) => {
+  const { state, writes, clock } = world(on, { files: {} })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80)]))
+  expect(await bandLine(ui)).toBeDefined()
+  // measureBand's read returns the empty file after 150 ms. The Dismiss finishes first.
+  state.limitReadMs = [150, 0]
+  const measured = $.session.measure(measure([at(80)]))
+  await clock.advance(10)
+  await ui.press({ key: 'dismiss-limits' })
+  await clock.advance(300)
+  await measured
+  await clock.settle()
+  expect(await bandLine(ui)).toBeUndefined()
+  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 0 })
+  await ui.unmount()
+})
+
 test('after a dismissal at 75 the band stays hidden at 80% and comes back at 90%', async ($, on) => {
   world(on, { files: { [LIMITS]: '{"five_hour":75,"seven_day":0}' } })
   const ui = await $.ui.mount(BAND)
@@ -2307,6 +2347,23 @@ test('a dismissal another session wrote hides the band within a minute', async (
   state.files[LIMITS] = '{"five_hour":75,"seven_day":0}'
   await clock.advance(60_000)
   expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a Dismiss that lands while recheckBand reads the levels file stays dismissed', async ($, on) => {
+  const { state, writes, clock } = world(on, { files: {} })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80)]))
+  expect(await bandLine(ui)).toBeDefined()
+  await clock.advance(59_990)
+  // The recheck's read and the Dismiss's read both return the empty file after 150 ms.
+  state.limitReadMs = [150, 150]
+  const advanced = clock.advance(20)
+  await ui.press({ key: 'dismiss-limits' })
+  await advanced
+  await clock.advance(300)
+  expect(await bandLine(ui)).toBeUndefined()
+  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 0 })
   await ui.unmount()
 })
 

@@ -1248,7 +1248,16 @@ async function checkSetup($: EngineInterface) {
   if (entries.length) {
     const file = `${dir}/cc-dashboard/changes/${id}.json`
     // A resumed session starts again with the same id: keep what it wrote before.
-    const earlier = await $.fs.read(file).then((text) => JSON.parse(String(text)) as unknown, () => [])
+    const earlier = await $.fs.read(file).then(
+      (text) => {
+        try {
+          return JSON.parse(String(text)) as unknown
+        } catch {
+          return []
+        }
+      },
+      () => [],
+    )
     await $.fs.write(file, changesFileText(earlier, entries))
   }
   for (const c of checked) {
@@ -1286,6 +1295,9 @@ const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readi
 // A module variable, so a reload drops it. The next measure starts the timer again.
 let recheck: Timer | undefined
 
+// Counts Dismiss presses. A measure or recheck that read the levels file before a Dismiss ran keeps the band's levels.
+let bandDismissals = 0
+
 const limitsFile = (dir: string) => `${dir}/cc-dashboard/limit-warnings.json`
 
 async function limitsPath($: EngineInterface) {
@@ -1302,17 +1314,22 @@ async function readLevels($: EngineInterface, path: string) {
 // is unsaved, and the write below retries it. A measure with no Session or Week window
 // (an API-key login) leaves the band as it is.
 async function measureBand($: EngineInterface, limits: readonly SessionRateLimit[]) {
+  const seq = bandDismissals
   if (!(await dashboardSettings($)).limitBand) return hideBand($)
   const now = await $.clock.now()
   const readings = liveReadings(readingsOf(limits), now)
   if (!readings.length) return
   const path = await limitsPath($)
   const stored = path ? await readLevels($, path) : NO_LEVELS
-  const held = await read($, band)
-  const levels = resetLevels(readings, held.unsaved ? maxLevels(stored, held.levels) : stored)
-  await update($, band, () => ({ readings, levels, unsaved: held.unsaved, fetchedAtMs: now }))
+  // The levels come from the band state inside update. A Dismiss that ran after the file
+  // read keeps its levels, and its own write holds them.
+  let levels = NO_LEVELS
+  await update($, band, (b) => {
+    levels = bandDismissals !== seq ? b.levels : resetLevels(readings, b.unsaved ? maxLevels(stored, b.levels) : stored)
+    return { readings, levels, unsaved: b.unsaved, fetchedAtMs: now }
+  })
   if (path) {
-    if (!sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
+    if (bandDismissals === seq && !sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
     await update($, band, (b) => ({ ...b, unsaved: false }))
   }
   // A claude -p session shows no band, so it reads nothing on a timer.
@@ -1346,6 +1363,7 @@ function startRecheck($: EngineInterface) {
 async function recheckBand($: EngineInterface) {
   if (!(await dashboardSettings($)).limitBand) return hideBand($)
   const paths = await configPaths($)
+  const seq = bandDismissals
   const file = paths ? await readLevels($, limitsFile(paths.dir)) : undefined
   const rateText = paths ? await $.fs.read(`${paths.dir}/rate-limits.json`).then(String, () => undefined) : undefined
   const cacheText = paths ? await $.fs.read(paths.claudeJson).then(String, () => undefined) : undefined
@@ -1357,7 +1375,7 @@ async function recheckBand($: EngineInterface) {
     const newer = newerReadings(b.readings, atMs, [parseRateLimitsFile(rateText), parseUsageCache(cacheText)])
     const next = {
       readings: liveReadings(newer ? newer.readings : b.readings, now),
-      levels: file ? (b.unsaved ? maxLevels(file, b.levels) : file) : b.levels,
+      levels: file && bandDismissals === seq ? (b.unsaved ? maxLevels(file, b.levels) : file) : b.levels,
       unsaved: b.unsaved,
       fetchedAtMs: newer ? newer.fetchedAtMs : atMs,
     }
@@ -1370,15 +1388,22 @@ async function recheckBand($: EngineInterface) {
 // Hides the band in this session first, so a failed write still hides it here. The
 // levels stay marked unsaved until the write succeeds.
 async function dismissBand($: EngineInterface) {
-  const current = await read($, band)
-  const path = await limitsPath($)
-  const stored = path ? await readLevels($, path) : NO_LEVELS
-  const base = current.unsaved ? maxLevels(stored, current.levels) : stored
-  const levels = dismissLevels(shownWindows(current.readings, current.levels), base)
-  await update($, band, (b) => ({ ...b, levels, unsaved: true }))
-  if (!path) return
-  await $.fs.write(path, JSON.stringify(levels))
-  await update($, band, (b) => ({ ...b, unsaved: false }))
+  // Counted at the start and again at the end, so a read that overlaps any part of a
+  // Dismiss sees a changed count.
+  bandDismissals++
+  try {
+    const current = await read($, band)
+    const path = await limitsPath($)
+    const stored = path ? await readLevels($, path) : NO_LEVELS
+    const base = current.unsaved ? maxLevels(stored, current.levels) : stored
+    const levels = dismissLevels(shownWindows(current.readings, current.levels), base)
+    await update($, band, (b) => ({ ...b, levels, unsaved: true }))
+    if (!path) return
+    await $.fs.write(path, JSON.stringify(levels))
+    await update($, band, (b) => ({ ...b, unsaved: false }))
+  } finally {
+    bandDismissals++
+  }
 }
 
 export const register: Register = (on) => {
