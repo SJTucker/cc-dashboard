@@ -118,7 +118,23 @@ test('steers and merges are attributed to tasks', () => {
   const r = parseOrchestrator(lines);
   assert.deepEqual(r.steers.map((s) => [s.to, s.summary, s.line]), [['aaa1', 'use the helper', 7]]);
   assert.match(r.steers[0].at, /^2026-11-10T/);
+  assert.equal(r.steers[0].source, 'orchestrator');
   assert.deepEqual(r.merges.map((m) => [m.task, m.line]), [[1, 9]]);
+});
+
+test('the dashboard steer note is a steer of that task\'s latest worker', () => {
+  const note = (text) => rec({ type: 'user', isMeta: true, message: { role: 'user', content: [{ type: 'text', text }] } });
+  const lines = [
+    ...orchestratorLines(),
+    ...launch('ag1b', 'aaa1b', 'Task 1 worker', workerPrompt(1)),
+    note('You steered Task 1 from the dashboard: Stop after this file\nthen report'),
+    note('You steered Task 9 from the dashboard: no such task'),
+    note('A meta row about something else'),
+  ];
+  const r = parseOrchestrator(lines);
+  assert.equal(r.steers.length, 1);
+  assert.deepEqual([r.steers[0].to, r.steers[0].summary, r.steers[0].source, r.steers[0].line], ['aaa1b', 'Stop after this file\nthen report', 'dashboard', 9]);
+  assert.match(r.steers[0].at, /^2026-11-10T/);
 });
 
 test('git merge-base, merge-tree and merge --abort are not merges', () => {

@@ -12,8 +12,8 @@
 // cut to 120 characters and the body to 2,000. Prints nothing and exits 0; a
 // missing path, --from or --title prints the reason on stderr and exits 1.
 
-const fs = require('fs');
 const { parseArgs } = require('util');
+const { appendPost } = require('../lib/orchestrations/board');
 
 function main() {
   const { values, positionals } = parseArgs({
@@ -23,8 +23,7 @@ function main() {
   if (positionals.length !== 1) throw new Error('usage: board-post <board path> --from <label> --title <text> [--body <text>]');
   if (!values.from) throw new Error('--from is required');
   if (!values.title) throw new Error('--title is required');
-  const post = { t: new Date().toISOString(), from: values.from, title: values.title.slice(0, 120), body: (values.body ?? '').slice(0, 2000) };
-  fs.appendFileSync(positionals[0], JSON.stringify(post) + '\n');
+  appendPost(positionals[0], { from: values.from, title: values.title, body: values.body ?? '' });
 }
 
 try {
