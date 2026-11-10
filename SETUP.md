@@ -84,6 +84,20 @@ to read the old session's transcript. The mod writes no file for this.
 the session's folder. Claude Code's own compaction (`/compact`, threshold and idle) is
 unchanged, because Claude Code does not pass compaction to installed mods.
 
+The mod reads `<cfg>/cc-dashboard/settings.json` at the moment each behaviour would
+run, so a change applies at the next event. A setting that is off stops the work
+behind it, including file reads, scripts and model calls:
+
+- `handoff` set to `off`: no handoff timer, no `bin/cache-state` run, no status line
+  offer and no prefill after `/clear`. A reset line from the orchestrate skill still
+  fills. `/transcript-handoff` still works.
+- `transcriptIndex` false: no `bin/transcript-index` run.
+- `setupMarkers` false: no setup check at session start.
+- `setupLabels` false: no Haiku label, release judging or changelog fetch.
+- `activity` false: no `activity/<session id>.json` write.
+- `limitBand` false: no plan limit band, and no recheck of `rate-limits.json` and
+  `~/.claude.json`.
+
 Link the mod into your skills folder from the clone:
 
 ```bash
@@ -311,8 +325,8 @@ of them.
   when the running Claude Code version has no verdict, or when you run
   `/backfill-updates`.
 - **The mod calls Haiku** through your Claude Code login to judge releases, review
-  ended sessions and label setup changes. The Haiku labels switch in the Setup changes
-  panel stops the label and release-judging calls and the changelog fetch. No API key is read. These calls write no
+  ended sessions and label setup changes. The `setupLabels` setting stops the label and
+  release-judging calls and the changelog fetch. No API key is read. These calls write no
   transcript line, so the dashboard's totals leave out their cost. Reviews and labels
   run in interactive sessions only. Each call sends this:
   - **Judging releases:** the changelog entries of up to 20 versions. Nothing from
@@ -324,8 +338,8 @@ of them.
     characters of each Claude reply. The digest names each tool call with its file
     path, URL host, skill, subagent type or Bash program name. Bash arguments are not
     sent. The digest also holds the first 200 characters of each tool error. A digest
-    over 60,000 characters keeps its first 20,000 and last 40,000. The Suggestions
-    switch in the Session reviews panel stops these calls.
+    over 60,000 characters keeps its first 20,000 and last 40,000. The `reviews`
+    setting stops these calls.
   - **Labelling a setup change:** the file's short name and its added and removed
     lines, up to 4,096 characters. Labelling covers `CLAUDE.md`, the files it includes
     with `@path`, rules, skills, agents, and a project's `CLAUDE.md` and
@@ -337,7 +351,8 @@ of them.
   `bin/cache-line` saved. For a 1-hour cache, the mod sets a timer for 7 minutes before the
   expiry and runs `bin/cache-state` again when it fires, so a cache that Claude Code renewed
   while a subagent ran moves the timer later. The timer does not run in sessions
-  without a terminal (Agent SDK, `-p`).
+  without a terminal (Agent SDK, `-p`). The `handoff` setting set to `off` stops the
+  timer and the `bin/cache-state` runs.
 
 ## Check it works
 

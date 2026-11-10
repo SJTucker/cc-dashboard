@@ -27,9 +27,12 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // A non-interactive session (claude -p) gets no activity file, no snapshot, no end
 // record, no handoff timer and no transcript index. It sends rate limits, and when it has no transcript it writes
 // its usage to headless-usage/.
-// The mod reads settings.json in the same folder, which the dashboard writes. While its
-// setupLabels value is false, the mod makes no Haiku label call, no release judging
-// call and no changelog fetch.
+// The mod reads settings.json in the same folder, which the dashboard writes, when each
+// behaviour would run. A setting that is off stops the work behind it. handoff 'off'
+// arms no timer, runs no bin/cache-state and prefills no handoff. transcriptIndex false
+// runs no bin/transcript-index. setupMarkers false runs no checkSetup. setupLabels false
+// makes no Haiku label call, no release judging call and no changelog fetch. activity
+// false writes no activity file. limitBand false shows no band and starts no recheck.
 // The bin/ scripts write the session, usage, update-verdict and review files, so the
 // formats, the atomic writes and the freshness checks of those files are theirs.
 // The orchestrate skill writes reset-prompt/<session id>.txt, the line to send after a
@@ -471,6 +474,8 @@ async function subagentCount($: EngineInterface, id: string) {
 async function writeActivity($: EngineInterface, id: string) {
   const dir = await configDir($)
   if (!dir) return
+  // The settings read waits for the throttle, so it runs at most once per write.
+  if (!(await dashboardSettings($)).activity) return
   const subagents = await subagentCount($, id)
   const a = activities.get(id)
   if (!a) return
@@ -1175,6 +1180,7 @@ async function readLevels($: EngineInterface, path: string) {
 // is unsaved, and the write below retries it. A measure with no Session or Week window
 // (an API-key login) leaves the band as it is.
 async function measureBand($: EngineInterface, limits: readonly SessionRateLimit[]) {
+  if (!(await dashboardSettings($)).limitBand) return hideBand($)
   const now = await $.clock.now()
   const readings = liveReadings(readingsOf(limits), now)
   if (!readings.length) return
@@ -1191,6 +1197,17 @@ async function measureBand($: EngineInterface, limits: readonly SessionRateLimit
   if (!(await nonInteractive($))) startRecheck($)
 }
 
+// With limitBand off, the band shows nothing and no timer reads the rate files. A band
+// already showing is emptied and redrawn once.
+async function hideBand($: EngineInterface) {
+  recheck?.cancel()
+  recheck = undefined
+  const held = await read($, band)
+  if (!held.readings.length) return
+  await update($, band, (b) => ({ ...b, readings: [] }))
+  $.ui.invalidate('ui.render')
+}
+
 function startRecheck($: EngineInterface) {
   if (recheck) return
   recheck = $.clock.every(RECHECK_MS, () => {
@@ -1205,6 +1222,7 @@ function startRecheck($: EngineInterface) {
 // stays live for up to 7 days. It redraws only while the band shows a window, or when
 // one has just left it.
 async function recheckBand($: EngineInterface) {
+  if (!(await dashboardSettings($)).limitBand) return hideBand($)
   const paths = await configPaths($)
   const file = paths ? await readLevels($, limitsFile(paths.dir)) : undefined
   const rateText = paths ? await $.fs.read(`${paths.dir}/rate-limits.json`).then(String, () => undefined) : undefined
@@ -1264,7 +1282,9 @@ export const register: Register = (on) => {
     if (e.isInteractive) {
       startReviews($)
       $.clock.after(0, () => {
-        checkSetup($).catch((err) => note($, `setup check failed (${errorName(err)})`))
+        dashboardSettings($)
+          .then((settings) => (settings.setupMarkers ? checkSetup($) : undefined))
+          .catch((err) => note($, `setup check failed (${errorName(err)})`))
       })
     }
     return result
@@ -1345,7 +1365,10 @@ export const register: Register = (on) => {
     const resetPath = await resetPromptPath($, e.sessionId)
     const reset = resetPath ? await queuedReset($, resetPath) : undefined
     if (resetPath) await consumeReset($, resetPath)
-    const fill = e.reason === 'clear' ? (reset ?? stored) : undefined
+    // With handoff off, a handoff stored before the switch is not offered. The status
+    // clear and the store delete below still run for it.
+    const handoffOn = (await dashboardSettings($)).handoff !== 'off'
+    const fill = e.reason === 'clear' ? (reset ?? (handoffOn ? stored : undefined)) : undefined
     if (fill !== undefined) prefillAfterClear($, fill)
     else if (stored !== undefined) $.ui.status()
     if (stored !== undefined) await deleteStoredHandoff($, e.sessionId)
@@ -1400,8 +1423,9 @@ export const register: Register = (on) => {
     try {
       if (!(await nonInteractive($))) {
         const id = await $.session.id()
-        armHandoff($, id)
-        queueIndex($, id)
+        const settings = await dashboardSettings($)
+        if (settings.handoff !== 'off') armHandoff($, id)
+        if (settings.transcriptIndex) queueIndex($, id)
       }
     } catch (err) {
       fail($, `handoff timer failed (${errorName(err)})`)
