@@ -667,7 +667,7 @@ test('session.start registers /backfill-updates and /transcript-handoff', async 
 })
 
 const STEER_DIR = '/home/u/.claude/cc-dashboard/steer/s1'
-const STEER_REQUEST = JSON.stringify({ id: 'r1', agentId: 'a1', task: 2, text: 'Use resolveRoot', at: 1 })
+const STEER_REQUEST = JSON.stringify({ id: 'r1', agentId: 'a1', task: 2, text: 'Use resolveRoot', at: 60_000 })
 
 test('with the orchestrate skill present, the relay delivers a steer request and writes its result', async ($, on) => {
   const { sent, appended, writes, clock } = world(on, {
@@ -688,6 +688,17 @@ test('without the orchestrate skill, the relay lists nothing', async ($, on) => 
   await clock.advance(10_000)
   await clock.settle()
   expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+})
+
+test('the relay keeps running after a /clear and lists the new session id folder', async ($, on) => {
+  const { listed, state, clock } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(listed).toContain('/home/u/.claude/cc-dashboard/steer/s2')
 })
 
 test('a headless session starts no relay', async ($, on) => {

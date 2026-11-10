@@ -655,6 +655,7 @@ async function relaySteers($: EngineInterface, dir: string) {
       },
       append: (text) => $.session.append({ message: { type: 'user', content: [{ type: 'text', text }] } }),
       now: () => $.clock.now(),
+      log: (text) => fail($, text),
     }, `${dir}/${sessionId}`, steerHandled)
   } finally {
     steerBusy = false

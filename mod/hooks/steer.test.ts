@@ -17,8 +17,9 @@ test('steerNote names the task', async () => {
 
 const DIR = '/cfg/cc-dashboard/steer/s1'
 
-function fake(files: Record<string, string>, send: SteerIo['send']) {
+function fake(files: Record<string, string>, send: SteerIo['send'], now = 99) {
   const calls: string[] = []
+  const logs: string[] = []
   const io: SteerIo = {
     list: async (dir) => {
       if (dir !== DIR) throw new Error('ENOENT')
@@ -36,9 +37,10 @@ function fake(files: Record<string, string>, send: SteerIo['send']) {
     append: async (text) => {
       calls.push(`append ${text}`)
     },
-    now: async () => 99,
+    now: async () => now,
+    log: (text) => { logs.push(text) },
   }
-  return { io, calls, files }
+  return { io, calls, files, logs }
 }
 
 const request = JSON.stringify({ id: 'b', agentId: 'a1', task: 5, text: 'Use resolveRoot', at: 1 })
@@ -80,4 +82,24 @@ test('a handled id is not sent twice, and a missing folder lists nothing', async
   await relayOnce(io, DIR, handled)
   await relayOnce(io, '/nowhere', new Set())
   expect(calls).toEqual([])
+})
+
+test('a request older than 30 s is answered expired and is not sent or appended', async () => {
+  const { io, calls } = fake({ [`${DIR}/b.json`]: request }, async () => ({ isDelivered: true }), 30_002)
+  await relayOnce(io, DIR, new Set())
+  expect(calls).toEqual(['write b.result.json {"id":"b","delivered":false,"reason":"expired","at":30002}'])
+})
+
+test('a request exactly 30 s old is still sent', async () => {
+  const { io, calls } = fake({ [`${DIR}/b.json`]: request }, async () => ({ isDelivered: true }), 30_001)
+  await relayOnce(io, DIR, new Set())
+  expect(calls[0]).toBe('send a1 Use resolveRoot')
+})
+
+test('a failed append and a failed result write are logged', async () => {
+  const { io, logs } = fake({ [`${DIR}/b.json`]: request }, async () => ({ isDelivered: true }))
+  io.append = async () => { throw new Error('append refused') }
+  io.write = async () => { throw new Error('disk full') }
+  await relayOnce(io, DIR, new Set())
+  expect(logs).toEqual(['steer note not appended (append refused)', 'steer result b not written (disk full)'])
 })
