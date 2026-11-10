@@ -1,0 +1,24 @@
+/* The Mod tab (public/panels/mod-settings.mjs). */
+.mod-row { padding: var(--sp-3) 0; border-top: 1px solid var(--border); }
+.mod-row:first-child { border-top: 0; }
+.mod-row:focus { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+.mod-head { display: flex; align-items: center; gap: var(--sp-2); }
+.mod-label { font-weight: 600; }
+.mod-controls { display: flex; flex-wrap: wrap; gap: var(--sp-3); margin-top: var(--sp-2); }
+/* Each row's control is a segmented group that matches the range picker and tab
+   switch in header.css: one bordered strip, the chosen segment filled cyan. The
+   radio inside each segment is hidden, and its label is the segment. */
+.segmented { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-s); overflow: hidden; }
+.segment { position: relative; display: inline-flex; align-items: center; padding: var(--sp-1) var(--sp-3); color: var(--text-secondary); cursor: pointer; border-right: 1px solid var(--border); font-size: var(--fs-caption); }
+.segment:last-child { border-right: none; }
+.segment input { position: absolute; opacity: 0; width: 1px; height: 1px; margin: 0; pointer-events: none; }
+.segment:hover { color: var(--text-primary); }
+.segment:has(input:checked) { background: var(--accent-cyan); color: var(--bg); }
+.segment:has(input:focus-visible) { outline: 2px solid var(--text-primary); outline-offset: -2px; }
+.segment:has(input:disabled) { cursor: default; opacity: 0.6; }
+.mod-affects { margin: var(--sp-1) 0 0; font-size: var(--fs-caption); color: var(--text-secondary); }
+.mod-row .info { border: 0; background: none; color: var(--text-secondary); cursor: pointer; font: inherit; padding: 0 var(--sp-1); }
+.mod-row .info:hover { color: var(--text-primary); }
+.mod-info { max-width: 28rem; padding: var(--sp-3); border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: var(--fs-caption); }
+.mod-info p { margin: 0 0 var(--sp-2); }
+.mod-info p:last-child { margin-bottom: 0; }

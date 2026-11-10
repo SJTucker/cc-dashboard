@@ -1529,7 +1529,7 @@ test('POST /api/settings turns reviews off and GET /api/reviews reports it', asy
   const { url } = await startServer(t);
   const res = await postSettings(url, { reviews: false });
   assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(await res.json(), { reviews: false, setupLabels: true });
+  assert.deepStrictEqual(await res.json(), { ...require('../lib/settings').DEFAULT_SETTINGS, reviews: false });
   assert.strictEqual((await (await fetch(`${url}/api/reviews?days=7`)).json()).enabled, false);
 });
 
@@ -1605,4 +1605,61 @@ test('GET /api/changes reports labelsOn', async (t) => {
   assert.strictEqual((await (await fetch(`${url}/api/changes`)).json()).labelsOn, true);
   await postSettings(url, { setupLabels: false });
   assert.strictEqual((await (await fetch(`${url}/api/changes`)).json()).labelsOn, false);
+});
+
+test('GET /api/settings returns the defaults', async (t) => {
+  const { url } = await startServer(t);
+  const res = await fetch(`${url}/api/settings`);
+  assert.strictEqual(res.status, 200);
+  assert.deepStrictEqual(await res.json(), require('../lib/settings').DEFAULT_SETTINGS);
+});
+
+test('POST /api/settings saves handoff transcript', async (t) => {
+  const { url } = await startServer(t);
+  const res = await postSettings(url, { handoff: 'transcript' });
+  assert.strictEqual(res.status, 200);
+  assert.strictEqual((await res.json()).handoff, 'transcript');
+  const after = await (await fetch(`${url}/api/settings`)).json();
+  assert.deepStrictEqual(after, { ...require('../lib/settings').DEFAULT_SETTINGS, handoff: 'transcript' });
+});
+
+test('POST /api/settings rejects handoff fork with 400', async (t) => {
+  const { url } = await startServer(t);
+  const res = await postSettings(url, { handoff: 'fork' });
+  assert.strictEqual(res.status, 400);
+  assert.ok((await res.json()).error.includes('handoff'));
+});
+
+test('POST /api/settings with only limitBand keeps reviews', async (t) => {
+  const { url } = await startServer(t);
+  await postSettings(url, { reviews: false });
+  const res = await postSettings(url, { limitBand: false });
+  assert.strictEqual(res.status, 200);
+  const body = await res.json();
+  assert.strictEqual(body.limitBand, false);
+  assert.strictEqual(body.reviews, false);
+});
+
+test('sessions/live drops activity when activity is off', async (t) => {
+  const { url, config } = await startServer(t);
+  const base = config.configDir;
+  writeSnapshot(base, {
+    sessionId: 'sess-d', lastActiveAt: Date.now() - 30_000, project: 'demo', model: 'Sonnet 4.6',
+    costUsd: 0.1, durationMs: 60_000, apiDurationMs: 5_000, linesAdded: 0, linesRemoved: 0,
+  });
+  const dir = path.join(base, 'cc-dashboard', 'activity');
+  fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'sess-d.json'), JSON.stringify({ sessionId: 'sess-d', state: 'working', since: Date.now(), subagents: 0, updatedAt: Date.now() }));
+  writeSavedSettings(config, { activity: false });
+  const body = await (await fetch(`${url}/api/sessions/live`)).json();
+  assert.strictEqual(body.activityOff, true);
+  assert.ok(body.sessions.length > 0);
+  for (const s of body.sessions) assert.strictEqual('activity' in s, false);
+});
+
+test('changes reports markersOn false', async (t) => {
+  const { url } = await startServer(t);
+  assert.strictEqual((await (await fetch(`${url}/api/changes`)).json()).markersOn, true);
+  await postSettings(url, { setupMarkers: false });
+  assert.strictEqual((await (await fetch(`${url}/api/changes`)).json()).markersOn, false);
 });

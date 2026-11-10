@@ -24,7 +24,7 @@ import { loadPricesSource, setupPrices } from './panels/prices.mjs';
 import { refreshRecords } from './panels/records.mjs';
 import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews } from './panels/reviews.mjs';
-import { wireReviewsSwitch, wireLabelsSwitch } from './panels/settings-switch.mjs';
+import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
@@ -38,7 +38,7 @@ import { setupCollapsibleRows, setupUsageGroupToggles } from './ui/collapse.mjs'
 import { setupHiding } from './ui/hidden.mjs';
 import { setupPanelLight } from './ui/panel-light.mjs';
 import { setupRowOrder } from './ui/row-order.mjs';
-import { setupTabs, showTab, rangeForTab, summaryPanelsFor } from './ui/tabs.mjs';
+import { setupTabs, showTab, rangeForTab, summaryPanelsFor, hasRange } from './ui/tabs.mjs';
 
 const LIVE_POLL_MS = 5000;
 // While Today is shown, runLoad runs LIVE_POLL_MS after the previous run finished
@@ -183,7 +183,7 @@ function loadStickyToday() {
     renderLimitsBanner(limits);
     // No summary draw runs on the High scores tab, so the first sticky poll ends
     // the "Loading…" lines (.first-load) that drawSummary ends on other tabs.
-    if (state.currentDays === 'highscores') document.body.classList.remove('first-load');
+    if (!hasRange(state.tab)) document.body.classList.remove('first-load');
   });
 }
 
@@ -373,7 +373,7 @@ function runLoad(options) {
   // The High scores tab has no range summary to load or draw. A load from the
   // previous tab still in flight is made stale, so it draws nothing, and it can no
   // longer clear the busy state or loadInFlight, so they are cleared here.
-  if (state.currentDays === 'highscores') {
+  if (!hasRange(state.tab)) {
     loads.next();
     loadInFlight = false;
     setBusy(false);
@@ -426,6 +426,9 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
 // after showTab, so every chart is drawn at its visible width. The first call has
 // no old tab: state starts on Now's range, which would hide Now's own requests.
 let tabEntered = false;
+// The Mod tab's settings request. A "Mod settings" link focuses its row after this
+// settles, because the render replaces the rows.
+let modLoaded = Promise.resolve();
 function enterTab(tab) {
   const before = tabEntered ? neededRequests(state.hiddenKeys, state.tab) : new Set();
   tabEntered = true;
@@ -439,6 +442,7 @@ function enterTab(tab) {
   setPolling(tab === 'now');
   syncHighscores();
   if (tab === 'highscores') refreshHighscores();
+  if (tab === 'mod') modLoaded = loadModSettings();
   const after = neededRequests(state.hiddenKeys, state.tab);
   if (after.has('changes') && !before.has('changes')) ensureChanges();
   if (after.has('prices') && !before.has('prices')) loadPricesSource();
@@ -468,7 +472,7 @@ document.getElementById('refreshBtn').addEventListener('click', async () => {
 // request. It loads instead when there is no payload yet, or when resumeRequests
 // passes refetch because a request skipped at the last load is needed again.
 function redrawCharts({ changes = true, refetch = false } = {}) {
-  if (state.currentDays === 'highscores') return; // no charts on the High scores tab
+  if (!hasRange(state.tab)) return; // no charts on the High scores or Mod tab
   clearSignatures(); // the width changed, so the same data still needs redrawing
   resetTimeline();
   if (refetch || !lastPayload || loadInFlight) {
@@ -519,8 +523,22 @@ setupModelMixToggle();
 setupPrices({ onApplied: reloadAll });
 refreshRecords();
 setupHighscores();
-wireReviewsSwitch(reloadReviews);
-wireLabelsSwitch();
+wireModSettings((key) => {
+  if (key === 'reviews') reloadReviews();
+  else if (key === 'setupLabels' || key === 'setupMarkers') loadChanges();
+});
 refreshHighscores();
+// A panel's "Mod settings" link opens the Mod tab and focuses that setting's row. The
+// hashchange listener added on click comes after setupTabs' own, so enterTab has run by then.
+document.addEventListener('click', (evt) => {
+  const link = evt.target.closest?.('[data-mod-setting]');
+  if (!link) return;
+  evt.preventDefault();
+  const key = link.dataset.modSetting;
+  if (location.hash === '#mod') return focusModSetting(key);
+  window.addEventListener('hashchange', () => modLoaded.then(() => focusModSetting(key)), { once: true });
+  location.hash = 'mod';
+});
+
 // Runs enterTab once for the hash the page opened with, then on each hash change.
 setupTabs(enterTab);

@@ -132,12 +132,6 @@ function drawBeforeAfter(report, marker) {
 }
 
 let changesReport = null;
-
-// Keeps the cached report in step with a saved Haiku labels switch, so a redraw
-// from the cache shows the saved state.
-export function setLabelsOn(on) {
-  if (changesReport) changesReport.labelsOn = on;
-}
 let selectedMarkerKey = null;
 
 // The row whose daily chart shows. Kept across marker changes, redraws and
@@ -232,6 +226,24 @@ function renderChangesFileNote(file) {
   else note.hidden = true;
 }
 
+// The note under the Setup changes head when the setupMarkers setting is off, or
+// null. Markers recorded earlier still show.
+export function markersOffNote(report) {
+  if (report.markersOn !== false) return null;
+  return el('span', {}, [
+    document.createTextNode('New setup changes are not recorded. Setup change markers are off in '),
+    el('a', { class: 'panel-link', href: '#mod', 'data-mod-setting': 'setupMarkers', text: 'Mod settings' }),
+    document.createTextNode('.'),
+  ]);
+}
+
+function renderMarkersNote(report) {
+  const box = document.getElementById('changesMarkersNote');
+  const note = markersOffNote(report);
+  box.hidden = !note;
+  box.replaceChildren(...(note ? [note] : []));
+}
+
 // The lanes, chart, table and day list show together or not at all. With no change
 // in the range they give way to one line.
 function showBody(visible) {
@@ -242,10 +254,8 @@ function showBody(visible) {
 function renderChanges(report) {
   changesReport = report;
   document.getElementById('beforeAfterPanel').hidden = false;
-  const labelsSwitch = document.getElementById('labelsSwitch');
-  labelsSwitch.checked = report.labelsOn !== false;
-  labelsSwitch.disabled = false;
   renderChangesFileNote(report.changesFile);
+  renderMarkersNote(report);
   // Showing the panel again re-runs renderChanges: resumeRequests in main.mjs
   // calls loadChanges or redrawCharts, which calls redrawChanges.
   if (!shown('beforeAfter')) return;
@@ -305,8 +315,7 @@ export async function loadChanges() {
     note.hidden = false;
     note.classList.add('changes-error');
     note.textContent = `Couldn't load setup changes: ${err.message}`;
-    // The switch would show its default, not the saved setting.
-    document.getElementById('labelsSwitch').disabled = true;
+    document.getElementById('changesMarkersNote').hidden = true;
   }
 }
 

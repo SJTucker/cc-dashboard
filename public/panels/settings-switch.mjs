@@ -1,6 +1,4 @@
-import { setLabelsOn } from './changes.mjs';
-
-// The Suggestions and Haiku labels switches: saving the choice to /api/settings and
+// The Mod tab's saves: saving the choice to /api/settings and
 // the dialog that asks what to do with sessions that ended while suggestions were off.
 
 // POSTs a settings change. Resolves to { ok: true, settings }, to
@@ -53,47 +51,15 @@ export function askBacklog(count) {
   });
 }
 
-// Wires the Suggestions switch. onSaved reloads the reviews request.
-export function wireReviewsSwitch(onSaved) {
-  const box = document.getElementById('reviewsSwitch');
-  const status = document.getElementById('reviewsStatus');
-  box.addEventListener('change', async () => {
-    const want = box.checked;
-    box.disabled = true;
-    let result = await saveSettings({ reviews: want });
-    if (want && result.backlog !== undefined) {
-      const choice = await askBacklog(result.backlog);
-      result = choice ? await saveSettings({ reviews: true, backlog: choice }) : { ok: false, cancelled: true };
-    }
-    box.disabled = false;
-    if (result.ok) {
-      onSaved();
-      return;
-    }
-    box.checked = !want;
-    if (result.error) {
-      status.hidden = false;
-      status.textContent = `Could not save the Suggestions setting: ${result.error}`;
-    }
-  });
-}
-
-// Wires the Haiku labels switch.
-export function wireLabelsSwitch() {
-  const box = document.getElementById('labelsSwitch');
-  const note = document.getElementById('changesFileNote');
-  box.addEventListener('change', async () => {
-    const want = box.checked;
-    box.disabled = true;
-    const result = await saveSettings({ setupLabels: want });
-    box.disabled = false;
-    if (result.ok) {
-      setLabelsOn(want);
-      return;
-    }
-    box.checked = !want;
-    note.hidden = false;
-    note.classList.add('changes-error');
-    note.textContent = `Could not save the Haiku labels setting: ${result.error}`;
-  });
+// Saves one setting for the Mod tab. Turning reviews on can answer 409 with a
+// backlog count. Then the dialog asks review or skip, and the save repeats with that
+// choice. Resolves to saveSettings' result, or { ok: false, cancelled: true } when the
+// dialog is cancelled. ask is for the tests.
+export async function saveSetting(key, value, { fetchImpl, ask = askBacklog } = {}) {
+  let result = await saveSettings({ [key]: value }, fetchImpl);
+  if (key === 'reviews' && value && result.backlog !== undefined) {
+    const choice = await ask(result.backlog);
+    result = choice ? await saveSettings({ reviews: true, backlog: choice }, fetchImpl) : { ok: false, cancelled: true };
+  }
+  return result;
 }

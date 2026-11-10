@@ -76,13 +76,38 @@ The mod in `mod/` records plan usage, live session state, session reviews, Claud
 release markers and setup change markers. It also shows a dismissable band above the
 prompt when the Session or Week plan window reaches 75%.
 
-7 minutes before the 1-hour prompt cache of a session with at least 50,000 tokens of
-context expires, the status line shows `cache expires soon · /clear to resume from the
-transcript`. After `/clear`, the mod fills the new session's input box with a prompt
-to read the old session's transcript. The mod writes no file for this.
-`/transcript-handoff` prints the same prompt with the `cd ... && claude` command for
-the session's folder. Claude Code's own compaction (`/compact`, threshold and idle) is
-unchanged, because Claude Code does not pass compaction to installed mods.
+The `handoff` setting picks what the mod does 7 minutes before the 1-hour prompt cache
+of a session with at least 50,000 tokens of context expires. It has three modes:
+
+- `document` (the default): the mod forks the session's model to write a handoff
+  document to `<worktree root>/.claude/handoffs/<date>-<time>-<branch>.md`, or to
+  `<session folder>/.claude/handoffs/` outside git. The status line shows `handoff
+  ready · /clear to resume`. After `/clear`, the mod fills the new session's input box
+  with `Read <path>, check Preconditions, then continue from "Next steps".` If the fork
+  or the file write fails, the mod falls back to the `transcript` behaviour. The files
+  show as untracked in `git status` unless the repo ignores `.claude/handoffs/`.
+- `transcript`: the status line shows `cache expires soon · /clear to resume from the
+  transcript`. After `/clear`, the mod fills the input box with a prompt to read the old
+  session's transcript. The mod writes no file for this.
+- `off`: no handoff.
+
+`/transcript-handoff` prints the transcript prompt with the `cd ... && claude` command
+for the session's folder. Claude Code's own compaction (`/compact`, threshold and idle)
+is unchanged, because Claude Code does not pass compaction to installed mods.
+
+The mod reads `<cfg>/cc-dashboard/settings.json` at the moment each behaviour would
+run, so a change applies at the next event. A setting that is off stops the work
+behind it, including file reads, scripts and model calls:
+
+- `handoff` set to `off`: no handoff timer, no `bin/cache-state` run, no status line
+  offer and no prefill after `/clear`. A reset line from the orchestrate skill still
+  fills. `/transcript-handoff` still works.
+- `transcriptIndex` false: no `bin/transcript-index` run.
+- `setupMarkers` false: no setup check at session start.
+- `setupLabels` false: no Haiku label, release judging or changelog fetch.
+- `activity` false: no `activity/<session id>.json` write.
+- `limitBand` false: no plan limit band, and no recheck of `rate-limits.json` and
+  `~/.claude.json`.
 
 Link the mod into your skills folder from the clone:
 
@@ -247,9 +272,10 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod. The server deletes files older than a day when the page shows the Today range. |
 | `<cfg>/cc-dashboard/agent-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per subagent. Each holds the agent id and, for each model request the subagent made, its time, model, turn id, step index and four token counts. The server reads them into `transcripts.db` and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/headless-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<session id>.json` per headless session (`claude -p` with no transcript). Each holds the session id, its working folder, the cost Claude Code last reported and, for each model request, its time, model, subagent id when there is one, turn id, step index and four token counts. The server reads them into `transcripts.db` as call rows and deletes each file a day after it was last written. |
+| `<repo root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, in `document` handoff mode, 7 minutes before a 1-hour prompt cache expires. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
-| `<cfg>/cc-dashboard/settings.json` | `CLAUDE_CONFIG_DIR` | The server writes it from the Suggestions and Haiku labels switches. `bin/review-session` and the mod read it. |
+| `<cfg>/cc-dashboard/settings.json` | `CLAUDE_CONFIG_DIR` | The server writes it from the Mod tab and keeps keys it does not know. Keys: `handoff` (`document`, `transcript` or `off`, default `document`), `transcriptIndex`, `reviews`, `setupMarkers`, `setupLabels`, `activity` and `limitBand` (each on unless set to `false`). `bin/review-session` and the mod read it. |
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
 | `<cfg>/cc-dashboard/server.pid`, `<cfg>/cc-dashboard/server.log` | `CLAUDE_CONFIG_DIR` | `bin/server`. `bin/server stop` removes the pid file. Each `bin/server start` empties the log. |
 | `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
@@ -276,7 +302,7 @@ The mod also reads these files to record setup changes and to check the dashboar
 
 - `<cfg>/CLAUDE.md`, the files it includes with an `@path` line, and `<cfg>/rules/`
 - `<cfg>/settings.json` and `<cfg>/settings.local.json`
-- `<cfg>/cc-dashboard/settings.json`, the dashboard's own switches
+- `<cfg>/cc-dashboard/settings.json`, the dashboard's mod settings (`handoff` and the on/off switches)
 - `<cfg>/skills/*/SKILL.md` and `<cfg>/agents/*.md`
 - the scripts named by hook commands and by `statusLine` in `settings.json`
 - `config.toml` and `filters.toml` in `~/Library/Application Support/rtk/`. This path
@@ -311,8 +337,8 @@ of them.
   when the running Claude Code version has no verdict, or when you run
   `/backfill-updates`.
 - **The mod calls Haiku** through your Claude Code login to judge releases, review
-  ended sessions and label setup changes. The Haiku labels switch in the Setup changes
-  panel stops the label and release-judging calls and the changelog fetch. No API key is read. These calls write no
+  ended sessions and label setup changes. The `setupLabels` setting stops the label and
+  release-judging calls and the changelog fetch. No API key is read. These calls write no
   transcript line, so the dashboard's totals leave out their cost. Reviews and labels
   run in interactive sessions only. Each call sends this:
   - **Judging releases:** the changelog entries of up to 20 versions. Nothing from
@@ -324,20 +350,27 @@ of them.
     characters of each Claude reply. The digest names each tool call with its file
     path, URL host, skill, subagent type or Bash program name. Bash arguments are not
     sent. The digest also holds the first 200 characters of each tool error. A digest
-    over 60,000 characters keeps its first 20,000 and last 40,000. The Suggestions
-    switch in the Session reviews panel stops these calls.
+    over 60,000 characters keeps its first 20,000 and last 40,000. The `reviews`
+    setting stops these calls.
   - **Labelling a setup change:** the file's short name and its added and removed
     lines, up to 4,096 characters. Labelling covers `CLAUDE.md`, the files it includes
     with `@path`, rules, skills, agents, and a project's `CLAUDE.md` and
     `CLAUDE.local.md`. Changes to settings files, hook scripts, the statusline script
     and rtk's config are labelled on your machine and not sent.
-- **The mod makes no model call for handoffs.** After each main-thread turn in an
-  interactive session with at least 50,000 tokens of context, it runs
-  `bin/cache-state`, which reads the session's transcript and the expiry
-  `bin/cache-line` saved. For a 1-hour cache, the mod sets a timer for 7 minutes before the
-  expiry and runs `bin/cache-state` again when it fires, so a cache that Claude Code renewed
-  while a subagent ran moves the timer later. The timer does not run in sessions
-  without a terminal (Agent SDK, `-p`).
+- **In `document` handoff mode the mod forks the session's own model** once per idle
+  gap, to write a handoff document. The fork reads the whole conversation from the
+  prompt cache and also receives the output of `git rev-parse`, `git branch`, `git log`,
+  `git worktree list`, `git status`, `git diff --stat` and `git stash list` for the
+  session's folder, and the current date. It writes no transcript line, so the
+  dashboard's totals leave out its cost. The `transcript` and `off` modes make no model
+  call.
+- **Handoff timing.** After each main-thread turn in an interactive session with at
+  least 50,000 tokens of context, the mod runs `bin/cache-state`, which reads the
+  session's transcript and the expiry `bin/cache-line` saved. For a 1-hour cache, the
+  mod sets a timer for 7 minutes before the expiry and runs `bin/cache-state` again
+  when it fires, so a cache that Claude Code renewed while a subagent ran moves the
+  timer later. The timer does not run in sessions without a terminal (Agent SDK, `-p`).
+  The `handoff` setting set to `off` stops the timer and the `bin/cache-state` runs.
 
 ## Check it works
 

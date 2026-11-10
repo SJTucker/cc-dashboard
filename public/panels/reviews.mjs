@@ -4,7 +4,7 @@
 import { getJson } from '../api.mjs';
 import { el, withTooltip, withFocusTooltip } from '../dom.mjs';
 import { createDrawGuard } from '../guards.mjs';
-import { reviewPrompt, countWithOpen, dismissalText, rangePhrase, rangeShort, byEnd, upsertSuggestion } from '../reviews.mjs';
+import { reviewPrompt, reviewsNote, countWithOpen, dismissalText, rangePhrase, rangeShort, byEnd, upsertSuggestion } from '../reviews.mjs';
 import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
 import { contextLine } from './sessions.mjs';
 import { kindName, reviewTime, iconButton, reviewTip, TIP_UNDO, suggestionName, dismissButtons, sendDismissal } from './review-ui.mjs';
@@ -176,8 +176,6 @@ function drawReviews(data) {
     panel.hidden = false;
     status.hidden = false;
     status.textContent = `Could not read session reviews: ${data.error}`;
-    // The switch would show its default, not the saved setting.
-    document.getElementById('reviewsSwitch').disabled = true;
     list.replaceChildren();
     document.getElementById('reviewsMore').replaceChildren();
     drawClosed({ closedCount: null });
@@ -187,9 +185,6 @@ function drawReviews(data) {
   panel.hidden = !data;
   if (panel.hidden) return;
   const enabled = data.enabled !== false;
-  const reviewsSwitch = document.getElementById('reviewsSwitch');
-  reviewsSwitch.checked = enabled;
-  reviewsSwitch.disabled = false;
 
   const active = document.activeElement;
   const activeKey = active && panel.contains(active) ? active.dataset.reviewFocus : null;
@@ -213,7 +208,5 @@ function drawReviews(data) {
   if (focusKey) [...panel.querySelectorAll('[data-review-focus]')].find((n) => n.dataset.reviewFocus === focusKey)?.focus({ preventScroll: true });
 
   const withOpen = countWithOpen(data.reviews);
-  note.textContent = enabled
-    ? `${withOpen} ${withOpen === 1 ? 'review' : 'reviews'} with open suggestions · ${rangeShort(reviewsDays)}`
-    : 'Suggestions are off. Ended sessions are not reviewed.';
+  note.textContent = reviewsNote(enabled, withOpen, reviewsDays);
 }

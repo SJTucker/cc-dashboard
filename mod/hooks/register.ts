@@ -10,7 +10,8 @@ import { backfillText, errorName, errorText, versionSpan } from './text'
 import type { Judged } from './text'
 import { headlessText, parseHeadless, parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep, HeadlessStep } from './steps'
-import { handoffText, handoffWaitMs, hourCacheExpiry, indexPath, resumePrompt } from './handoff'
+import { REPO_STEPS, documentResumePrompt, handoffDocument, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, resumePrompt } from './handoff'
+import type { StepOutput } from './handoff'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
@@ -27,9 +28,12 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // A non-interactive session (claude -p) gets no activity file, no snapshot, no end
 // record, no handoff timer and no transcript index. It sends rate limits, and when it has no transcript it writes
 // its usage to headless-usage/.
-// The mod reads settings.json in the same folder, which the dashboard writes. While its
-// setupLabels value is false, the mod makes no Haiku label call, no release judging
-// call and no changelog fetch.
+// The mod reads settings.json in the same folder, which the dashboard writes, when each
+// behaviour would run. A setting that is off stops the work behind it. handoff 'off'
+// arms no timer, runs no bin/cache-state and prefills no handoff. transcriptIndex false
+// runs no bin/transcript-index. setupMarkers false runs no checkSetup. setupLabels false
+// makes no Haiku label call, no release judging call and no changelog fetch. activity
+// false writes no activity file. limitBand false shows no band and starts no recheck.
 // The bin/ scripts write the session, usage, update-verdict and review files, so the
 // formats, the atomic writes and the freshness checks of those files are theirs.
 // The orchestrate skill writes reset-prompt/<session id>.txt, the line to send after a
@@ -471,6 +475,8 @@ async function subagentCount($: EngineInterface, id: string) {
 async function writeActivity($: EngineInterface, id: string) {
   const dir = await configDir($)
   if (!dir) return
+  // The settings read waits for the throttle, so it runs at most once per write.
+  if (!(await dashboardSettings($)).activity) return
   const subagents = await subagentCount($, id)
   const a = activities.get(id)
   if (!a) return
@@ -643,15 +649,19 @@ function forgetSession(id: string) {
 
 // The handoff before the prompt cache expires. 7 minutes before a 1h cache of a session
 // with 50k tokens or more runs out, the status offers /clear, and the next session's
-// input is prefilled with a prompt to read this session's transcript. The mod's own
-// timer (handoffTimers) starts it. No model call is made, because the transcript is the
-// record.
+// input is prefilled. The mod's own timer (handoffTimers) starts it. The handoff
+// setting in settings.json picks what the prefill says. 'document' (the default) forks
+// the conversation to write a handoff document under <repo root>/.claude/handoffs/ and
+// prefills a prompt to read it, at the cost of one model call. 'transcript' prefills a
+// prompt to read this session's transcript and makes no model call. 'off' arms no
+// timer. A document that cannot be written falls back to the transcript prompt.
 // The mod hooks no session.compact. On Claude Code 2.1.316, cc-plugin-sec-default sends
 // that event past the user tier, so a mod's hook never runs. An idle compaction that
 // summarised the session therefore ends its idle gap without the mod seeing it. The
 // timer's re-check then finds the context under HANDOFF_MIN_TOKENS and offers nothing.
-// A session's entry is set when the handoff is ready. Any entry blocks a second handoff
-// until turn.start removes it, so each idle gap gets one at most.
+// A session's entry is 'writing' while the fork runs, 'ready' once the handoff is ready
+// and 'failed' when the document and the transcript fallback both gave up. Any entry
+// blocks a second handoff until turn.start removes it, so each idle gap gets one at most.
 // A reload empties the map, so a ready entry is also kept in $.store under
 // HANDOFF_KEY + session id, as { resume, at }. session.end reads it when the map has
 // no entry. turn.start and session.end delete it. A process that dies without a
@@ -659,34 +669,92 @@ function forgetSession(id: string) {
 // HANDOFF_STORE_MAX_AGE_MS.
 const HANDOFF_KEY = 'handoff:'
 const HANDOFF_STORE_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
-const HANDOFF_STATUS = 'cache expires soon · /clear to resume from the transcript'
+const HANDOFF_STATUS_TRANSCRIPT = 'cache expires soon · /clear to resume from the transcript'
+const HANDOFF_STATUS_DOCUMENT = 'handoff ready · /clear to resume'
+const HANDOFF_STEP_TIMEOUT_MS = 5000
 // $.ui.status() with no text clears the status. On Claude Code 2.1.296, $.ui.status('')
 // pins an empty "⚠ cc-dashboard:" line above the input instead.
-type Handoff = { resume: string }
+type Handoff = { state: 'writing' | 'failed' } | { state: 'ready'; resume: string }
 const handoffs = new Map<string, Handoff>()
 
 // Makes the session's handoff ready: the map entry, the status and the stored copy.
-// A session with no transcript gets none, and the skip is logged. A prompt or
-// an end during the awaits replaces or removes the map entry, and then
+// A guard is the entry the caller set: when the map holds another one, or none, nothing
+// is made ready. A prompt or an end during the awaits replaces or removes the map entry, and then
 // the status stays as that event left it and the stored key is deleted again, so a
 // handoff from an earlier idle gap cannot outlive its gap.
-async function readyHandoff($: EngineInterface, id: string) {
+async function markReady($: EngineInterface, id: string, resume: string, status: string, guard?: Handoff) {
+  if (guard && handoffs.get(id) !== guard) return
+  const ready: Handoff = { state: 'ready', resume }
+  handoffs.set(id, ready)
+  $.ui.status(status)
+  const now = await $.clock.now()
+  await $.store.set(HANDOFF_KEY + id, { resume, at: now })
+  if (handoffs.get(id) !== ready) await $.store.delete(HANDOFF_KEY + id)
+  await pruneHandoffs($, id, now)
+}
+
+// The transcript handoff. A session with no transcript gets none, and the skip is logged.
+async function readyHandoff($: EngineInterface, id: string, guard?: Handoff) {
   try {
     const path = await transcriptPath($, await $.session.root(), id)
     if (!path) {
       note($, 'handoff skipped (transcript not found)')
       return
     }
-    const resume = resumePrompt(path, await existingIndex($, id))
-    const ready: Handoff = { resume }
-    handoffs.set(id, ready)
-    $.ui.status(HANDOFF_STATUS)
-    const now = await $.clock.now()
-    await $.store.set(HANDOFF_KEY + id, { resume, at: now })
-    if (handoffs.get(id) !== ready) await $.store.delete(HANDOFF_KEY + id)
-    await pruneHandoffs($, id, now)
+    const index = await existingIndex($, id)
+    await markReady($, id, resumePrompt(path, index), HANDOFF_STATUS_TRANSCRIPT, guard)
   } catch (err) {
     note($, `handoff failed (${errorText(err)})`)
+  }
+}
+
+// Runs each REPO_STEPS command in cwd. A command that fails or throws is recorded,
+// not raised, because the prompt shows the failure the way the /handoff skill shows its errors.
+async function repoState($: EngineInterface, cwd: string): Promise<StepOutput[]> {
+  const outputs: StepOutput[] = []
+  for (const step of REPO_STEPS) {
+    try {
+      const { exitCode, stdout, stderr } = await $.process.run([...step.argv], { cwd, timeoutMs: HANDOFF_STEP_TIMEOUT_MS })
+      outputs.push({ label: step.label, ok: exitCode === 0, text: (exitCode === 0 ? stdout : stderr).trim() })
+    } catch (err) {
+      outputs.push({ label: step.label, ok: false, text: errorName(err) })
+    }
+  }
+  return outputs
+}
+
+// The document handoff. The fork reads the conversation from the cache and adds no
+// transcript line. The file is written even when a turn or a /clear has come since,
+// because it is still a record of the session. Only the status and the prefill need the
+// entry to still be the one this call started, so a fork from an earlier idle gap cannot
+// change a later gap's entry. fs.write creates the handoffs folder when it is missing.
+async function writeHandoff($: EngineInterface, id: string, entry: Handoff) {
+  const cwd = await $.session.cwd()
+  const plan = planHandoff(await repoState($, cwd), cwd)
+  if (!plan) throw new Error('no timestamp')
+  const reply = await $.model.fork({ prompt: plan.prompt })
+  if (!reply.isAnswered) throw new Error(`fork ${reply.reason}`)
+  const doc = handoffDocument(reply.text)
+  if (!doc) throw new Error('fork empty')
+  await $.fs.write(plan.path, doc)
+  if (handoffs.get(id) !== entry) return
+  await markReady($, id, documentResumePrompt(plan.path), HANDOFF_STATUS_DOCUMENT)
+}
+
+// Starts the document handoff and waits for it. A failure is logged, and the transcript
+// handoff runs in its place, but only while the entry is still the one this call set.
+async function startHandoff($: EngineInterface, id: string) {
+  const entry: Handoff = { state: 'writing' }
+  handoffs.set(id, entry)
+  try {
+    await writeHandoff($, id, entry)
+  } catch (err) {
+    note($, `handoff document failed (${errorText(err)})`)
+    if (handoffs.get(id) !== entry) return
+    // The 'writing' entry stays during the fallback, so a turn.start or a /clear in its
+    // awaits removes it and the guard then stops the fallback from changing anything.
+    await readyHandoff($, id, entry)
+    if (handoffs.get(id) === entry) handoffs.set(id, { state: 'failed' })
   }
 }
 
@@ -798,9 +866,12 @@ function armHandoff($: EngineInterface, id: string) {
 }
 
 // Milliseconds until the handoff should start, with the cache expiry it was computed
-// for, or null when this idle gap gets no timer: no terminal, under HANDOFF_MIN_TOKENS,
-// no transcript or not a 1h cache. A failing script throws.
+// for, or null when this idle gap gets no timer: handoff off, no terminal, under
+// HANDOFF_MIN_TOKENS, no transcript or not a 1h cache. A failing script throws. The
+// setting is read first, because a timer armed before the switch to off ends here
+// without running bin/cache-state.
 async function handoffWait($: EngineInterface, id: string): Promise<{ wait: number; expiresAt: number } | null> {
+  if ((await dashboardSettings($)).handoff === 'off') return null
   if ((await $.session.surfaces()).length === 0) return null
   const tokens = (await $.session.usage()).context.tokens
   if (typeof tokens !== 'number' || tokens < HANDOFF_MIN_TOKENS) return null
@@ -840,7 +911,13 @@ async function fireHandoff($: EngineInterface, id: string, expiresAt: number, fi
     return
   }
   handoffTimers.delete(id)
-  if (renewed !== null && activities.get(id)?.state === 'waiting' && !handoffs.has(id)) await readyHandoff($, id)
+  if (renewed === null || activities.get(id)?.state !== 'waiting' || handoffs.has(id)) return
+  // Read again after the wait, so a switch to off during bin/cache-state sets no status.
+  const mode = (await dashboardSettings($)).handoff
+  // A turn.start or a /clear during that read changed the session, so check again.
+  if (activities.get(id)?.state !== 'waiting' || handoffs.has(id)) return
+  if (mode === 'document') await startHandoff($, id)
+  else if (mode === 'transcript') await readyHandoff($, id)
 }
 
 // A prompt makes the handoff out of date, so turn.start drops it and clears the
@@ -912,7 +989,12 @@ function queueIndex($: EngineInterface, id: string) {
   const timer = $.clock.after(INDEX_DELAY_MS, () => {
     if (indexTimers.get(id) !== timer) return
     indexTimers.delete(id)
-    startIndex($, id)
+    // A timer pending when transcriptIndex was switched off runs nothing.
+    dashboardSettings($)
+      .then((settings) => {
+        if (settings.transcriptIndex) startIndex($, id)
+      })
+      .catch((err) => fail($, `transcript index failed (${errorName(err)})`))
   })
   indexTimers.set(id, timer)
 }
@@ -1175,6 +1257,7 @@ async function readLevels($: EngineInterface, path: string) {
 // is unsaved, and the write below retries it. A measure with no Session or Week window
 // (an API-key login) leaves the band as it is.
 async function measureBand($: EngineInterface, limits: readonly SessionRateLimit[]) {
+  if (!(await dashboardSettings($)).limitBand) return hideBand($)
   const now = await $.clock.now()
   const readings = liveReadings(readingsOf(limits), now)
   if (!readings.length) return
@@ -1191,6 +1274,17 @@ async function measureBand($: EngineInterface, limits: readonly SessionRateLimit
   if (!(await nonInteractive($))) startRecheck($)
 }
 
+// With limitBand off, the band shows nothing and no timer reads the rate files. A band
+// already showing is emptied and redrawn once.
+async function hideBand($: EngineInterface) {
+  recheck?.cancel()
+  recheck = undefined
+  const held = await read($, band)
+  if (!held.readings.length) return
+  await update($, band, (b) => ({ ...b, readings: [] }))
+  $.ui.invalidate('ui.render')
+}
+
 function startRecheck($: EngineInterface) {
   if (recheck) return
   recheck = $.clock.every(RECHECK_MS, () => {
@@ -1205,6 +1299,7 @@ function startRecheck($: EngineInterface) {
 // stays live for up to 7 days. It redraws only while the band shows a window, or when
 // one has just left it.
 async function recheckBand($: EngineInterface) {
+  if (!(await dashboardSettings($)).limitBand) return hideBand($)
   const paths = await configPaths($)
   const file = paths ? await readLevels($, limitsFile(paths.dir)) : undefined
   const rateText = paths ? await $.fs.read(`${paths.dir}/rate-limits.json`).then(String, () => undefined) : undefined
@@ -1264,7 +1359,9 @@ export const register: Register = (on) => {
     if (e.isInteractive) {
       startReviews($)
       $.clock.after(0, () => {
-        checkSetup($).catch((err) => note($, `setup check failed (${errorName(err)})`))
+        dashboardSettings($)
+          .then((settings) => (settings.setupMarkers ? checkSetup($) : undefined))
+          .catch((err) => note($, `setup check failed (${errorName(err)})`))
       })
     }
     return result
@@ -1341,11 +1438,14 @@ export const register: Register = (on) => {
     // run never throws.
     const running = run($, 'record-session-end', { session_id: e.sessionId, reason: e.reason }, END_TIMEOUT_MS)
     // The store reads follow run, so the script is not delayed by them.
-    const stored = handoff?.resume ?? (await storedResume($, e.sessionId))
+    const stored = (handoff?.state === 'ready' ? handoff.resume : undefined) ?? (await storedResume($, e.sessionId))
     const resetPath = await resetPromptPath($, e.sessionId)
     const reset = resetPath ? await queuedReset($, resetPath) : undefined
     if (resetPath) await consumeReset($, resetPath)
-    const fill = e.reason === 'clear' ? (reset ?? stored) : undefined
+    // With handoff off, a handoff stored before the switch is not offered. The status
+    // clear and the store delete below still run for it.
+    const handoffOn = (await dashboardSettings($)).handoff !== 'off'
+    const fill = e.reason === 'clear' ? (reset ?? (handoffOn ? stored : undefined)) : undefined
     if (fill !== undefined) prefillAfterClear($, fill)
     else if (stored !== undefined) $.ui.status()
     if (stored !== undefined) await deleteStoredHandoff($, e.sessionId)
@@ -1400,8 +1500,9 @@ export const register: Register = (on) => {
     try {
       if (!(await nonInteractive($))) {
         const id = await $.session.id()
-        armHandoff($, id)
-        queueIndex($, id)
+        const settings = await dashboardSettings($)
+        if (settings.handoff !== 'off') armHandoff($, id)
+        if (settings.transcriptIndex) queueIndex($, id)
       }
     } catch (err) {
       fail($, `handoff timer failed (${errorName(err)})`)
