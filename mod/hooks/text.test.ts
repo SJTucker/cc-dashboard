@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { backfillText, errorName, errorText, versionSpan } from './text'
+import { backfillText, parseVerdicts, reviewOutcome, errorName, errorText, versionSpan } from './text'
 
 test('errorName and errorText read an Error and fall back to "error" for anything else', async () => {
   expect(errorName(new TypeError('boom'))).toBe('TypeError')
@@ -21,4 +21,19 @@ test('backfillText reports nothing to judge, the counts, and the failures', asyn
     'Judged 2 of 3 versions, 1 relevant. Failed: a; b',
   )
   expect(backfillText({ asked: 0, recorded: 0, relevant: 0, failed: ['x'] })).toBe('Judged 0 of 0 versions, 0 relevant. Failed: x')
+})
+
+test('parseVerdicts reads a JSON object, treats a missing file as empty, and names the two failures', () => {
+  expect(parseVerdicts(undefined)).toEqual({ verdicts: {} })
+  expect(parseVerdicts('{"1.2.3":{}}')).toEqual({ verdicts: { '1.2.3': {} } })
+  expect(parseVerdicts('')).toEqual({ error: 'not-json' })
+  expect(parseVerdicts('[]')).toEqual({ error: 'not-object' })
+  expect(parseVerdicts('null')).toEqual({ error: 'not-object' })
+})
+
+test('reviewOutcome returns the reply text, or the no-answer message with the api status', () => {
+  expect(reviewOutcome({ isAnswered: true, text: 'ok' } as never)).toEqual({ reply: 'ok' })
+  expect(reviewOutcome({ isAnswered: false, reason: 'api-error', status: 529 } as never)).toEqual({ error: 'Haiku gave no answer (api-error 529)' })
+  expect(reviewOutcome({ isAnswered: false, reason: 'api-error', status: null } as never)).toEqual({ error: 'Haiku gave no answer (api-error)' })
+  expect(reviewOutcome({ isAnswered: false, reason: 'timeout' } as never)).toEqual({ error: 'Haiku gave no answer (timeout)' })
 })

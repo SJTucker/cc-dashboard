@@ -1,20 +1,10 @@
 import { test, expect } from 'claude-code/testing'
-import { DETAIL_MAX, newestTool, setState, toolDetail, toolsOf } from './activity'
+import { DETAIL_MAX, newestTool, setState, throttleDelay, toolDetail } from './activity'
 import type { Activity, ToolRun } from './activity'
 
 const run = (name: string): ToolRun => ({ name, detail: '', startedAt: 1 })
 const activity = (state: Activity['state'], since: number): Activity => ({
   sessionId: 's', state, since, tool: null, subagents: 0, updatedAt: since,
-})
-
-test('toolsOf creates one map per session and returns the same map after', async () => {
-  const all = new Map<string, Map<string, ToolRun>>()
-  const a = toolsOf(all, 's1')
-  expect(a.size).toBe(0)
-  a.set('t1', run('Bash'))
-  expect(toolsOf(all, 's1')).toBe(a)
-  expect(toolsOf(all, 's2')).not.toBe(a)
-  expect(all.size).toBe(2)
 })
 
 test('newestTool is the last started tool, or null with none', async () => {
@@ -42,4 +32,10 @@ test('toolDetail gives the file name for Read, Edit and Write and nothing for ot
   expect(toolDetail('Edit', { file_path: 'C:\\a\\d.ts' })).toBe('d.ts')
   expect(toolDetail('Write', { file_path: 5 })).toBe('')
   expect(toolDetail('Grep', { pattern: 'x' })).toBe('')
+})
+
+test('throttleDelay is null for a first write or a span that has passed, else the time left', () => {
+  expect(throttleDelay(undefined, 10, 250)).toBeNull()
+  expect(throttleDelay(0, 100, 250)).toBe(150)
+  expect(throttleDelay(0, 250, 250)).toBeNull()
 })

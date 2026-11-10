@@ -15,15 +15,21 @@ const TIPS =
   '- Each line is one JSON message, some with huge tool results: never cat or tail it raw, ' +
   'cap each block to a few hundred chars.\n'
 
+// The path unchanged when it holds only [A-Za-z0-9_./~-], else single-quoted with each
+// embedded ' written as '\''. A path with a space then reads as one argument.
+export function quotePath(path: string) {
+  return /^[A-Za-z0-9_./~-]+$/.test(path) ? path : `'${path.replace(/'/g, "'\\''")}'`
+}
+
 // The prompt the mod puts in the input box after /clear. index is the transcript's
 // index file from bin/transcript-index, passed only when it exists.
 export function resumePrompt(path: string, index?: string) {
   const start = index
-    ? `Start with its index, ${index}. It lists each prompt the user typed with the transcript lines it covers, ` +
+    ? `Start with its index, ${quotePath(index)}. It lists each prompt the user typed with the transcript lines it covers, ` +
       'the files touched, the commands run and the subagents launched. Then read only the line ranges you need.\n\n'
     : ''
   return (
-    `Read ${path}, the transcript of an earlier Claude Code session, to find what it was working on, ` +
+    `Read ${quotePath(path)}, the transcript of an earlier Claude Code session, to find what it was working on, ` +
     'and continue from where it stopped.\n\n' +
     start +
     TIPS +
@@ -40,8 +46,7 @@ export function indexPath(configDir: string, sessionId: string) {
 // then the resume prompt. cwd is single-quoted when it holds a character outside
 // [A-Za-z0-9_./~-], with each embedded ' written as '\''.
 export function handoffText(cwd: string, path: string, index?: string) {
-  const dir = /^[A-Za-z0-9_./~-]+$/.test(cwd) ? cwd : `'${cwd.replace(/'/g, "'\\''")}'`
-  return `cd ${dir} && claude\n\n${resumePrompt(path, index)}\n- The last lines are the /transcript-handoff command that produced this prompt, so skip them.`
+  return `cd ${quotePath(cwd)} && claude\n\n${resumePrompt(path, index)}\n- The last lines are the /transcript-handoff command that produced this prompt, so skip them.`
 }
 
 // The commands the /handoff skill runs for its "Live repo state", plus date for the
@@ -155,7 +160,7 @@ export function branchSlug(branch: string | null) {
 // The text the mod puts in the input box after /clear in document mode. It names the
 // handoff file and the sections the next agent reads first.
 export function documentResumePrompt(path: string) {
-  return `Read ${path}, check Preconditions, then continue from "Next steps".`
+  return `Read ${quotePath(path)}, check Preconditions, then continue from "Next steps".`
 }
 
 // The repo state in the fork prompt: one heading per step, with the output, or the
@@ -200,4 +205,17 @@ export function hourCacheExpiry(cache: { ttl?: unknown; expiresAt?: unknown }): 
 // expires. A timer armed or re-checked after that moment gets 0, so it fires at once.
 export function handoffWaitMs(expiresAt: number, now: number, leadMs: number) {
   return Math.max(0, expiresAt - leadMs - now)
+}
+
+// The handoff to make at fire time. A document handoff forks the conversation, and a
+// fork sent after the 1h cache expired re-sends the whole conversation uncached. At or
+// past expiresAt the transcript handoff is made instead, which costs no model call.
+export function handoffKind(mode: 'document' | 'transcript', expiresAt: number, now: number): 'document' | 'transcript' {
+  return expiresAt <= now ? 'transcript' : mode
+}
+
+// The handoff entry a session.end fills in for the next session: only after a /clear,
+// the reset entry first, else the stored one when handoff is on.
+export function endFill(reason: string, reset: string | undefined, stored: string | undefined, handoffOn: boolean): string | undefined {
+  return reason === 'clear' ? (reset ?? (handoffOn ? stored : undefined)) : undefined
 }
