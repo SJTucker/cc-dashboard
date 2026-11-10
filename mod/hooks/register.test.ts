@@ -2870,6 +2870,18 @@ test('a handoff switched to off while the fork runs writes no file and sets no s
   expect(state.store['handoff:s1']).toBe(undefined)
 })
 
+test('a handoff switched to off while the fork runs and then fails makes no transcript fallback', async ($, on) => {
+  const { statuses, state, clock } = world(on, docWorld({ forkMs: 1_000, forkReply: { isAnswered: false, reason: 'nothing-to-fork' } }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  await clock.set(FIRE)
+  state.files[DASH_SETTINGS] = '{"handoff":"off"}'
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(statuses).toEqual([undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
 test('a missing handoff key means the document handoff', async ($, on) => {
   const { forked, clock } = world(on, docWorld({ files: setting({ reviews: true }) }))
   await idleTurn($)

@@ -753,6 +753,9 @@ async function startHandoff($: EngineInterface, id: string) {
   } catch (err) {
     note($, `handoff document failed (${errorText(err)})`)
     if (handoffs.get(id) !== entry) return
+    // A switch to off during the fork also stops the fallback.
+    if ((await dashboardSettings($)).handoff === 'off') return
+    if (handoffs.get(id) !== entry) return
     // The 'writing' entry stays during the fallback, so a turn.start or a /clear in its
     // awaits removes it and the guard then stops the fallback from changing anything.
     await readyHandoff($, id, entry)
