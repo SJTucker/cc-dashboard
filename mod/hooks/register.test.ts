@@ -219,6 +219,16 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const asked: Array<{ model: string; system?: string; prompt: string; maxTokens?: number; effort?: string; timeoutMs?: number }> = []
   const registered: string[] = []
   const logged: string[] = []
+  const sent: Array<{ to: unknown; text: string }> = []
+  const appended: unknown[] = []
+  on('session.send', (_$, e) => {
+    sent.push({ to: e.to, text: e.text })
+    return { isDelivered: true }
+  })
+  on('session.append', (_$, e, next) => {
+    appended.push(e.message)
+    return next(e)
+  })
   on('fs.read', async (_$, e) => {
     readLog.push(e.path)
     if (e.path.endsWith('/cc-dashboard/settings.json')) {
@@ -361,7 +371,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('tool.check', () => ({ decision: state.verdict }))
   on('agent.spawn', () => ({ model: 'claude-haiku-4-5', agentId: 'a1' }))
-  return { ran, reviewRan, cacheRan, indexRan, repoRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, forked, statuses, fills }
+  return { ran, reviewRan, cacheRan, indexRan, repoRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, forked, statuses, fills, sent, appended }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -654,6 +664,48 @@ test('session.start registers /backfill-updates and /transcript-handoff', async 
   const { registered } = world(on, { files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
   await $.session.start(start)
   expect(registered).toEqual(['backfill-updates', 'transcript-handoff'])
+})
+
+const STEER_DIR = '/home/u/.claude/cc-dashboard/steer/s1'
+const STEER_REQUEST = JSON.stringify({ id: 'r1', agentId: 'a1', task: 2, text: 'Use resolveRoot', at: 1 })
+
+test('with the orchestrate skill present, the relay delivers a steer request and writes its result', async ($, on) => {
+  const { sent, appended, writes, clock } = world(on, {
+    dirs: { [STEER_DIR]: ['r1.json'] },
+    files: { [`${STEER_DIR}/r1.json`]: STEER_REQUEST },
+  })
+  await $.session.start(start)
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(sent).toEqual([{ to: 'a1', text: 'Use resolveRoot' }])
+  expect(appended.length).toBe(1)
+  expect(JSON.parse(writes[`${STEER_DIR}/r1.result.json`] ?? 'null')).toMatchObject({ id: 'r1', delivered: true })
+})
+
+test('without the orchestrate skill, the relay lists nothing', async ($, on) => {
+  const { listed, clock } = world(on, { exists: (path) => !path.endsWith('/skills/orchestrate/SKILL.md') })
+  await $.session.start(start)
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+})
+
+test('a headless session starts no relay', async ($, on) => {
+  const { listed, clock } = world(on)
+  await $.session.start({ ...start, isInteractive: false })
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+})
+
+test('the relay stops at a session end other than clear or resume', async ($, on) => {
+  const { listed, clock } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
 })
 
 test('session.start returns before the check fetches', async ($, on) => {
