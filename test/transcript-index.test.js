@@ -186,6 +186,14 @@ test('records the transcript a resumed session started from', () => {
   assert.equal(buildIndex([typed('hello')]).facts.resumedFrom, null);
 });
 
+test('records a resumed-from transcript whose path holds a space or a quote', () => {
+  for (const path of ['/my cfg/p/old.jsonl', "/it's cfg/old.jsonl"]) {
+    const quoted = `'${path.replace(/'/g, "'\\''")}'`;
+    const resume = `Read ${quoted}, the transcript of an earlier Claude Code session, to find what it was working on.\n\nTips:\n`;
+    assert.equal(buildIndex([typed(resume), assistant([text('reading')])]).facts.resumedFrom, path);
+  }
+});
+
 test('collects facts and docs written under docs/superpowers or .claude/handoffs', () => {
   const lines = [
     JSON.stringify({ type: 'ai-title', aiTitle: 'First title', sessionId: 's1' }),

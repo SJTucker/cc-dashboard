@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import {
-  REPO_STEPS, branchSlug, documentResumePrompt, handoffDocument, handoffKind, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, resumePrompt,
+  REPO_STEPS, branchSlug, documentResumePrompt, handoffDocument, handoffKind, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, quotePath, resumePrompt,
 } from './handoff'
 import type { StepOutput } from './handoff'
 
@@ -172,4 +172,18 @@ test('handoffKind falls back to the transcript handoff once the cache has expire
   expect(handoffKind('document', 1000, 1000)).toBe('transcript')
   expect(handoffKind('document', 1000, 2000)).toBe('transcript')
   expect(handoffKind('transcript', 1000, 999)).toBe('transcript')
+})
+
+test('quotePath leaves a plain path alone and single-quotes any other', async () => {
+  expect(quotePath('/a/b.jsonl')).toBe('/a/b.jsonl')
+  expect(quotePath('/a b/c.jsonl')).toBe("'/a b/c.jsonl'")
+  expect(quotePath("/a'b/c.jsonl")).toBe("'/a'\\''b/c.jsonl'")
+})
+
+test('resumePrompt and documentResumePrompt quote paths with a space', async () => {
+  expect(resumePrompt('/my cfg/p/s.jsonl').startsWith("Read '/my cfg/p/s.jsonl', the transcript")).toBe(true)
+  expect(resumePrompt('/p/s.jsonl', '/my cfg/i.md')).toContain("Start with its index, '/my cfg/i.md'.")
+  expect(documentResumePrompt('/my repo/.claude/handoffs/x.md')).toBe(
+    `Read '/my repo/.claude/handoffs/x.md', check Preconditions, then continue from "Next steps".`,
+  )
 })
