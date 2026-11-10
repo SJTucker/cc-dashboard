@@ -23,6 +23,7 @@
 <link rel="stylesheet" href="/css/controls.css" />
 <link rel="stylesheet" href="/css/highscores.css" />
 <link rel="stylesheet" href="/css/mod-settings.css" />
+<link rel="stylesheet" href="/css/orchestration.css" />
 </head>
 <body class="first-load">
   <!-- The glow the line charts take while the pointer is over them (see
@@ -404,7 +405,8 @@
         </section>
       </div>
       <div class="tab" id="tabOrchestration" hidden>
-        <p id="orchPlaceholder"></p>
+        <div class="orch-switcher" id="orchSwitcher" role="group" aria-label="Orchestrations"></div>
+        <div id="orchView"></div>
       </div>
       <div class="tab" id="tabMod" hidden>
         <section class="panel" id="modSettingsPanel">

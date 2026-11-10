@@ -10,7 +10,7 @@ import { loadStickyData } from './sticky-poll.mjs';
 
 import { escapeHtml } from './format.mjs';
 
-import { spinnerNode } from './dom.mjs';
+import { spinnerNode, el } from './dom.mjs';
 
 import { formatStatus } from './hud.mjs';
 import { neededRequests } from './visibility.mjs';
@@ -25,6 +25,7 @@ import { refreshRecords } from './panels/records.mjs';
 import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews } from './panels/reviews.mjs';
 import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
+import { renderSwitcher, renderDetail, renderEmpty, EMPTY_TEXT } from './orchestration/render.mjs';
 import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS } from './panels/orchestration.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
@@ -234,7 +235,51 @@ function applyOrchestrationList(body) {
   const live = liveCount(orchList);
   const badge = document.getElementById('orchLive');
   badge.hidden = live === 0;
-  badge.textContent = live ? `● ${live} live` : '';
+  badge.replaceChildren(...(live ? [el('i', { class: 'orch-dot', 'aria-hidden': 'true' }), document.createTextNode(`${live} live`)] : []));
+}
+
+// How many board posts of an orchestration the viewer has seen, kept per
+// orchestration in localStorage. Posts beyond it get the new marker.
+const BOARD_SEEN_PREFIX = 'cc-dashboard:board-seen:';
+function boardSeen(id) {
+  try {
+    return Number(localStorage.getItem(BOARD_SEEN_PREFIX + id)) || 0;
+  } catch {
+    return 0;
+  }
+}
+function saveBoardSeen(id, count) {
+  try {
+    localStorage.setItem(BOARD_SEEN_PREFIX + id, String(count));
+  } catch {
+    // Storage can be blocked. Every post then shows as new on the next visit.
+  }
+}
+
+// The id whose detail is on screen, so a selection change renders without motion.
+let orchRenderedId = null;
+let boardSeenTimer = null;
+
+// Stores the board count 6 s after a render that showed unseen posts. The next
+// poll then drops the new marker.
+function scheduleBoardSeen(id, count) {
+  if (boardSeenTimer || count <= boardSeen(id)) return;
+  boardSeenTimer = setTimeout(() => {
+    boardSeenTimer = null;
+    if (orchDetail?.id === id) saveBoardSeen(id, orchDetail.board.length);
+  }, 6000);
+}
+
+function selectOrchestration(id) {
+  if (id === orchSelected) return;
+  orchSelected = id;
+  saveOrchestrationId(id);
+  drawOrchestrationSwitcher();
+  loadOrchestration();
+}
+
+function drawOrchestrationSwitcher() {
+  renderSwitcher(document.getElementById('orchSwitcher'), orchList, orchSelected, selectOrchestration);
 }
 
 // Never rejects: requestOrchestrations resolves to null on failure.
@@ -244,22 +289,31 @@ function refreshOrchestrationList() {
 }
 
 // The Orchestration poller's run. Refreshes the list, then fetches the selected
-// orchestration's detail. Task 7 draws it. Never rejects.
+// orchestration's detail, and draws both. Never rejects.
 async function loadOrchestration() {
   if (!orchInstalled) return;
   await refreshOrchestrationList();
   if (state.tab !== 'orchestration') return;
+  drawOrchestrationSwitcher();
+  const view = document.getElementById('orchView');
   if (!orchSelected) {
     orchDetail = null;
-    document.getElementById('orchPlaceholder').textContent = 'No orchestrations in the last 7 days.';
+    orchRenderedId = null;
+    renderEmpty(view, EMPTY_TEXT);
     return;
   }
   saveOrchestrationId(orchSelected);
   const id = orchSelected;
   const detail = await requestOrchestration(id);
   if (state.tab !== 'orchestration' || id !== orchSelected) return;
+  if (!detail) {
+    if (orchRenderedId !== id) renderEmpty(view, 'Could not load this orchestration.');
+    return;
+  }
   orchDetail = detail;
-  document.getElementById('orchPlaceholder').textContent = detail ? `Orchestration ${detail.topic ?? id}` : 'Could not load this orchestration.';
+  renderDetail(view, detail, { seenBoard: boardSeen(id), firstRender: orchRenderedId !== id });
+  orchRenderedId = id;
+  scheduleBoardSeen(id, detail.board.length);
 }
 
 // Asked once at startup. A page opened on #orchestration without the skill falls back to Now.

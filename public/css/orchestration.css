@@ -1,0 +1,148 @@
+/* The Orchestration tab. Cyan marks live and selected things, amber marks
+   STUCK, DRIFT and BUDGET only, and no state relies on colour: each has a glyph
+   and a word. Motion values come from the design spec's motion table. */
+:root { --orch-ease: cubic-bezier(0.23, 1, 0.32, 1); }
+
+/* Live dot: the dashboard's cyan ring, pulsing. Hollow when the orchestrator
+   waits for the owner, outline only when no session is live. */
+.orch-dot { position: relative; display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent-cyan); flex: none; }
+.orch-dot::after { content: ""; position: absolute; inset: -3px; border-radius: 50%; border: 1px solid var(--accent-cyan); opacity: 0; animation: orch-ring 2.4s var(--orch-ease) infinite; }
+.orch-dot.wait { background: transparent; box-shadow: inset 0 0 0 1.5px var(--accent-cyan); }
+.orch-dot.wait::after { animation-duration: 1.6s; }
+.orch-dot.off { background: transparent; box-shadow: inset 0 0 0 1.5px var(--text-tertiary); }
+.orch-dot.off::after { display: none; }
+@keyframes orch-ring { 0% { transform: scale(0.6); opacity: 0.7; } 100% { transform: scale(1.8); opacity: 0; } }
+
+/* The tab button's "N live" badge. */
+#orchLive { display: inline-flex; align-items: center; gap: 6px; margin-left: var(--sp-1); color: var(--accent-cyan); font-family: var(--font-num); font-size: var(--fs-caption); text-transform: none; letter-spacing: 0; }
+
+/* Switcher */
+.orch-switcher { display: grid; grid-template-columns: repeat(auto-fill, minmax(250px, 1fr)); gap: var(--sp-2); margin-bottom: var(--sp-4); }
+.orch-switcher:empty { display: none; }
+.run { all: unset; box-sizing: border-box; cursor: pointer; background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius-m); padding: 10px var(--sp-3); display: grid; gap: 6px; font-family: var(--font-data); font-size: var(--fs-body); transition: transform 140ms var(--orch-ease), border-color 150ms ease, background-color 150ms ease; }
+.run:active { transform: scale(0.98); }
+.run:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 2px; }
+@media (hover: hover) and (pointer: fine) { .run:hover { background: var(--surface-hover); } }
+.run[aria-pressed="true"] { border-color: var(--accent-cyan-dim); background: var(--surface-raised); box-shadow: inset 2px 0 0 var(--accent-cyan); }
+.run.done { opacity: 0.6; }
+.run-top { display: flex; align-items: center; gap: var(--sp-2); min-width: 0; }
+.run-name { font-weight: 600; font-size: var(--fs-prose); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.run-meta { display: flex; justify-content: space-between; gap: var(--sp-2); color: var(--text-secondary); font-size: var(--fs-caption); }
+.run-state { color: var(--text-primary); }
+.run-state.wait { color: var(--accent-cyan); font-weight: 600; }
+.run-project { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* Layout. The dashboard's .panel has its own padding and margin, so panels in
+   this tab reset them and pad their own parts. */
+.orch-layout { display: grid; grid-template-columns: minmax(0, 1fr) 340px; gap: var(--sp-4); align-items: start; }
+.orch-layout .panel { padding: 0; margin-bottom: 0; }
+.orch-layout .panel-head { padding: var(--sp-3) 14px 10px; margin-bottom: 0; border-bottom: 1px solid var(--border); align-items: baseline; flex-wrap: wrap; }
+.orch-layout .panel-meta { color: var(--text-secondary); font-size: var(--fs-caption); }
+.orch-main { display: grid; gap: var(--sp-4); min-width: 0; }
+.orch-empty { margin: 0; padding: 28px 14px; text-align: center; color: var(--text-secondary); font-family: var(--font-ui); font-size: var(--fs-prose); }
+.orch-empty[hidden] { display: none; }
+#orchView > .orch-empty { border: 1px dashed var(--border); border-radius: var(--radius-m); }
+
+/* Orchestrator panel */
+.orch-body { padding: 14px; display: grid; gap: 14px; }
+.orch-title { display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.orch-topic { margin: 0; font: 600 18px var(--font-num); }
+.tagline { color: var(--text-secondary); font-size: var(--fs-caption); }
+.tagline code { color: var(--text-primary); }
+.phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-1); }
+.phase { display: grid; gap: 5px; }
+.phase .bar { height: 3px; border-radius: 2px; background: var(--border); }
+.phase.done .bar { background: var(--accent-cyan-dim); }
+.phase.now .bar { background: repeating-linear-gradient(90deg, var(--accent-cyan) 0 6px, var(--accent-cyan-dim) 6px 9px); }
+.phase .name { font-size: var(--fs-caption); color: var(--text-tertiary); }
+.phase.done .name { color: var(--text-secondary); }
+.phase.now .name { color: var(--text-primary); font-weight: 600; }
+.now-box { display: grid; grid-template-columns: auto 1fr auto; gap: var(--sp-3); align-items: center; background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius-m); padding: var(--sp-3) 14px; }
+.now-box.wait { border-color: var(--accent-cyan-dim); box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-cyan) 20%, transparent), 0 0 24px -8px color-mix(in srgb, var(--accent-cyan) 45%, transparent); }
+.now-text { display: grid; gap: 2px; min-width: 0; }
+.now-text .what { font-size: var(--fs-prose); font-weight: 500; }
+.now-text .detail { color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orch-layout .since { color: var(--text-tertiary); font-size: var(--fs-caption); white-space: nowrap; }
+
+/* Actions feed */
+.feed-wrap { padding: 6px 14px 10px; }
+.feed { display: grid; margin: 0; padding: 0; list-style: none; }
+.feed li { display: grid; grid-template-columns: 52px 18px 1fr; gap: 6px; padding: 5px 0; border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); align-items: baseline; }
+.feed li:first-child { border-top: 0; }
+.feed .t { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
+.feed .g { color: var(--text-secondary); text-align: center; }
+.feed .x { min-width: 0; overflow-wrap: anywhere; }
+.feed .x span { color: var(--text-secondary); }
+
+/* Waves and workers */
+.wave { padding: var(--sp-3) 14px; display: grid; gap: 10px; }
+.wave + .wave { border-top: 1px solid var(--border); }
+.wave-head { display: flex; justify-content: space-between; gap: var(--sp-2); align-items: baseline; }
+.wave .label { font-family: var(--font-label); font-size: var(--fs-body); font-weight: 600; text-transform: uppercase; letter-spacing: var(--ls-label); color: var(--text-secondary); }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; color: var(--text-secondary); font-size: var(--fs-caption); }
+.orch-workers { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 10px; }
+.worker { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-m); display: grid; align-content: start; }
+.worker.attn { border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); }
+.w-head { all: unset; box-sizing: border-box; cursor: pointer; padding: 10px var(--sp-3) var(--sp-2); display: grid; gap: var(--sp-2); border-radius: var(--radius-m); font-family: var(--font-data); font-size: var(--fs-body); }
+.w-head:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: -2px; }
+.w-top { display: flex; justify-content: space-between; gap: var(--sp-2); align-items: baseline; }
+.w-title { font-weight: 600; font-size: var(--fs-prose); min-width: 0; }
+.w-title b { font-family: var(--font-num); color: var(--text-secondary); font-weight: 500; margin-right: 6px; }
+.status { display: inline-flex; align-items: center; gap: 5px; font-size: var(--fs-caption); white-space: nowrap; color: var(--text-secondary); }
+.status .glyph { font-size: var(--fs-caption); }
+.status.live { color: var(--accent-cyan); }
+.status.warn { color: var(--warning); font-weight: 600; }
+.w-now { display: grid; grid-template-columns: 1fr auto; gap: var(--sp-2); align-items: baseline; background: var(--bg); border-radius: 4px; padding: 6px var(--sp-2); min-width: 0; }
+.w-now .act { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.w-now.attn .act { color: var(--warning); }
+.ctx { display: grid; gap: var(--sp-1); }
+.ctx-row { display: flex; justify-content: space-between; font-size: var(--fs-caption); color: var(--text-secondary); }
+.meter { position: relative; height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; }
+.meter .fill { position: absolute; inset: 0; transform-origin: left; background: var(--series-neutral); border-radius: 3px; transition: transform 500ms var(--orch-ease); }
+/* Past the budget the fill is striped, so the state does not rest on colour. */
+.meter .fill.over { background: repeating-linear-gradient(135deg, var(--series-neutral) 0 4px, var(--bg) 4px 6px); }
+.meter .tick { position: absolute; top: 0; bottom: 0; right: 0; width: 2px; background: var(--text-secondary); }
+.w-foot { display: flex; gap: var(--sp-3); font-size: var(--fs-caption); color: var(--text-tertiary); flex-wrap: wrap; }
+.w-foot b { color: var(--text-secondary); font-weight: 500; }
+.w-more { border-top: 1px solid var(--border); padding: var(--sp-2) var(--sp-3) 10px; display: grid; gap: 6px; }
+.w-more .more-label { font-family: var(--font-label); font-size: var(--fs-caption); font-weight: 600; text-transform: uppercase; letter-spacing: var(--ls-label); color: var(--text-secondary); }
+.w-more .steps { margin: 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: var(--fs-caption); }
+.w-more .steps li { display: grid; grid-template-columns: 44px 1fr; gap: 6px; color: var(--text-secondary); }
+.w-more .steps li span:last-child { color: var(--text-primary); overflow-wrap: anywhere; }
+.w-more .done-check { font-size: var(--fs-caption); color: var(--text-secondary); }
+.w-more .done-check code { color: var(--text-primary); }
+.review { display: flex; justify-content: space-between; gap: var(--sp-2); font-size: var(--fs-caption); margin: 0 var(--sp-3) 10px; padding: 6px var(--sp-2); border: 1px dashed var(--border); border-radius: 4px; color: var(--text-secondary); }
+.review[hidden] { display: none; }
+
+/* Board. The topbar is sticky, so the board sticks below it. */
+.orch-board { position: sticky; top: 96px; max-height: calc(100vh - 112px); display: grid; grid-template-rows: auto minmax(0, 1fr); }
+.board-list { overflow-y: auto; margin: 0; padding: var(--sp-1) 0; list-style: none; }
+.board-list:empty { display: none; }
+.post { padding: 10px 14px; display: grid; gap: var(--sp-1); border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); position: relative; }
+.post:first-child { border-top: 0; }
+.post.new::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 2px; background: var(--accent-cyan); border-radius: 2px; transition: opacity 1200ms ease; }
+.post.seen::before { opacity: 0; }
+.post-top { display: flex; justify-content: space-between; gap: var(--sp-2); font-size: var(--fs-caption); }
+.post-from { color: var(--accent-cyan); font-weight: 500; }
+.post-from.you { color: var(--text-primary); }
+.post .muted { color: var(--text-tertiary); }
+.post-title { font-size: var(--fs-prose); font-weight: 500; font-family: var(--font-ui); }
+.post-body { color: var(--text-secondary); font-family: var(--font-ui); font-size: var(--fs-body); line-height: 1.5; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; white-space: pre-wrap; }
+.post.open .post-body { -webkit-line-clamp: unset; display: block; }
+.post button.more { all: unset; cursor: pointer; justify-self: start; color: var(--text-tertiary); font-size: var(--fs-caption); }
+.post button.more:focus-visible { outline: 1px solid var(--accent-cyan); }
+
+@media (max-width: 1000px) {
+  .orch-layout { grid-template-columns: 1fr; }
+  .orch-board { position: static; max-height: none; }
+}
+@media (max-width: 480px) {
+  .phases { grid-template-columns: repeat(2, 1fr); }
+  .now-box { grid-template-columns: auto 1fr; }
+  .now-box .since { grid-column: 2; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orch-dot::after { animation: none; }
+  .meter .fill, .run { transition: none; }
+}

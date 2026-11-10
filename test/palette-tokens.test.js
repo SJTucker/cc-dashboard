@@ -61,7 +61,7 @@ test('letter-spacing is the label token or 0', () => {
 
 test('media queries use the known breakpoints', () => {
   const widths = [...scaleCss.matchAll(/@media[^{]*?(max|min)-width:\s*(\d+)px/g)].map((m) => `${m[1]}-${m[2]}`);
-  assert.deepStrictEqual(widths.filter((w) => !['max-480', 'max-720', 'min-721', 'max-900', 'min-901', 'max-1240'].includes(w)), []);
+  assert.deepStrictEqual(widths.filter((w) => !['max-480', 'max-720', 'min-721', 'max-900', 'min-901', 'max-1000', 'max-1240'].includes(w)), []);
 });
 
 // .ba-under lines the legend up with the plot, so its margin is the plot's left pad in px.
