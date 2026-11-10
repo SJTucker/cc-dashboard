@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import {
-  REPO_STEPS, branchSlug, documentResumePrompt, handoffDocument, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, resumePrompt,
+  REPO_STEPS, branchSlug, documentResumePrompt, handoffDocument, handoffKind, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, resumePrompt,
 } from './handoff'
 import type { StepOutput } from './handoff'
 
@@ -165,4 +165,11 @@ test('the fork prompt calls a repo not a git repo only when the Worktree root st
 test('handoffDocument keeps a reply with no # Handoff: line, and rejects a blank one', async () => {
   expect(handoffDocument('Some document\n')).toBe('Some document\n')
   expect(handoffDocument('  \n')).toBe(null)
+})
+
+test('handoffKind falls back to the transcript handoff once the cache has expired', async () => {
+  expect(handoffKind('document', 1000, 999)).toBe('document')
+  expect(handoffKind('document', 1000, 1000)).toBe('transcript')
+  expect(handoffKind('document', 1000, 2000)).toBe('transcript')
+  expect(handoffKind('transcript', 1000, 999)).toBe('transcript')
 })

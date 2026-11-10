@@ -10,7 +10,7 @@ import { backfillText, errorName, errorText, versionSpan } from './text'
 import type { Judged } from './text'
 import { headlessText, parseHeadless, parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep, HeadlessStep } from './steps'
-import { REPO_STEPS, documentResumePrompt, handoffDocument, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, resumePrompt } from './handoff'
+import { REPO_STEPS, documentResumePrompt, handoffDocument, handoffKind, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
@@ -727,7 +727,8 @@ async function repoState($: EngineInterface, cwd: string): Promise<StepOutput[]>
 // transcript line. The file is written even when a turn or a /clear has come since,
 // because it is still a record of the session. Only the status and the prefill need the
 // entry to still be the one this call started, so a fork from an earlier idle gap cannot
-// change a later gap's entry. fs.write creates the handoffs folder when it is missing.
+// change a later gap's entry. A switch to off during the fork writes no file and sets no
+// status. fs.write creates the handoffs folder when it is missing.
 async function writeHandoff($: EngineInterface, id: string, entry: Handoff) {
   const cwd = await $.session.cwd()
   const plan = planHandoff(await repoState($, cwd), cwd)
@@ -736,6 +737,7 @@ async function writeHandoff($: EngineInterface, id: string, entry: Handoff) {
   if (!reply.isAnswered) throw new Error(`fork ${reply.reason}`)
   const doc = handoffDocument(reply.text)
   if (!doc) throw new Error('fork empty')
+  if ((await dashboardSettings($)).handoff === 'off') return
   await $.fs.write(plan.path, doc)
   if (handoffs.get(id) !== entry) return
   await markReady($, id, documentResumePrompt(plan.path), HANDOFF_STATUS_DOCUMENT)
@@ -902,7 +904,8 @@ function armFire($: EngineInterface, id: string, { wait, expiresAt }: { wait: nu
 // Claude Code's compaction left the context under HANDOFF_MIN_TOKENS, offers nothing. Otherwise the
 // handoff is made ready when the session is between turns and has no handoff in this
 // idle gap. A turn.start, /clear or newer turn during the read replaces or cancels fire,
-// and then nothing happens here.
+// and then nothing happens here. A cache that expired before this point gets the
+// transcript handoff, because a fork would send the whole conversation uncached.
 async function fireHandoff($: EngineInterface, id: string, expiresAt: number, fire: Timer) {
   const renewed = await handoffWait($, id)
   if (handoffTimers.get(id) !== fire) return
@@ -914,10 +917,14 @@ async function fireHandoff($: EngineInterface, id: string, expiresAt: number, fi
   if (renewed === null || activities.get(id)?.state !== 'waiting' || handoffs.has(id)) return
   // Read again after the wait, so a switch to off during bin/cache-state sets no status.
   const mode = (await dashboardSettings($)).handoff
-  // A turn.start or a /clear during that read changed the session, so check again.
+  // The clock is read with the settings, before the check below, so a turn.start cannot
+  // land in a further await between that check and the fork.
+  const now = await $.clock.now()
+  // A turn.start or a /clear during those reads changed the session, so check again.
   if (activities.get(id)?.state !== 'waiting' || handoffs.has(id)) return
-  if (mode === 'document') await startHandoff($, id)
-  else if (mode === 'transcript') await readyHandoff($, id)
+  if (mode === 'off') return
+  if (handoffKind(mode, renewed.expiresAt, now) === 'document') await startHandoff($, id)
+  else await readyHandoff($, id)
 }
 
 // A prompt makes the handoff out of date, so turn.start drops it and clears the

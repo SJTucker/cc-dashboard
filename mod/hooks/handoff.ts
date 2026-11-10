@@ -201,3 +201,10 @@ export function hourCacheExpiry(cache: { ttl?: unknown; expiresAt?: unknown }): 
 export function handoffWaitMs(expiresAt: number, now: number, leadMs: number) {
   return Math.max(0, expiresAt - leadMs - now)
 }
+
+// The handoff to make at fire time. A document handoff forks the conversation, and a
+// fork sent after the 1h cache expired re-sends the whole conversation uncached. At or
+// past expiresAt the transcript handoff is made instead, which costs no model call.
+export function handoffKind(mode: 'document' | 'transcript', expiresAt: number, now: number): 'document' | 'transcript' {
+  return expiresAt <= now ? 'transcript' : mode
+}

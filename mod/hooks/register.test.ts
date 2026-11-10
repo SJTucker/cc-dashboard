@@ -2846,6 +2846,30 @@ test('transcript handoff keeps today\'s prompt and makes no fork call', async ($
   expect(state.store['handoff:s1']).toEqual({ resume: RESUME, at: FIRE })
 })
 
+test('a document handoff whose cache expired before the timer fired makes the transcript handoff and no fork', async ($, on) => {
+  const { forked, statuses, state, clock } = world(on, docWorld({ nowOffset: HOUR }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  await clock.settle()
+  expect(forked).toEqual([])
+  expect(statuses).toEqual([undefined, READY])
+  expect(state.store['handoff:s1']).toEqual(expect.objectContaining({ resume: RESUME }))
+})
+
+test('a handoff switched to off while the fork runs writes no file and sets no status', async ($, on) => {
+  const { forked, writes, statuses, state, clock } = world(on, docWorld({ forkMs: 1_000 }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  await clock.set(FIRE)
+  state.files[DASH_SETTINGS] = '{"handoff":"off"}'
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(forked.length).toBe(1)
+  expect(writes[DOC_PATH]).toBe(undefined)
+  expect(statuses).toEqual([undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
 test('a missing handoff key means the document handoff', async ($, on) => {
   const { forked, clock } = world(on, docWorld({ files: setting({ reviews: true }) }))
   await idleTurn($)
