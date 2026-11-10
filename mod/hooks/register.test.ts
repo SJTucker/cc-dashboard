@@ -2669,3 +2669,101 @@ test('labels off: /backfill-updates answers with the off text and fetches nothin
   expect(asked).toEqual([])
   expect(ran).toEqual([])
 })
+
+// The on/off settings in <cfg>/cc-dashboard/settings.json. A setting that is off stops the
+// work behind it, not only its output.
+const setting = (json: object) => ({ [DASH_SETTINGS]: JSON.stringify(json) })
+
+test('activity off writes no activity file', async ($, on) => {
+  const { writes, writeLog, clock } = world(on, { files: setting({ activity: false }) })
+  await $.turn.start({ text: 'hi', turnId: 't1' })
+  await $.tool.call({ tool: 'Bash', command: 'npm test' } as never)
+  await clock.advance(500)
+  await clock.settle()
+  expect(writes[ACTIVITY]).toBe(undefined)
+  expect(writeLog).toEqual([])
+})
+
+test('limitBand off renders no band at 90%', async ($, on) => {
+  const { readLog, clock } = world(on, { files: setting({ limitBand: false }) })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(90), WEEK]))
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  expect(readLog).not.toContain(RATE_LIMITS)
+  await ui.unmount()
+})
+
+test('limitBand turned off clears a band that is showing', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(90), WEEK]))
+  expect(await bandLine(ui)).toBeDefined()
+  state.files[DASH_SETTINGS] = '{"limitBand":false}'
+  await $.session.measure(measure([at(90), WEEK]))
+  await clock.settle()
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('setupMarkers off runs no setup check', async ($, on) => {
+  const { writes, readLog, asked, state, clock } = world(on, {
+    files: { ...judged, ...setting({ setupMarkers: false }), [CLAUDE_MD]: 'a\nb', [snap(CLAUDE_MD)]: snapText(CLAUDE_MD, 1000, 'a') },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+    replies: [{ isAnswered: true, text: 'add rule b' }],
+  })
+  await startAndSettle($, clock)
+  expect(writes[CHANGES]).toBe(undefined)
+  expect(writes[snap(CLAUDE_MD)]).toBe(undefined)
+  expect(asked).toEqual([])
+  expect(readLog).not.toContain(CLAUDE_MD)
+  expect(state.store.setup).toEqual({ folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } })
+})
+
+test('transcriptIndex off runs no transcript-index', async ($, on) => {
+  const { indexRan, clock } = world(on, { files: setting({ transcriptIndex: false }) })
+  await idleTurn($)
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(indexRan).toEqual([])
+})
+
+test('handoff off arms no timer and runs no cache-state', async ($, on) => {
+  const { cacheRan, statuses, state, clock } = world(on, timed({ files: setting({ handoff: 'off' }) }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await clock.settle()
+  expect(cacheRan).toEqual([])
+  expect(statuses).not.toContain(READY)
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('session.end skips the handoff prefill when handoff is off', async ($, on) => {
+  const { fills, statuses, state, clock } = world(on, {
+    files: { ...setting({ handoff: 'off' }), [RESET_FILE]: RESET },
+    stats: { [RESET_FILE]: 60_000 },
+    store: { 'handoff:s1': { resume: RESUME, at: 1 } },
+  })
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(4_000)
+  await clock.settle()
+  expect(fills).toEqual([RESET])
+  expect(statuses.at(-1)).toBe(undefined)
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('session.end fills nothing after a /clear when handoff is off and no reset line is queued', async ($, on) => {
+  const { fills, statuses, state, clock } = world(on, {
+    files: setting({ handoff: 'off' }),
+    store: { 'handoff:s1': { resume: RESUME, at: 1 } },
+  })
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+  expect(statuses).not.toContain(READY)
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
