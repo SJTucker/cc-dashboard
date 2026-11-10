@@ -79,7 +79,7 @@
 .panel-switch { display: inline-flex; align-items: center; gap: var(--sp-1); margin-left: var(--sp-3); font-size: var(--fs-caption); color: var(--text-secondary); cursor: pointer; }
 .panel-switch input { margin: 0; }
 .panel-link { margin-left: var(--sp-3); font-size: var(--fs-caption); color: var(--text-secondary); }
-.panel-note .panel-link { margin-left: 0; font-size: inherit; }
+.panel-note .panel-link { margin-left: 0; font-size: var(--fs-caption); }
 .backlog-dialog { max-width: 420px; padding: var(--sp-4); border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--text-primary); }
 .backlog-dialog::backdrop { background: rgb(0 0 0 / 50%); }
 .backlog-dialog h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-body); }
