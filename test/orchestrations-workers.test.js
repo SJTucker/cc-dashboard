@@ -119,15 +119,42 @@ test('a merge wins over every other status', () => {
   assert.equal(resolved[0].status, 'merged');
 });
 
-test('stuck stays until a step follows the latest steer', () => {
-  const stuck = st({ raw: 'stuck', events: [{ type: 'STUCK', text: 'x', line: 3 }], lastActiveAt: iso(10) });
-  assert.equal(resolveStatuses([stuck], [], [], [])[0].status, 'stuck');
-  assert.equal(resolveStatuses([stuck], [], [], [{ to: 'w', at: iso(20) }])[0].status, 'stuck');
-  assert.equal(resolveStatuses([stuck], [], [], [{ to: 'other', at: iso(5) }])[0].status, 'stuck');
-  const after = st({ raw: 'stuck', events: stuck.events, lastActiveAt: iso(30) });
-  assert.equal(resolveStatuses([after], [], [], [{ to: 'w', at: iso(20) }])[0].status, 'working');
-  const quietAfter = st({ raw: 'stuck', quiet: true, events: stuck.events, lastActiveAt: iso(30) });
-  assert.equal(resolveStatuses([quietAfter], [], [], [{ to: 'w', at: iso(20) }])[0].status, 'quiet');
+const ev = (at) => [{ type: 'STUCK', text: 'x', line: 3, at: iso(at) }];
+
+test('a steer before the attention event leaves the worker stuck', () => {
+  const w = st({ raw: 'stuck', events: ev(10), lastActiveAt: iso(10) });
+  assert.equal(resolveStatuses([w], [], [], [{ to: 'w', at: iso(5) }])[0].status, 'stuck');
+});
+
+test('an attention event then a steer with no step after stays stuck', () => {
+  const w = st({ raw: 'stuck', events: ev(10), lastActiveAt: iso(10) });
+  assert.equal(resolveStatuses([w], [], [], [{ to: 'w', at: iso(20) }])[0].status, 'stuck');
+  assert.equal(resolveStatuses([w], [], [], [])[0].status, 'stuck');
+  assert.equal(resolveStatuses([w], [], [], [{ to: 'other', at: iso(20) }])[0].status, 'stuck');
+});
+
+test('an attention event, a steer, then a step clears stuck', () => {
+  const w = st({ raw: 'stuck', events: ev(10), lastActiveAt: iso(30) });
+  assert.equal(resolveStatuses([w], [], [], [{ to: 'w', at: iso(20) }])[0].status, 'working');
+  const q = st({ raw: 'stuck', quiet: true, events: ev(10), lastActiveAt: iso(30) });
+  assert.equal(resolveStatuses([q], [], [], [{ to: 'w', at: iso(20) }])[0].status, 'quiet');
+});
+
+test('events carry the time of the step that raised them', () => {
+  const lines = [tool('Read', { file_path: 'a.js' }, 1), tool('Edit', { file_path: 'server.js' }, 7), tool('Read', { file_path: 'b.js' }, 9)];
+  const { state } = workerState(agent, read(lines, 9), null, undefined, opts(10));
+  assert.equal(state.events[0].at, iso(7));
+});
+
+test('a task of null never matches a reviewer or merge without a task', () => {
+  const w = st({ raw: 'done', task: null });
+  const resolved = resolveStatuses([w], [st({ raw: 'working', task: null })], [{ task: null }], []);
+  assert.equal(resolved[0].status, 'done');
+  assert.equal(resolved[0].review, null);
+});
+
+test('a transcript with no complete lines is starting', () => {
+  assert.equal(workerState(agent, read([], 0), null, undefined, opts(1)).state.raw, 'starting');
 });
 
 test('quiet and starting pass through', () => {
