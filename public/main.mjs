@@ -25,6 +25,7 @@ import { refreshRecords } from './panels/records.mjs';
 import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews } from './panels/reviews.mjs';
 import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
+import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS } from './panels/orchestration.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
@@ -44,8 +45,13 @@ const LIVE_POLL_MS = 5000;
 // While Today is shown, runLoad runs LIVE_POLL_MS after the previous run finished
 // (createPoller in public/poll.mjs), so a slow scan delays the next poll instead of
 // overlapping it. On any other range only the sticky bar polls (stickyPoller).
-const livePoller = createPoller(() => runLoad(), LIVE_POLL_MS);
+const livePoller = createPoller(() => {
+  refreshOrchestrationList();
+  return runLoad();
+}, LIVE_POLL_MS);
 const stickyPoller = createPoller(() => loadStickyToday(), LIVE_POLL_MS);
+// Polls the open Orchestration tab's detail every ORCH_POLL_MS (loadOrchestration).
+const orchPoller = createPoller(() => loadOrchestration(), ORCH_POLL_MS);
 // Signatures of the last rendered summary and the last rendered rtk response. A 5s
 // poll that redraws unconditionally would tear down the SVG under the cursor and kill
 // any open tooltip, so an unchanged response skips rendering entirely. The two are
@@ -131,8 +137,12 @@ function setPolling(onNow) {
   if (document.hidden) {
     livePoller.stop();
     stickyPoller.stop();
+    orchPoller.stop();
     return;
   }
+  // The Orchestration poller runs only on that tab, and only when the skill is installed.
+  if (state.tab === 'orchestration' && orchInstalled) orchPoller.start();
+  else orchPoller.stop();
   if (onNow) {
     stickyPoller.stop();
     livePoller.start();
@@ -150,6 +160,7 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     livePoller.stop();
     stickyPoller.stop();
+    orchPoller.stop();
     syncHighscores();
     return;
   }
@@ -159,6 +170,7 @@ document.addEventListener('visibilitychange', () => {
     if (state.tab === 'now') runLoad();
     else loadStickyToday();
   }
+  if (state.tab === 'orchestration' && orchInstalled) loadOrchestration();
   setPolling(state.tab === 'now');
   syncHighscores();
 });
@@ -177,6 +189,8 @@ function drawSticky(data) {
 // request rejects (public/api.mjs). The tab check drops a response that lands
 // after a switch to the Now tab, where the full load draws both.
 function loadStickyToday() {
+  // The Orchestration tab's own poller refreshes the list there.
+  if (state.tab !== 'orchestration') refreshOrchestrationList();
   return loadStickyData({ getJson, requestLimits }).then(({ summary, limits }) => {
     if (state.tab === 'now') return;
     drawSticky(summary);
@@ -186,6 +200,82 @@ function loadStickyToday() {
     if (!hasRange(state.tab)) document.body.classList.remove('first-load');
   });
 }
+
+// Orchestration tab. orchInstalled is set once at startup from the first
+// /api/orchestrations answer. When the skill is not installed, the tab button stays
+// hidden and no orchestration request is ever sent again.
+const ORCH_STORAGE_KEY = 'cc-dashboard:orchestration';
+let orchInstalled = false;
+let orchList = [];
+let orchSelected = null;
+let orchDetail = null;
+
+function savedOrchestrationId() {
+  try {
+    return localStorage.getItem(ORCH_STORAGE_KEY);
+  } catch {
+    return null;
+  }
+}
+
+function saveOrchestrationId(id) {
+  try {
+    if (id) localStorage.setItem(ORCH_STORAGE_KEY, id);
+  } catch {
+    // Storage can be blocked. The selection then lasts for this page view.
+  }
+}
+
+// Keeps the list, picks the selected id, and sets the tab button's live count.
+function applyOrchestrationList(body) {
+  if (!body?.installed) return;
+  orchList = body.orchestrations;
+  orchSelected = pickSelected(orchList, orchSelected ?? savedOrchestrationId());
+  const live = liveCount(orchList);
+  const badge = document.getElementById('orchLive');
+  badge.hidden = live === 0;
+  badge.textContent = live ? `● ${live} live` : '';
+}
+
+// Never rejects: requestOrchestrations resolves to null on failure.
+function refreshOrchestrationList() {
+  if (!orchInstalled) return Promise.resolve();
+  return requestOrchestrations().then(applyOrchestrationList);
+}
+
+// The Orchestration poller's run. Refreshes the list, then fetches the selected
+// orchestration's detail. Task 7 draws it. Never rejects.
+async function loadOrchestration() {
+  if (!orchInstalled) return;
+  await refreshOrchestrationList();
+  if (state.tab !== 'orchestration') return;
+  if (!orchSelected) {
+    orchDetail = null;
+    document.getElementById('orchPlaceholder').textContent = 'No orchestrations in the last 7 days.';
+    return;
+  }
+  saveOrchestrationId(orchSelected);
+  const id = orchSelected;
+  const detail = await requestOrchestration(id);
+  if (state.tab !== 'orchestration' || id !== orchSelected) return;
+  orchDetail = detail;
+  document.getElementById('orchPlaceholder').textContent = detail ? `Orchestration ${detail.topic ?? id}` : 'Could not load this orchestration.';
+}
+
+// Asked once at startup. A page opened on #orchestration without the skill falls back to Now.
+requestOrchestrations().then((body) => {
+  if (!body?.installed) {
+    if (state.tab === 'orchestration') location.hash = 'now';
+    return;
+  }
+  orchInstalled = true;
+  document.getElementById('orchTabBtn').hidden = false;
+  applyOrchestrationList(body);
+  if (state.tab === 'orchestration') {
+    setPolling(false);
+    loadOrchestration();
+  }
+});
 
 // The requests fetchAll skips when every panel they feed is hidden.
 // resumeRequests loads the page again when one of them was skipped at the last
@@ -443,6 +533,7 @@ function enterTab(tab) {
   syncHighscores();
   if (tab === 'highscores') refreshHighscores();
   if (tab === 'mod') modLoaded = loadModSettings();
+  if (tab === 'orchestration' && orchInstalled) loadOrchestration();
   const after = neededRequests(state.hiddenKeys, state.tab);
   if (after.has('changes') && !before.has('changes')) ensureChanges();
   if (after.has('prices') && !before.has('prices')) loadPricesSource();

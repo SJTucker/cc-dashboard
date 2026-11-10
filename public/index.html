@@ -50,8 +50,9 @@
       <div class="tab-switch" id="tabSwitch" role="group" aria-label="View">
         <button type="button" data-tab="now" aria-pressed="true">Now</button>
         <button type="button" data-tab="analysis" aria-pressed="false">Analysis</button>
-        <button type="button" data-tab="highscores" aria-pressed="false">High scores</button>
+        <button type="button" data-tab="orchestration" id="orchTabBtn" aria-pressed="false" hidden>Orchestration <span id="orchLive" hidden></span></button>
         <button type="button" data-tab="mod" aria-pressed="false">Mod</button>
+        <button type="button" data-tab="highscores" aria-pressed="false">High scores</button>
       </div>
       <!-- Today's three numbers, on every tab and range. Not hideable. -->
       <div class="sticky-stats" id="stickyStats" role="group" aria-label="Today">
@@ -402,8 +403,8 @@
           </div>
         </section>
       </div>
-      <div class="tab" id="tabHighscores" hidden>
-        <section class="arcade" id="arcade"></section>
+      <div class="tab" id="tabOrchestration" hidden>
+        <p id="orchPlaceholder"></p>
       </div>
       <div class="tab" id="tabMod" hidden>
         <section class="panel" id="modSettingsPanel">
@@ -411,6 +412,9 @@
           <p id="modSettingsStatus" role="status" hidden></p>
           <div id="modSettingsRows"></div>
         </section>
+      </div>
+      <div class="tab" id="tabHighscores" hidden>
+        <section class="arcade" id="arcade"></section>
       </div>
     </main>
   </div>

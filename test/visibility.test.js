@@ -64,3 +64,7 @@ test('the High scores tab needs only /api/records', () => {
 test('the Mod tab needs no optional request', () => {
   assert.strictEqual(neededRequests(new Set(), 'mod').size, 0);
 });
+
+test('the Orchestration tab needs no optional request', () => {
+  assert.strictEqual(neededRequests(new Set(), 'orchestration').size, 0);
+});

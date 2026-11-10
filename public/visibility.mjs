@@ -20,6 +20,8 @@ const ANALYSIS_REQUESTS = ['changes', 'rtk', 'reviews', 'records'];
 const HIGHSCORES_REQUESTS = ['records'];
 // The Mod tab loads only /api/settings, which is not an optional request.
 const MOD_REQUESTS = [];
+// The Orchestration tab loads only /api/orchestrations routes, which are not listed here.
+const ORCHESTRATION_REQUESTS = [];
 
 // The hidden keys saved in localStorage. Anything that is not a JSON list gives
 // an empty list, and entries that are not strings are dropped.
@@ -40,6 +42,7 @@ function neededRequests(hidden, tab) {
   if (tab === 'now') onTab = NOW_REQUESTS;
   else if (tab === 'highscores') onTab = HIGHSCORES_REQUESTS;
   else if (tab === 'mod') onTab = MOD_REQUESTS;
+  else if (tab === 'orchestration') onTab = ORCHESTRATION_REQUESTS;
   const needed = new Set();
   for (const request of onTab) {
     const keys = REQUEST_CONSUMERS[request];
