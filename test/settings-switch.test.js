@@ -35,30 +35,33 @@ test('backlogText says "1 session" for one', async () => {
   assert.match(backlogText(4), /^4 sessions ended/);
 });
 
-test('the Haiku labels switch keeps its saved state across a redraw of the cached report', async () => {
-  const { installDom } = require('./dom-stub');
-  installDom();
-  const nodes = {};
-  const get = (id) => (nodes[id] ??= Object.assign(document.createElement('div'), { checked: true, hidden: false, classList: { toggle() {}, add() {} }, dataset: {}, style: {} }));
-  document.getElementById = get;
-  const realFetch = globalThis.fetch;
-  globalThis.fetch = async (url, init) => {
-    if (init?.method === 'POST') return { ok: true, status: 200, json: async () => ({ reviews: true, setupLabels: false }) };
-    return { ok: true, status: 200, json: async () => ({ markers: [], sessions: [{ t: Date.now() }], daily: new Proxy({}, { get: () => [] }), labelsOn: true, changesFile: { status: 'ok' } }) };
+test('saveSetting posts one key', async () => {
+  const { saveSetting } = await load();
+  let sent;
+  const fetchImpl = async (url, init) => { sent = { url, body: JSON.parse(init.body) }; return { ok: true, status: 200, json: async () => ({ activity: false }) }; };
+  const r = await saveSetting('activity', false, { fetchImpl });
+  assert.deepStrictEqual(sent, { url: '/api/settings', body: { activity: false } });
+  assert.deepStrictEqual(r, { ok: true, settings: { activity: false } });
+});
+
+test('saveSetting asks about the backlog when turning reviews on', async () => {
+  const { saveSetting } = await load();
+  const bodies = [];
+  const answers = [{ status: 409, body: { error: 'backlog', backlog: 3 } }, { status: 200, body: { reviews: true } }];
+  const fetchImpl = async (_url, init) => {
+    bodies.push(JSON.parse(init.body));
+    const a = answers.shift();
+    return { ok: a.status === 200, status: a.status, json: async () => a.body };
   };
-  try {
-    const changes = await import('../public/panels/changes.mjs');
-    const { wireLabelsSwitch } = await load();
-    const state = (await import('../public/state.mjs')).state;
-    state.hiddenKeys = new Set(); state.tab = 'analysis';
-    await changes.loadChanges();
-    assert.strictEqual(get('labelsSwitch').checked, true);
-    let onChange;
-    get('labelsSwitch').addEventListener = (_type, fn) => { onChange = fn; };
-    wireLabelsSwitch();
-    get('labelsSwitch').checked = false;
-    await onChange();
-    changes.redrawChanges();
-    assert.strictEqual(get('labelsSwitch').checked, false);
-  } finally { globalThis.fetch = realFetch; }
+  const asked = [];
+  const r = await saveSetting('reviews', true, { fetchImpl, ask: async (n) => { asked.push(n); return 'skip'; } });
+  assert.deepStrictEqual(asked, [3]);
+  assert.deepStrictEqual(bodies, [{ reviews: true }, { reviews: true, backlog: 'skip' }]);
+  assert.strictEqual(r.ok, true);
+});
+
+test('saveSetting reports cancelled when the backlog dialog is cancelled', async () => {
+  const { saveSetting } = await load();
+  const fetchImpl = async () => ({ ok: false, status: 409, json: async () => ({ error: 'backlog', backlog: 2 }) });
+  assert.deepStrictEqual(await saveSetting('reviews', true, { fetchImpl, ask: async () => null }), { ok: false, cancelled: true });
 });
