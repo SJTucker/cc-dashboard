@@ -98,22 +98,23 @@ function infoNodes(spec) {
   return [button, popover];
 }
 
+const ON_OFF = [{ value: 'true', label: 'On' }, { value: 'false', label: 'Off' }];
+
+// The radio value a row's saved setting checks. On/off settings use 'true' and 'false'.
+const checkedValue = (spec, value) => (spec.choices ? value : String(value !== false));
+
+// One segmented control per row, styled like the range picker: a radio per choice,
+// with the radio hidden and its label drawn as the segment.
 function controlNodes(spec, value, disabled) {
   const name = `modSetting-${spec.key}`;
-  const made = [];
-  if (spec.choices) {
-    for (const choice of spec.choices) {
-      const input = el('input', { type: 'radio', name, value: choice.value });
-      input.checked = value === choice.value;
-      input.disabled = disabled;
-      made.push(el('label', { class: 'mod-choice' }, [input, el('span', { text: ` ${choice.label}` })]));
-    }
-    return made;
-  }
-  const input = el('input', { type: 'checkbox', role: 'switch', name });
-  input.checked = value !== false;
-  input.disabled = disabled;
-  return [el('label', { class: 'panel-switch' }, [input, el('span', { text: ' On' })])];
+  const want = checkedValue(spec, value);
+  const segments = (spec.choices ?? ON_OFF).map((choice) => {
+    const input = el('input', { type: 'radio', name, value: choice.value });
+    input.checked = value !== undefined && want === choice.value;
+    input.disabled = disabled;
+    return el('label', { class: 'segment' }, [input, el('span', { text: choice.label })]);
+  });
+  return [el('div', { class: 'segmented', role: 'radiogroup', 'aria-label': spec.label }, segments)];
 }
 
 // Draws every row from the saved settings. A { error } object draws the rows with
@@ -146,7 +147,7 @@ function setDisabled(row, disabled) {
 // Puts the row's control back to the last saved value.
 function revert(row, spec) {
   for (const input of row.querySelectorAll('input')) {
-    input.checked = spec.choices ? input.value === saved?.[spec.key] : saved?.[spec.key] !== false;
+    input.checked = input.value === checkedValue(spec, saved?.[spec.key]);
   }
 }
 
@@ -160,17 +161,23 @@ export function wireModSettings(onSaved) {
     const spec = MOD_SETTINGS.find((s) => s.key === key);
     if (!spec) return;
     const row = document.getElementById(`modSetting-${key}`);
-    const value = spec.choices ? input.value : input.checked;
+    const value = spec.choices ? input.value : input.value === 'true';
+    // Disabling the row drops keyboard focus, so it goes back to the checked segment
+    // once the save ends. Without this, each arrow-key change sends focus to the page.
+    const hadFocus = document.activeElement === input;
+    const refocus = () => { if (hadFocus) row.querySelector('input:checked')?.focus({ preventScroll: true }); };
     setDisabled(row, true);
     const result = await saveSetting(key, value);
     setDisabled(row, false);
     if (result.ok) {
       saved = result.settings ?? { ...saved, [key]: value };
       showStatus('');
+      refocus();
       onSaved(key);
       return;
     }
     revert(row, spec);
+    refocus();
     if (result.error) showStatus(`Could not save ${spec.label}: ${result.error}`);
   });
 }

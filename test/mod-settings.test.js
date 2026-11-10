@@ -40,13 +40,15 @@ test('handoff row checks the saved choice', async () => {
   assert.deepStrictEqual(radios.map((r) => r.checked), [false, true, false]);
 });
 
-test('switch rows reflect the saved boolean', async () => {
+test('on/off rows draw an On and an Off segment that reflect the saved boolean', async () => {
   const { renderModSettings } = await load();
   const { container } = setup();
   renderModSettings(container, { ...ALL, activity: false });
-  const box = find(container, (n) => n.attributes.name === 'modSetting-activity')[0];
-  assert.strictEqual(box.attributes.role, 'switch');
-  assert.strictEqual(box.checked, false);
+  const radios = find(container, (n) => n.attributes.type === 'radio' && n.attributes.name === 'modSetting-activity');
+  assert.deepStrictEqual(radios.map((r) => r.attributes.value), ['true', 'false']);
+  assert.deepStrictEqual(radios.map((r) => r.checked), [false, true]);
+  const groups = find(container, (n) => n.className === 'segmented');
+  assert.strictEqual(groups.length, 7, 'every row, handoff included, uses the segmented control');
 });
 
 test('each row has an info popover with the Design copy', async () => {
