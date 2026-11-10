@@ -83,8 +83,11 @@ of a session with at least 50,000 tokens of context expires. It has three modes:
   document to `<worktree root>/.claude/handoffs/<date>-<time>-<branch>.md`, or to
   `<session folder>/.claude/handoffs/` outside git. The status line shows `handoff
   ready · /clear to resume`. After `/clear`, the mod fills the new session's input box
-  with `Read <path>, check Preconditions, then continue from "Next steps".` If the fork
-  or the file write fails, the mod falls back to the `transcript` behaviour. The files
+  with `Read <path>, check Preconditions, then continue from "Next steps".` A path with
+  a character outside `[A-Za-z0-9_./~-]` is single-quoted. If the fork or the file write
+  fails, the mod falls back to the `transcript` behaviour. When the 1-hour cache has
+  already expired at the moment the timer fires, as after the machine slept, the mod
+  makes no fork and uses the `transcript` behaviour. The files
   show as untracked in `git status` unless the repo ignores `.claude/handoffs/`.
 - `transcript`: the status line shows `cache expires soon · /clear to resume from the
   transcript`. After `/clear`, the mod fills the input box with a prompt to read the old
@@ -360,7 +363,9 @@ of them.
     `CLAUDE.local.md`. Changes to settings files, hook scripts, the statusline script
     and rtk's config are labelled on your machine and not sent.
 - **In `document` handoff mode the mod forks the session's own model** once per idle
-  gap, to write a handoff document. The fork reads the whole conversation from the
+  gap, to write a handoff document. When the 1-hour cache has already expired at the
+  moment the timer fires, as after the machine slept, the mod makes no fork and uses
+  the `transcript` behaviour. The fork reads the whole conversation from the
   prompt cache and also receives the output of `git rev-parse`, `git branch`, `git log`,
   `git worktree list`, `git status`, `git diff --stat` and `git stash list` for the
   session's folder, and the current date. It writes no transcript line, so the
