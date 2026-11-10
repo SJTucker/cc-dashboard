@@ -22,7 +22,7 @@ const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = requir
 const { readCacheState, getCacheDir } = require('./lib/cache');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
 const { readActivity, getActivityDir } = require('./lib/activity');
-const { readSettings, writeSettings } = require('./lib/settings');
+const { SETTING_SPECS, readSettings, writeSettings, validSettingValue } = require('./lib/settings');
 const { reviewBacklog, skipBacklog } = require('./lib/review');
 const { readReviews, readClosedPage, parseCursor, suggestionReason, setDismissal, DISMISS_REASONS, CLOSED_PAGE_SIZE, CLOSED_PAGE_MAX } = require('./lib/review');
 const { createReviewDbGetter, legacyReviewsDir } = require('./lib/review-db');
@@ -312,7 +312,8 @@ function createServer(config) {
       // The two rtk rows' daily series come from rtk's own history, not the scan.
       const rtkDaily = readRtkDaily(config.rtkDb);
       if (rtkDaily) Object.assign(report.daily, rtkDaily);
-      res.json({ ...report, labelsOn: readSettings(config.configDir).setupLabels });
+      const saved = readSettings(config.configDir);
+      res.json({ ...report, labelsOn: saved.setupLabels, markersOn: saved.setupMarkers });
     } catch (err) {
       console.error('[API] /api/changes failed:', err);
       res.status(500).json({ error: 'Failed to build the setup changes report', detail: err.message });
@@ -400,7 +401,8 @@ function createServer(config) {
         }
         return first;
       };
-      res.json(buildLiveSessions(readSessions(getSessionsDir(config.configDir)), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, readActivity(getActivityDir(config.configDir)), {
+      const activityOff = !readSettings(config.configDir).activity;
+      const live = buildLiveSessions(readSessions(getSessionsDir(config.configDir)), efficiency.calls, Date.now(), efficiency.linesBySession, efficiency.titleBySession, efficiency.prompts, activityOff ? new Map() : readActivity(getActivityDir(config.configDir)), {
         branchesBySession: efficiency.branchesBySession,
         branchBySession: efficiency.branchBySession,
         firstPromptBySession: efficiency.firstPromptBySession,
@@ -409,7 +411,12 @@ function createServer(config) {
         cacheCallsOf: transcriptCalls,
         cacheStateOf: (sessionId) => readCacheState(getCacheDir(config.configDir), sessionId),
         firstPromptAtOf: firstPromptAt,
-      }));
+      });
+      if (activityOff) {
+        for (const row of live.sessions) delete row.activity;
+        live.activityOff = true;
+      }
+      res.json(live);
     } catch (err) {
       console.error('[API] /api/sessions/live failed:', err);
       res.status(500).json({ error: 'Failed to read live sessions', detail: err.message });
@@ -494,22 +501,26 @@ function createServer(config) {
     changeDismissal(res, target, reason);
   });
 
-  // Saves the dashboard switches. A key the body leaves out keeps its saved value.
+  app.get('/api/settings', (req, res) => {
+    res.json(readSettings(config.configDir));
+  });
+
+  // Saves the mod settings. A key the body leaves out keeps its saved value.
   // Turning reviews from off to on first finds the sessions that ended while it was
   // off. Without `backlog` they answer 409 with the count and nothing is written, so
   // the page can ask. 'skip' records them as skipped before the switch is written,
   // because the mod can only claim sessions once reviews are on. 'review' leaves them
   // unclaimed for the mod to pick up.
-  const SETTINGS_KEYS = ['reviews', 'setupLabels', 'backlog'];
+  const SETTING_KEYS = Object.keys(SETTING_SPECS);
   app.post('/api/settings', express.json({ limit: '1kb' }), async (req, res) => {
     const body = req.body;
     const bad = !body || typeof body !== 'object' || Array.isArray(body)
-      || Object.keys(body).some((k) => !SETTINGS_KEYS.includes(k))
-      || ['reviews', 'setupLabels'].some((k) => k in body && typeof body[k] !== 'boolean')
+      || Object.keys(body).some((k) => k !== 'backlog' && !SETTING_KEYS.includes(k))
+      || SETTING_KEYS.some((k) => k in body && !validSettingValue(k, body[k]))
       || ('backlog' in body && body.backlog !== 'review' && body.backlog !== 'skip')
-      || !('reviews' in body || 'setupLabels' in body);
+      || !SETTING_KEYS.some((k) => k in body);
     if (bad) {
-      res.status(400).json({ error: 'Send reviews and/or setupLabels as booleans, and backlog as "review" or "skip".' });
+      res.status(400).json({ error: `Send any of ${SETTING_KEYS.join(', ')} with a valid value, and backlog as "review" or "skip".` });
       return;
     }
     try {
@@ -526,10 +537,7 @@ function createServer(config) {
       }
       // Read again: a POST that arrived during the await above may have changed the other key.
       const latest = readSettings(config.configDir);
-      const next = {
-        reviews: 'reviews' in body ? body.reviews : latest.reviews,
-        setupLabels: 'setupLabels' in body ? body.setupLabels : latest.setupLabels,
-      };
+      const next = Object.fromEntries(SETTING_KEYS.map((k) => [k, k in body ? body[k] : latest[k]]));
       writeSettings(config.configDir, next);
       res.json(next);
     } catch (err) {
