@@ -8,9 +8,12 @@
 // Usage: bin/skill-cost [--since YYYY-MM-DD] [--min-subagents N] [--size-band F]
 //                       [--until <sessionIdPrefix>=<ISO time>]... [--json]
 // It reads <cfg>/projects/**/*.jsonl and each session's subagents' transcripts, and
-// runs read-only git through lib/extract.js to count commits. A session's segment
-// starts at its first skill marker and ends at the next marker of the other skill or
-// the session's last line, or at --until. Exit 0 on success, 1 on a bad argument.
+// runs read-only git through lib/extract.js to count commits. A session can hold several segments. A segment starts at a skill marker and ends at a
+// marker of the other skill, at a finishing-a-development-branch call, at --until, or
+// at the session's last line. --since is UTC midnight and filters on a run's first
+// segment start. A planning session whose execution prompt was not the reset line does
+// not name the plan path, so it shows as its own run. Exit 0 on success, 1 on a bad
+// argument.
 
 const fs = require('fs');
 const path = require('path');
@@ -47,7 +50,8 @@ function firstTimestamp(file) {
 
 const inside = (seg) => (t) => t == null || (t >= seg.start && t <= seg.end);
 
-// The cost, edits and commits of one run, deduping calls on their key.
+// The cost, edits and commits of one run, deduping calls on their key. A call with no
+// key is counted every time, as lib/aggregate.js does.
 async function measureRun(run) {
   const seen = new Set();
   const m = { mainCost: 0, subCost: 0, subagents: 0, prompts: 0 };
@@ -55,8 +59,10 @@ async function measureRun(run) {
   const commits = [];
   const add = (calls, key) => {
     for (const c of calls) {
-      if (seen.has(c.key)) continue;
-      seen.add(c.key);
+      if (c.key) {
+        if (seen.has(c.key)) continue;
+        seen.add(c.key);
+      }
       m[key] += costForUsage(c.usage, c.model, c.t).cost;
     }
   };
@@ -85,7 +91,7 @@ async function measureRun(run) {
       commits.push(...sc.ownCommits(sub.commits, seg.start));
     }
   }
-  const rows = lineRows(edits, commits);
+  const rows = lineRows(sc.dropContextImages(edits), commits);
   m.added = rows.reduce((a, r) => a + r.added, 0);
   m.removed = rows.reduce((a, r) => a + r.removed, 0);
   return m;
@@ -129,7 +135,7 @@ async function main() {
     if (!text.includes('orchestrate') && !text.includes('subagent-driven-development')) continue;
     const id = path.basename(file, '.jsonl');
     const scan = sc.scanSession(text);
-    items.push({ file, id, project: path.basename(path.dirname(file)), scan, segment: sc.segmentOf(scan, id, untils) });
+    for (const segment of sc.segmentsOf(scan, id, untils)) items.push({ file, id, project: path.basename(path.dirname(file)), scan, segment });
   }
 
   const runs = [];
@@ -140,7 +146,7 @@ async function main() {
     runs.push({
       skill: run.skill,
       start,
-      sessionIds: run.items.map((i) => i.id.slice(0, 8)),
+      sessionIds: [...new Set(run.items.map((i) => i.id.slice(0, 8)))],
       project: run.items[0].project,
       ...metrics,
     });

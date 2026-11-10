@@ -234,7 +234,15 @@ read-only git, and a run over a few weeks takes a minute or two.
 bin/skill-cost --since 2026-10-20 [--min-subagents 5] [--size-band 0.5] [--json]
 ```
 
-`--until <sessionIdPrefix>=<ISO time>` cuts one session's segment early.
+A session can hold several segments. A segment starts at a skill marker (a `Skill`
+call or the typed slash command) and ends at a marker of the other skill, at a
+`superpowers:finishing-a-development-branch` call, at `--until`, or at the session's
+last line. `--until <sessionIdPrefix>=<ISO time>` cuts one session's segment early.
+`--since` is UTC midnight and filters on a run's first segment start. A planning
+session pairs with its execution session through the plan path (an absolute `.md`
+path the model wrote after "You are the orchestrator for"). When the execution
+prompt was not the reset line, the planning session does not name the plan path and
+shows as its own run. Edits under `docs/superpowers/images/` do not count as lines.
 
 ## rtk
 
