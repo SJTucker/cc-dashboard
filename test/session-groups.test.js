@@ -373,3 +373,10 @@ test("a chain's key comes from its first session to start, so a session that joi
   assert.strictEqual(after.length, 1);
   assert.strictEqual(after[0].key, 'launch:L9');
 });
+
+test('State cell reads off with the setting title when activityOff', async () => {
+  const { stateParts } = await import('../public/session-groups.mjs');
+  assert.deepStrictEqual(stateParts(undefined, true), { text: 'off', title: 'Live activity is off in Mod settings', attention: false });
+  assert.deepStrictEqual(stateParts(undefined, false), { text: '—', title: null, attention: false });
+  assert.deepStrictEqual(stateParts({ state: 'waiting' }, false), { text: '⏸ waiting on you', title: null, attention: true });
+});

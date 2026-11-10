@@ -57,4 +57,11 @@ function reviewPrompt(review) {
   return `Review the Claude Code session transcript at ${review.transcript}. A Haiku review of it suggested:\n${lines}\nWhich of these are right, which are wrong, and what did it miss?`;
 }
 
-export { reviewPrompt, openSuggestions, countWithOpen, dismissalText, reasonLabel, rangePhrase, rangeShort, byEnd, byCursor, upsertSuggestion };
+// The Session reviews panel's note: the count, or why nothing is reviewed.
+function reviewsNote(enabled, withOpen, days) {
+  return enabled
+    ? `${withOpen} ${withOpen === 1 ? 'review' : 'reviews'} with open suggestions · ${rangeShort(days)}`
+    : 'Suggestions are off. Ended sessions are not reviewed.';
+}
+
+export { reviewsNote, reviewPrompt, openSuggestions, countWithOpen, dismissalText, reasonLabel, rangePhrase, rangeShort, byEnd, byCursor, upsertSuggestion };

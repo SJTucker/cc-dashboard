@@ -229,7 +229,7 @@
           <div class="panel-head">
             <h2 id="reviewsHeading">Session reviews</h2>
             <span class="panel-meta" id="reviewsNote"></span>
-            <label class="panel-switch"><input type="checkbox" role="switch" id="reviewsSwitch" checked> Suggestions</label>
+            <a class="panel-link" href="#mod" data-mod-setting="reviews">Mod settings</a>
           </div>
           <p class="review-empty" id="reviewsStatus" role="status" hidden></p>
           <ul class="reviews-list" id="reviewsList"></ul>
@@ -379,9 +379,10 @@
           <div class="panel-head">
             <h2>Setup changes &middot; before and after</h2>
             <span class="panel-meta">7 days before and after the picked change</span>
-            <label class="panel-switch"><input type="checkbox" role="switch" id="labelsSwitch" checked> Haiku labels</label>
+            <a class="panel-link" href="#mod" data-mod-setting="setupLabels">Mod settings</a>
           </div>
           <p id="changesFileNote" class="panel-note changes-file-note" hidden></p>
+          <p id="changesMarkersNote" class="panel-note changes-file-note" hidden></p>
           <p id="baEmpty" class="bar-empty" hidden>No setup changes in this range.</p>
           <div id="baBody">
             <div id="baDailyChart" class="chart" role="group" aria-label="Context at session start: bars are the daily median, dots are sessions, with setup changes by kind above the chart"></div>
