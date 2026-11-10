@@ -148,11 +148,27 @@ export function settingsChanges(beforeText: string, afterText: string): Array<{ 
 const expandHome = (p: string, home: string) => p.replace(/^~(?=\/|$)/, home).replace(/^\$\{?HOME\}?(?=\/|$)/, home)
 
 // Files a CLAUDE.md pulls in with a line of its own, `@path`. A relative path is
-// relative to the CLAUDE.md's folder (`base`).
+// relative to the CLAUDE.md's folder (`base`). Lines inside a fenced code block are
+// code, and Claude Code does not include a file named there. A fence opens on a line
+// that starts, once trimmed, with three or more backticks or three or more tildes. It
+// closes on a line of the same character, at least as long as the opening run, with
+// only whitespace after the run. An unclosed fence runs to the end of the text.
 export function includedPaths(text: string, base: string, home: string) {
   const paths: string[] = []
+  let fence: { char: string; length: number } | null = null
   for (const line of text.split('\n')) {
-    const match = /^@(\S+)\s*$/.exec(line.trim())
+    const trimmed = line.trim()
+    if (fence) {
+      const run = /^(`+|~+)\s*$/.exec(trimmed)?.[1]
+      if (run && run[0] === fence.char && run.length >= fence.length) fence = null
+      continue
+    }
+    const open = /^(`{3,}|~{3,})/.exec(trimmed)?.[1]
+    if (open) {
+      fence = { char: open[0] as string, length: open.length }
+      continue
+    }
+    const match = /^@(\S+)\s*$/.exec(trimmed)
     if (!match?.[1]) continue
     const raw = expandHome(match[1], home)
     const full = raw.startsWith('/') ? raw : `${base}/${raw.replace(/^\.\//, '')}`
