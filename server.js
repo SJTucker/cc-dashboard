@@ -21,6 +21,7 @@ const { readLimits, readUsageFetchedAt, readDailyShare, getRateLimitsPath } = re
 const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = require('./lib/sessions');
 const { readCacheState, getCacheDir } = require('./lib/cache');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
+const { createOrchestrations } = require('./lib/orchestrations/discover');
 const { readActivity, getActivityDir } = require('./lib/activity');
 const { SETTING_SPECS, readSettings, writeSettings, validSettingValue } = require('./lib/settings');
 const { reviewBacklog, skipBacklog } = require('./lib/review');
@@ -577,6 +578,40 @@ function createServer(config) {
       return;
     }
     res.json(result);
+  });
+
+  // The Orchestration tab. The browser polls the list and, for the selected
+  // orchestration, its detail. Without the orchestrate skill installed the list
+  // answers at once without reading any session.
+  const orchestrations = createOrchestrations(config.configDir);
+  app.get('/api/orchestrations', (req, res) => {
+    try {
+      if (!orchestrations.installed()) {
+        res.json({ installed: false, orchestrations: [] });
+        return;
+      }
+      res.json({ installed: true, orchestrations: orchestrations.list() });
+    } catch (err) {
+      console.error('[API] /api/orchestrations failed:', err);
+      res.status(500).json({ error: 'Failed to read orchestrations', detail: err.message });
+    }
+  });
+  app.get('/api/orchestrations/:id', (req, res) => {
+    if (!SESSION_ID_PATTERN.test(req.params.id)) {
+      res.status(400).json({ error: 'Invalid orchestration id' });
+      return;
+    }
+    try {
+      const detail = orchestrations.detail(req.params.id);
+      if (!detail) {
+        res.status(404).json({ error: 'Unknown orchestration' });
+        return;
+      }
+      res.json(detail);
+    } catch (err) {
+      console.error('[API] /api/orchestrations/:id failed:', err);
+      res.status(500).json({ error: 'Failed to read the orchestration', detail: err.message });
+    }
   });
 
   // Express 4 answers a body-parser error (malformed JSON, body over the limit)
