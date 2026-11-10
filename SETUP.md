@@ -336,8 +336,8 @@ of them.
   its own login and rewrites that cache. No model is called and the dashboard reads no
   token. Set `CC_DASHBOARD_USAGE_REFRESH=off` to stop it.
 - **The mod** fetches `CHANGELOG.md` from `raw.githubusercontent.com/anthropics/claude-code`
-  in an interactive session when the running Claude Code version has no verdict, or when you run
-  `/backfill-updates`.
+  in an interactive session when the running Claude Code version has no verdict, or
+  when you run `/backfill-updates`.
 - **The mod calls Haiku** through your Claude Code login to judge releases, review
   ended sessions and label setup changes. The `setupLabels` setting stops the label and
   release-judging calls and the changelog fetch. No API key is read. These calls write no

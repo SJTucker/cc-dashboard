@@ -252,20 +252,19 @@ async function findTranscript($: EngineInterface, root: string, id: string): Pro
 }
 
 // Records when the projects/ scan last found nothing for a session id, and the turn
-// count at that time. While the miss is under TRANSCRIPT_MISS_MS old and the turn count is the same,
-// transcriptPath checks only the built path, so a transcript that does not exist yet
-// does not cost a folder scan on every measure. A new turn or the end of the window
+// count at that time. While the miss is under TRANSCRIPT_MISS_MS old and the turn
+// count is the same, transcriptPath checks only the built path, so a transcript that
+// does not exist yet does not cost a folder scan on every measure. A new turn or the end of the window
 // searches again. forgetSession drops the entry. It stays outside the session record,
 // so recording a miss creates no record. Only a hit stores a path in the record.
 const TRANSCRIPT_MISS_MS = 30_000
 const transcriptMisses = new Map<string, { at: number; turns: number }>()
 
 // Ids of sessions that ended, oldest first, at most ENDED_SESSIONS_MAX. forgetSession
-// adds the ids. A hook that
-// awaits while session.end runs checks it before it creates state or a timer for the
-// id. session.start and turn.start remove the id, because a session that starts or
-// takes a prompt is live again. It stays outside the session record, because it must
-// outlive the record that forgetSession deletes.
+// adds the ids. A hook that awaits while session.end runs checks it before it creates
+// state or a timer for the id. session.start and turn.start remove the id, because a
+// session that starts or takes a prompt is live again. It stays outside the session
+// record, because it must outlive the record that forgetSession deletes.
 const ENDED_SESSIONS_MAX = 50
 const endedSessions = new Set<string>()
 
@@ -704,8 +703,8 @@ async function track($: EngineInterface, change: (a: Activity, now: number, s: S
 // handoff and index timers and deletes the record. A throttle timer that has not fired
 // therefore never queues a write. A timer callback already waiting on clock.now finds
 // no activity for the id and returns, so it queues no write either. A write already
-// queued finds no state in writeActivity and writes nothing. A write already inside fs.write finishes, and writeActivity does not
-// record its text.
+// queued finds no state in writeActivity and writes nothing. A write already inside
+// fs.write finishes, and writeActivity does not record its text.
 function forgetSession(id: string) {
   endedSessions.delete(id)
   endedSessions.add(id)
@@ -1500,6 +1499,7 @@ export const register: Register = (on) => {
   // The command.run hooks here and the ui.render hook at the end carry a matcher, which
   // exempts them from the one-on()-per-event rule. `h`, used by ui.render, is not
   // imported. The engine provides it to this module as a global element factory.
+  // Box, Text and Button are not globals. ui.render gets them from $.ui.resolve(e).
   on('command.run', { command: 'backfill-updates' }, async ($) => ((await dashboardSettings($)).setupLabels ? { text: backfillText(await judgeUpdates($)) } : { text: LABELS_OFF_TEXT }))
 
   on('command.run', { command: 'transcript-handoff' }, async ($) => {
