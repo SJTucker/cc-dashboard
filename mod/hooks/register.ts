@@ -1084,7 +1084,11 @@ function queueIndex($: EngineInterface, id: string) {
         current.indexTimer = undefined
         if (settings.transcriptIndex) startIndex($, id)
       })
-      .catch((err) => logOnce($, `transcript index failed (${errorName(err)})`))
+      .catch((err) => {
+        const current = peekState(id)
+        if (current?.indexTimer === timer) current.indexTimer = undefined
+        logOnce($, `transcript index failed (${errorName(err)})`)
+      })
   })
   s.indexTimer = timer
 }
@@ -1671,7 +1675,7 @@ export const register: Register = (on) => {
           })
         }
         else if (e.agentId) {
-          if (!endedSessions.has(id)) stateOf(id).agentIds.add(e.agentId)
+          if (SESSION_ID.test(id) && !endedSessions.has(id)) stateOf(id).agentIds.add(e.agentId)
           queueStep($, e.agentId, stepOf(result.usage, now, e.turnId, e.index))
         }
       }

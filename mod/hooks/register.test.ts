@@ -2686,6 +2686,20 @@ test('session.end drops the steps of a subagent that never completed', async ($,
   expect(readLog).toContain(AGENT_FILE)
 })
 
+test('a step under a malformed session id creates no record, so session.end frees no subagent steps', async ($, on) => {
+  const { writes, clock, state, readLog } = world(on)
+  state.id = 'bad/id'
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  state.files[AGENT_FILE] = writes[AGENT_FILE]
+  await $.session.end({ reason: 'clear', sessionId: 'bad/id', resume: { id: 'bad/id' } })
+  await clock.settle()
+  readLog.length = 0
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(readLog).not.toContain(AGENT_FILE)
+})
+
 test('a step queued after a subagent ends but before its chain settles is dropped too', async ($, on) => {
   const { clock, readLog } = world(on, { writeMs: [100, 100] })
   await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
