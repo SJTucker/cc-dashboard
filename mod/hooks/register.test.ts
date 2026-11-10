@@ -452,6 +452,34 @@ test('a fresh session with no transcript yet logs nothing, and one after a promp
   expect(logged).toEqual(['transcript not found'])
 })
 
+test('a missing transcript is searched for once per 30 s', async ($, on) => {
+  const { listed, clock } = world(on, { exists: () => false, turns: () => 1, dirs: { '/home/u/.claude/projects': ['-a', '-b'] } })
+  await $.session.measure(measure([FIVE]))
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(1)
+  await clock.advance(30_001)
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(2)
+})
+
+test('a new turn ends the wait after a miss', async ($, on) => {
+  const found = '/home/u/.claude/projects/-other/s1.jsonl'
+  let turns = 0
+  let written = false
+  const { ran, listed, clock } = world(on, {
+    exists: (path) => written && path === found,
+    turns: () => turns,
+    dirs: { '/home/u/.claude/projects': ['-other'] },
+  })
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(1)
+  written = true
+  turns = 1
+  await clock.advance(1000)
+  await $.session.measure(measure([FIVE]))
+  expect(ran.filter((r) => r.argv[0] === '/repo/bin/record-statusline').length).toBe(1)
+})
+
 test('a measure without cost records once the transcript appears', async ($, on) => {
   let written = false
   const { ran } = world(on, { exists: () => written })
@@ -529,9 +557,10 @@ test('a /clear of a session this process never measured still links the new sess
 })
 
 test('two /clears with no prompt between link the new session to the first one', async ($, on) => {
-  const { ran, state } = world(on, { exists: (path) => !path.endsWith('/s2.jsonl') })
+  const { ran, state, clock } = world(on, { exists: (path) => !path.endsWith('/s2.jsonl') })
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
   await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  await clock.settle()
   state.id = 's3'
   await $.session.measure(measure([FIVE]))
   expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual(['s1'])
@@ -546,6 +575,32 @@ test('a second /clear whose session.root rejects still calls the next hook and s
   await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
   await clock.settle()
   expect(reviewRan.length).toBeGreaterThan(before)
+})
+
+test('a /clear\'s cleared_from lookup does not cache the ended session\'s path', async ($, on) => {
+  const found = '/home/u/.claude/projects/-other/s2.jsonl'
+  const { listed, state, clock } = world(on, {
+    exists: (path) => path === found,
+    dirs: { '/home/u/.claude/projects': ['-other'] },
+  })
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  state.id = 's2'
+  await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  await clock.settle()
+  expect(listed.length).toBe(1)
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(2)
+})
+
+test('a later end is not overwritten by an earlier cleared_from scan', async ($, on) => {
+  const { ran, state, clock } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's2', resume: { id: 's2' } })
+  await clock.settle()
+  state.id = 's3'
+  await $.session.measure(measure([FIVE]))
+  expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual([null])
 })
 
 test('after an in-process /resume the next measure sends no cleared_from', async ($, on) => {
@@ -1882,6 +1937,19 @@ test('a main-thread turn runs transcript-index one second later with the transcr
   expect(indexRan).toEqual([])
   await clock.advance(1_000)
   expect(indexRan).toEqual([{ argv: ['/repo/bin/transcript-index'], timeoutMs: 10_000, stdin: { transcript: TRANSCRIPT, out: INDEX_OUT } }])
+})
+
+test('a /clear while the index timer reads the settings runs no transcript-index', async ($, on) => {
+  const { indexRan, state, clock } = world(on, { files: setting({ handoff: 'off' }) })
+  await idleTurn($)
+  await clock.advance(999)
+  await clock.settle()
+  state.readMs = [500]
+  await clock.advance(1)
+  await $.session.end(clear)
+  await clock.advance(500)
+  await clock.settle()
+  expect(indexRan).toEqual([])
 })
 
 test('a subagent turn runs no transcript-index', async ($, on) => {

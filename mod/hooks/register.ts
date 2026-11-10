@@ -95,6 +95,9 @@ let launchId: string | undefined
 // opens carries no link. A reload drops it too. A /clear of a session with no transcript
 // keeps the earlier link, because that session never gets a row for the next one to link to.
 let clearedFrom: string | undefined
+// Counts session.end events. The cleared_from scan that session.end schedules sets
+// clearedFrom only when no later end has run.
+let endCount = 0
 // Whether this module has cleared the status yet. The engine keeps a plugin's status
 // until the plugin replaces or clears it, and a reload empties handoffs. So a status
 // shown before a reload would otherwise stay for the rest of the process. The first
@@ -178,30 +181,53 @@ async function dashboardSettings($: EngineInterface) {
 // the session started in, every character outside a-z, A-Z and 0-9 replaced by '-'.
 // Claude Code shortens and hashes a very long folder name. $.session.root() follows
 // /cd and a worktree move, so the folder built from it can be the wrong one.
-// The built path is the first guess. On a miss every folder under projects/ is
-// searched for <session id>.jsonl. Null when neither variable is set or no file is
-// found.
-async function transcriptPath($: EngineInterface, root: string, id: string) {
-  const cached = transcripts.get(id)
-  if (cached) return cached
+// findTranscript checks the built path first. On a miss every folder under projects/
+// is searched for <session id>.jsonl. Null when neither variable is set or no file is
+// found. It reads and writes no cache, so a lookup for an ended session leaves nothing
+// behind.
+async function findTranscript($: EngineInterface, root: string, id: string): Promise<string | null> {
   const dir = await configDir($)
   if (!dir) return null
   const projects = `${dir}/projects`
   const folder = projectFolder(root)
   const built = `${projects}/${folder}/${id}.jsonl`
-  let found: string | null = (await $.fs.exists(built)) ? built : null
-  if (!found) {
-    const entries = await $.fs.list(projects).catch(() => [])
-    for (const entry of entries) {
-      if (entry.kind === 'file' || entry.name === folder) continue
-      const candidate = `${projects}/${entry.name}/${id}.jsonl`
-      if (await $.fs.exists(candidate)) {
-        found = candidate
-        break
-      }
-    }
+  if (await $.fs.exists(built)) return built
+  const entries = await $.fs.list(projects).catch(() => [])
+  for (const entry of entries) {
+    if (entry.kind === 'file' || entry.name === folder) continue
+    const candidate = `${projects}/${entry.name}/${id}.jsonl`
+    if (await $.fs.exists(candidate)) return candidate
   }
-  if (found) transcripts.set(id, found)
+  return null
+}
+
+// When the projects/ scan last found nothing for a session id, and the turn count
+// then. While the miss is under TRANSCRIPT_MISS_MS old and the turn count is the same,
+// transcriptPath checks only the built path, so a transcript that does not exist yet
+// does not cost a folder scan on every measure. A new turn or the end of the window
+// searches again. forgetSession drops the entry.
+const TRANSCRIPT_MISS_MS = 30_000
+const transcriptMisses = new Map<string, { at: number; turns: number }>()
+
+// findTranscript, plus the cache in transcripts and the miss window in
+// transcriptMisses.
+async function transcriptPath($: EngineInterface, root: string, id: string) {
+  const cached = transcripts.get(id)
+  if (cached) return cached
+  const miss = transcriptMisses.get(id)
+  if (miss && (await $.clock.now()) - miss.at < TRANSCRIPT_MISS_MS && (await $.session.turns()) === miss.turns) {
+    const dir = await configDir($)
+    if (!dir) return null
+    const built = `${dir}/projects/${projectFolder(root)}/${id}.jsonl`
+    if (!(await $.fs.exists(built))) return null
+  }
+  const found = await findTranscript($, root, id)
+  if (found) {
+    transcripts.set(id, found)
+    transcriptMisses.delete(id)
+  } else {
+    transcriptMisses.set(id, { at: await $.clock.now(), turns: await $.session.turns() })
+  }
   return found
 }
 
@@ -640,6 +666,7 @@ function forgetSession(id: string) {
   runningTools.delete(id)
   endedAgents.delete(id)
   transcripts.delete(id)
+  transcriptMisses.delete(id)
   sessionModes.delete(id)
   lastWriteAt.delete(id)
   writeTimers.get(id)?.cancel()
@@ -1003,10 +1030,13 @@ function queueIndex($: EngineInterface, id: string) {
   indexTimers.get(id)?.cancel()
   const timer = $.clock.after(INDEX_DELAY_MS, () => {
     if (indexTimers.get(id) !== timer) return
-    indexTimers.delete(id)
+    // The timer stays registered until the settings read resolves, so forgetSession
+    // (through cancelIndex) stops a read that is still pending.
     // A timer pending when transcriptIndex was switched off runs nothing.
     dashboardSettings($)
       .then((settings) => {
+        if (indexTimers.get(id) !== timer) return
+        indexTimers.delete(id)
         if (settings.transcriptIndex) startIndex($, id)
       })
       .catch((err) => fail($, `transcript index failed (${errorName(err)})`))
@@ -1040,7 +1070,7 @@ async function existingIndex($: EngineInterface, id: string) {
 // No transcript or no config dir writes nothing and logs nothing: the first turn of
 // a session can end before Claude Code has created its transcript.
 async function writeIndex($: EngineInterface, id: string) {
-  const transcript = await transcriptPath($, await $.session.root(), id)
+  const transcript = transcripts.get(id) ?? (await findTranscript($, await $.session.root(), id))
   const dir = await configDir($)
   if (!transcript || !dir) return
   await run($, 'transcript-index', { transcript, out: indexPath(dir, id) }, INDEX_TIMEOUT_MS)
@@ -1464,14 +1494,21 @@ export const register: Register = (on) => {
     if (fill !== undefined) prefillAfterClear($, fill)
     else if (stored !== undefined) $.ui.status()
     if (stored !== undefined) await deleteStoredHandoff($, e.sessionId)
-    // The lookup follows run, so the script is not delayed, and follows forgetSession,
-    // so transcriptPath checks the file system instead of the dropped cache.
+    // The lookup runs after the hook returns, so it does not count against the hook's
+    // budget. It uses findTranscript, which caches nothing for the ended session. A
+    // later end raises endCount, and the scan then leaves clearedFrom alone.
+    const end = ++endCount
     if (e.reason !== 'clear') clearedFrom = undefined
     else if (!clearedFrom) clearedFrom = e.sessionId
     else {
       // A root that cannot be read leaves clearedFrom as it is.
       const root = await $.session.root().catch(() => null)
-      if (root && (await transcriptPath($, root, e.sessionId).catch(() => null))) clearedFrom = e.sessionId
+      if (root) {
+        $.clock.after(0, async () => {
+          const found = await findTranscript($, root, e.sessionId).catch(() => null)
+          if (found && endCount === end) clearedFrom = e.sessionId
+        })
+      }
     }
     const result = await next(e)
     await running
