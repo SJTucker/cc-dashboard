@@ -70,4 +70,4 @@ test('writeSettings keeps unknown keys', (t) => {
 });
 
 // The mod keeps its own parse in mod/hooks/setup.ts. Its fixtures match
-// test/mod-contract.test.js and 'parseDashboardSettings matches readSettings' in mod/hooks/setup.test.ts.
+// test/mod-contract.test.js and 'parseDashboardSettings matches the server fixtures' in mod/hooks/setup.test.ts.
