@@ -4,6 +4,7 @@ import { baseName, changesFileText, commandPaths, fallbackLabel, cleanLabel, fol
 import type { SetupEntry, SetupState, Snapshot, Watched } from './setup'
 import { projectFolder, rateLimitsInput, statuslineRecord } from './statusline'
 import type { Frozen } from './statusline'
+import { appendChain } from './chain'
 import { newestTool, setState, toolDetail } from './activity'
 import type { Activity, ToolRun } from './activity'
 import { backfillText, errorName, errorText, versionSpan } from './text'
@@ -120,15 +121,17 @@ async function scriptPath($: EngineInterface, name: string) {
   return `${binDir}/${name}`
 }
 
+// Runs a bin/ script with args and stdin, and returns its exit code and output.
+async function spawn($: EngineInterface, name: string, args: string[], stdin: string, timeoutMs: number): Promise<{ exitCode: number; stdout: string; stderr: string }> {
+  return $.process.run([await scriptPath($, name), ...args], { stdin, timeoutMs })
+}
+
 // A bin/ script's fail() prints its own reason to stderr. An uncaught exception prints
 // a file path first, so the first stderr line may hold a path. The 200-character cap
 // keeps the log line short.
 async function run($: EngineInterface, name: string, input: object, timeoutMs: number) {
   try {
-    const { exitCode, stderr } = await $.process.run([await scriptPath($, name)], {
-      stdin: JSON.stringify(input),
-      timeoutMs,
-    })
+    const { exitCode, stderr } = await spawn($, name, [], JSON.stringify(input), timeoutMs)
     if (exitCode !== 0) {
       const reason = (stderr ?? '').split('\n')[0]?.trim().slice(0, 200)
       fail($, `${name} failed (exit ${exitCode})${reason ? `: ${reason}` : ''}`)
@@ -328,7 +331,7 @@ function note($: EngineInterface, text: string) {
 // its stderr when it exits non-zero.
 async function callScript($: EngineInterface, name: string, args: string[], stdin: string, timeoutMs: number): Promise<unknown> {
   const label = [name, ...args.slice(0, 1)].join(' ')
-  const { exitCode, stdout, stderr } = await $.process.run([await scriptPath($, name), ...args], { stdin, timeoutMs })
+  const { exitCode, stdout, stderr } = await spawn($, name, args, stdin, timeoutMs)
   // The name holds only the label and the exit code, so errorName() can log it
   // without quoting stderr, which may hold transcript text.
   if (exitCode !== 0) {
@@ -568,8 +571,7 @@ async function writeActivity($: EngineInterface, id: string) {
 // write is logged, and the chain goes on with the next one.
 function queueWrite($: EngineInterface, id: string) {
   const s = stateOf(id)
-  const previous = s.writes ?? Promise.resolve()
-  s.writes = previous.then(() => writeActivity($, id)).catch((err) => fail($, `activity failed (${errorName(err)})`))
+  s.writes = appendChain(s.writes, () => writeActivity($, id), (err) => fail($, `activity failed (${errorName(err)})`))
 }
 
 // Adds one step to the agent's list and writes the whole list. The first step of an
@@ -593,8 +595,7 @@ async function recordStep($: EngineInterface, agentId: string, step: AgentStep) 
 // Adds a step write to the end of the agent's chain and returns at once. A failed
 // write is logged, and the chain goes on with the next one.
 function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
-  const previous = stepWrites.get(agentId) ?? Promise.resolve()
-  stepWrites.set(agentId, previous.then(() => recordStep($, agentId, step)).catch((err) => fail($, `agent usage failed (${errorName(err)})`)))
+  stepWrites.set(agentId, appendChain(stepWrites.get(agentId), () => recordStep($, agentId, step), (err) => fail($, `agent usage failed (${errorName(err)})`)))
 }
 
 // Drops the agent's steps and its write chain once its last queued write settles.
@@ -630,8 +631,7 @@ async function recordHeadless($: EngineInterface, id: string, cwd: string, chang
 // failed write is logged, and the chain goes on with the next one. cwd is passed in
 // because session.end drops the session's mode before a queued write runs.
 function queueHeadless($: EngineInterface, id: string, cwd: string, change: (h: { steps: HeadlessStep[], reportedCost?: number }) => void) {
-  const previous = headlessWrites.get(id) ?? Promise.resolve()
-  headlessWrites.set(id, previous.then(() => recordHeadless($, id, cwd, change)).catch((err) => fail($, `headless usage failed (${errorName(err)})`)))
+  headlessWrites.set(id, appendChain(headlessWrites.get(id), () => recordHeadless($, id, cwd, change), (err) => fail($, `headless usage failed (${errorName(err)})`)))
 }
 
 // Drops the session's headless record and chain once its last queued write settles,
