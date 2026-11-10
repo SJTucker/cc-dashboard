@@ -351,11 +351,16 @@ async function reviewSession($: EngineInterface, review: Review) {
 }
 
 // Reviews each ended session bin/review-session hands back. A failed review is
-// logged and the rest still run.
+// logged and the rest still run. The `reviews` setting is read before the prompt step
+// and again before each review, so switching it off stops the calls still to come.
+// A claimed review that is skipped stays pending, and lib/review.js retakes it after
+// RETRY_MS.
 async function reviewSessions($: EngineInterface) {
+  if (!(await dashboardSettings($)).reviews) return
   const { reviews } = (await callScript($, 'review-session', ['prompt'], '', REVIEW_PROMPT_TIMEOUT_MS)) as { reviews?: unknown }
   if (!Array.isArray(reviews)) throw new Error('review-session prompt printed no reviews')
   for (const review of reviews as Review[]) {
+    if (!(await dashboardSettings($)).reviews) return
     await reviewSession($, review).catch((err) => note($, `session review failed (${errorText(err)})`))
   }
 }
@@ -1351,7 +1356,8 @@ export const register: Register = (on) => {
   // reviews and the setup check run in interactive sessions only. All three run from
   // timers after session.start returns, because session.start is awaited before the
   // first prompt. A -p or Agent SDK run starts no reviews: it can exit mid-call and
-  // leave claimed sessions pending for an hour.
+  // leave claimed sessions pending for an hour. The reviews setting set to false also
+  // starts none (reviewSessions checks it).
   on('session.start', async ($, e, next) => {
     sessionModes.set(await $.session.id(), { interactive: e.isInteractive, cwd: e.cwd })
     await $.command.register({

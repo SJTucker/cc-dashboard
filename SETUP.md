@@ -103,6 +103,8 @@ behind it, including file reads, scripts and model calls:
   offer and no prefill after `/clear`. A reset line from the orchestrate skill still
   fills. `/transcript-handoff` still works.
 - `transcriptIndex` false: no `bin/transcript-index` run.
+- `reviews` false: no `bin/review-session` run and no Haiku review call. A review
+  already claimed stays pending and is retried an hour later.
 - `setupMarkers` false: no setup check at session start.
 - `setupLabels` false: no Haiku label, release judging or changelog fetch.
 - `activity` false: no `activity/<session id>.json` write.

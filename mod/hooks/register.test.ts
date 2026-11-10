@@ -57,6 +57,8 @@ type World = {
   // Answers bin/cache-state. Its runs go to cacheRan. cacheMs delays the answer on the mock clock.
   cacheState: { exitCode: number; stdout: string; stderr?: string }
   cacheMs: number
+  // Delays each bin/review-session record answer on the mock clock.
+  reviewMs: number
   // What $.session.surfaces returns, and how far clock.now runs ahead of the mock timers.
   surfaces: string[]
   nowOffset: number
@@ -157,6 +159,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     contextTokens: undefined,
     cacheState: { exitCode: 0, stdout: '{}' },
     cacheMs: 0,
+    reviewMs: 0,
     surfaces: ['terminal'],
     nowOffset: 0,
     rootFails: false,
@@ -304,6 +307,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
         // left as text
       }
       reviewRan.push({ argv: e.argv, stdin: parsed, timeoutMs: e.init?.timeoutMs })
+      if (e.argv[1] === 'record' && state.reviewMs > 0) await clock.sleep(state.reviewMs)
       const out = state.reviews[e.argv[1] ?? ''] ?? { exitCode: 1, stdout: '', stderr: 'review-session: no answer set' }
       return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
     }
@@ -862,6 +866,39 @@ test('session.start reviews ended sessions after it returns', async ($, on) => {
   expect(reviewRan[0]?.timeoutMs).toBe(60000)
   expect(asked).toEqual([{ model: 'haiku', system: 'REVIEW SYSTEM', prompt: 'USER: fix it', maxTokens: 1024, effort: 'low', timeoutMs: 60000 }])
   expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', reply: '{"suggestions":[]}' })
+})
+
+test('reviews off: session.start runs no review-session and makes no Haiku call', async ($, on) => {
+  const { reviewRan, asked, clock } = world(on, { files: { ...judged, ...setting({ reviews: false }) }, reviews: reviewing() })
+  await $.session.start(start)
+  await clock.settle()
+  expect(reviewRan).toEqual([])
+  expect(asked).toEqual([])
+})
+
+test('reviews off: a /clear starts no review', async ($, on) => {
+  const { reviewRan, asked, clock } = world(on, { files: { ...judged, ...setting({ reviews: false }) }, reviews: reviewing() })
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  expect(reviewRan).toEqual([])
+  expect(asked).toEqual([])
+})
+
+test('reviews switched off while a claimed batch runs stops the remaining Haiku calls', async ($, on) => {
+  const { reviewRan, asked, state, clock } = world(on, {
+    files: { ...judged },
+    reviewMs: 1_000,
+    reviews: reviewing([REVIEW, { ...REVIEW, sessionId: 'older' }]),
+    replies: [{ isAnswered: true, text: '{"suggestions":[]}' }, { isAnswered: true, text: '{"suggestions":[]}' }],
+  })
+  await $.session.start(start)
+  await clock.advance(1)
+  expect(asked.length).toBe(1)
+  state.files[DASH_SETTINGS] = '{"reviews":false}'
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(asked.length).toBe(1)
+  expect(reviewRan.map((r) => r.argv[1])).toEqual(['prompt', 'record'])
 })
 
 test('no ended session means no Haiku call', async ($, on) => {
