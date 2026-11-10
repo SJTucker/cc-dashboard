@@ -148,9 +148,17 @@ test('waiting activity says Waiting for you with the last reply', () => {
 test('working activity describes the latest tool step', () => {
   const s = orchestration();
   const parsed = parseOrchestrator(s.lines);
-  const now = nowLine(parsed, stepsFor(s), { state: 'working', tool: { name: 'Bash' }, since: T0 }, true);
+  const now = nowLine(parsed, stepsFor(s), { state: 'working', tool: null, since: T0 }, true);
   assert.equal(now.state, 'working');
   assert.equal(now.text, 'Merged Task 1');
+});
+
+test('a latest SendMessage step reads Steered Task N with the summary', () => {
+  const s = orchestration().use('SendMessage', { to: 'a1', summary: 'rebase first', message: 'long' });
+  const parsed = parseOrchestrator(s.lines);
+  const now = nowLine(parsed, stepsFor(s), { state: 'working', tool: null, since: T0 }, true);
+  assert.equal(now.text, 'Steered Task 1');
+  assert.equal(now.detail, 'rebase first');
 });
 
 test('working with a latest step that has no mapping says Working', () => {
