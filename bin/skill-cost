@@ -1,0 +1,164 @@
+#!/usr/bin/env node
+'use strict';
+
+// Compares the token cost of sessions that ran the orchestrate skill with sessions
+// that ran superpowers:subagent-driven-development (SDD), per subagent and per 100
+// lines changed, and pairs runs of similar size. Read-only.
+//
+// Usage: bin/skill-cost [--since YYYY-MM-DD] [--min-subagents N] [--size-band F]
+//                       [--until <sessionIdPrefix>=<ISO time>]... [--json]
+// It reads <cfg>/projects/**/*.jsonl and each session's subagents' transcripts, and
+// runs read-only git through lib/extract.js to count commits. A session can hold several segments. A segment starts at a skill marker and ends at a
+// marker of the other skill, at a finishing-a-development-branch call, at --until, or
+// at the session's last line. --since is UTC midnight and filters on a run's first
+// segment start. A planning session whose execution prompt was not the reset line does
+// not name the plan path, so it shows as its own run. Exit 0 on success, 1 on a bad
+// argument.
+
+const fs = require('fs');
+const path = require('path');
+const { parseArgs } = require('util');
+const { loadConfig } = require('../lib/config-dir');
+const { getProjectsDir, findJsonlFiles } = require('../lib/transcript-files');
+const { extractFile } = require('../lib/extract');
+const { lineRows } = require('../lib/lines');
+const { costForUsage } = require('../lib/pricing');
+const sc = require('../lib/skill-cost');
+
+function fail(message) {
+  process.stderr.write(`skill-cost: ${message}\n`);
+  process.exit(1);
+}
+
+// The first timestamp of a transcript, read from its first lines only.
+function firstTimestamp(file) {
+  const fd = fs.openSync(file, 'r');
+  try {
+    const buf = Buffer.alloc(65536);
+    const n = fs.readSync(fd, buf, 0, buf.length, 0);
+    for (const line of buf.toString('utf8', 0, n).split('\n')) {
+      try {
+        const t = Date.parse(JSON.parse(line).timestamp);
+        if (Number.isFinite(t)) return t;
+      } catch { /* a cut or non-JSON line */ }
+    }
+  } finally {
+    fs.closeSync(fd);
+  }
+  return null;
+}
+
+const inside = (seg) => (t) => t == null || (t >= seg.start && t <= seg.end);
+
+// The cost, edits and commits of one run, deduping calls on their key. A call with no
+// key is counted every time, as lib/aggregate.js does.
+async function measureRun(run) {
+  const seen = new Set();
+  const m = { mainCost: 0, subCost: 0, subagents: 0, prompts: 0 };
+  const edits = [];
+  const commits = [];
+  const add = (calls, key) => {
+    for (const c of calls) {
+      if (c.key) {
+        if (seen.has(c.key)) continue;
+        seen.add(c.key);
+      }
+      m[key] += costForUsage(c.usage, c.model, c.t).cost;
+    }
+  };
+  for (const item of run.items) {
+    const seg = item.segment;
+    const ok = inside(seg);
+    const main = await extractFile(item.file);
+    add(main.calls.filter((c) => ok(c.t) && !c.sidechain), 'mainCost');
+    add(main.calls.filter((c) => ok(c.t) && c.sidechain), 'subCost');
+    edits.push(...main.edits.filter((e) => ok(e.t)));
+    commits.push(...sc.ownCommits(main.commits.filter((c) => ok(c.t)), seg.start));
+    m.prompts += item.scan.prompts.filter((t) => ok(t)).length;
+    const subDir = path.join(path.dirname(item.file), item.id, 'subagents');
+    let names = [];
+    try {
+      names = fs.readdirSync(subDir).filter((n) => /^agent-.*\.jsonl$/.test(n));
+    } catch { /* no subagents */ }
+    for (const name of names) {
+      const file = path.join(subDir, name);
+      const t0 = firstTimestamp(file);
+      if (t0 == null || !ok(t0)) continue;
+      m.subagents += 1;
+      const sub = await extractFile(file);
+      add(sub.calls, 'subCost');
+      edits.push(...sub.edits);
+      commits.push(...sc.ownCommits(sub.commits, seg.start));
+    }
+  }
+  const rows = lineRows(sc.dropContextImages(edits), commits);
+  m.added = rows.reduce((a, r) => a + r.added, 0);
+  m.removed = rows.reduce((a, r) => a + r.removed, 0);
+  return m;
+}
+
+async function main() {
+  let values;
+  try {
+    ({ values } = parseArgs({
+      options: {
+        since: { type: 'string' },
+        'min-subagents': { type: 'string', default: '5' },
+        'size-band': { type: 'string', default: '0.5' },
+        until: { type: 'string', multiple: true, default: [] },
+        json: { type: 'boolean', default: false },
+      },
+    }));
+  } catch (err) {
+    return fail(err.message);
+  }
+  const since = values.since ? Date.parse(`${values.since}T00:00:00Z`) : null;
+  if (values.since && !Number.isFinite(since)) return fail('--since needs YYYY-MM-DD');
+  const minSubagents = Number(values['min-subagents']);
+  const band = Number(values['size-band']);
+  if (!Number.isInteger(minSubagents) || minSubagents < 0) return fail('--min-subagents needs a whole number');
+  if (!(band >= 0)) return fail('--size-band needs a number such as 0.5');
+  const untils = [];
+  for (const arg of values.until) {
+    const u = sc.parseUntil(arg);
+    if (!u) return fail(`--until needs <sessionIdPrefix>=<ISO time>, got ${arg}`);
+    untils.push(u);
+  }
+
+  const projects = getProjectsDir(loadConfig().configDir);
+  const items = [];
+  for (const file of findJsonlFiles(projects)) {
+    if (file.includes(`${path.sep}subagents${path.sep}`)) continue;
+    // A planning session can start days before its execution session, so keep a margin.
+    if (since != null && fs.statSync(file).mtimeMs < since - 3 * 86400e3) continue;
+    const text = fs.readFileSync(file, 'utf8');
+    if (!text.includes('orchestrate') && !text.includes('subagent-driven-development')) continue;
+    const id = path.basename(file, '.jsonl');
+    const scan = sc.scanSession(text);
+    for (const segment of sc.segmentsOf(scan, id, untils)) items.push({ file, id, project: path.basename(path.dirname(file)), scan, segment });
+  }
+
+  const runs = [];
+  for (const run of sc.pairRuns(items)) {
+    const start = run.items[0].segment.start;
+    if (since != null && start < since) continue;
+    const metrics = sc.runMetrics(await measureRun(run));
+    runs.push({
+      skill: run.skill,
+      start,
+      sessionIds: [...new Set(run.items.map((i) => i.id.slice(0, 8)))],
+      project: run.items[0].project,
+      ...metrics,
+    });
+  }
+
+  const summary = sc.summarise(runs, { minSubagents });
+  const similar = sc.similarSize(runs, { minSubagents, band });
+  if (values.json) {
+    process.stdout.write(`${JSON.stringify({ runs, summary, similar: { overall: similar.overall, pairs: similar.pairs.map((p) => ({ session: p.run.sessionIds, matches: p.matches.map((s) => s.sessionIds), medianMatches: p.medianMatches })) } }, null, 2)}\n`);
+  } else {
+    process.stdout.write(`${sc.renderText(runs, summary, similar, { minSubagents })}\n`);
+  }
+}
+
+main().catch((err) => fail(err.stack || String(err)));

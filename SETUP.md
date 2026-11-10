@@ -223,6 +223,27 @@ subagent, and the dashboard counts from the transcript instead:
 
 Each refresh runs the whole statusline script, so keep the script fast.
 
+## Compare the cost of two skills
+
+`bin/skill-cost` compares sessions that ran the `orchestrate` skill with sessions
+that ran `superpowers:subagent-driven-development`, per subagent and per 100 lines
+changed, and pairs runs of similar size. It only reads `<cfg>/projects/` and runs
+read-only git, and a run over a few weeks takes a minute or two.
+
+```bash
+bin/skill-cost --since 2026-10-20 [--min-subagents 5] [--size-band 0.5] [--json]
+```
+
+A session can hold several segments. A segment starts at a skill marker (a `Skill`
+call or the typed slash command) and ends at a marker of the other skill, at a
+`superpowers:finishing-a-development-branch` call, at `--until`, or at the session's
+last line. `--until <sessionIdPrefix>=<ISO time>` cuts one session's segment early.
+`--since` is UTC midnight and filters on a run's first segment start. A planning
+session pairs with its execution session through the plan path (an absolute `.md`
+path the model wrote after "You are the orchestrator for"). When the execution
+prompt was not the reset line, the planning session does not name the plan path and
+shows as its own run. Edits under `docs/superpowers/images/` do not count as lines.
+
 ## rtk
 
 The two rtk panels read rtk's `history.db` read-only. The default path is
@@ -263,7 +284,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 
 | Path | Override | Written by |
 |---|---|---|
-| `<cfg>/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` | Claude Code |
+| `<cfg>/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` | Claude Code. `bin/skill-cost` also reads each session's `subagents/agent-*.jsonl` transcripts, read-only. |
 | `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/plugins/installed_plugins.json` | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/plugins/store/cc-dashboard_<id>.json` | `CLAUDE_CONFIG_DIR` | Claude Code, for the mod's key-value store. It holds the update check, the setup snapshots, and a ready handoff's resume prompt per session until that session's next prompt or end. |
@@ -288,7 +309,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/usage-refresh/` | `CLAUDE_CONFIG_DIR` | the server. It is the working folder of the headless `/usage` runs and stays empty. Claude Code also creates a matching empty project folder under `<cfg>/projects/`. The runs write no transcript. |
 | `<cfg>/cc-dashboard/transcripts.db` | `CLAUDE_CONFIG_DIR` | the server, `bin/review-session`. It also holds the repo path of each edit, the rows of `agent-usage/` files, the call rows of `headless-usage/` files, for each session the text of Claude Code's last away-summary recap (the `away_summary` line it writes when you return to an idle session), the length in characters of each tool result (not its text), each main-loop turn's duration from Claude Code's `turn_duration` lines, and a group for each Bash command: the program, plus the next word when that word is a word or a flag (such as `sed -n` or `git diff`). |
 | `.git` in the folders above each edited file | none | git. The server reads it to find the repo of each file that an Edit or Write call changed. For stored rows of deleted transcripts, it instead lists the folders on the path that the transcript folder's name encodes. |
-| The git repos where a session ran `git commit` through Bash | none | git. The server runs `git rev-parse --show-toplevel`, `git log --numstat` (on `HEAD`, then `--all` when HEAD has nothing in the window), `git log -g HEAD`, `git diff --numstat`, `git patch-id` and `git check-attr` (which reads `.gitattributes` for `linguist-generated` and `linguist-vendored`) there, read-only, to count the lines of the commits made during each call. When the folder is gone, it falls back to the repo the folder name encodes. |
+| The git repos where a session ran `git commit` through Bash | none | git. The server and `bin/skill-cost` run `git rev-parse --show-toplevel`, `git log --numstat` (on `HEAD`, then `--all` when HEAD has nothing in the window), `git log -g HEAD`, `git diff --numstat`, `git patch-id` and `git check-attr` (which reads `.gitattributes` for `linguist-generated` and `linguist-vendored`) there, read-only, to count the lines of the commits made during each call. When the folder is gone, it falls back to the repo the folder name encodes. |
 | `<cfg>/projects/**/subagents/agent-<id>.meta.json` | `CLAUDE_CONFIG_DIR` | Claude Code. `bin/transcript-index --steps` and `--watch` read the one beside the worker transcript they are given, for the agent's description, type, model and finished flag. |
 | A board file, at the path its first argument names | none | `bin/board-post`, one JSON line per post. The orchestrate skill puts it beside its context image, at `<project>/docs/superpowers/images/<name>.board.jsonl`. `bin/transcript-index --watch --board` reads it. |
 | rtk's `history.db` | `RTK_DB` | rtk |
