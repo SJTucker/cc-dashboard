@@ -7,8 +7,8 @@ const os = require('node:os');
 const path = require('node:path');
 const { parseOrchestrator } = require('../lib/orchestrations/parse');
 const { writeOrchestration } = require('./orchestration-fixture');
-const { stepsOf, contextTokens } = require('../lib/transcript-index');
-const { readSessions, getSessionsDir } = require('../lib/sessions');
+const { stepsOf, contextTokens, watchEvents } = require('../lib/transcript-index');
+const { readSessions, getSessionsDir, LIVE_WINDOW_MS } = require('../lib/sessions');
 
 // Record helpers in the shapes Claude Code writes.
 let clock = 0;
@@ -121,6 +121,40 @@ test('steers and merges are attributed to tasks', () => {
   assert.deepEqual(r.merges.map((m) => [m.task, m.line]), [[1, 9]]);
 });
 
+test('git merge-base, merge-tree and merge --abort are not merges', () => {
+  const lines = [
+    ...orchestratorLines(),
+    assistant(use('Bash', { command: 'git merge-base --is-ancestor demo-t1 demo' }, 'g1')),
+    assistant(use('Bash', { command: 'git merge-tree demo demo-t1' }, 'g2')),
+    assistant(use('Bash', { command: 'git merge --abort' }, 'g3')),
+  ];
+  assert.deepEqual(parseOrchestrator(lines).merges, []);
+});
+
+test('merges are limited to the branch derived from worker switches when no plan switch exists', () => {
+  const lines = [
+    typed('go'),
+    assistant(use('Skill', { skill: 'orchestrate' }, 'sk')),
+    assistant(use('Bash', { command: 'wt switch --create demo-t1 --base demo --no-cd' }, 'b1')),
+    assistant(use('Bash', { command: 'git merge demo-t1' }, 'g1')),
+    assistant(use('Bash', { command: 'git merge other-t2' }, 'g2')),
+  ];
+  assert.deepEqual(parseOrchestrator(lines).merges.map((m) => m.task), [1]);
+});
+
+test('merges are limited to the branch derived from a worker worktree when no switch exists', () => {
+  const lines = [
+    typed('go'),
+    assistant(use('Skill', { skill: 'orchestrate' }, 'sk')),
+    ...launch('ag1', 'aaa1', 'Task 1 worker', workerPrompt(1)),
+    assistant(use('Bash', { command: 'git merge other-t3' }, 'g0')),
+    assistant(use('Bash', { command: 'git merge demo-t1' }, 'g1')),
+  ];
+  const r = parseOrchestrator(lines);
+  assert.equal(r.branch, 'demo');
+  assert.deepEqual(r.merges.map((m) => m.task), [1]);
+});
+
 test('finishing is set by the finishing skill', () => {
   assert.equal(parseOrchestrator(orchestratorLines()).finishing, false);
   const lines = [...orchestratorLines(), assistant(use('Skill', { skill: 'superpowers:finishing-a-development-branch' }, 'fin'))];
@@ -182,4 +216,36 @@ test('the fixture writes clearedFrom, an ended snapshot and a reset line as the 
   const r = parseOrchestrator(fs.readFileSync(out.transcript, 'utf8').split('\n').filter(Boolean));
   assert.equal(r.isOrchestrator, true);
   assert.equal(r.imagePath, out.imagePath);
+});
+
+test('watchEvents reports a finished fixture worker as done with its report, and a running one as not done', () => {
+  const cfg = tmpDir();
+  const out = writeOrchestration(cfg, {
+    topic: 'demo',
+    sessionId: 'sess-w',
+    workers: [
+      { task: 1, title: 'Parse the field', files: ['lib/parse.js'], steps: [{ tool: 'Edit', file_path: 'lib/parse.js' }], finished: true },
+      { task: 2, title: 'Render it', files: ['public/a.mjs'], steps: [{ tool: 'Edit', file_path: 'public/a.mjs' }] },
+    ],
+  });
+  const read = (id) => fs.readFileSync(path.join(path.dirname(out.transcript), 'sess-w', 'subagents', `agent-${id}.jsonl`), 'utf8').split('\n').filter(Boolean);
+  const watch = (lines, finished) => {
+    const opts = { files: undefined, budget: 120000, finished };
+    const first = watchEvents(lines, null, opts);
+    return watchEvents(lines, first.seen, opts);
+  };
+  const done = watch(read(out.workerIds[0]), true);
+  assert.equal(done.done, true);
+  assert.ok(done.events.some((e) => /^DONE Task 1 done: Parse the field/.test(e)), done.events.join('|'));
+  const running = watch(read(out.workerIds[1]), false);
+  assert.equal(running.done, false);
+  assert.ok(!running.events.some((e) => e.startsWith('DONE')));
+});
+
+test('a live fixture snapshot counts as live by the sessions rule', () => {
+  const cfg = tmpDir();
+  writeOrchestration(cfg, { topic: 'demo', sessionId: 'sess-live', live: true, workers: [] });
+  const [s] = readSessions(getSessionsDir(cfg));
+  assert.equal(typeof s.endedAt, 'undefined');
+  assert.ok(Date.now() - s.lastActiveAt <= LIVE_WINDOW_MS);
 });
