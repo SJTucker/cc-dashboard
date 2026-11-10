@@ -3371,3 +3371,19 @@ test('a session.end during the transcript lookup of a handoff leaves no status a
   expect(statuses).not.toContain(READY)
   expect(Object.keys(state.store).filter((key) => key.startsWith('handoff:'))).toEqual([])
 })
+
+test('a turn.start during the transcript lookup of a handoff leaves no status and no stored handoff', async ($, on) => {
+  const gate = gateNext(on, 'fs.exists')
+  const { statuses, state, clock } = world(gate.gated, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  gate.arm()
+  const fired = clock.set(FIRE)
+  await gate.reached
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  gate.open()
+  await fired
+  await clock.settle()
+  expect(statuses).not.toContain(READY)
+  expect(Object.keys(state.store).filter((key) => key.startsWith('handoff:'))).toEqual([])
+})

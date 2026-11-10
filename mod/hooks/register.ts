@@ -1004,8 +1004,12 @@ async function fireHandoff($: EngineInterface, id: string, expiresAt: number, fi
   const current = peekState(id)
   if (current?.activity?.state !== 'waiting' || current.handoff) return
   if (mode === 'off') return
-  if (handoffKind(mode, renewed.expiresAt, now) === 'document') await startHandoff($, id)
-  else await readyHandoff($, id)
+  if (handoffKind(mode, renewed.expiresAt, now) === 'document') return startHandoff($, id)
+  // The 'writing' entry is the guard, so a turn.start or a /clear during the lookups in
+  // readyHandoff removes it and markReady then changes nothing.
+  const entry: Handoff = { state: 'writing' }
+  stateOf(id).handoff = entry
+  await readyHandoff($, id, entry)
 }
 
 // A prompt makes the handoff out of date, so turn.start drops it and clears the
@@ -1347,7 +1351,7 @@ const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readi
 // A module variable, so a reload drops it. The next measure starts the timer again.
 let recheck: Timer | undefined
 
-// Counts Dismiss presses. A measure or recheck that read the levels file before a Dismiss ran keeps the band's levels.
+// Changes at the start and at the end of each Dismiss. A measure or recheck that read the levels file before a Dismiss ran keeps the band's levels.
 let bandDismissals = 0
 
 const limitsFile = (dir: string) => `${dir}/cc-dashboard/limit-warnings.json`
@@ -1385,7 +1389,8 @@ async function measureBand($: EngineInterface, limits: readonly SessionRateLimit
     // write stays unsaved.
     if (bandDismissals === seq) {
       if (!sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
-      await update($, band, (b) => ({ ...b, unsaved: false }))
+      // A Dismiss that started during the write owns the unsaved flag.
+      if (bandDismissals === seq) await update($, band, (b) => ({ ...b, unsaved: false }))
     }
   }
   // A claude -p session shows no band, so it reads nothing on a timer.
