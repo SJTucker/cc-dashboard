@@ -10,6 +10,7 @@ const { readActivity } = require('../lib/activity');
 const { readAgentSteps } = require('../lib/agent-steps');
 const { readHeadlessUsage } = require('../lib/headless-usage');
 const { collectMarkers } = require('../lib/changes');
+const { readSettings, getSettingsPath } = require('../lib/settings');
 
 // The mod test runner refuses to import a .json file, so the entries live in
 // register.test.ts between two marker comments, as strict JSON.
@@ -122,4 +123,22 @@ test('each reader skips a truncated copy of its sample without throwing', async 
   fs.writeFileSync(path.join(changesDir, 's1.json'), cut(CONTRACT.changes));
   const { markers } = collectMarkers([{ t: CONTRACT.changes[0].t - 7 * 24 * 60 * 60 * 1000, model: 'm' }], { configDir: base, changesFile: path.join(base, 'none.json') });
   assert.deepStrictEqual(markers, []);
+});
+
+// This file loads no mod code, so the mod side lives in mod/hooks/setup.test.ts, test
+// 'parseDashboardSettings matches the server fixtures'. Keep the two fixture lists identical.
+test('mod and server parse settings.json alike', (t) => {
+  const defaults = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true };
+  const fixtures = [
+    ['', defaults],
+    ['[]', defaults],
+    ['{"handoff":"off","activity":false}', { ...defaults, handoff: 'off', activity: false }],
+    ['{"handoff":7}', defaults],
+  ];
+  for (const [text, expected] of fixtures) {
+    const cfg = tmpDir(t, 'mod-contract');
+    fs.mkdirSync(path.dirname(getSettingsPath(cfg)), { recursive: true });
+    fs.writeFileSync(getSettingsPath(cfg), text);
+    assert.deepStrictEqual(readSettings(cfg), expected, JSON.stringify(text));
+  }
 });

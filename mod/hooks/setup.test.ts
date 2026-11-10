@@ -141,11 +141,28 @@ test('changesFileText appends new entries to an earlier array and ignores anythi
   expect(changesFileText([], [entry]).endsWith(']\n')).toBe(true)
 })
 
+const SETTING_DEFAULTS = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true }
+
+test('parseDashboardSettings defaults every key', async () => {
+  for (const text of ['', '[]', 'null', 'nope', undefined]) expect(parseDashboardSettings(text)).toEqual(SETTING_DEFAULTS)
+})
+
+test('parseDashboardSettings reads an unknown handoff value as document', async () => {
+  expect(parseDashboardSettings('{"handoff":"fork"}').handoff).toBe('document')
+  expect(parseDashboardSettings('{"handoff":7}').handoff).toBe('document')
+  expect(parseDashboardSettings('{"handoff":"transcript"}').handoff).toBe('transcript')
+})
+
 test('parseDashboardSettings counts only false as off', async () => {
-  expect(parseDashboardSettings('{"setupLabels":false}')).toEqual({ reviews: true, setupLabels: false })
-  expect(parseDashboardSettings('{"reviews":false}')).toEqual({ reviews: false, setupLabels: true })
-  expect(parseDashboardSettings('{"setupLabels":"no"}')).toEqual({ reviews: true, setupLabels: true })
-  expect(parseDashboardSettings('')).toEqual({ reviews: true, setupLabels: true })
-  expect(parseDashboardSettings('[]')).toEqual({ reviews: true, setupLabels: true })
-  expect(parseDashboardSettings(undefined)).toEqual({ reviews: true, setupLabels: true })
+  expect(parseDashboardSettings('{"activity":0,"limitBand":false,"reviews":"no"}')).toEqual({ ...SETTING_DEFAULTS, limitBand: false })
+  expect(parseDashboardSettings('{"setupLabels":false}')).toEqual({ ...SETTING_DEFAULTS, setupLabels: false })
+})
+
+// Same fixtures as test/mod-contract.test.js, which checks lib/settings.js readSettings
+// against these expected objects. Keep the two lists identical.
+test('parseDashboardSettings matches the server fixtures', async () => {
+  expect(parseDashboardSettings('')).toEqual(SETTING_DEFAULTS)
+  expect(parseDashboardSettings('[]')).toEqual(SETTING_DEFAULTS)
+  expect(parseDashboardSettings('{"handoff":"off","activity":false}')).toEqual({ ...SETTING_DEFAULTS, handoff: 'off', activity: false })
+  expect(parseDashboardSettings('{"handoff":7}')).toEqual(SETTING_DEFAULTS)
 })
