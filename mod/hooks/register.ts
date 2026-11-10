@@ -72,6 +72,11 @@ const RECORD_TIMEOUT_MS = 10_000
 // review-session prompt reads up to three transcripts in full.
 const REVIEW_PROMPT_TIMEOUT_MS = 60_000
 const MODEL_TIMEOUT_MS = 60_000
+// Output limits of the Haiku calls: the release judging batch, the session review and
+// the setup change labels.
+const JUDGE_MAX_TOKENS = 2048
+const REVIEW_MAX_TOKENS = 1024
+const LABEL_MAX_TOKENS = 2048
 const RETRY_MS = 60 * 60 * 1000
 
 // `claude plugin validate` refuses a function that takes $ unless it is declared at
@@ -105,7 +110,7 @@ let endCount = 0
 // turn.start after a load clears it once, and deletes the session's stored handoff.
 let statusCleared = false
 
-function fail($: EngineInterface, text: string) {
+function logOnce($: EngineInterface, text: string) {
   if (logged.has(text)) return
   logged.add(text)
   $.ui.log(text)
@@ -134,10 +139,10 @@ async function run($: EngineInterface, name: string, input: object, timeoutMs: n
     const { exitCode, stderr } = await spawn($, name, [], JSON.stringify(input), timeoutMs)
     if (exitCode !== 0) {
       const reason = (stderr ?? '').split('\n')[0]?.trim().slice(0, 200)
-      fail($, `${name} failed (exit ${exitCode})${reason ? `: ${reason}` : ''}`)
+      logOnce($, `${name} failed (exit ${exitCode})${reason ? `: ${reason}` : ''}`)
     }
   } catch (err) {
-    fail($, `${name} failed (${err instanceof Error ? err.name : 'error'})`)
+    logOnce($, `${name} failed (${err instanceof Error ? err.name : 'error'})`)
   }
 }
 
@@ -214,7 +219,7 @@ async function configDir($: EngineInterface) {
 const LABELS_OFF_TEXT = "Haiku labels are off in the dashboard's Setup changes panel. Turn them on to judge Claude Code releases."
 
 // Reads <config dir>/cc-dashboard/settings.json. A missing dir or a failed read gives
-// both switches on.
+// every setting its default.
 async function dashboardSettings($: EngineInterface) {
   const dir = await configDir($)
   const text = dir ? await $.fs.read(`${dir}/cc-dashboard/settings.json`).then(String, () => undefined) : undefined
@@ -246,8 +251,8 @@ async function findTranscript($: EngineInterface, root: string, id: string): Pro
   return null
 }
 
-// When the projects/ scan last found nothing for a session id, and the turn count
-// then. While the miss is under TRANSCRIPT_MISS_MS old and the turn count is the same,
+// Records when the projects/ scan last found nothing for a session id, and the turn
+// count at that time. While the miss is under TRANSCRIPT_MISS_MS old and the turn count is the same,
 // transcriptPath checks only the built path, so a transcript that does not exist yet
 // does not cost a folder scan on every measure. A new turn or the end of the window
 // searches again. forgetSession drops the entry. It stays outside the session record,
@@ -255,7 +260,8 @@ async function findTranscript($: EngineInterface, root: string, id: string): Pro
 const TRANSCRIPT_MISS_MS = 30_000
 const transcriptMisses = new Map<string, { at: number; turns: number }>()
 
-// Ids of sessions that ended, oldest first, at most ENDED_SESSIONS_MAX. A hook that
+// Ids of sessions that ended, oldest first, at most ENDED_SESSIONS_MAX. forgetSession
+// adds the ids. A hook that
 // awaits while session.end runs checks it before it creates state or a timer for the
 // id. session.start and turn.start remove the id, because a session that starts or
 // takes a prompt is live again. It stays outside the session record, because it must
@@ -306,7 +312,7 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
     // The first prompt writes the transcript, and a session's first measure arrives
     // before it, carrying cost { usd: 0 }. Before a prompt there is no session to
     // record yet, and the next measure retries.
-    if ((await $.session.turns()) > 0) fail($, 'transcript not found')
+    if ((await $.session.turns()) > 0) logOnce($, 'transcript not found')
     return null
   }
   // Read the clock before the check so no await sits between the check and the
@@ -322,8 +328,8 @@ type Batch = { versions: string[]; system: string; prompt: string }
 type Review = { sessionId: string; system: string; prompt: string }
 
 // Every update failure is logged. They happen at most once per Claude Code release,
-// so the once-only rule in fail() would hide the one that matters.
-function note($: EngineInterface, text: string) {
+// so the once-only rule in logOnce() would hide the one that matters.
+function logEach($: EngineInterface, text: string) {
   $.ui.log(text)
 }
 
@@ -355,7 +361,7 @@ async function judgeBatch($: EngineInterface, batch: Batch, judged: Judged) {
       model: 'haiku',
       system: batch.system,
       prompt: batch.prompt,
-      maxTokens: 2048,
+      maxTokens: JUDGE_MAX_TOKENS,
       effort: 'low',
       timeoutMs: MODEL_TIMEOUT_MS,
     })
@@ -421,7 +427,7 @@ async function reviewSession($: EngineInterface, review: Review) {
         model: 'haiku',
         system: review.system,
         prompt: review.prompt,
-        maxTokens: 1024,
+        maxTokens: REVIEW_MAX_TOKENS,
         effort: 'low',
         timeoutMs: MODEL_TIMEOUT_MS,
       }),
@@ -443,14 +449,14 @@ async function reviewSessions($: EngineInterface) {
   if (!Array.isArray(reviews)) throw new Error('review-session prompt printed no reviews')
   for (const review of reviews as Review[]) {
     if (!(await dashboardSettings($)).reviews) return
-    await reviewSession($, review).catch((err) => note($, `session review failed (${errorText(err)})`))
+    await reviewSession($, review).catch((err) => logEach($, `session review failed (${errorText(err)})`))
   }
 }
 
 // From a timer, so the hook that calls it returns first.
 function startReviews($: EngineInterface) {
   $.clock.after(0, () => {
-    reviewSessions($).catch((err) => note($, `session review failed (${errorText(err)})`))
+    reviewSessions($).catch((err) => logEach($, `session review failed (${errorText(err)})`))
   })
 }
 
@@ -473,7 +479,7 @@ async function checkVersion($: EngineInterface) {
   const text = await $.fs.read(file).then(String, () => undefined)
   const parsed = parseVerdicts(text)
   if ('error' in parsed) {
-    note($, `${file} is not ${parsed.error === 'not-json' ? 'valid JSON' : 'a JSON object'}; fix or delete it`)
+    logEach($, `${file} is not ${parsed.error === 'not-json' ? 'valid JSON' : 'a JSON object'}; fix or delete it`)
     return
   }
   const { verdicts } = parsed
@@ -486,7 +492,7 @@ async function checkVersion($: EngineInterface) {
   if (last?.version === base && typeof last.at === 'number' && now - last.at < RETRY_MS) return
   await $.store.set('updateCheck', { version: base, at: now })
   const judged = await judgeUpdates($, base)
-  for (const failure of judged.failed) note($, failure)
+  for (const failure of judged.failed) logEach($, failure)
 }
 
 // What the Live sessions panel shows as State and Doing now. One state object per
@@ -558,7 +564,7 @@ async function writeActivity($: EngineInterface, id: string) {
 // write is logged, and the chain goes on with the next one.
 function queueWrite($: EngineInterface, id: string) {
   const s = stateOf(id)
-  s.writes = appendChain(s.writes, () => writeActivity($, id), (err) => fail($, `activity failed (${errorName(err)})`))
+  s.writes = appendChain(s.writes, () => writeActivity($, id), (err) => logOnce($, `activity failed (${errorName(err)})`))
 }
 
 // Adds one step to the agent's list and writes the whole list. The first step of an
@@ -582,7 +588,7 @@ async function recordStep($: EngineInterface, agentId: string, step: AgentStep) 
 // Adds a step write to the end of the agent's chain and returns at once. A failed
 // write is logged, and the chain goes on with the next one.
 function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
-  stepWrites.set(agentId, appendChain(stepWrites.get(agentId), () => recordStep($, agentId, step), (err) => fail($, `agent usage failed (${errorName(err)})`)))
+  stepWrites.set(agentId, appendChain(stepWrites.get(agentId), () => recordStep($, agentId, step), (err) => logOnce($, `agent usage failed (${errorName(err)})`)))
 }
 
 // Drops the agent's steps and its write chain once its last queued write settles.
@@ -618,7 +624,7 @@ async function recordHeadless($: EngineInterface, id: string, cwd: string, chang
 // failed write is logged, and the chain goes on with the next one. cwd is passed in
 // because session.end drops the session's mode before a queued write runs.
 function queueHeadless($: EngineInterface, id: string, cwd: string, change: (h: { steps: HeadlessStep[], reportedCost?: number }) => void) {
-  headlessWrites.set(id, appendChain(headlessWrites.get(id), () => recordHeadless($, id, cwd, change), (err) => fail($, `headless usage failed (${errorName(err)})`)))
+  headlessWrites.set(id, appendChain(headlessWrites.get(id), () => recordHeadless($, id, cwd, change), (err) => logOnce($, `headless usage failed (${errorName(err)})`)))
 }
 
 // Drops the session's headless record and chain once its last queued write settles,
@@ -685,20 +691,20 @@ async function track($: EngineInterface, change: (a: Activity, now: number, s: S
             current.lastWriteAt = at
             queueWrite($, id)
           })
-          .catch((err) => fail($, `activity failed (${errorName(err)})`))
+          .catch((err) => logOnce($, `activity failed (${errorName(err)})`))
       })
       s.writeTimer = timer
     }
   } catch (err) {
-    fail($, `activity failed (${errorName(err)})`)
+    logOnce($, `activity failed (${errorName(err)})`)
   }
 }
 
 // Releases everything held for a session that ended: it cancels the record's write,
 // handoff and index timers and deletes the record. A throttle timer that has not fired
 // therefore never queues a write. A timer callback already waiting on clock.now finds
-// no activity for the id and returns, so it queues no write either. A write already queued finds no state in writeActivity and writes
-// nothing. A write already inside fs.write finishes, and writeActivity does not
+// no activity for the id and returns, so it queues no write either. A write already
+// queued finds no state in writeActivity and writes nothing. A write already inside fs.write finishes, and writeActivity does not
 // record its text.
 function forgetSession(id: string) {
   endedSessions.delete(id)
@@ -764,13 +770,13 @@ async function readyHandoff($: EngineInterface, id: string, guard?: Handoff) {
   try {
     const path = await transcriptPath($, await $.session.root(), id)
     if (!path) {
-      note($, 'handoff skipped (transcript not found)')
+      logEach($, 'handoff skipped (transcript not found)')
       return
     }
     const index = await existingIndex($, id)
     await markReady($, id, resumePrompt(path, index), HANDOFF_STATUS_TRANSCRIPT, guard)
   } catch (err) {
-    note($, `handoff failed (${errorText(err)})`)
+    logEach($, `handoff failed (${errorText(err)})`)
   }
 }
 
@@ -817,7 +823,7 @@ async function startHandoff($: EngineInterface, id: string) {
   try {
     await writeHandoff($, id, entry)
   } catch (err) {
-    note($, `handoff document failed (${errorText(err)})`)
+    logEach($, `handoff document failed (${errorText(err)})`)
     if (peekState(id)?.handoff !== entry) return
     // A switch to off during the fork also stops the fallback.
     if ((await dashboardSettings($)).handoff === 'off') return
@@ -847,7 +853,7 @@ async function storedResume($: EngineInterface, id: string): Promise<string | un
     const stored = (await $.store.get(HANDOFF_KEY + id)) as { resume?: unknown } | undefined
     return typeof stored?.resume === 'string' ? stored.resume : undefined
   } catch (err) {
-    note($, `handoff store read failed (${errorText(err)})`)
+    logEach($, `handoff store read failed (${errorText(err)})`)
     return undefined
   }
 }
@@ -870,7 +876,7 @@ async function queuedReset($: EngineInterface, path: string): Promise<string | u
     if ((await $.clock.now()) - stat.mtimeMs > RESET_PROMPT_MAX_AGE_MS) return undefined
     return String(await $.fs.read(path)).trim() || undefined
   } catch (err) {
-    note($, `reset prompt read failed (${errorText(err)})`)
+    logEach($, `reset prompt read failed (${errorText(err)})`)
     return undefined
   }
 }
@@ -881,7 +887,7 @@ async function consumeReset($: EngineInterface, path: string) {
   try {
     if (await $.fs.exists(path)) await $.fs.write(path, '')
   } catch (err) {
-    note($, `reset prompt clear failed (${errorText(err)})`)
+    logEach($, `reset prompt clear failed (${errorText(err)})`)
   }
 }
 
@@ -889,7 +895,7 @@ async function deleteStoredHandoff($: EngineInterface, id: string) {
   try {
     await $.store.delete(HANDOFF_KEY + id)
   } catch (err) {
-    note($, `handoff store delete failed (${errorText(err)})`)
+    logEach($, `handoff store delete failed (${errorText(err)})`)
   }
 }
 
@@ -933,7 +939,7 @@ function armHandoff($: EngineInterface, id: string) {
       .catch((err) => {
         const s = peekState(id)
         if (s?.handoffTimer === arming) s.handoffTimer = undefined
-        fail($, `handoff timer failed (${errorName(err)})`)
+        logOnce($, `handoff timer failed (${errorName(err)})`)
       })
   })
   stateOf(id).handoffTimer = arming
@@ -966,7 +972,7 @@ function armFire($: EngineInterface, id: string, { wait, expiresAt }: { wait: nu
     fireHandoff($, id, expiresAt, fire).catch((err) => {
       const s = peekState(id)
       if (s?.handoffTimer === fire) s.handoffTimer = undefined
-      fail($, `handoff timer failed (${errorName(err)})`)
+      logOnce($, `handoff timer failed (${errorName(err)})`)
     })
   })
   stateOf(id).handoffTimer = fire
@@ -1018,7 +1024,7 @@ async function dropHandoff($: EngineInterface) {
     if (handoff || !statusCleared) await deleteStoredHandoff($, id)
     statusCleared = true
   } catch (err) {
-    fail($, `handoff failed (${errorName(err)})`)
+    logOnce($, `handoff failed (${errorName(err)})`)
   }
 }
 
@@ -1031,7 +1037,7 @@ const PREFILL_DELAY_MS = 4000
 
 function prefillAfterClear($: EngineInterface, resume: string) {
   $.clock.after(PREFILL_DELAY_MS, () => {
-    fillResume($, resume).catch((err) => note($, `handoff prefill failed (${errorText(err)})`))
+    fillResume($, resume).catch((err) => logEach($, `handoff prefill failed (${errorText(err)})`))
   })
 }
 
@@ -1078,7 +1084,7 @@ function queueIndex($: EngineInterface, id: string) {
         current.indexTimer = undefined
         if (settings.transcriptIndex) startIndex($, id)
       })
-      .catch((err) => fail($, `transcript index failed (${errorName(err)})`))
+      .catch((err) => logOnce($, `transcript index failed (${errorName(err)})`))
   })
   s.indexTimer = timer
 }
@@ -1090,7 +1096,7 @@ function startIndex($: EngineInterface, id: string) {
   }
   indexing.add(id)
   writeIndex($, id)
-    .catch((err) => fail($, `transcript index failed (${errorName(err)})`))
+    .catch((err) => logOnce($, `transcript index failed (${errorName(err)})`))
     .finally(() => {
       indexing.delete(id)
       const s = peekState(id)
@@ -1240,7 +1246,7 @@ async function haikuLabel($: EngineInterface, name: string, added: string[], rem
       model: 'haiku',
       system: LABEL_SYSTEM,
       prompt,
-      maxTokens: 2048,
+      maxTokens: LABEL_MAX_TOKENS,
       effort: 'medium',
       timeoutMs: LABEL_TIMEOUT_MS,
     })
@@ -1396,7 +1402,7 @@ async function hideBand($: EngineInterface) {
 function startRecheck($: EngineInterface) {
   if (recheck) return
   recheck = $.clock.every(RECHECK_MS, () => {
-    recheckBand($).catch((err) => fail($, `limit band recheck failed (${errorName(err)})`))
+    recheckBand($).catch((err) => logOnce($, `limit band recheck failed (${errorName(err)})`))
   })
 }
 
@@ -1453,11 +1459,13 @@ async function dismissBand($: EngineInterface) {
 }
 
 export const register: Register = (on) => {
-  // Registers /backfill-updates inline. The version check, the reviews and the setup
-  // check run in interactive sessions only. All three run from timers after session.start returns, because session.start is awaited before the
-  // first prompt. A -p or Agent SDK run starts no reviews: it can exit mid-call and
-  // leave claimed sessions pending for an hour. The reviews setting set to false also
-  // starts none (reviewSessions checks it).
+  // Marks the session live again and records its mode and working directory from the
+  // event. Registers /backfill-updates and /transcript-handoff inline. The version
+  // check, the reviews and the setup check run in interactive sessions only. All three
+  // run from timers after session.start returns, because session.start is awaited
+  // before the first prompt. A -p or Agent SDK run starts no reviews: it can exit
+  // mid-call and leave claimed sessions pending for an hour. The reviews setting set
+  // to false also starts none (reviewSessions checks it).
   on('session.start', async ($, e, next) => {
     const id = await $.session.id()
     endedSessions.delete(id)
@@ -1465,26 +1473,29 @@ export const register: Register = (on) => {
     await $.command.register({
       name: 'backfill-updates',
       description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
-    }).catch((err) => note($, `could not register /backfill-updates (${errorName(err)})`))
+    }).catch((err) => logEach($, `could not register /backfill-updates (${errorName(err)})`))
     await $.command.register({
       name: 'transcript-handoff',
       description: 'Print a prompt that resumes this session in a fresh one by reading its transcript',
-    }).catch((err) => note($, `could not register /transcript-handoff (${errorName(err)})`))
+    }).catch((err) => logEach($, `could not register /transcript-handoff (${errorName(err)})`))
     const result = await next(e)
     if (e.isInteractive) {
       $.clock.after(0, () => {
-        checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
+        checkVersion($).catch((err) => logEach($, `update check failed (${errorName(err)})`))
       })
       startReviews($)
       $.clock.after(0, () => {
         dashboardSettings($)
           .then((settings) => (settings.setupMarkers ? checkSetup($) : undefined))
-          .catch((err) => note($, `setup check failed (${errorName(err)})`))
+          .catch((err) => logEach($, `setup check failed (${errorName(err)})`))
       })
     }
     return result
   })
 
+  // The command.run hooks here and the ui.render hook at the end carry a matcher, which
+  // exempts them from the one-on()-per-event rule. `h`, used by ui.render, is not
+  // imported. The engine provides it to this module as a global element factory.
   on('command.run', { command: 'backfill-updates' }, async ($) => ((await dashboardSettings($)).setupLabels ? { text: backfillText(await judgeUpdates($)) } : { text: LABELS_OFF_TEXT }))
 
   on('command.run', { command: 'transcript-handoff' }, async ($) => {
@@ -1506,7 +1517,7 @@ export const register: Register = (on) => {
         : await statuslineInput($, e)
       if (input) await run($, 'record-statusline', input, MEASURE_TIMEOUT_MS)
     } catch (err) {
-      fail($, `measure failed (${err instanceof Error ? err.name : 'error'})`)
+      logOnce($, `measure failed (${err instanceof Error ? err.name : 'error'})`)
     }
     try {
       const id = await $.session.id()
@@ -1519,12 +1530,12 @@ export const register: Register = (on) => {
         else if (mode.headless) queueHeadless($, id, mode.cwd, (h) => { h.reportedCost = usd })
       }
     } catch (err) {
-      fail($, `headless usage failed (${errorName(err)})`)
+      logOnce($, `headless usage failed (${errorName(err)})`)
     }
     try {
       await measureBand($, e.rateLimits)
     } catch (err) {
-      fail($, `limit band failed (${errorName(err)})`)
+      logOnce($, `limit band failed (${errorName(err)})`)
     }
     return result
   })
@@ -1544,12 +1555,12 @@ export const register: Register = (on) => {
   on('session.end', async ($, e, next) => {
     const handoff = peekState(e.sessionId)?.handoff
     const interactive = peekState(e.sessionId)?.mode?.interactive !== false
-    const writing = headlessWrites.get(e.sessionId)
+    const headlessWrite = headlessWrites.get(e.sessionId)
     forgetSession(e.sessionId)
     if (!interactive) {
       // A claude -p process exits once session.end returns, so a queued headless write
       // finishes first. The chain never rejects.
-      if (writing) await writing
+      if (headlessWrite) await headlessWrite
       return next(e)
     }
     // The script starts before next, so it does not wait for the other hooks.
@@ -1629,7 +1640,7 @@ export const register: Register = (on) => {
         }
       }
     } catch (err) {
-      fail($, `handoff timer failed (${errorName(err)})`)
+      logOnce($, `handoff timer failed (${errorName(err)})`)
     }
     return next(e)
   })
@@ -1665,7 +1676,7 @@ export const register: Register = (on) => {
         }
       }
     } catch (err) {
-      fail($, `usage record failed (${errorName(err)})`)
+      logOnce($, `usage record failed (${errorName(err)})`)
     }
     return result
   }).catch(async function* ($, e, next) {
@@ -1726,7 +1737,7 @@ export const register: Register = (on) => {
         role: 'dismiss',
         hotkey: 'd',
         onPress: () => {
-          dismissBand($).catch((err) => fail($, `could not dismiss the limit band (${errorName(err)})`))
+          dismissBand($).catch((err) => logOnce($, `could not dismiss the limit band (${errorName(err)})`))
         },
       }),
     )

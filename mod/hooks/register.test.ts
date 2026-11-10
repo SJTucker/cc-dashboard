@@ -968,7 +968,7 @@ test('reviews off: a /clear starts no review', async ($, on) => {
 
 test('reviews switched off while a claimed batch runs stops the remaining Haiku calls', async ($, on) => {
   const { reviewRan, asked, state, clock } = world(on, {
-    files: { ...judged },
+    files: { ...judged }, // world keeps files by reference, so the shared judged fixture must be copied
     reviewMs: 1_000,
     reviews: reviewing([REVIEW, { ...REVIEW, sessionId: 'older' }]),
     replies: [{ isAnswered: true, text: '{"suggestions":[]}' }, { isAnswered: true, text: '{"suggestions":[]}' }],
