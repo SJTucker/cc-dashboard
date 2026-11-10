@@ -210,3 +210,72 @@ test('the steer note counts as a steer of that task\'s worker, in Steered N', as
   const w = workerOf(await detailOf(url, o.sessionId), o.workerIds[0]);
   assert.equal(w.steerCount, 1);
 });
+
+test('a worker whose meta flips to finished between polls is refused on the first look', async (t) => {
+  const { url, config, o } = await setup(t);
+  const route = `/api/orchestrations/${o.sessionId}/steer`;
+  // One poll that sees finished: false.
+  assert.equal(workerOf(await detailOf(url, o.sessionId), o.workerIds[0]).canSteer, true);
+  const meta = path.join(path.dirname(o.transcript), o.sessionId, 'subagents', `agent-${o.workerIds[0]}.meta.json`);
+  fs.writeFileSync(meta, JSON.stringify({ ...JSON.parse(fs.readFileSync(meta, 'utf8')), finished: true }));
+  const res = await send(url, route, { agentId: o.workerIds[0], text: 'too late' });
+  assert.equal(res.status, 409);
+  assert.deepEqual(await res.json(), { error: 'worker finished' });
+  assert.equal(fs.existsSync(steerDir(config, o.sessionId)), false);
+});
+
+test('a refused steer does not advance the state the next poll builds on', async (t) => {
+  const { url, o } = await setup(t);
+  const meta = path.join(path.dirname(o.transcript), o.sessionId, 'subagents', `agent-${o.workerIds[0]}.meta.json`);
+  await detailOf(url, o.sessionId);
+  fs.writeFileSync(meta, JSON.stringify({ finished: true }));
+  await send(url, `/api/orchestrations/${o.sessionId}/steer`, { agentId: o.workerIds[0], text: 'x' });
+  // If the POST had recorded finished at this line count, this first detail poll would already be done.
+  assert.equal(workerOf(await detailOf(url, o.sessionId), o.workerIds[0]).status, 'working');
+});
+
+test('board post is 409 when the board path does not end in .board.jsonl', async (t) => {
+  const { url, config } = await bootServer(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, workers: [] });
+  const victim = path.join(config.configDir, 'victim.txt');
+  fs.writeFileSync(victim, 'keep\n');
+  const lines = fs.readFileSync(o.transcript, 'utf8').split('\n').filter(Boolean);
+  lines.splice(1, 0, JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), message: { role: 'assistant', content: [{ type: 'tool_use', id: 'mon', name: 'Monitor', input: { command: `x --watch --board ${victim}`, description: 'w' } }] } }));
+  fs.writeFileSync(o.transcript, lines.join('\n') + '\n');
+  const res = await send(url, `/api/orchestrations/${o.sessionId}/board`, { title: 'x' });
+  assert.equal(res.status, 409);
+  assert.deepEqual(await res.json(), { error: 'no board yet' });
+  assert.equal(fs.readFileSync(victim, 'utf8'), 'keep\n');
+});
+
+test('temp files a crashed write left are deleted after 24 h, fresh ones are kept', (t) => {
+  const cfg = tmpDir(t, 'steer');
+  const now = Date.now();
+  const old = new Date(now - 25 * 3600 * 1000);
+  const dir = steerDir({ configDir: cfg }, 's1');
+  fs.mkdirSync(dir, { recursive: true });
+  const stale = path.join(dir, 'abc-123.json.4242');
+  const fresh = path.join(dir, 'def-456.json.4243');
+  fs.writeFileSync(stale, '{');
+  fs.writeFileSync(fresh, '{');
+  fs.utimesSync(stale, old, old);
+  readSteers(cfg, 's1', now);
+  assert.equal(fs.existsSync(stale), false);
+  assert.equal(fs.existsSync(fresh), true);
+});
+
+test('a result that arrives after 30 s turns unclaimed into delivered', async (t) => {
+  const { url, config, o } = await setup(t);
+  const req = writeSteerRequest(config.configDir, o.sessionId, { agentId: o.workerIds[0], task: 1, text: 'late' }, Date.now() - 40000);
+  assert.equal(workerOf(await detailOf(url, o.sessionId), o.workerIds[0]).lastSteer.state, 'unclaimed');
+  fs.writeFileSync(path.join(steerDir(config, o.sessionId), `${req.id}.result.json`), JSON.stringify({ id: req.id, delivered: true, at: Date.now() }));
+  assert.equal(workerOf(await detailOf(url, o.sessionId), o.workerIds[0]).lastSteer.state, 'delivered');
+});
+
+test('steer is cross-site refused', async (t) => {
+  const { url, config, o } = await setup(t);
+  const res = await fetch(`${url}/api/orchestrations/${o.sessionId}/steer`, { method: 'POST', headers: { 'content-type': 'application/json', 'sec-fetch-site': 'cross-site' }, body: JSON.stringify({ agentId: o.workerIds[0], text: 'x' }) });
+  assert.equal(res.status, 403);
+  assert.equal(fs.existsSync(steerDir(config, o.sessionId)), false);
+});

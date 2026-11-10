@@ -633,7 +633,7 @@ function createServer(config) {
         res.status(404).json({ error: 'Unknown orchestration' });
         return;
       }
-      if (!target.boardPath) {
+      if (!target.boardPath || !target.boardPath.endsWith('.board.jsonl')) {
         res.status(409).json({ error: 'no board yet' });
         return;
       }
