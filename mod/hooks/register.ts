@@ -5,13 +5,13 @@ import type { SetupEntry, SetupState, Snapshot, Watched } from './setup'
 import { projectFolder, rateLimitsInput, statuslineRecord } from './statusline'
 import type { Frozen } from './statusline'
 import { appendChain } from './chain'
-import { newestTool, setState, toolDetail } from './activity'
+import { newestTool, setState, throttleDelay, toolDetail } from './activity'
 import type { Activity, ToolRun } from './activity'
-import { backfillText, errorName, errorText, versionSpan } from './text'
+import { backfillText, errorName, errorText, parseVerdicts, reviewOutcome, versionSpan } from './text'
 import type { Judged } from './text'
 import { headlessText, parseHeadless, parseSteps, stepOf, stepsText } from './steps'
 import type { AgentStep, HeadlessStep } from './steps'
-import { REPO_STEPS, documentResumePrompt, handoffDocument, handoffKind, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, resumePrompt } from './handoff'
+import { REPO_STEPS, documentResumePrompt, endFill, handoffDocument, handoffKind, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
@@ -416,20 +416,16 @@ async function judgeUpdates($: EngineInterface, current?: string): Promise<Judge
 async function reviewSession($: EngineInterface, review: Review) {
   let outcome: { reply: string } | { error: string }
   try {
-    const reply = await $.model.complete({
-      model: 'haiku',
-      system: review.system,
-      prompt: review.prompt,
-      maxTokens: 1024,
-      effort: 'low',
-      timeoutMs: MODEL_TIMEOUT_MS,
-    })
-    if (reply.isAnswered) {
-      outcome = { reply: reply.text }
-    } else {
-      const status = reply.reason === 'api-error' && reply.status !== null ? ` ${reply.status}` : ''
-      outcome = { error: `Haiku gave no answer (${reply.reason}${status})` }
-    }
+    outcome = reviewOutcome(
+      await $.model.complete({
+        model: 'haiku',
+        system: review.system,
+        prompt: review.prompt,
+        maxTokens: 1024,
+        effort: 'low',
+        timeoutMs: MODEL_TIMEOUT_MS,
+      }),
+    )
   } catch (err) {
     outcome = { error: `Haiku call failed (${errorName(err)})` }
   }
@@ -475,21 +471,12 @@ async function checkVersion($: EngineInterface) {
   if (!file) return
   // A read that fails means no verdicts yet: the file is written on the first one.
   const text = await $.fs.read(file).then(String, () => undefined)
-  let verdicts: Record<string, unknown> = {}
-  if (text !== undefined) {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(text)
-    } catch {
-      note($, `${file} is not valid JSON; fix or delete it`)
-      return
-    }
-    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-      note($, `${file} is not a JSON object; fix or delete it`)
-      return
-    }
-    verdicts = parsed as Record<string, unknown>
+  const parsed = parseVerdicts(text)
+  if ('error' in parsed) {
+    note($, `${file} is not ${parsed.error === 'not-json' ? 'valid JSON' : 'a JSON object'}; fix or delete it`)
+    return
   }
+  const { verdicts } = parsed
   if (Object.hasOwn(verdicts, base)) return
   // On release day the changelog has no entry for the running version yet, so each
   // session start would download the whole changelog again. One attempt per version
@@ -683,12 +670,12 @@ async function track($: EngineInterface, change: (a: Activity, now: number, s: S
     if (change(a, now, s) === false) return
     s.activity = a
     a.updatedAt = now
-    const last = s.lastWriteAt
-    if (last === undefined || now - last >= ACTIVITY_WRITE_MS) {
+    const delay = throttleDelay(s.lastWriteAt, now, ACTIVITY_WRITE_MS)
+    if (delay === null) {
       s.lastWriteAt = now
       queueWrite($, id)
     } else if (!s.writeTimer) {
-      const timer = $.clock.after(ACTIVITY_WRITE_MS - (now - last), () => {
+      const timer = $.clock.after(delay, () => {
         s.writeTimer = undefined
         $.clock.now()
           .then((at) => {
@@ -1576,7 +1563,7 @@ export const register: Register = (on) => {
     // With handoff off, a handoff stored before the switch is not offered. The status
     // clear and the store delete below still run for it.
     const handoffOn = (await dashboardSettings($)).handoff !== 'off'
-    const fill = e.reason === 'clear' ? (reset ?? (handoffOn ? stored : undefined)) : undefined
+    const fill = endFill(e.reason, reset, stored, handoffOn)
     if (fill !== undefined) prefillAfterClear($, fill)
     else if (stored !== undefined) $.ui.status()
     if (stored !== undefined) await deleteStoredHandoff($, e.sessionId)

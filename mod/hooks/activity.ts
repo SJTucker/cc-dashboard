@@ -37,3 +37,8 @@ export function toolDetail(tool: string, args: Record<string, unknown>) {
   }
   return ''
 }
+
+// Milliseconds a write must wait to keep spanMs between writes, or null to write now.
+export function throttleDelay(last: number | undefined, now: number, spanMs: number): number | null {
+  return last === undefined || now - last >= spanMs ? null : spanMs - (now - last)
+}

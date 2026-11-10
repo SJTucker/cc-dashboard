@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { DETAIL_MAX, newestTool, setState, toolDetail } from './activity'
+import { DETAIL_MAX, newestTool, setState, throttleDelay, toolDetail } from './activity'
 import type { Activity, ToolRun } from './activity'
 
 const run = (name: string): ToolRun => ({ name, detail: '', startedAt: 1 })
@@ -32,4 +32,10 @@ test('toolDetail gives the file name for Read, Edit and Write and nothing for ot
   expect(toolDetail('Edit', { file_path: 'C:\\a\\d.ts' })).toBe('d.ts')
   expect(toolDetail('Write', { file_path: 5 })).toBe('')
   expect(toolDetail('Grep', { pattern: 'x' })).toBe('')
+})
+
+test('throttleDelay is null for a first write or a span that has passed, else the time left', () => {
+  expect(throttleDelay(undefined, 10, 250)).toBeNull()
+  expect(throttleDelay(0, 100, 250)).toBe(150)
+  expect(throttleDelay(0, 250, 250)).toBeNull()
 })

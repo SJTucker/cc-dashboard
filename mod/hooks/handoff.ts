@@ -213,3 +213,9 @@ export function handoffWaitMs(expiresAt: number, now: number, leadMs: number) {
 export function handoffKind(mode: 'document' | 'transcript', expiresAt: number, now: number): 'document' | 'transcript' {
   return expiresAt <= now ? 'transcript' : mode
 }
+
+// The handoff entry a session.end fills in for the next session: only after a /clear,
+// the reset entry first, else the stored one when handoff is on.
+export function endFill(reason: string, reset: string | undefined, stored: string | undefined, handoffOn: boolean): string | undefined {
+  return reason === 'clear' ? (reset ?? (handoffOn ? stored : undefined)) : undefined
+}

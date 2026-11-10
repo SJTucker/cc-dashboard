@@ -1,6 +1,6 @@
 import { test, expect } from 'claude-code/testing'
 import {
-  REPO_STEPS, branchSlug, documentResumePrompt, handoffDocument, handoffKind, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, quotePath, resumePrompt,
+  REPO_STEPS, endFill, branchSlug, documentResumePrompt, handoffDocument, handoffKind, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, quotePath, resumePrompt,
 } from './handoff'
 import type { StepOutput } from './handoff'
 
@@ -186,4 +186,11 @@ test('resumePrompt and documentResumePrompt quote paths with a space', async () 
   expect(documentResumePrompt('/my repo/.claude/handoffs/x.md')).toBe(
     `Read '/my repo/.claude/handoffs/x.md', check Preconditions, then continue from "Next steps".`,
   )
+})
+
+test('endFill uses the reset entry, else the stored one when handoff is on, and only for a clear', () => {
+  expect(endFill('clear', 'r', 's', false)).toBe('r')
+  expect(endFill('clear', undefined, 's', false)).toBeUndefined()
+  expect(endFill('clear', undefined, 's', true)).toBe('s')
+  expect(endFill('exit', 'r', 's', true)).toBeUndefined()
 })
