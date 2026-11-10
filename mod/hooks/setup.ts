@@ -37,8 +37,11 @@ const clip = (text: string) => (text.length > LABEL_MAX ? `${text.slice(0, LABEL
 // Drops a Markdown list, heading or quote marker from the start of a line.
 const bare = (line: string) => line.replace(/^[-*#>\s]+/, '').trim()
 
-// The dashboard's settings.json, written by lib/settings.js. A missing or invalid
-// file, a non-object, or any value other than false counts as on.
+// The dashboard's settings.json, written by lib/settings.js, which holds the same
+// defaults (test/mod-contract.test.js keeps the two parses alike). A missing or
+// invalid file or a non-object gives every default. Only a literal false turns a
+// boolean key off. A handoff value other than the three allowed ones is 'document'.
+export type HandoffMode = 'document' | 'transcript' | 'off'
 export function parseDashboardSettings(text: unknown) {
   let parsed: unknown
   try {
@@ -47,7 +50,16 @@ export function parseDashboardSettings(text: unknown) {
     parsed = null
   }
   const v = isObject(parsed) ? parsed : {}
-  return { reviews: v.reviews !== false, setupLabels: v.setupLabels !== false }
+  const handoff: HandoffMode = v.handoff === 'transcript' || v.handoff === 'off' ? v.handoff : 'document'
+  return {
+    handoff,
+    transcriptIndex: v.transcriptIndex !== false,
+    reviews: v.reviews !== false,
+    setupMarkers: v.setupMarkers !== false,
+    setupLabels: v.setupLabels !== false,
+    activity: v.activity !== false,
+    limitBand: v.limitBand !== false,
+  }
 }
 
 // The label when Haiku gives none.
