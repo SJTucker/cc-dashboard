@@ -2673,6 +2673,19 @@ test('a subagent that ends drops its in-memory steps, and a later step re-reads 
   expect(JSON.parse(writes[AGENT_FILE]).steps).toHaveLength(2)
 })
 
+test('session.end drops the steps of a subagent that never completed', async ($, on) => {
+  const { writes, clock, state, readLog } = world(on)
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  state.files[AGENT_FILE] = writes[AGENT_FILE]
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  readLog.length = 0
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(readLog).toContain(AGENT_FILE)
+})
+
 test('a step queued after a subagent ends but before its chain settles is dropped too', async ($, on) => {
   const { clock, readLog } = world(on, { writeMs: [100, 100] })
   await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
@@ -3327,4 +3340,20 @@ test('a missing transcript during a session.end leaves no miss window for the en
   await $.session.start(start)
   await $.session.measure(measure([FIVE]))
   expect(listed.length).toBe(before + 1)
+})
+
+test('a session.end during the transcript lookup of a handoff leaves no status and no stored handoff', async ($, on) => {
+  const gate = gateNext(on, 'fs.exists')
+  const { statuses, state, clock } = world(gate.gated, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  gate.arm()
+  const fired = clock.set(FIRE)
+  await gate.reached
+  await $.session.end(clear)
+  gate.open()
+  await fired
+  await clock.settle()
+  expect(statuses).not.toContain(READY)
+  expect(Object.keys(state.store).filter((key) => key.startsWith('handoff:'))).toEqual([])
 })

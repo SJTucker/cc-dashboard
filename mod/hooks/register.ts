@@ -154,7 +154,8 @@ async function run($: EngineInterface, name: string, input: object, timeoutMs: n
 // writes: the session's activity writes run one after another on one promise chain,
 // so the last write to finish is the last one started. lastWritten, the text last
 // written, lets a write with nothing new be skipped.
-// agentIds: nothing reads or writes it yet.
+// agentIds: the subagents with recorded steps. forgetSession frees the steps of each,
+// so a subagent that never completed does not keep them.
 type SessionState = {
   id: string
   transcript?: string
@@ -722,6 +723,7 @@ function forgetSession(id: string) {
   s?.writeTimer?.cancel()
   s?.handoffTimer?.cancel()
   s?.indexTimer?.cancel()
+  for (const agentId of s?.agentIds ?? []) forgetAgentSteps(agentId)
   sessions.delete(id)
 }
 
@@ -760,7 +762,7 @@ type Handoff = { state: 'writing' | 'failed' } | { state: 'ready'; resume: strin
 // the record's handoff, and then the status stays as that event left it and the stored
 // key is deleted again, so a handoff from an earlier idle gap cannot outlive its gap.
 async function markReady($: EngineInterface, id: string, resume: string, status: string, guard?: Handoff) {
-  if (guard && peekState(id)?.handoff !== guard) return
+  if (endedSessions.has(id) || (guard && peekState(id)?.handoff !== guard)) return
   const ready: Handoff = { state: 'ready', resume }
   stateOf(id).handoff = ready
   $.ui.status(status)
@@ -1670,7 +1672,10 @@ export const register: Register = (on) => {
             h.steps.push(stepOf(result.usage!, now, e.turnId, e.index, e.agentId))
           })
         }
-        else if (e.agentId) queueStep($, e.agentId, stepOf(result.usage, now, e.turnId, e.index))
+        else if (e.agentId) {
+          if (!endedSessions.has(id)) stateOf(id).agentIds.add(e.agentId)
+          queueStep($, e.agentId, stepOf(result.usage, now, e.turnId, e.index))
+        }
       }
     } catch (err) {
       fail($, `usage record failed (${errorName(err)})`)
