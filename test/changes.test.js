@@ -339,3 +339,20 @@ test('collectMarkers returns no markers when there are no calls', () => {
   const { config } = setup({ changes: [{ date: '2026-09-01T09:00', kind: 'skill', label: 'file' }] });
   assert.deepStrictEqual(changes.collectMarkers([], config).markers, []);
 });
+
+test('changes with markersOn false shows the markers-off note', async () => {
+  const { installDom } = require('./dom-stub');
+  installDom();
+  const { markersOffNote } = await import('../public/panels/changes.mjs');
+  assert.strictEqual(markersOffNote({ markersOn: true }), null);
+  assert.strictEqual(markersOffNote({}), null);
+  const note = markersOffNote({ markersOn: false });
+  assert.strictEqual(note.textContent, 'New setup changes are not recorded. Setup change markers are off in Mod settings.');
+  const link = note.children.find((c) => c.tagName === 'a');
+  assert.strictEqual(link.textContent, 'Mod settings');
+  assert.strictEqual(link.getAttribute('href'), '#mod');
+  assert.strictEqual(link.getAttribute('data-mod-setting'), 'setupMarkers');
+  const html = require('fs').readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  assert.match(html, /data-mod-setting="setupLabels">Mod settings<\/a>/);
+  assert.doesNotMatch(html, /id="labelsSwitch"/);
+});

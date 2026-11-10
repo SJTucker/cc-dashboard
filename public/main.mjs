@@ -24,7 +24,7 @@ import { loadPricesSource, setupPrices } from './panels/prices.mjs';
 import { refreshRecords } from './panels/records.mjs';
 import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews } from './panels/reviews.mjs';
-import { loadModSettings, wireModSettings } from './panels/mod-settings.mjs';
+import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
@@ -426,6 +426,9 @@ document.getElementById('rangePicker').addEventListener('click', (evt) => {
 // after showTab, so every chart is drawn at its visible width. The first call has
 // no old tab: state starts on Now's range, which would hide Now's own requests.
 let tabEntered = false;
+// The Mod tab's settings request. A "Mod settings" link focuses its row after this
+// settles, because the render replaces the rows.
+let modLoaded = Promise.resolve();
 function enterTab(tab) {
   const before = tabEntered ? neededRequests(state.hiddenKeys, state.tab) : new Set();
   tabEntered = true;
@@ -439,7 +442,7 @@ function enterTab(tab) {
   setPolling(tab === 'now');
   syncHighscores();
   if (tab === 'highscores') refreshHighscores();
-  if (tab === 'mod') loadModSettings();
+  if (tab === 'mod') modLoaded = loadModSettings();
   const after = neededRequests(state.hiddenKeys, state.tab);
   if (after.has('changes') && !before.has('changes')) ensureChanges();
   if (after.has('prices') && !before.has('prices')) loadPricesSource();
@@ -525,5 +528,17 @@ wireModSettings((key) => {
   else if (key === 'setupLabels' || key === 'setupMarkers') loadChanges();
 });
 refreshHighscores();
+// A panel's "Mod settings" link opens the Mod tab and focuses that setting's row. The
+// hashchange listener added on click comes after setupTabs' own, so enterTab has run by then.
+document.addEventListener('click', (evt) => {
+  const link = evt.target.closest?.('[data-mod-setting]');
+  if (!link) return;
+  evt.preventDefault();
+  const key = link.dataset.modSetting;
+  if (location.hash === '#mod') return focusModSetting(key);
+  window.addEventListener('hashchange', () => modLoaded.then(() => focusModSetting(key)), { once: true });
+  location.hash = 'mod';
+});
+
 // Runs enterTab once for the hash the page opened with, then on each hash change.
 setupTabs(enterTab);

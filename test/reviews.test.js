@@ -75,3 +75,14 @@ test('upsertSuggestion leaves a review past the last loaded one for its own page
   assert.strictEqual(h.upsertSuggestion(list, older, closed(0, 'done'), { order: h.byCursor, insert: true, hasMore: true }), list);
   assert.deepStrictEqual(h.upsertSuggestion(list, older, closed(0, 'done'), { order: h.byCursor, insert: true, hasMore: false }).map((r) => r.sessionId), ['new', 'older']);
 });
+
+test('reviews off shows the note and a Mod settings link', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  assert.strictEqual(h.reviewsNote(false, 0, '7'), 'Suggestions are off. Ended sessions are not reviewed.');
+  assert.match(h.reviewsNote(true, 2, '7'), /^2 reviews with open suggestions/);
+  const html = fs.readFileSync(path.join(__dirname, '..', 'public', 'index.html'), 'utf8');
+  const panel = html.slice(html.indexOf('id="reviewsPanel"'), html.indexOf('id="reviewsList"'));
+  assert.match(panel, /<a class="panel-link" href="#mod" data-mod-setting="reviews">Mod settings<\/a>/);
+  assert.doesNotMatch(html, /id="reviewsSwitch"/);
+});

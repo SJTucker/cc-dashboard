@@ -194,6 +194,17 @@ function activityLabel(activity) {
   return { ...s, text: `${s.glyph} ${s.label}` };
 }
 
+// The State cell's first line: text, an optional title and whether it needs the user.
+// With activityOff (the payload's flag, set when the activity setting is off) it reads
+// "off" with a title naming the setting. Without activity it reads "—".
+function stateParts(activity, activityOff) {
+  if (activityOff) return { text: 'off', title: 'Live activity is off in Mod settings', attention: false };
+  const label = activityLabel(activity);
+  if (!label) return { text: '—', title: null, attention: false };
+  const doing = doingNow(activity);
+  return { text: label.text + (doing ? ` · ${doing}` : ''), title: null, attention: label.attention };
+}
+
 // Second line of the State cell for a session waiting on the user: how long its
 // prompt cache lasts and what the next reply pays to rebuild it. `cache` is the
 // session's cache field from lib/sessions.js, and a negative minutesLeft means it
@@ -219,4 +230,4 @@ function doingNow(activity) {
   return parts.length ? parts.join(' · ') : null;
 }
 
-export { groupSessions, itemCost, costShare, splitBands, isRunning, costSplit, activityLabel, cacheLine, doingNow };
+export { groupSessions, itemCost, costShare, splitBands, isRunning, costSplit, activityLabel, stateParts, cacheLine, doingNow };

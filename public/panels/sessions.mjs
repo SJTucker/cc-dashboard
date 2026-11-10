@@ -3,7 +3,7 @@ import { getJson } from '../api.mjs';
 import { el } from '../dom.mjs';
 import { formatCost, formatDuration, formatAgo } from '../format.mjs';
 import { state } from '../state.mjs';
-import { groupSessions, itemCost, costShare, splitBands, costSplit, activityLabel, cacheLine, doingNow } from '../session-groups.mjs';
+import { groupSessions, itemCost, costShare, splitBands, costSplit, stateParts, cacheLine } from '../session-groups.mjs';
 import { createDrawGuard } from '../guards.mjs';
 import { visibleRows, showAllButton, refocusShowAll, keepShowAllFocus } from '../ui/show-all.mjs';
 
@@ -129,16 +129,14 @@ function drawSessions(live) {
   // The State cell of a running session: its state and what it is doing, then a
   // waiting session's cache countdown (cacheLine) on a second line. The payload
   // changes once a minute, and the poll redraws it. State and Doing now come from
-  // the mod's activity files (lib/activity.js) and show "—" without the mod. Every
-  // other row has an empty cell.
+  // the mod's activity files (lib/activity.js). They show "—" without the mod and
+  // "off" when the activity setting is off. Every other row has an empty cell.
   const stateCell = (s) => {
     if (!s) return el('td');
-    const label = activityLabel(s.activity);
-    const doing = doingNow(s.activity);
+    const parts = stateParts(s.activity, live.activityOff === true);
     const cache = cacheLine(s.cache, formatCost);
-    const text = label ? label.text + (doing ? ` · ${doing}` : '') : '—';
-    return el('td', label?.attention ? { class: 'is-attention' } : {}, [
-      el('span', { text }),
+    return el('td', parts.attention ? { class: 'is-attention' } : {}, [
+      el('span', parts.title ? { text: parts.text, title: parts.title } : { text: parts.text }),
       ...(cache ? [el('span', { class: 'cache-line', text: cache })] : []),
     ]);
   };
