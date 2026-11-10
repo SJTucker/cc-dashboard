@@ -3234,3 +3234,97 @@ test('a turn.start while fireHandoff reads the settings starts no fork', async (
   expect(forked).toEqual([])
   expect(statuses).toEqual([undefined])
 })
+
+// Wraps `on` so the first call of `event` after arm() waits for open(). `reached`
+// resolves when that call arrives. Later calls pass straight through.
+function gateNext(on: On, event: string) {
+  let held: Promise<void> | undefined
+  let release = () => {}
+  let arrived = () => {}
+  const reached = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  const gated = ((name: string, ...rest: unknown[]) => {
+    const hook = rest.pop() as (...args: unknown[]) => unknown
+    const wrapped = name === event
+      ? async (...args: unknown[]) => {
+        if (held) {
+          const waiting = held
+          held = undefined
+          arrived()
+          await waiting
+        }
+        return hook(...args)
+      }
+      : hook
+    return (on as (...args: unknown[]) => unknown)(name, ...rest, wrapped)
+  }) as unknown as On
+  return {
+    gated,
+    reached,
+    arm: () => {
+      held = new Promise((resolve) => {
+        release = resolve
+      })
+    },
+    open: () => release(),
+  }
+}
+
+test('a session.end during track\'s awaits leaves no activity file, no index run and no handoff timer', async ($, on) => {
+  const gate = gateNext(on, 'clock.now')
+  const { writes, indexRan, cacheRan, clock } = world(gate.gated, timed({ files: { [DASH_SETTINGS]: '{"handoff":"transcript","transcriptIndex":true}' } }))
+  gate.arm()
+  const turn = $.turn.complete(turnEnd())
+  await gate.reached
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  gate.open()
+  await turn
+  await clock.advance(1_500)
+  await clock.settle()
+  expect(writes[ACTIVITY]).toBeUndefined()
+  expect(indexRan).toEqual([])
+  expect(cacheRan).toEqual([])
+})
+
+test('a turn.start of an id that ended tracks it again', async ($, on) => {
+  const { writes, clock } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await $.turn.start({ text: 'hi', turnId: 't2' })
+  await clock.advance(500)
+  expect(activityOf(writes).state).toBe('working')
+})
+
+test('a transcript found during a session.end is not cached for the ended session', async ($, on) => {
+  const gate = gateNext(on, 'fs.exists')
+  const found = '/home/u/.claude/projects/-other/s1.jsonl'
+  const { listed, clock } = world(gate.gated, { exists: (path) => path === found, dirs: { '/home/u/.claude/projects': ['-other'] } })
+  gate.arm()
+  const measured = $.session.measure(measure([FIVE]))
+  await gate.reached
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  gate.open()
+  await measured
+  await clock.settle()
+  const before = listed.length
+  // The session starts again under the same id. A cached path would skip the search.
+  await $.session.start(start)
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(before + 1)
+})
+
+test('a missing transcript during a session.end leaves no miss window for the ended session', async ($, on) => {
+  const gate = gateNext(on, 'fs.exists')
+  const { listed, clock } = world(gate.gated, { exists: () => false, turns: () => 1, dirs: { '/home/u/.claude/projects': ['-other'] } })
+  gate.arm()
+  const measured = $.session.measure(measure([FIVE]))
+  await gate.reached
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  gate.open()
+  await measured
+  await clock.settle()
+  const before = listed.length
+  await $.session.start(start)
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(before + 1)
+})

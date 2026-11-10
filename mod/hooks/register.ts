@@ -215,6 +215,13 @@ async function findTranscript($: EngineInterface, root: string, id: string): Pro
 const TRANSCRIPT_MISS_MS = 30_000
 const transcriptMisses = new Map<string, { at: number; turns: number }>()
 
+// Ids of sessions that ended, oldest first, at most ENDED_SESSIONS_MAX. A hook that
+// awaits while session.end runs checks it before it creates state or a timer for the
+// id. session.start and turn.start remove the id, because a session that starts or
+// takes a prompt is live again.
+const ENDED_SESSIONS_MAX = 50
+const endedSessions = new Set<string>()
+
 // findTranscript, plus the cache in transcripts and the miss window in
 // transcriptMisses.
 async function transcriptPath($: EngineInterface, root: string, id: string) {
@@ -229,10 +236,16 @@ async function transcriptPath($: EngineInterface, root: string, id: string) {
   }
   const found = await findTranscript($, root, id)
   if (found) {
-    transcripts.set(id, found)
-    transcriptMisses.delete(id)
+    // session.end can run during the lookup. forgetSession has already dropped the
+    // maps, so a write now would leave an entry for the ended session.
+    if (!endedSessions.has(id)) {
+      transcripts.set(id, found)
+      transcriptMisses.delete(id)
+    }
   } else {
-    transcriptMisses.set(id, { at: await $.clock.now(), turns: await $.session.turns() })
+    const at = await $.clock.now()
+    const turns = await $.session.turns()
+    if (!endedSessions.has(id)) transcriptMisses.set(id, { at, turns })
   }
   return found
 }
@@ -632,6 +645,7 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
     if (!SESSION_ID.test(id)) return
     if (await nonInteractive($)) return
     const now = await $.clock.now()
+    if (endedSessions.has(id)) return
     const known = activities.get(id)
     if (!known && !create) return
     const a = known ?? { sessionId: id, state: 'working' as const, since: now, tool: null, subagents: 0, updatedAt: now }
@@ -668,6 +682,9 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
 // nothing. A write already inside fs.write finishes, and writeActivity does not
 // record its text.
 function forgetSession(id: string) {
+  endedSessions.delete(id)
+  endedSessions.add(id)
+  if (endedSessions.size > ENDED_SESSIONS_MAX) endedSessions.delete(endedSessions.values().next().value as string)
   activities.delete(id)
   runningTools.delete(id)
   endedAgents.delete(id)
@@ -1423,7 +1440,9 @@ export const register: Register = (on) => {
   // leave claimed sessions pending for an hour. The reviews setting set to false also
   // starts none (reviewSessions checks it).
   on('session.start', async ($, e, next) => {
-    sessionModes.set(await $.session.id(), { interactive: e.isInteractive, cwd: e.cwd })
+    const id = await $.session.id()
+    endedSessions.delete(id)
+    sessionModes.set(id, { interactive: e.isInteractive, cwd: e.cwd })
     await $.command.register({
       name: 'backfill-updates',
       description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
@@ -1554,6 +1573,7 @@ export const register: Register = (on) => {
   // A turn that begins is working. turn.start has no agentId: a subagent's run raises
   // none.
   on('turn.start', async ($, e, next) => {
+    endedSessions.delete(await $.session.id())
     if (!(await nonInteractive($))) await dropHandoff($)
     await track($, (a, now) => setState(a, 'working', now))
     return next(e)
@@ -1588,8 +1608,11 @@ export const register: Register = (on) => {
       if (!(await nonInteractive($))) {
         const id = await $.session.id()
         const settings = await dashboardSettings($)
-        if (settings.handoff !== 'off') armHandoff($, id)
-        if (settings.transcriptIndex) queueIndex($, id)
+        // session.end can run during these awaits.
+        if (!endedSessions.has(id)) {
+          if (settings.handoff !== 'off') armHandoff($, id)
+          if (settings.transcriptIndex) queueIndex($, id)
+        }
       }
     } catch (err) {
       fail($, `handoff timer failed (${errorName(err)})`)
