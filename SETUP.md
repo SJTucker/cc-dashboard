@@ -341,8 +341,8 @@ of them.
 - **The mod calls Haiku** through your Claude Code login to judge releases, review
   ended sessions and label setup changes. The `setupLabels` setting stops the label and
   release-judging calls and the changelog fetch. No API key is read. These calls write no
-  transcript line, so the dashboard's totals leave out their cost. Reviews and labels
-  run in interactive sessions only. Each call sends this:
+  transcript line, so the dashboard's totals leave out their cost. Reviews, labels and
+  release judging run in interactive sessions only. Each call sends this:
   - **Judging releases:** the changelog entries of up to 20 versions. Nothing from
     your setup or transcripts is sent.
   - **Reviewing a session:** the rule files listed under "Files outside the repo", cut

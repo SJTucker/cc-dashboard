@@ -668,6 +668,14 @@ test('session.start returns before the check fetches', async ($, on) => {
   expect(fetched.length).toBe(1)
 })
 
+test('a -p run fetches no changelog and makes no Haiku call', async ($, on) => {
+  const { fetched, asked, clock } = world(on, { files: {}, version: { version: '2.1.290', base: '2.1.290' } })
+  await $.session.start({ ...start, isInteractive: false })
+  await clock.settle()
+  expect(fetched).toEqual([])
+  expect(asked).toEqual([])
+})
+
 test('a version that has a verdict makes no request', async ($, on) => {
   const { fetched, asked, clock } = world(on, { files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
   await $.session.start(start)

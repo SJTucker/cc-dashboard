@@ -1352,9 +1352,8 @@ async function dismissBand($: EngineInterface) {
 }
 
 export const register: Register = (on) => {
-  // Registers /backfill-updates inline. The version check runs in every session. The
-  // reviews and the setup check run in interactive sessions only. All three run from
-  // timers after session.start returns, because session.start is awaited before the
+  // Registers /backfill-updates inline. The version check, the reviews and the setup
+  // check run in interactive sessions only. All three run from timers after session.start returns, because session.start is awaited before the
   // first prompt. A -p or Agent SDK run starts no reviews: it can exit mid-call and
   // leave claimed sessions pending for an hour. The reviews setting set to false also
   // starts none (reviewSessions checks it).
@@ -1369,10 +1368,10 @@ export const register: Register = (on) => {
       description: 'Print a prompt that resumes this session in a fresh one by reading its transcript',
     }).catch((err) => note($, `could not register /transcript-handoff (${errorName(err)})`))
     const result = await next(e)
-    $.clock.after(0, () => {
-      checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
-    })
     if (e.isInteractive) {
+      $.clock.after(0, () => {
+        checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
+      })
       startReviews($)
       $.clock.after(0, () => {
         dashboardSettings($)
