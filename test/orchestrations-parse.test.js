@@ -194,7 +194,7 @@ test('the fixture writes an orchestration the parser and transcript-index can re
   const wfile = path.join(path.dirname(out.transcript), 'sess-1', 'subagents', `agent-${out.workerIds[0]}.jsonl`);
   const wlines = fs.readFileSync(wfile, 'utf8').split('\n').filter(Boolean);
   const steps = stepsOf(wlines, 1, wlines.length);
-  assert.ok(steps.some((s) => s.kind === 'tool' && s.tool === 'Edit' && s.text === 'lib/parse.js'));
+  assert.ok(steps.some((s) => s.kind === 'tool' && s.tool === 'Edit' && s.text.endsWith('/.worktrees/demo-t1/lib/parse.js')));
   assert.ok(contextTokens(wlines) > 0);
   const meta = JSON.parse(fs.readFileSync(wfile.replace(/\.jsonl$/, '.meta.json'), 'utf8'));
   assert.equal(meta.finished, true);

@@ -23,7 +23,9 @@ test('switcherState words follow waiting, phase and liveness', async () => {
   assert.equal(switcherState({ waiting: false, phase: 'waves', wave: 2, live: true }, now), 'Wave 2');
   assert.equal(switcherState({ phase: 'plan', live: true }, now), 'Planning');
   assert.equal(switcherState({ phase: 'reset', live: true }, now), 'Reset');
-  assert.equal(switcherState({ phase: 'finish', live: false, lastActiveAt: now - 3 * 3600_000 }, now).startsWith('Finished '), true);
+  assert.equal(switcherState({ phase: 'finish', live: false, lastActiveAt: now - 3 * 3600_000 }, now), 'Finished 3h ago');
+  assert.equal(switcherState({ phase: 'finish', live: false, lastActiveAt: now - 20_000 }, now), 'Finished just now');
+  assert.equal(switcherState({ phase: 'waves', wave: null, live: true }, now), 'Waves');
 });
 
 test('meterRatio is tokens over the 120000 budget, clamped to 1', async () => {
@@ -44,4 +46,21 @@ test('countsLine lists only the non-zero counts', async () => {
   const { countsLine } = await load();
   assert.equal(countsLine({ working: 2, review: 0, merged: 1, attention: 0 }), '2 working · 1 merged');
   assert.equal(countsLine({ working: 0, review: 0, merged: 0, attention: 0 }), 'no workers yet');
+});
+
+test('postTime reads as minutes ago under an hour and as a 24-hour clock after', async () => {
+  const { postTime } = await load();
+  const now = Date.parse('2026-11-10T12:00:00Z');
+  assert.equal(postTime(new Date(now - 4 * 60_000).toISOString(), now), '4m ago');
+  assert.equal(postTime(new Date(now - 10_000).toISOString(), now), 'just now');
+  assert.match(postTime(new Date(now - 3 * 3600_000).toISOString(), now), /^\d\d:\d\d$/);
+});
+
+test('reviewLabel says Reviewer running for a running review', async () => {
+  const { reviewLabel } = await load();
+  const now = Date.parse('2026-11-10T12:00:00Z');
+  const startedAt = new Date(now - 120_000).toISOString();
+  assert.equal(reviewLabel({ status: 'running', startedAt }, now), '◐ Reviewer running · 2m');
+  assert.equal(reviewLabel({ status: 'passed', startedAt }, now), '✓ Reviewer passed · 2m');
+  assert.equal(reviewLabel({ status: 'changes', startedAt }, now), '◐ Reviewer changes asked · 2m');
 });

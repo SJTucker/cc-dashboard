@@ -72,7 +72,7 @@
 .feed .t { color: var(--text-tertiary); font-variant-numeric: tabular-nums; }
 .feed .g { color: var(--text-secondary); text-align: center; }
 .feed .x { min-width: 0; overflow-wrap: anywhere; }
-.feed .x span { color: var(--text-secondary); }
+.feed .x .detail { color: var(--text-secondary); }
 
 /* Waves and workers */
 .wave { padding: var(--sp-3) 14px; display: grid; gap: 10px; }
@@ -81,7 +81,7 @@
 .wave .label { font-family: var(--font-label); font-size: var(--fs-body); font-weight: 600; text-transform: uppercase; letter-spacing: var(--ls-label); color: var(--text-secondary); }
 .chips { display: flex; flex-wrap: wrap; gap: 6px; }
 .chip { border: 1px solid var(--border); border-radius: 999px; padding: 1px 9px; color: var(--text-secondary); font-size: var(--fs-caption); }
-.orch-workers { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 10px; }
+.orch-workers { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 10px; align-items: start; }
 .worker { background: var(--surface-raised); border: 1px solid var(--border); border-radius: var(--radius-m); display: grid; align-content: start; }
 .worker.attn { border-color: color-mix(in srgb, var(--warning) 55%, var(--border)); }
 .w-head { all: unset; box-sizing: border-box; cursor: pointer; padding: 10px var(--sp-3) var(--sp-2); display: grid; gap: var(--sp-2); border-radius: var(--radius-m); font-family: var(--font-data); font-size: var(--fs-body); }

@@ -4,7 +4,7 @@
 // changed, so a poll that changes one worker leaves the rest of the page alone.
 // Nothing here touches the DOM at import time.
 import { el } from '../dom.mjs';
-import { formatAgo, formatDuration, formatTokens } from '../format.mjs';
+import { formatDuration, formatTokens } from '../format.mjs';
 import { enter, fadeIn, swapText } from './motion.mjs';
 
 export const CONTEXT_BUDGET = 120000;
@@ -31,8 +31,11 @@ export function statusView(status) {
 // The switcher card's one-line state.
 export function switcherState(summary, now = Date.now()) {
   if (summary.waiting) return 'Waiting for you';
-  if (summary.phase === 'waves') return `Wave ${summary.wave}`;
-  if (summary.phase === 'finish' && !summary.live) return `Finished ${formatAgo(summary.lastActiveAt, now)}`;
+  if (summary.phase === 'waves') return summary.wave ? `Wave ${summary.wave}` : 'Waves';
+  if (summary.phase === 'finish' && !summary.live) {
+    const ago = shortAgo(summary.lastActiveAt, now);
+    return ago.endsWith('s') ? 'Finished just now' : `Finished ${ago} ago`;
+  }
   if (summary.phase === 'plan') return 'Planning';
   if (summary.phase === 'reset') return 'Reset';
   return 'Finishing';
@@ -87,6 +90,21 @@ function firstLine(text, max = 110) {
 
 function clock(time) {
   return new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+}
+
+// A board post's time: "4m ago" under an hour, then the same 24-hour clock the
+// actions feed uses.
+export function postTime(time, now = Date.now()) {
+  const ago = shortAgo(time, now);
+  if (ago.endsWith('s')) return 'just now';
+  return ago.endsWith('m') ? `${ago} ago` : clock(time);
+}
+
+// The review row text: "◐ Reviewer running · 2m".
+export function reviewLabel(review, now = Date.now()) {
+  const view = statusView(review.status === 'running' ? 'review' : review.status);
+  const word = review.status === 'running' ? 'running' : view.word.toLowerCase();
+  return `${view.glyph} Reviewer ${word} · ${formatDuration(Math.max(0, now - new Date(review.startedAt).getTime()))}`;
 }
 
 const ATTENTION = new Set(['STUCK', 'DRIFT', 'BUDGET']);
@@ -151,7 +169,7 @@ export function renderSwitcher(root, list, selectedId, onSelect, now = Date.now(
     root,
     list,
     (s) => s.id,
-    (s) => {
+    () => {
       const name = el('span', { class: 'run-name' });
       const dot = el('span', { class: 'orch-dot', 'aria-hidden': 'true' });
       const state = el('span', { class: 'run-state' });
@@ -249,7 +267,7 @@ export function renderDetail(root, detail, { seenBoard = 0, firstRender = false,
   const r = fresh ? buildSkeleton(root, detail.id) : root._orch;
   const animate = !(firstRender || fresh);
 
-  setText(r.orchMeta, detail.live ? `updated ${formatAgo(now, now)}` : 'ended');
+  setText(r.orchMeta, detail.live ? 'live' : 'ended');
   setText(r.title, detail.topic);
   setText(r.project, detail.project);
   setText(r.branch, detail.branch ?? '');
@@ -310,7 +328,7 @@ function renderWaves(r, detail, animate, now) {
     r.waves,
     sections,
     (s) => `wave-${s.wave.n}-${s.mode}`,
-    (s) => buildWave(s),
+    buildWave,
     (node, s) => updateWave(node, s, r, animate, now),
   );
 }
@@ -333,7 +351,7 @@ function updateWave(node, { mode, wave }, r, animate, now) {
       w.body,
       wave.workers,
       (worker) => worker.agentId,
-      (worker) => buildWorker(worker, r),
+      () => buildWorker(r),
       (card, worker) => updateWorker(card, worker, r, animate, now),
     );
     return;
@@ -350,27 +368,52 @@ function updateWave(node, { mode, wave }, r, animate, now) {
   );
 }
 
-function buildWorker(worker, r) {
-  const title = el('span', { class: 'w-title' });
-  const status = el('span', { class: 'status' });
-  const act = el('span', { class: 'act' });
-  const since = el('span', { class: 'since' });
-  const ctxValue = el('span');
-  const fill = el('span', { class: 'fill' });
-  const meterNode = el('span', { class: 'meter' }, [fill, el('span', { class: 'tick' })]);
-  const foot = el('div', { class: 'w-foot' });
+// A worker card. Every node below is built once and updated in place on each poll,
+// so a text selection or an open composer survives it. .w-slot is empty here and
+// no poll touches it: the steer composer goes in it.
+function buildWorker(r) {
+  const filesValue = el('b', { class: 'num' });
+  const steerValue = el('b', { class: 'num' });
+  const steerItem = el('span', {}, [document.createTextNode('Steered '), steerValue]);
+  const runningValue = el('b', { class: 'num' });
+  const r2 = {
+    taskNo: el('b'),
+    titleText: el('span'),
+    glyph: el('span', { class: 'glyph' }),
+    word: el('span'),
+    act: el('span', { class: 'act' }),
+    since: el('span', { class: 'since' }),
+    ctxValue: el('span'),
+    fill: el('span', { class: 'fill' }),
+    filesValue, steerValue, steerItem, runningValue,
+    reviewText: el('span'),
+    reviewTask: el('span'),
+    moreList: el('ul', { class: 'steps' }),
+    doneWhen: el('code'),
+  };
+  r2.title = el('span', { class: 'w-title' }, [r2.taskNo, r2.titleText]);
+  r2.status = el('span', { class: 'status' }, [r2.glyph, r2.word]);
+  r2.wNow = el('div', { class: 'w-now' }, [r2.act, r2.since]);
   const head = el('button', { class: 'w-head', type: 'button', 'aria-expanded': 'false' }, [
-    el('div', { class: 'w-top' }, [title, status]),
-    el('div', { class: 'w-now' }, [act, since]),
-    el('div', { class: 'ctx' }, [el('div', { class: 'ctx-row' }, [el('span', { text: 'Context' }), ctxValue]), meterNode]),
-    foot,
+    el('div', { class: 'w-top' }, [r2.title, r2.status]),
+    r2.wNow,
+    el('div', { class: 'ctx' }, [
+      el('div', { class: 'ctx-row' }, [el('span', { text: 'Context' }), r2.ctxValue]),
+      el('span', { class: 'meter' }, [r2.fill, el('span', { class: 'tick' })]),
+    ]),
+    el('div', { class: 'w-foot' }, [el('span', {}, [document.createTextNode('Files '), filesValue]), steerItem, el('span', {}, [document.createTextNode('Running '), runningValue])]),
   ]);
-  const more = el('div', { class: 'w-more' });
+  const more = el('div', { class: 'w-more' }, [
+    el('span', { class: 'label more-label', text: 'Last steps' }),
+    r2.moreList,
+    el('div', { class: 'done-check' }, [document.createTextNode('Done when '), r2.doneWhen]),
+  ]);
   more.hidden = true;
-  const review = el('div', { class: 'review' });
+  const review = el('div', { class: 'review' }, [r2.reviewText, r2.reviewTask]);
   review.hidden = true;
-  const card = el('div', { class: 'worker' }, [head, review, more]);
-  card._r = { head, title, status, act, since, ctxValue, fill, meterNode, foot, more, review, wNow: head.querySelector('.w-now') };
+  const card = el('div', { class: 'worker' }, [head, review, el('div', { class: 'w-slot' }), more]);
+  Object.assign(r2, { head, more, review });
+  card._r = r2;
   head.addEventListener('click', () => {
     const id = card.dataset.key;
     const open = !r.open.has(id);
@@ -379,7 +422,7 @@ function buildWorker(worker, r) {
     head.setAttribute('aria-expanded', String(open));
     more.hidden = !open;
     if (open) {
-      fillMore(card._r, card._worker);
+      fillMore(card._r, card._worker, Date.now());
       fadeIn(more, { animate: true });
     }
   });
@@ -390,9 +433,11 @@ function updateWorker(card, w, r, animate, now) {
   const c = card._r;
   card._worker = w;
   const view = statusView(w.status);
-  c.title.replaceChildren(el('b', { text: `T${w.task}` }), document.createTextNode(w.title ?? ''));
+  setText(c.taskNo, `T${w.task}`);
+  setText(c.titleText, w.title ?? '');
   c.status.className = `status ${view.tone}`;
-  c.status.replaceChildren(el('span', { class: 'glyph', text: view.glyph }), document.createTextNode(view.word));
+  setText(c.glyph, view.glyph);
+  setText(c.word, view.word);
   setClass(card, 'attn', w.status === 'stuck');
   setClass(c.wNow, 'attn', w.status === 'stuck');
   swapText(c.act, actionText(w), { animate });
@@ -402,43 +447,37 @@ function updateWorker(card, w, r, animate, now) {
   c.fill.style.transform = `scaleX(${meterRatio(w.contextTokens)})`;
   setClass(c.fill, 'over', w.contextTokens > CONTEXT_BUDGET);
 
-  const edited = (w.edited ?? []).filter((f) => (w.files ?? []).includes(f)).length;
   const finished = ['merged', 'done', 'passed', 'changes', 'review'].includes(w.status);
   const end = finished && w.lastActiveAt ? new Date(w.lastActiveAt).getTime() : now;
-  c.foot.replaceChildren(
-    footItem('Files', `${edited} of ${(w.files ?? []).length}`),
-    footItem('Running', formatDuration(Math.max(0, end - new Date(w.startedAt).getTime()))),
-  );
+  setText(c.filesValue, `${(w.touched ?? []).length} of ${(w.files ?? []).length}`);
+  c.steerItem.hidden = !(w.steerCount > 0);
+  setText(c.steerValue, String(w.steerCount ?? 0));
+  setText(c.runningValue, formatDuration(Math.max(0, end - new Date(w.startedAt).getTime())));
 
   c.review.hidden = !w.review;
   if (w.review) {
-    const reviewView = statusView(w.review.status === 'running' ? 'review' : w.review.status);
-    c.review.replaceChildren(
-      el('span', { text: `${reviewView.glyph} Reviewer ${reviewView.word.toLowerCase()} · ${formatDuration(Math.max(0, now - new Date(w.review.startedAt).getTime()))}` }),
-      el('span', { text: `Task ${w.task}` }),
-    );
+    setText(c.reviewText, reviewLabel(w.review, now));
+    setText(c.reviewTask, `Task ${w.task}`);
   }
   const open = r.open.has(card.dataset.key);
   c.head.setAttribute('aria-expanded', String(open));
   c.more.hidden = !open;
-  if (open) fillMore(c, w);
+  if (open) fillMore(c, w, now);
 }
 
-function footItem(label, value) {
-  return el('span', {}, [document.createTextNode(`${label} `), el('b', { class: 'num', text: value })]);
-}
-
-function fillMore(c, w) {
-  const steps = [...(w.steps ?? [])].reverse();
-  const now = Date.now();
-  c.more.replaceChildren(
-    el('span', { class: 'label more-label', text: 'Last steps' }),
-    el('ul', { class: 'steps' }, steps.map((s, i) => el('li', {}, [
-      el('span', { text: i === 0 ? 'now' : `-${shortAgo(s.time, now)}` }),
-      el('span', { text: stepLabel(s) }),
-    ]))),
-    el('div', { class: 'done-check' }, [document.createTextNode('Done when '), el('code', { text: w.doneWhen ?? 'not stated' })]),
+function fillMore(c, w, now) {
+  const steps = [...(w.steps ?? [])].reverse().map((step, i) => ({ step, i }));
+  reconcile(
+    c.moreList,
+    steps,
+    ({ step }) => String(step.line),
+    () => el('li', {}, [el('span'), el('span')]),
+    (li, { step, i }) => {
+      setText(li.children[0], i === 0 ? 'now' : `-${shortAgo(step.time, now)}`);
+      setText(li.children[1], stepLabel(step));
+    },
   );
+  setText(c.doneWhen, w.doneWhen ?? 'not stated');
 }
 
 // ---------- Feed and board ----------
@@ -448,12 +487,14 @@ function renderFeed(node, feed) {
     node,
     feed ?? [],
     (f) => `${f.at}|${f.line}`,
-    () => el('li', {}, [el('span', { class: 't' }), el('span', { class: 'g' }), el('span', { class: 'x' })]),
+    () => el('li', {}, [el('span', { class: 't' }), el('span', { class: 'g' }), el('span', { class: 'x' }, [el('span', { class: 'what' }), el('span', { class: 'detail' })])]),
     (li, f) => {
       const [t, g, x] = li.children;
       setText(t, clock(f.at));
       setText(g, f.glyph);
-      x.replaceChildren(document.createTextNode(f.text), ...(f.detail ? [el('span', { text: ` · ${f.detail}` })] : []));
+      setText(x.children[0], f.text);
+      x.children[1].hidden = !f.detail;
+      setText(x.children[1], f.detail ? ` · ${f.detail}` : '');
     },
   );
 }
@@ -473,7 +514,7 @@ function renderBoard(r, detail, seenBoard, animate, now) {
       const p = li._r;
       setText(p.from, post.from);
       setClass(p.from, 'you', post.from === 'You');
-      setText(p.when, formatAgo(new Date(post.t).getTime(), now));
+      setText(p.when, postTime(post.t, now));
       setText(p.title, post.title);
       setText(p.body, post.body ?? '');
       if (isNew) li.classList.add('new');

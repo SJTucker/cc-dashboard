@@ -117,6 +117,9 @@ function writeOrchestration(configDir, opts = {}) {
       const usage = last && w.tokens ? { ...usageAt(k), cache_read_input_tokens: w.tokens - 510 } : usageAt(k);
       if (s.tool) {
         const { tool, ...input } = s;
+        // A real worker edits absolute paths inside its worktree, so a relative file_path
+        // in the step list is placed in this worker's worktree.
+        if (typeof input.file_path === 'string' && !path.isAbsolute(input.file_path)) input.file_path = `${project}/.worktrees/${topic}-t${n}/${input.file_path}`;
         wl.push(assistantOf(side, [use(tool, input, `w${n}-t${k}`)], usage));
         wl.push(resultOf(side, `w${n}-t${k}`));
       } else {

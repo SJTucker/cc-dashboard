@@ -174,3 +174,22 @@ test('a worker started after all earlier ones finished opens wave 2', () => {
   assert.equal(groupWaves([w('a', 0, 'done', 50), w('b', 5, 'working')]).length, 1);
   assert.equal(groupWaves([w('a', 0, 'working'), w('b', 5, 'working')]).length, 1);
 });
+
+test('touched lists edited files that match the task files, absolute or relative', () => {
+  const task = { ...agent, files: ['lib/a.js', 'docs/'] };
+  const lines = [
+    tool('Edit', { file_path: '/work/.worktrees/x-t3/lib/a.js' }, 1),
+    tool('Edit', { file_path: '/work/.worktrees/x-t3/docs/guide.md' }, 2),
+    tool('Edit', { file_path: '/work/.worktrees/x-t3/lib/other.js' }, 3),
+  ];
+  const { state } = workerState(task, read(lines, 3), null, undefined, opts(4));
+  assert.deepEqual(state.touched, ['/work/.worktrees/x-t3/lib/a.js', '/work/.worktrees/x-t3/docs/guide.md']);
+  assert.deepEqual(workerState(task, null, null, undefined, opts(1)).state.touched, []);
+});
+
+test('steerCount counts the steers sent to the worker', () => {
+  const steers = [{ to: 'w', at: iso(5) }, { to: 'other', at: iso(6) }, { to: 'w', at: iso(7) }];
+  const resolved = resolveStatuses([st({}), st({ agentId: 'z', task: '2' })], [], [], steers);
+  assert.equal(resolved[0].steerCount, 2);
+  assert.equal(resolved[1].steerCount, 0);
+});
