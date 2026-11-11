@@ -80,7 +80,7 @@ test('a review agent is a reviewer for its task', () => {
 });
 
 test('board path comes from the Monitor --board argument', () => {
-  const cmd = '/clone/bin/transcript-index /c/subagents/agent-aaa1.jsonl --watch --files lib/parse.js --budget 120000 --board /b/custom.board.jsonl';
+  const cmd = '/clone/bin/transcript-index /c/subagents/agent-aaa1.jsonl --watch --files lib/parse.js --budget 200000 --board /b/custom.board.jsonl';
   const lines = [...orchestratorLines(), assistant(use('Monitor', { command: cmd, description: 'Task 1 worker' }, 'm1'))];
   assert.equal(parseOrchestrator(lines).boardPath, '/b/custom.board.jsonl');
 });
@@ -286,7 +286,7 @@ test('watchEvents reports a finished fixture worker as done with its report, and
   });
   const read = (id) => fs.readFileSync(path.join(path.dirname(out.transcript), 'sess-w', 'subagents', `agent-${id}.jsonl`), 'utf8').split('\n').filter(Boolean);
   const watch = (lines, finished) => {
-    const opts = { files: undefined, budget: 120000, finished };
+    const opts = { files: undefined, budget: 200000, finished };
     const first = watchEvents(lines, null, opts);
     return watchEvents(lines, first.seen, opts);
   };

@@ -3,7 +3,7 @@
 // import this module (test/modules-load.test.js).
 import { formatDuration } from '../format.mjs';
 
-export const CONTEXT_BUDGET = 120000;
+export const CONTEXT_BUDGET = 200000;
 export const EMPTY_TEXT = 'No orchestration ran today. Start one with the orchestrate skill.';
 
 const STATUS_VIEWS = {

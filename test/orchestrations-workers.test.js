@@ -60,10 +60,10 @@ test('STUCK after three identical failures', () => {
   assert.equal(state.events.at(-1).type, 'STUCK');
 });
 
-test('BUDGET once context passes 120000', () => {
-  const lines = [tool('Read', { file_path: 'a.js' }, 1, { input_tokens: 1, cache_read_input_tokens: 100000, cache_creation_input_tokens: 20000 })];
+test('BUDGET once context passes 200000', () => {
+  const lines = [tool('Read', { file_path: 'a.js' }, 1, { input_tokens: 1, cache_read_input_tokens: 180000, cache_creation_input_tokens: 20000 })];
   const { state } = workerState(agent, read(lines, 1), null, undefined, opts(2));
-  assert.equal(state.contextTokens, 120001);
+  assert.equal(state.contextTokens, 200001);
   assert.equal(state.events.at(-1).type, 'BUDGET');
 });
 

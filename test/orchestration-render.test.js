@@ -28,10 +28,10 @@ test('switcherState words follow waiting, phase and liveness', async () => {
   assert.equal(switcherState({ phase: 'waves', wave: null, live: true }, now), 'Waves');
 });
 
-test('meterRatio is tokens over the 120000 budget, clamped to 1', async () => {
+test('meterRatio is tokens over the 200000 budget, clamped to 1', async () => {
   const { meterRatio } = await load();
-  assert.equal(meterRatio(60000), 0.5);
-  assert.equal(meterRatio(130000), 1);
+  assert.equal(meterRatio(100000), 0.5);
+  assert.equal(meterRatio(210000), 1);
   assert.equal(meterRatio(null), 0);
 });
 

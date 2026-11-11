@@ -156,7 +156,7 @@ For each worker, its transcript is
 `<project dir>/$CLAUDE_CODE_SESSION_ID/subagents/agent-<agentId>.jsonl`, with
 `agentId` from the Agent result. Start one Monitor tool watch per worker:
 
-- `command`: `TI <worker transcript> --watch --files <task files, comma separated> --budget 120000`,
+- `command`: `TI <worker transcript> --watch --files <task files, comma separated> --budget 200000`,
   plus `--board <board>` on exactly one watch per wave, so each post wakes you
   once. A `--files` entry ending in `/` covers a whole folder: add this
   session's scratchpad folder, so a worker's scratch files are not reported as
@@ -181,7 +181,7 @@ Run `TI <worker transcript> --steps 20` and decide:
   is a file the plan missed and the task needs. Then note it for Updates.
 - `STUCK <tool> <text> failed 3 times in a row`: steer with the fix, or tell the
   worker to stop and report if you do not know it.
-- `BUDGET context <n> tokens, over 120000`: steer the worker to finish its
+- `BUDGET context <n> tokens, over 200000`: steer the worker to finish its
   current step, commit, and report. Then split the rest of its task into a new
   task for a later wave.
 - `QUIET no new lines for 5 min`: look. Steer only if the steps show the worker
