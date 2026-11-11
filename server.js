@@ -618,13 +618,14 @@ function createServer(config) {
 
   // The owner's board post, from "You", appended to the orchestration's board file.
   // The board path comes from the orchestration, never from the request.
-  const cleanText = (v, max) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
+  // Text over max is refused, not cut, as the steer route does. appendPost still cuts for bin/board-post.
+  const cleanText = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
   app.post('/api/orchestrations/:id/board', express.json({ limit: '8kb' }), (req, res) => {
     const body = req.body;
     const title = cleanText(body?.title, 120);
-    const text = body?.body === undefined ? '' : typeof body.body === 'string' ? body.body.trim() : null;
+    const text = body?.body === undefined ? '' : typeof body.body === 'string' && body.body.trim().length <= 2000 ? body.body.trim() : null;
     if (!SESSION_ID_PATTERN.test(req.params.id) || title === null || text === null) {
-      res.status(400).json({ error: 'Send a title, and optionally a body, as text.' });
+      res.status(400).json({ error: 'Send a title of 1 to 120 characters, and optionally a body of up to 2000, as text.' });
       return;
     }
     try {

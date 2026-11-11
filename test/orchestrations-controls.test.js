@@ -361,3 +361,27 @@ test('a symlinked file in a steer folder is neither read nor deleted', (t) => {
   assert.ok(fs.lstatSync(path.join(dir, 'link-1.json')).isSymbolicLink());
   assert.ok(fs.existsSync(target));
 });
+
+test('board text over the limit is refused with 400, as steer text is, and the limit itself is accepted', async (t) => {
+  const { url, o } = await setup(t);
+  const board = `/api/orchestrations/${o.sessionId}/board`;
+  const steer = `/api/orchestrations/${o.sessionId}/steer`;
+  const count = () => parseBoard(fs.readFileSync(o.boardPath, 'utf8').split('\n').filter(Boolean)).length;
+  assert.equal((await send(url, board, { title: 'x'.repeat(121) })).status, 400);
+  assert.equal((await send(url, board, { title: 'x', body: 'y'.repeat(2001) })).status, 400);
+  assert.equal((await send(url, steer, { agentId: o.workerIds[0], text: 'z'.repeat(2001) })).status, 400);
+  assert.equal(count(), 0);
+  const ok = await send(url, board, { title: 'x'.repeat(120), body: 'y'.repeat(2000) });
+  assert.equal(ok.status, 201);
+  const post = await ok.json();
+  assert.equal(post.title.length, 120);
+  assert.equal(post.body.length, 2000);
+  assert.equal(count(), 1);
+});
+
+test('appendPost still cuts long text for bin/board-post', (t) => {
+  const file = path.join(tmpDir(t, 'board'), 'x.board.jsonl');
+  const post = require('../lib/orchestrations/board').appendPost(file, { from: 'Task 1', title: 'x'.repeat(121), body: 'y'.repeat(2001) });
+  assert.equal(post.title.length, 120);
+  assert.equal(post.body.length, 2000);
+});
