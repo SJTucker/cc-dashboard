@@ -499,3 +499,13 @@ test('the sweep keeps the board a remaining member of the group still uses', (t)
   assert.equal(orch.list().length, 1);
   assert.equal(open.mock.calls.filter((c) => c.arguments[0] === a.boardPath).length, 0, 'the board was not read again from the start');
 });
+
+test('a worker with no transcript yet leaves no stepsMemo entry', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  fs.rmSync(path.join(path.dirname(o.transcript), o.sessionId, 'subagents', `agent-${o.workerIds[0]}.jsonl`));
+  const orch = createOrchestrations(config.configDir);
+  assert.equal(orch.list()[0].counts.working, 1);
+  assert.equal(orch.sizes().stepsMemo, 0);
+});

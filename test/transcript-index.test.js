@@ -592,3 +592,19 @@ test('bashReadPaths handles &>, subshells, backslashes, sed -ne and cd -', () =>
   assert.deepEqual(bashReadPaths(`sed -ne '1,5p' ${P('f.md')} && sed -n -e '1p' ${P('g.md')}`), [P('f.md'), P('g.md')]);
   assert.deepEqual(bashReadPaths(`cd ${D}; cd sub; cd -; cat f.md`), []);
 });
+
+test('stepsOf with a carried ctx finds a worker task line that arrives in a later batch, as a full pass does', () => {
+  const side = (o) => JSON.stringify({ agentId: 'w1', timestamp: '2026-11-10T10:00:00.000Z', ...o });
+  const lines = [
+    side({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text: 'warming up' }] } }),
+    side({ type: 'api-request' }),
+  ];
+  const ctx = {};
+  const first = stepsOf(lines, 1, 2, ctx);
+  assert.equal(ctx.kind.settled, false);
+  lines.push(side({ type: 'user', message: { role: 'user', content: 'Do Task 1' } }), side({ type: 'user', origin: { kind: 'coordinator' }, message: { role: 'user', content: 'The coordinator sent a message while you were working:\nStop.' } }));
+  const second = stepsOf(lines, 3, 4, ctx);
+  assert.equal(ctx.kind.settled, true);
+  assert.equal(ctx.kind.taskLine, 2);
+  assert.deepEqual([...first, ...second], stepsOf(lines, 1, 4));
+});
