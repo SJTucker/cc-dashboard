@@ -408,7 +408,7 @@ test('a worker done with no lines and no file stays in the wave of one launched 
   const lines = [tool('Read', { file_path: 'a.js' }, 2)];
   const other = workerState({ ...agent, agentId: 'b', task: '2', startedAt: iso(1) }, read(lines, 2), null, undefined, opts(3)).state;
   assert.equal(early.raw, 'done');
-  assert.equal(early.lastActiveAt, iso(1.5));
+  assert.equal(early.lastActiveAt, null);
   assert.equal(noFile.lastActiveAt, null);
   const waves = groupWaves(resolveStatuses([early, noFile, other], [], [], []));
   assert.deepEqual(waves.map((w) => w.workers.map((x) => x.agentId)), [['a', 'c', 'b']]);
@@ -417,4 +417,12 @@ test('a worker done with no lines and no file stays in the wave of one launched 
 test('a worker with no known last-active time never lets a later worker open a wave', () => {
   const w = (id, sec, status, lastActiveAt) => ({ agentId: id, startedAt: iso(sec), lastActiveAt, status });
   assert.equal(groupWaves([w('a', 0, 'done', null), w('b', 100, 'working', iso(100))]).length, 1);
+});
+
+test('a finished worker with an empty file made before its sibling started stays in that wave', () => {
+  // The probe's case: an empty file's mtime is its creation time, not the time the worker finished.
+  const a = workerState({ ...agent, agentId: 'a', task: '1', startedAt: iso(0) }, read([], 0.5), { finished: true }, undefined, opts(3)).state;
+  const b = workerState({ ...agent, agentId: 'b', task: '2', startedAt: iso(1) }, read([tool('Read', { file_path: 'a.js' }, 2)], 2), null, undefined, opts(3)).state;
+  assert.equal(a.lastActiveAt, null);
+  assert.deepEqual(groupWaves(resolveStatuses([a, b], [], [], [])).map((w) => w.workers.map((x) => x.agentId)), [['a', 'b']]);
 });
