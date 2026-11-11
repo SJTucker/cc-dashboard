@@ -1,0 +1,75 @@
+#!/usr/bin/env node
+'use strict';
+
+// The claim queue of an orchestrate run (see lib/orchestrations/claims.js).
+//
+//   orch-claim <run> work|review            claim the oldest pending task and print it
+//   orch-claim <run> --add work|review      add a task, JSON on stdin; prints the file name
+//   orch-claim <run> --release <file>       return a claimed task to its pending queue
+//   orch-claim <run> --status               list pending files and claimed files with no time
+//
+// <run> is the run folder, an absolute path ending in .run. An empty queue prints
+// a NO TASK line and exits 0. Any other problem prints `orch-claim: <reason>` on
+// stderr and exits 1.
+
+const fs = require('fs');
+const { parseArgs } = require('util');
+const claims = require('../lib/orchestrations/claims');
+
+const USAGE = 'usage: orch-claim <run> work|review | <run> --add work|review | <run> --release <file> | <run> --status';
+
+function kindArg(v) {
+  if (!claims.KINDS.includes(v)) throw new Error(USAGE);
+  return v;
+}
+
+function checkTask(task, kind) {
+  if (!task || typeof task !== 'object' || Array.isArray(task)) throw new Error('the task must be a JSON object');
+  for (const key of ['worktree', 'title', 'plan', 'doneWhen']) {
+    if (typeof task[key] !== 'string' || !task[key]) throw new Error(`task.${key} is required`);
+  }
+  if (!Number.isInteger(task.task) || task.task < 0) throw new Error('task.task must be an integer >= 0');
+  if (!Array.isArray(task.files) || !task.files.every((f) => typeof f === 'string')) throw new Error('task.files must be an array of strings');
+  if (kind === 'review' && typeof task.implementer?.transcript !== 'string') throw new Error('a review task needs implementer.transcript');
+}
+
+function main() {
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: { add: { type: 'boolean' }, release: { type: 'string' }, status: { type: 'boolean' } },
+  });
+  const [run, kind, ...extra] = positionals;
+  if (!run || extra.length > 0) throw new Error(USAGE);
+  if (!claims.validRunDir(run)) throw new Error(`${run} is not a run folder: it must be an absolute path ending in .run`);
+  if (values.status) {
+    if (kind) throw new Error(USAGE);
+    const s = claims.status(run);
+    const list = (a) => (a.length ? a.join(', ') : '(none)');
+    process.stdout.write(`work: ${list(s.work)}\nreview: ${list(s.review)}\nclaimed, no time: ${list(s.unstamped)}\n`);
+  } else if (values.release !== undefined) {
+    if (kind) throw new Error(USAGE);
+    if (!claims.TASK_FILE.test(values.release)) throw new Error(`${values.release} is not a task file name`);
+    claims.release(run, values.release);
+  } else if (values.add) {
+    const k = kindArg(kind);
+    let task;
+    try {
+      task = JSON.parse(fs.readFileSync(0, 'utf8'));
+    } catch (err) {
+      throw new Error(`the task on stdin is not valid JSON: ${err.message}`);
+    }
+    checkTask(task, k);
+    process.stdout.write(`${claims.addTask(run, k, { ...task, kind: k, attempt: task.attempt ?? 1 })}\n`);
+  } else {
+    const k = kindArg(kind);
+    const got = claims.claimNext(run, k);
+    process.stdout.write(got ? `${claims.formatClaim(got.file, got.task)}\n` : `NO TASK: the ${k} queue is empty. Report that and stop.\n`);
+  }
+}
+
+try {
+  main();
+} catch (err) {
+  process.stderr.write(`orch-claim: ${err.message}\n`);
+  process.exitCode = 1;
+}
