@@ -109,7 +109,8 @@ export function reviewLabel(review, now = Date.now()) {
   const view = statusView(review.status === 'running' ? 'review' : review.status);
   const word = review.status === 'running' ? 'running' : view.word.toLowerCase();
   const start = Date.parse(review.startedAt);
-  const end = review.endedAt ? Date.parse(review.endedAt) : now;
+  // Only a running review counts up. A settled one with no end time shows a dash.
+  const end = review.endedAt ? Date.parse(review.endedAt) : review.status === 'running' ? now : NaN;
   const time = Number.isNaN(start) || Number.isNaN(end) ? '—' : formatDuration(Math.max(0, end - start));
   return `${view.glyph} Reviewer ${word} · ${time}`;
 }
