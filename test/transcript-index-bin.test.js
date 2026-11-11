@@ -319,3 +319,63 @@ test('--steps lists files read through Bash on the Read: line', (t) => {
   }) + '\n');
   assert.equal(runArgs([file, '--steps', '1']).stdout.split('\n')[1], `Read: /r/spec.md, /r/a.ts, ${notes}`);
 });
+
+// A worker transcript that edits /wt/lib/b.js, claims 0001-t3-a1.json (files lib/a.js)
+// from a run folder, then edits /wt/lib/c.js, and hands back. extra lines go after the claim.
+function claimWorker(t, { task = { files: ['lib/a.js'] }, extra = [] } = {}) {
+  const dir = tmpDir(t, 'transcript-index-claim');
+  const run = path.join(dir, 'img.run');
+  fs.mkdirSync(path.join(run, 'claimed'), { recursive: true });
+  if (task) fs.writeFileSync(path.join(run, 'claimed', '0001-t3-a1.json'), JSON.stringify(task));
+  const rec = (o) => JSON.stringify({ agentId: 'a1', isSidechain: true, sessionId: 's1', timestamp: '2026-11-08T14:02:00.000Z', ...o });
+  const asst = (content) => rec({ type: 'assistant', message: { role: 'assistant', content } });
+  const res = (id, content) => rec({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+  const use = (id, name, input) => ({ type: 'tool_use', id, name, input });
+  const claim = (id, file) => [asst([use(id, 'Bash', { command: `/c/bin/orch-claim '${run}' work` })]), res(id, `CLAIMED ${file}\nYour worktree is /wt`)];
+  const lines = [
+    rec({ type: 'user', message: { role: 'user', content: 'Read the image' } }),
+    asst([use('e1', 'Edit', { file_path: '/wt/lib/b.js' })]),
+    ...claim('c1', '0001-t3-a1.json'),
+    asst([use('e2', 'Edit', { file_path: '/wt/lib/c.js' })]),
+    ...extra.flatMap((x) => claim(x.id, x.file)),
+    HANDBACK,
+  ];
+  const file = path.join(dir, 'agent-a1.jsonl');
+  fs.writeFileSync(file, lines.join('\n') + '\n');
+  return { file, run };
+}
+const watchRun = (file, ...args) => spawnSync(process.execPath, [BIN, file, '--watch', ...args], { encoding: 'utf8', timeout: 10_000 });
+
+test('--watch --run reports DRIFT only for edits after the claim, against the claimed files', (t) => {
+  const { file, run } = claimWorker(t);
+  const r = watchRun(file, '--run', run);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes('DRIFT edit outside task files: /wt/lib/c.js'), r.stdout);
+  assert.ok(!r.stdout.includes('/wt/lib/b.js'), r.stdout);
+});
+
+test('--watch --run adds --files entries to the claimed files', (t) => {
+  const { file, run } = claimWorker(t);
+  const r = watchRun(file, '--run', run, '--files', '/wt/lib/c.js');
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!r.stdout.includes('DRIFT'), r.stdout);
+});
+
+test('--watch --run with an unreadable claim reports no DRIFT', (t) => {
+  const { file, run } = claimWorker(t, { task: null });
+  const r = watchRun(file, '--run', run);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!r.stdout.includes('DRIFT'), r.stdout);
+});
+
+test('--watch --run prints CLAIM for a second claim', (t) => {
+  const { file, run } = claimWorker(t, { extra: [{ id: 'c2', file: '0002-t4-a1.json' }] });
+  const r = watchRun(file, '--run', run);
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(r.stdout.includes('CLAIM second claim 0002-t4-a1.json after 0001-t3-a1.json\n'), r.stdout);
+});
+
+test('--watch --run rejects a run folder that is not absolute, ends in .run and is normalized', (t) => {
+  const { file } = claimWorker(t);
+  for (const bad of ['rel/img.run', '/a/img', '/a/../a/img.run']) assert.equal(watchRun(file, '--run', bad).status, 1, bad);
+});
