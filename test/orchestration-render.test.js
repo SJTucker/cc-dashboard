@@ -95,3 +95,16 @@ test('steerError words each refusal of a steer', async () => {
   assert.equal(steerError(400, {}), 'Write a message first.');
   assert.equal(steerError(404, {}), 'Could not send. The server said 404.');
 });
+
+test('steerView says plain Not delivered when a failed steer has no reason', async () => {
+  const { steerView } = await load();
+  assert.deepEqual(steerView({ state: 'failed', reason: null }), { word: 'Not delivered', tone: 'warn' });
+  assert.deepEqual(steerView({ state: 'failed' }), { word: 'Not delivered', tone: 'warn' });
+});
+
+test('steerError asks for a message only when the text is empty, else says it is too long or not valid', async () => {
+  const { steerError } = await load();
+  assert.equal(steerError(400, {}, '   '), 'Write a message first.');
+  assert.equal(steerError(400, {}, ''), 'Write a message first.');
+  assert.equal(steerError(400, {}, 'x'.repeat(2001)), 'The message is too long or not valid.');
+});

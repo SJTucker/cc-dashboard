@@ -137,7 +137,7 @@
 .orch-btn { all: unset; box-sizing: border-box; cursor: pointer; font-family: var(--font-data); font-size: var(--fs-caption); color: var(--text-primary); background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 3px 10px; transition: transform 140ms var(--orch-ease), background-color 150ms ease; }
 .orch-btn.primary { border-color: var(--accent-cyan-dim); color: var(--accent-cyan); }
 .orch-btn:active { transform: scale(0.97); }
-.orch-btn:disabled { opacity: 0.45; cursor: default; transform: none; }
+.orch-btn:disabled, .orch-btn[aria-disabled="true"] { opacity: 0.45; cursor: default; transform: none; }
 .orch-btn:focus-visible, .orch-link:focus-visible { outline: 2px solid var(--accent-cyan); outline-offset: 1px; }
 @media (hover: hover) and (pointer: fine) { .orch-btn:not(:disabled):hover { background: var(--surface-hover); } }
 .orch-link { all: unset; cursor: pointer; font-size: var(--fs-caption); color: var(--text-tertiary); }
@@ -157,7 +157,7 @@
 .steer-status.warn { color: var(--warning); font-weight: 600; }
 .steer-form { display: grid; gap: 6px; }
 .post[data-pending] { opacity: 0.6; }
-.post { transition: opacity 300ms ease; }
+.post { transition: opacity 300ms var(--orch-ease); }
 
 @media (max-width: 1000px) {
   .orch-layout { grid-template-columns: 1fr; }
@@ -171,4 +171,5 @@
 @media (prefers-reduced-motion: reduce) {
   .orch-dot::after { animation: none; }
   .meter .fill, .run, .orch-btn, .post { transition: none; }
+  .orch-btn:active { transform: none; }
 }

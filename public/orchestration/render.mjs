@@ -117,7 +117,7 @@ export function steerView(lastSteer) {
     case 'delivered': return { word: `Delivered ${clock(lastSteer.at)}`, tone: 'plain' };
     case 'failed':
       if (lastSteer.reason === 'expired') return { word: 'Not sent: it reached the orchestrator too late. Send it again.', tone: 'warn' };
-      return { word: `Not delivered: ${lastSteer.reason}`, tone: 'warn' };
+      return { word: lastSteer.reason ? `Not delivered: ${lastSteer.reason}` : 'Not delivered', tone: 'warn' };
     case 'unclaimed': return { word: 'Not picked up. Is the orchestrator session still open?', tone: 'warn' };
     default: return null;
   }
@@ -131,10 +131,10 @@ export function boardError(status, data) {
 }
 
 // The message under the steer composer after a refused steer.
-export function steerError(status, data) {
+export function steerError(status, data, text = '') {
   if (status === 409 && data?.error === 'worker finished') return 'This worker has finished, so it was not steered.';
   if (status === 409 && data?.error === 'orchestrator not live') return 'The orchestrator session is not running, so nothing can deliver the message.';
-  if (status === 400) return 'Write a message first.';
+  if (status === 400) return text.trim() ? 'The message is too long or not valid.' : 'Write a message first.';
   return `Could not send. The server said ${status}.`;
 }
 
@@ -628,8 +628,10 @@ function buildBoardComposer(root) {
     if (!body.hidden) body.focus();
   });
   let sequence = 0;
+  let sending = false;
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (sending) return;
     const text = { title: title.value.trim(), body: body.value.trim() };
     if (!text.title) {
       showError(boardError(400, null));
@@ -649,8 +651,13 @@ function buildBoardComposer(root) {
     const typed = { title: title.value, body: body.value };
     title.value = '';
     body.value = '';
+    sending = true;
+    post.setAttribute('aria-disabled', 'true');
     const result = await sendBoardPost(id, text);
+    sending = false;
+    post.removeAttribute('aria-disabled');
     if (result.ok && result.data?.t) {
+      showError('');
       const key = `${result.data.t}You`;
       const same = [...list.children].find((child) => child !== li && child.dataset.key === key);
       if (same) li.remove();
@@ -673,10 +680,10 @@ function buildBoardComposer(root) {
 // returns the card, which does not exist yet when this runs. The composer is
 // built once and only shown or hidden, so a poll never rebuilds it.
 function buildSteer(r, getCard) {
-  const status = el('span', { class: 'steer-status', 'aria-live': 'polite' });
-  const open = button('Steer', '', { 'aria-expanded': 'false' });
+  const status = el('span', { class: 'steer-status', 'aria-live': 'polite', tabindex: '-1' });
+  const open = button('Steer', '', { 'aria-expanded': 'false', 'aria-label': 'Steer' });
   const row = el('div', { class: 'w-steer-row' }, [status, open]);
-  const input = el('textarea', { class: 'orch-field', rows: '2' });
+  const input = el('textarea', { class: 'orch-field', rows: '2', maxlength: '2000' });
   const send = el('button', { class: 'orch-btn primary', type: 'submit', text: 'Send' });
   const cancel = button('Cancel');
   const error = el('p', { class: 'orch-error', role: 'alert' });
@@ -692,6 +699,7 @@ function buildSteer(r, getCard) {
   form.hidden = true;
   const node = el('div', { class: 'w-slot' }, [row, form]);
   const s = { node, row, status, open, form, input, error };
+  let sending = false;
 
   const showError = (text) => {
     error.textContent = text ?? '';
@@ -703,12 +711,16 @@ function buildSteer(r, getCard) {
     showError('');
     open.hidden = !getCard()._worker?.canSteer;
     open.setAttribute('aria-expanded', 'false');
-    open.focus();
+    // A hidden button cannot take focus, so the status row does.
+    if (!open.hidden) open.focus();
+    else if (!row.hidden) status.focus();
+    else getCard()._r.head.focus();
   };
   open.addEventListener('click', () => {
     const card = getCard();
     input.setAttribute('aria-label', `Message to the ${card._worker ? `Task ${card._worker.task}` : 'task'} worker`);
     input.placeholder = input.getAttribute('aria-label');
+    showError('');
     form.hidden = false;
     open.hidden = true;
     open.setAttribute('aria-expanded', 'true');
@@ -727,19 +739,22 @@ function buildSteer(r, getCard) {
   });
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
+    if (sending) return;
     const card = getCard();
     const text = input.value.trim();
     if (!text) {
-      showError(steerError(400, null));
+      showError(steerError(400, null, text));
       input.focus();
       return;
     }
     showError('');
-    send.disabled = true;
+    sending = true;
+    send.setAttribute('aria-disabled', 'true');
     const result = await sendSteer(r.root.dataset.id, { agentId: card.dataset.key, text });
-    send.disabled = false;
+    sending = false;
+    send.removeAttribute('aria-disabled');
     if (!result.ok) {
-      showError(steerError(result.status, result.data));
+      showError(steerError(result.status, result.data, text));
       input.focus();
       return;
     }
@@ -757,6 +772,7 @@ function updateSteer(card, w, animate) {
   const s = card._r.steer;
   if (card._sending && card._sending === w.lastSteer?.id) card._sending = null;
   const view = card._sending ? { word: 'Sending…', tone: 'plain' } : steerView(w.lastSteer);
+  s.open.setAttribute('aria-label', `Steer Task ${w.task}`);
   swapText(s.status, view?.word ?? '', { animate });
   setClass(s.status, 'warn', view?.tone === 'warn');
   if (s.form.hidden) s.open.hidden = !w.canSteer;
