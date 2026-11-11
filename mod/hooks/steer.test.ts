@@ -15,12 +15,9 @@ test('steerNote names the task', async () => {
   expect(steerNote(null, 'Stop')).toBe('You steered a worker from the dashboard: Stop')
 })
 
-// lib/orchestrations/parse.js reads these notes back. Its STEER_NOTE matches the
-// 'Task <n>' form, and the server also accepts 'a worker'. Changing either string
-// here breaks that reader.
+// lib/orchestrations/parse.js STEER_NOTE reads both forms back (the 'a worker' form is added in the server fixes).
 test('steerNote writes the exact strings the server parses', async () => {
   expect(steerNote(12, 'a\nb')).toBe('You steered Task 12 from the dashboard: a\nb')
-  expect(/^You steered Task (\d+) from the dashboard: ([\s\S]*)$/.exec(steerNote(12, 'a\nb'))?.[1]).toBe('12')
   expect(steerNote(null, 'Stop now')).toBe('You steered a worker from the dashboard: Stop now')
 })
 
@@ -29,6 +26,7 @@ const DIR = '/cfg/cc-dashboard/steer/s1'
 function fake(files: Record<string, string>, send: SteerIo['send'], now = 99) {
   const calls: string[] = []
   const logs: string[] = []
+  const cancelled: string[] = []
   const io: SteerIo = {
     list: async (dir) => {
       if (dir !== DIR) throw new Error('ENOENT')
@@ -47,10 +45,10 @@ function fake(files: Record<string, string>, send: SteerIo['send'], now = 99) {
       calls.push(`append ${text}`)
     },
     now: async () => now,
-    sleep: async () => { await new Promise(() => {}) },
+    after: (_ms, _fn) => ({ cancel: () => { cancelled.push('timeout') } }),
     log: (text) => { logs.push(text) },
   }
-  return { io, calls, files, logs }
+  return { io, calls, files, logs, cancelled }
 }
 
 const request = JSON.stringify({ id: 'b', agentId: 'a1', task: 5, text: 'Use resolveRoot', at: 1 })
@@ -116,12 +114,21 @@ test('a failed append and a failed result write are logged', async () => {
 
 test('a send that never resolves is answered timed out after 10 s, logged, and the pass returns', async () => {
   const { io, calls, logs } = fake({ [`${DIR}/b.json`]: request }, () => new Promise(() => {}))
-  const slept: number[] = []
-  io.sleep = async (ms) => { slept.push(ms) }
+  const waits: number[] = []
+  io.after = (ms, fn) => { waits.push(ms); fn(); return { cancel: () => {} } }
   await relayOnce(io, DIR, new Set())
-  expect(slept).toEqual([10_000])
-  expect(calls).toEqual(['send a1 Use resolveRoot', 'write b.result.json {"id":"b","delivered":false,"reason":"timed out","at":99}'])
-  expect(logs).toEqual(['steer b timed out after 10000 ms'])
+  expect(waits).toEqual([10_000])
+  // The send may still deliver later. Its result is ignored: the request is answered once,
+  // and the owner may re-send.
+  const reason = 'timed out (it may still arrive)'
+  expect(calls).toEqual(['send a1 Use resolveRoot', `write b.result.json {"id":"b","delivered":false,"reason":"${reason}","at":99}`])
+  expect(logs).toEqual([`steer b ${reason}`])
+})
+
+test('the timeout timer is cancelled when the send wins', async () => {
+  const { io, cancelled } = fake({ [`${DIR}/b.json`]: request }, async () => ({ isDelivered: true }))
+  await relayOnce(io, DIR, new Set())
+  expect(cancelled).toEqual(['timeout'])
 })
 
 test('a send that resolves first is not reported as timed out', async () => {

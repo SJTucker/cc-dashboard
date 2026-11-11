@@ -76,6 +76,9 @@ type World = {
   readMs: number[]
   indexExistsMs: number
   indexExistsFails: boolean
+  // How long the fs.exists of the orchestrate skill file takes, and whether session.send never resolves.
+  skillExistsMs: number
+  sendHangs: boolean
   // Stdout of each git or date command the document handoff runs, by its argv joined with
   // spaces. Their runs go to repoRan, and a command not listed prints nothing.
   repo: Record<string, string>
@@ -167,6 +170,8 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     readMs: [],
     indexExistsMs: 0,
     indexExistsFails: false,
+    skillExistsMs: 0,
+    sendHangs: false,
     repo: {},
     ...w,
   }
@@ -198,6 +203,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     return { value: { kind: 'dir' as const, size: 0, mtimeMs: 0, isLink: true, realPath: '/repo/mod' } }
   })
   on('fs.exists', async (_$, e) => {
+    if (e.path.endsWith('/skills/orchestrate/SKILL.md') && state.skillExistsMs > 0) await clock.sleep(state.skillExistsMs)
     if (e.path.includes('/cc-dashboard/transcript-index/')) {
       if (state.indexExistsMs > 0) await clock.sleep(state.indexExistsMs)
       if (state.indexExistsFails) throw new Error('exists failed')
@@ -223,6 +229,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const appended: unknown[] = []
   on('session.send', (_$, e) => {
     sent.push({ to: e.to, text: e.text })
+    if (state.sendHangs) return new Promise(() => {})
     return { isDelivered: true }
   })
   on('session.append', (_$, e, next) => {
@@ -723,9 +730,36 @@ test('a session.end for another session id leaves the relay running', async ($, 
   const { listed, clock } = world(on)
   await $.session.start(start)
   await clock.settle()
+  await $.session.end({ reason: 'other', sessionId: 'other-session', resume: { id: 'other-session' } })
+  listed.length = 0
   await clock.advance(2_000)
   await clock.settle()
-  await $.session.end({ reason: 'other', sessionId: 'other-session', resume: { id: 'other-session' } })
+  expect(listed).toContain(STEER_DIR)
+})
+
+test('a session.end while the config check is pending leaves no relay timer', async ($, on) => {
+  const { listed, clock } = world(on, { skillExistsMs: 500 })
+  await $.session.start(start)
+  await clock.advance(100)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+})
+
+test('a hung send is answered timed out and the next tick lists the steer folder again', async ($, on) => {
+  const { sent, writes, listed, clock } = world(on, {
+    sendHangs: true,
+    dirs: { [STEER_DIR]: ['r1.json'] },
+    files: { [`${STEER_DIR}/r1.json`]: STEER_REQUEST },
+  })
+  await $.session.start(start)
+  await clock.settle()
+  await clock.advance(2_000)
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(sent.length).toBe(1)
+  expect(JSON.parse(writes[`${STEER_DIR}/r1.result.json`] ?? 'null')).toMatchObject({ delivered: false, reason: 'timed out (it may still arrive)' })
   listed.length = 0
   await clock.advance(2_000)
   await clock.settle()

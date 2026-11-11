@@ -11,7 +11,9 @@ export type SteerIo = {
   send: (agentId: string, text: string) => Promise<{ isDelivered: boolean, reason?: string }>
   append: (text: string) => Promise<unknown>
   now: () => Promise<number>
-  sleep: (ms: number) => Promise<void>
+  // A timer as $.clock.after makes one. $.clock.sleep is a hook's own wait and the types
+  // document it for a hook's dispatch, not for a clock.every callback, where this runs.
+  after: (ms: number, fn: () => void) => { cancel: () => void }
   log: (text: string) => void
 }
 
@@ -46,7 +48,7 @@ export function steerNote(task: number | null, text: string): string {
   return `You steered ${task === null ? 'a worker' : `Task ${task}`} from the dashboard: ${text}`
 }
 
-function parseRequest(text: string): { agentId: string, task: number | null, text: string, at: number } | null {
+function parseRequest(text: string): { agentId: string, task: number | null, text: string, at: number | null } | null {
   let body: unknown
   try {
     body = JSON.parse(text)
@@ -56,7 +58,7 @@ function parseRequest(text: string): { agentId: string, task: number | null, tex
   if (typeof body !== 'object' || body === null) return null
   const { agentId, task, text: steerText, at } = body as Record<string, unknown>
   if (typeof agentId !== 'string' || !agentId || typeof steerText !== 'string' || !steerText) return null
-  return { agentId, task: typeof task === 'number' ? task : null, text: steerText, at: typeof at === 'number' && Number.isFinite(at) ? at : NaN }
+  return { agentId, task: typeof task === 'number' ? task : null, text: steerText, at: typeof at === 'number' && Number.isFinite(at) ? at : null }
 }
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
@@ -74,15 +76,24 @@ export async function relayOnce(io: SteerIo, dir: string, handled: Set<string>):
       const request = parseRequest(await io.read(`${dir}/${id}.json`))
       if (!request) {
         reason = 'the request file is not a valid steer'
-      } else if (Number.isNaN(request.at)) {
+      } else if (request.at === null) {
         reason = 'invalid request'
       } else if ((await io.now()) - request.at > EXPIRED_AFTER_MS) {
         reason = 'expired'
       } else {
-        const sent = await Promise.race([io.send(request.agentId, request.text), io.sleep(SEND_TIMEOUT_MS).then(() => null)])
+        let timer: { cancel: () => void } | undefined
+        const timeout = new Promise<null>((resolve) => { timer = io.after(SEND_TIMEOUT_MS, () => resolve(null)) })
+        let sent: { isDelivered: boolean, reason?: string } | null
+        try {
+          sent = await Promise.race([io.send(request.agentId, request.text), timeout])
+        } finally {
+          timer?.cancel()
+        }
         if (sent === null) {
-          io.log(`steer ${id} timed out after ${SEND_TIMEOUT_MS} ms`)
-          reason = 'timed out'
+          // The send may still deliver after this. Its result is ignored, so the request
+          // is answered once, and the owner may re-send.
+          reason = 'timed out (it may still arrive)'
+          io.log(`steer ${id} ${reason}`)
         } else {
           delivered = sent.isDelivered === true
           if (!delivered) reason = sent.reason ?? 'the worker did not accept the message'

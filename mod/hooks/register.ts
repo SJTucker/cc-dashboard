@@ -636,7 +636,7 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
 // when the ended session is the relay's current one or the event has no session id.
 // steerEnded records such an end, so a start deferred with clock.after(0) that has not
 // run yet does nothing, and so does one that is still reading the config when the end
-// arrives. session.start clears the record.
+// arrives. session.start clears the record and reads the session id into steerSessionId.
 const STEER_POLL_MS = 2000
 let steerTimer: Timer | undefined
 let steerBusy = false
@@ -661,7 +661,7 @@ async function relaySteers($: EngineInterface, dir: string) {
       },
       append: (text) => $.session.append({ message: { type: 'user', content: [{ type: 'text', text }] } }),
       now: () => $.clock.now(),
-      sleep: (ms) => $.clock.sleep(ms),
+      after: (ms, fn) => $.clock.after(ms, fn),
       log: (text) => fail($, text),
     }, `${dir}/${sessionId}`, steerHandled)
   } finally {
@@ -684,7 +684,6 @@ async function startSteerRelay($: EngineInterface) {
 function stopSteerRelay() {
   steerTimer?.cancel()
   steerTimer = undefined
-  steerSessionId = undefined
 }
 
 // Releases everything held for a session that ended. Its throttle timer is
@@ -1422,6 +1421,7 @@ export const register: Register = (on) => {
     if (e.isInteractive) {
       startReviews($)
       steerEnded = false
+      steerSessionId = await $.session.id().catch(() => undefined)
       $.clock.after(0, () => {
         startSteerRelay($).catch((err) => note($, `steer relay failed (${errorName(err)})`))
       })
@@ -1495,7 +1495,7 @@ export const register: Register = (on) => {
     const interactive = sessionModes.get(e.sessionId)?.interactive !== false
     const writing = headlessWrites.get(e.sessionId)
     forgetSession(e.sessionId)
-    if (e.reason !== 'clear' && e.reason !== 'resume' && (!e.sessionId || steerSessionId === undefined || e.sessionId === steerSessionId)) {
+    if (e.reason !== 'clear' && e.reason !== 'resume' && (!e.sessionId || e.sessionId === steerSessionId)) {
       steerEnded = true
       stopSteerRelay()
     }
