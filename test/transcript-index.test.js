@@ -715,3 +715,22 @@ test('stepsOf with a carried ctx finds a worker task line that arrives in a late
   assert.equal(ctx.kind.taskLine, 2);
   assert.deepEqual([...first, ...second], stepsOf(lines, 1, 4));
 });
+
+test('watchEvents reports CLAIM once for a second claim', () => {
+  const claims = [{ file: '0001-t3-a1.json', line: 4 }, { file: '0002-t4-a1.json', line: 9 }];
+  const r = watchEvents(workerLines(), null, { ...NO_LIMITS, claims });
+  assert.deepEqual(r.events.filter((e) => e.startsWith('CLAIM')), ['CLAIM second claim 0002-t4-a1.json after 0001-t3-a1.json']);
+  assert.deepEqual(watchEvents(workerLines(), r.seen, { ...NO_LIMITS, claims }).events.filter((e) => e.startsWith('CLAIM')), []);
+});
+
+test('watchEvents with sinceLine past the second claim does not repeat CLAIM', () => {
+  const claims = [{ file: '0001-t3-a1.json', line: 4 }, { file: '0002-t4-a1.json', line: 9 }];
+  assert.deepEqual(watchEvents(workerLines(), null, { ...NO_LIMITS, claims, sinceLine: 9 }).events.filter((e) => e.startsWith('CLAIM')), []);
+  const r = watchEvents(workerLines(), null, { ...NO_LIMITS, claims, sinceLine: 5 });
+  assert.equal(r.events.filter((e) => e.startsWith('CLAIM')).length, 1);
+});
+
+test('watchEvents reports no DRIFT for edits at or before driftAfterLine', () => {
+  assert.deepEqual(watchEvents(linesWithEdit('/r/other.ts', 1), null, { files: ['/r/a.ts'], budget: null, driftAfterLine: 2 }).events, []);
+  assert.deepEqual(watchEvents(linesWithEdit('/r/other.ts', 3), null, { files: ['/r/a.ts'], budget: null, driftAfterLine: 2 }).events, ['DRIFT edit outside task files: /r/other.ts']);
+});

@@ -22,17 +22,22 @@
 //
 // With `--watch`, run by the orchestrate skill through the Monitor tool, it polls
 // the worker's transcript every 2 seconds and prints one line per event (DRIFT,
-// STUCK, BUDGET, QUIET, DONE, KILLED, FAILED; see watchEvents), then exits 0 after
+// STUCK, BUDGET, CLAIM, QUIET, DONE, KILLED, FAILED; see watchEvents), then exits 0 after
 // DONE, KILLED or FAILED. It does not print the MSG events watchEvents returns, because
 // they tell the orchestrator nothing to act on. It
 // waits for a missing file to appear, and leaves a last line that has no newline
 // yet for the next poll. `--since-line <n>` skips events up to line n, for a
 // watch re-armed after the Monitor tool's time limit. With `--board <path>` it also prints a POST line for each
-// post bin/board-post adds to that file after the watch starts.
+// post bin/board-post adds to that file after the watch starts. With `--run <run folder>`
+// the watch finds the worker's orch-claim result in its transcript and reads the task's
+// files from <run>/claimed/<file>, so it can be armed before the worker claims: there is
+// no DRIFT until the claim, and none for edits at or before it. `--files` adds to the
+// claimed task's files. A second claim prints CLAIM.
 
 const fs = require('fs');
 const path = require('path');
 const { parseArgs } = require('util');
+const { claimsInTranscript, readClaimed, validRunDir } = require('../lib/orchestrations/claims');
 const { buildIndex, renderIndex, recentSteps, contextTokens, watchEvents, boardEvents, filesRead } = require('../lib/transcript-index');
 
 const POLL_MS = 2000;
@@ -88,7 +93,7 @@ const USAGE = `usage: transcript-index                              read {"trans
        transcript-index <transcript.jsonl>          print the index
        transcript-index <transcript.jsonl> --steps <n> [--full]
                                                     print a worker's header, files read and last n steps
-       transcript-index <transcript.jsonl> --watch [--files a,b] [--budget N] [--quiet-min M] [--board P] [--since-line N]
+       transcript-index <transcript.jsonl> --watch [--files a,b] [--budget N] [--quiet-min M] [--board P] [--since-line N] [--run R]
                                                     print one line per worker event until it finishes
 `;
 
@@ -178,7 +183,15 @@ async function watch(file, opts) {
         grewAt = Date.now();
         quietSent = false;
       }
-      const r = watchEvents(lines, seen, { files: opts.files, budget: opts.budget, sinceLine: opts.sinceLine, finished: readMeta(file)?.finished === true });
+      let files = opts.files;
+      let claims = [];
+      if (opts.run !== null) {
+        claims = claimsInTranscript(lines);
+        // Until the first claim resolves to a task there is no file list, so no DRIFT.
+        const task = claims.length > 0 ? readClaimed(opts.run, claims[0].file) : null;
+        files = task ? [...task.files, ...(opts.files ?? [])] : null;
+      }
+      const r = watchEvents(lines, seen, { files, claims, driftAfterLine: claims[0]?.line ?? 0, budget: opts.budget, sinceLine: opts.sinceLine, finished: readMeta(file)?.finished === true });
       seen = r.seen;
       for (const e of r.events) if (!e.startsWith('MSG ')) process.stdout.write(e + '\n');
       if (r.done) return;
@@ -191,6 +204,12 @@ async function watch(file, opts) {
   }
 }
 
+function runDir(value) {
+  if (value === undefined) return null;
+  if (!validRunDir(value)) throw new Error(`--run needs an absolute run folder path ending in .run, got ${value}`);
+  return value;
+}
+
 function watchOptions(values) {
   return {
     files: values.files === undefined ? null : values.files.split(',').map((x) => x.trim()).filter(Boolean),
@@ -198,6 +217,7 @@ function watchOptions(values) {
     quietMin: values['quiet-min'] === undefined ? 5 : positive('quiet-min', values['quiet-min']),
     board: values.board ?? null,
     sinceLine: values['since-line'] === undefined ? 0 : wholeNumber('since-line', values['since-line']),
+    run: runDir(values.run),
   };
 }
 
@@ -210,6 +230,7 @@ const OPTIONS = {
   'quiet-min': { type: 'string' },
   board: { type: 'string' },
   'since-line': { type: 'string' },
+  run: { type: 'string' },
   help: { type: 'boolean' },
 };
 

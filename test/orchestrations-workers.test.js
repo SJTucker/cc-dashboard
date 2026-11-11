@@ -462,3 +462,19 @@ test('a settled review carries endedAt from the reviewer last activity, a runnin
   const bare = resolveStatuses([st({ raw: 'done' })], [st({ raw: 'done', report: 'fix it', startedAt: iso(50), lastActiveAt: undefined })], [], []);
   assert.deepEqual(bare[0].review, { status: 'changes', startedAt: iso(50), endedAt: null });
 });
+
+test('a worker with two claims is stuck', () => {
+  const claimed = { ...agent, claimRun: '/p/img.run', claims: [{ file: '0001-t3-a1.json', line: 2 }, { file: '0002-t4-a1.json', line: 4 }] };
+  const lines = [tool('Read', { file_path: 'a.js' }, 1), text('claimed', 2), tool('Read', { file_path: 'b.js' }, 3), text('again', 4)];
+  const { state } = workerState(claimed, read(lines, 4), null, undefined, opts(5));
+  assert.equal(state.events.at(-1).type, 'CLAIM');
+  assert.equal(state.raw, 'stuck');
+});
+
+test('a claim-run worker reading before its claim is starting and reports no DRIFT', () => {
+  const waiting = { ...agent, claimRun: '/p/img.run', claims: [], files: [] };
+  const lines = [tool('Read', { file_path: 'a.js' }, 1), tool('Edit', { file_path: 'server.js' }, 2)];
+  const { state } = workerState(waiting, read(lines, 2), null, undefined, opts(3));
+  assert.equal(state.raw, 'starting');
+  assert.ok(!state.events.some((e) => e.type === 'DRIFT'));
+});
