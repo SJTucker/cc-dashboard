@@ -27,7 +27,7 @@ import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews
 import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
 import { renderSwitcher, renderDetail, renderEmpty } from './orchestration/render.mjs';
 import { EMPTY_TEXT, othersCount } from './orchestration/view.mjs';
-import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS, boardSeen, scheduleBoardSeen, sendBoardPost, sendSteer, savedOrchestrationId, saveOrchestrationId, createOrchestrationGate, syncOrchestrationPoller, removeOrchestrationTab } from './panels/orchestration.mjs';
+import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS, boardSeen, scheduleBoardSeen, sendBoardPost, sendSteer, savedOrchestrationId, saveOrchestrationId, createOrchestrationGate, syncOrchestrationPoller, removeOrchestrationTab, redirectFromRemovedTab } from './panels/orchestration.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
@@ -74,6 +74,7 @@ const orchGate = createOrchestrationGate({
       poller: orchPoller,
       location,
       onTab: state.tab === 'orchestration',
+      views: [document.getElementById('orchView'), document.getElementById('orchSwitcher')],
       clearState() {
         orchList = [];
         orchSelected = null;
@@ -569,6 +570,7 @@ let tabEntered = false;
 // settles, because the render replaces the rows.
 let modLoaded = Promise.resolve();
 function enterTab(tab) {
+  if (redirectFromRemovedTab(tab, orchGate, location)) return;
   const before = tabEntered ? neededRequests(state.hiddenKeys, state.tab) : new Set();
   tabEntered = true;
   state.tab = tab;

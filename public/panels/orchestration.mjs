@@ -178,12 +178,21 @@ export function syncOrchestrationPoller(poller, { installed, tab, hidden }) {
   else poller.stop();
 }
 
+// Sends a visit to #orchestration back to #now once the gate has settled on
+// "not installed" (Back, a bookmark or a typed hash). Returns true when it redirected.
+export function redirectFromRemovedTab(tab, gate, location) {
+  if (tab !== 'orchestration' || !gate.settled || gate.installed) return false;
+  location.hash = 'now';
+  return true;
+}
+
 // Takes the Orchestration tab away after the server said the skill is not installed:
 // hides the tab button and the live badge, stops the poller, clears the page state
 // (clearState) and sends #orchestration back to #now.
-export function removeOrchestrationTab({ tabButton, badge, poller, location, onTab, clearState }) {
+export function removeOrchestrationTab({ tabButton, badge, poller, location, onTab, clearState, views = [] }) {
   poller.stop();
   clearState();
+  for (const view of views) view.replaceChildren();
   tabButton.hidden = true;
   badge.hidden = true;
   if (onTab) location.hash = 'now';

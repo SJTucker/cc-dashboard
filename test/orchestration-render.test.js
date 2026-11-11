@@ -158,3 +158,31 @@ test('boardError asks for a title only when the title is empty, else says the te
   assert.equal(boardError(400, {}, 'Fine title'), 'The title or details are too long.');
   assert.equal(boardError(500, {}, 'x'), 'Could not post. The server said 500.');
 });
+
+test('reviewLabel stops counting at endedAt, and shows a dash for an unreadable time', async () => {
+  const { reviewLabel } = await load();
+  const now = Date.parse('2026-11-10T12:00:00Z');
+  const startedAt = new Date(now - 3600_000).toISOString();
+  const endedAt = new Date(now - 3600_000 + 120_000).toISOString();
+  assert.equal(reviewLabel({ status: 'passed', startedAt, endedAt }, now), '✓ Reviewer passed · 2m');
+  assert.equal(reviewLabel({ status: 'passed', startedAt: null, endedAt }, now), '✓ Reviewer passed · —');
+  assert.equal(reviewLabel({ status: 'running', startedAt: undefined }, now), '◐ Reviewer running · —');
+  assert.equal(reviewLabel({ status: 'passed', startedAt, endedAt: 'garbage' }, now), '✓ Reviewer passed · —');
+});
+
+test('steerView words a timed-out and an invalid-request failure as actions', async () => {
+  const { steerView } = await load();
+  // These reason strings are written by mod/hooks/steer.ts.
+  assert.deepEqual(steerView({ state: 'failed', reason: 'timed out (it may still arrive)' }), {
+    word: 'Not confirmed: the send timed out. It may still arrive, so check the worker before sending again.', tone: 'warn',
+  });
+  assert.deepEqual(steerView({ state: 'failed', reason: 'invalid request' }), {
+    word: 'Not sent: the request was not valid. Send it again.', tone: 'warn',
+  });
+});
+
+test('boardError and steerError word a 413 like text that is too long', async () => {
+  const { boardError, steerError } = await load();
+  assert.equal(boardError(413, null, 'A title'), 'The title or details are too long.');
+  assert.equal(steerError(413, null, 'hello'), 'The message is too long or not valid.');
+});

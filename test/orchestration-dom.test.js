@@ -355,3 +355,37 @@ test('the board composer limits the title to 120 characters and the details to 2
   await boardForm().requestSubmit();
   assert.equal(boardForm().querySelector('.orch-error').textContent, 'The title or details are too long.');
 });
+
+test('a finished worker with no lastActiveAt shows a dash for Running, not a growing time', () => {
+  const w = worker({ status: 'done', lastActiveAt: null });
+  render.renderDetail(root, detail({ waves: [{ n: 1, workers: [w] }] }), { now: NOW, actions: actions() });
+  assert.match(root.querySelector('.worker').querySelector('.w-foot').textContent, /Running —/);
+  render.renderDetail(root, detail({ waves: [{ n: 1, workers: [w] }] }), { now: NOW + 3_600_000, actions: actions() });
+  assert.match(root.querySelector('.worker').querySelector('.w-foot').textContent, /Running —/);
+});
+
+test('removing the Orchestration tab empties the detail and switcher, so a later visit shows nothing', async () => {
+  const { removeOrchestrationTab } = await import('../public/panels/orchestration.mjs');
+  const view = document.createElement('div');
+  const switcher = document.createElement('div');
+  view.appendChild(document.createElement('section'));
+  switcher.appendChild(document.createElement('button'));
+  removeOrchestrationTab({
+    tabButton: document.createElement('button'), badge: document.createElement('span'), poller: { stop() {} },
+    location: { hash: '#now' }, onTab: false, clearState() {}, views: [view, switcher],
+  });
+  assert.equal(view.children.length, 0);
+  assert.equal(switcher.children.length, 0);
+});
+
+test('a visit to #orchestration after the tab was removed is sent back to #now', async () => {
+  const { redirectFromRemovedTab } = await import('../public/panels/orchestration.mjs');
+  const loc = { hash: '#orchestration' };
+  assert.equal(redirectFromRemovedTab('orchestration', { settled: true, installed: false }, loc), true);
+  assert.equal(loc.hash, 'now');
+  for (const [tab, gate] of [['orchestration', { settled: true, installed: true }], ['orchestration', { settled: false, installed: false }], ['now', { settled: true, installed: false }]]) {
+    const other = { hash: '#' + tab };
+    assert.equal(redirectFromRemovedTab(tab, gate, other), false);
+    assert.equal(other.hash, '#' + tab);
+  }
+});

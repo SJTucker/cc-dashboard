@@ -108,7 +108,10 @@ export function postTime(time, now = Date.now()) {
 export function reviewLabel(review, now = Date.now()) {
   const view = statusView(review.status === 'running' ? 'review' : review.status);
   const word = review.status === 'running' ? 'running' : view.word.toLowerCase();
-  return `${view.glyph} Reviewer ${word} · ${formatDuration(Math.max(0, now - new Date(review.startedAt).getTime()))}`;
+  const start = Date.parse(review.startedAt);
+  const end = review.endedAt ? Date.parse(review.endedAt) : now;
+  const time = Number.isNaN(start) || Number.isNaN(end) ? '—' : formatDuration(Math.max(0, end - start));
+  return `${view.glyph} Reviewer ${word} · ${time}`;
 }
 
 // { word, tone } for a worker's lastSteer, or null when it has none. Warn states
@@ -120,6 +123,9 @@ export function steerView(lastSteer) {
     case 'delivered': return { word: `Delivered ${clock(lastSteer.at)}`, tone: 'plain' };
     case 'failed':
       if (lastSteer.reason === 'expired') return { word: 'Not sent: it reached the orchestrator too late. Send it again.', tone: 'warn' };
+      // These two reasons are written by mod/hooks/steer.ts.
+      if (lastSteer.reason === 'timed out (it may still arrive)') return { word: 'Not confirmed: the send timed out. It may still arrive, so check the worker before sending again.', tone: 'warn' };
+      if (lastSteer.reason === 'invalid request') return { word: 'Not sent: the request was not valid. Send it again.', tone: 'warn' };
       return { word: lastSteer.reason ? `Not delivered: ${lastSteer.reason}` : 'Not delivered', tone: 'warn' };
     case 'unclaimed': return { word: 'Not picked up. Is the orchestrator session still open?', tone: 'warn' };
     default: return null;
@@ -129,7 +135,7 @@ export function steerView(lastSteer) {
 // The message under the board composer after a refused post.
 export function boardError(status, data, title = '') {
   if (status === 409 && data?.error === 'no board yet') return 'This orchestration has no board yet. It gets one when the context image is written.';
-  if (status === 400) return title.trim() ? 'The title or details are too long.' : 'Write a title first.';
+  if (status === 400 || status === 413) return title.trim() ? 'The title or details are too long.' : 'Write a title first.';
   return `Could not post. The server said ${status}.`;
 }
 
@@ -137,7 +143,7 @@ export function boardError(status, data, title = '') {
 export function steerError(status, data, text = '') {
   if (status === 409 && data?.error === 'worker finished') return 'This worker has finished, so it was not steered.';
   if (status === 409 && data?.error === 'orchestrator not live') return 'The orchestrator session is not running, so nothing can deliver the message.';
-  if (status === 400) return text.trim() ? 'The message is too long or not valid.' : 'Write a message first.';
+  if (status === 400 || status === 413) return text.trim() ? 'The message is too long or not valid.' : 'Write a message first.';
   return `Could not send. The server said ${status}.`;
 }
 

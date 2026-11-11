@@ -345,12 +345,13 @@ function updateWorker(card, w, r, animate, now) {
   setClass(c.fill, 'over', w.contextTokens > CONTEXT_BUDGET);
 
   const finished = ['merged', 'done', 'passed', 'changes', 'review'].includes(w.status);
-  const end = finished && w.lastActiveAt ? new Date(w.lastActiveAt).getTime() : now;
+  // A finished worker's time ends at its last activity. With none recorded there is no end.
+  const end = finished ? (w.lastActiveAt ? new Date(w.lastActiveAt).getTime() : NaN) : now;
   setText(c.filesValue, `${(w.touched ?? []).length} of ${(w.files ?? []).length}`);
   c.steerItem.hidden = !(w.steerCount > 0);
   setText(c.steerValue, String(w.steerCount ?? 0));
   const started = new Date(w.startedAt).getTime();
-  setText(c.runningValue, Number.isNaN(started) ? '—' : formatDuration(Math.max(0, end - started)));
+  setText(c.runningValue, Number.isNaN(started) || Number.isNaN(end) ? '—' : formatDuration(Math.max(0, end - started)));
 
   c.review.hidden = !w.review;
   if (w.review) {
