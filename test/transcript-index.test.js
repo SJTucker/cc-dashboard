@@ -519,6 +519,30 @@ test('a coordinator message after the API error clears FAILED', () => {
   assert.equal(r.done, false);
 });
 
+test('KILLED is not repeated on an unchanged transcript', () => {
+  let r = watchEvents(killedLines(), null, NO_LIMITS);
+  r = watchEvents(killedLines(), r.seen, NO_LIMITS);
+  assert.equal(r.events.length, 1);
+  r = watchEvents(killedLines(), r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, []);
+  assert.equal(r.done, true);
+});
+
+test('a killed worker that is resumed is followed to its report, and a second kill is reported', () => {
+  let r = watchEvents(killedLines(), null, NO_LIMITS);
+  r = watchEvents(killedLines(), r.seen, NO_LIMITS);
+  const resumed = [...killedLines(), coordinator('Carry on.', at('05')), handback('back again', '06')];
+  r = watchEvents(resumed, r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, ['MSG landed at line 5', 'DONE back again']);
+  assert.equal(r.done, true);
+  const again = [...killedLines(), coordinator('Carry on.', at('05')), assistant([tool('Edit', { file_path: '/r/a.ts' }, 'e9')], at('06')), interrupted('07')];
+  let q = watchEvents(killedLines(), null, NO_LIMITS);
+  q = watchEvents(killedLines(), q.seen, NO_LIMITS);
+  q = watchEvents(again, q.seen, NO_LIMITS);
+  q = watchEvents(again, q.seen, NO_LIMITS);
+  assert.deepEqual(q.events, ['KILLED Edit /r/a.ts']);
+});
+
 test('watchEvents still returns MSG events', () => {
   assert.deepEqual(watchEvents(workerLines(), null, NO_LIMITS).events, ['MSG landed at line 6']);
 });
