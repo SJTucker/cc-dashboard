@@ -402,6 +402,7 @@ function renderBoard(r, detail, seenBoard, animate, now) {
   setText(r.boardMeta, `${board.length} ${board.length === 1 ? 'post' : 'posts'}${unseen ? ` · ${unseen} new` : ''}`);
   r.boardEmpty.hidden = board.length > 0;
   const total = board.length;
+  adoptPending(r.boardList, board);
   const created = reconcile(
     r.boardList,
     board.map((post, i) => ({ post, isNew: total - i > seenBoard })),
@@ -410,7 +411,7 @@ function renderBoard(r, detail, seenBoard, animate, now) {
     (li, { post, isNew }) => {
       fillPost(li, post, now);
       li.removeAttribute('data-pending');
-      if (isNew) li.classList.add('new');
+      if (isNew && !li._own) li.classList.add('new');
       else if (li.classList.contains('new')) li.classList.add('seen');
     },
   );
@@ -419,6 +420,23 @@ function renderBoard(r, detail, seenBoard, animate, now) {
   const pending = [...r.boardList.querySelectorAll(':scope > [data-pending]')];
   for (const li of pending.reverse()) if (li !== r.boardList.firstChild) r.boardList.prepend(li);
   r.boardEmpty.hidden = board.length > 0 || pending.length > 0;
+}
+
+// A poll can land between the server writing the owner's post and the 201 answer.
+// A listed post from You with the same title and a time within 10 s of the request
+// takes over the pending node, so no solid copy appears beside it.
+const ADOPT_WINDOW_MS = 10_000;
+function adoptPending(list, board) {
+  const taken = new Set([...list.children].map((child) => child.dataset.key));
+  for (const li of list.querySelectorAll(':scope > [data-pending]')) {
+    const post = board.find((p) => p.from === 'You'
+      && p.title === li._r.title.textContent
+      && Math.abs(new Date(p.t).getTime() - li._sentAt) <= ADOPT_WINDOW_MS
+      && !taken.has(`${p.t}You`));
+    if (!post) continue;
+    li.dataset.key = `${post.t}You`;
+    taken.add(li.dataset.key);
+  }
 }
 
 function fillPost(li, post, now) {
@@ -503,6 +521,8 @@ function buildBoardComposer(root) {
     const li = buildPost(text);
     li.dataset.key = `pending-${++sequence}`;
     li.setAttribute('data-pending', '');
+    li._sentAt = Date.now();
+    li._own = true;
     fillPost(li, { t: new Date().toISOString(), from: 'You', ...text }, Date.now());
     list.prepend(li);
     root._orch.boardEmpty.hidden = true;
@@ -580,6 +600,7 @@ function buildSteer(r, getCard) {
     input.setAttribute('aria-label', `Message to the ${card._worker ? `Task ${card._worker.task}` : 'task'} worker`);
     input.placeholder = input.getAttribute('aria-label');
     showError('');
+    card._sendError = null;
     form.hidden = false;
     open.hidden = true;
     open.setAttribute('aria-expanded', 'true');
@@ -607,13 +628,21 @@ function buildSteer(r, getCard) {
       return;
     }
     showError('');
+    card._sendError = null;
     sending = true;
     send.setAttribute('aria-disabled', 'true');
     const result = await r.actions.sendSteer(r.root.dataset.id, { agentId: card.dataset.key, text });
     sending = false;
     send.removeAttribute('aria-disabled');
     if (!result.ok) {
-      showError(steerError(result.status, result.data, text));
+      const message = steerError(result.status, result.data, text);
+      if (form.hidden) {
+        // Esc closed the form during the request, so the error goes in the status line.
+        card._sendError = { word: message, tone: 'warn' };
+        updateSteer(card, card._worker, true);
+        return;
+      }
+      showError(message);
       input.focus();
       return;
     }
@@ -630,7 +659,7 @@ function buildSteer(r, getCard) {
 function updateSteer(card, w, animate) {
   const s = card._r.steer;
   if (card._sending && card._sending === w.lastSteer?.id) card._sending = null;
-  const view = card._sending ? { word: 'Sending…', tone: 'plain' } : steerView(w.lastSteer);
+  const view = card._sending ? { word: 'Sending…', tone: 'plain' } : (card._sendError ?? steerView(w.lastSteer));
   s.open.setAttribute('aria-label', `Steer Task ${w.task}`);
   swapText(s.status, view?.word ?? '', { animate });
   setClass(s.status, 'warn', view?.tone === 'warn');
