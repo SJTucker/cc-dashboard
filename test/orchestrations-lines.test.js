@@ -70,12 +70,15 @@ test('read starts over when the file is replaced by one of the same size', (t) =
   fs.writeFileSync(file, 'a\nb\n');
   const stamp = new Date(Math.floor(Date.now() / 1000) * 1000 - 5000);
   fs.utimesSync(file, stamp, stamp);
-  assert.deepEqual(cache.read(file).lines, ['a', 'b']);
+  const before = cache.read(file);
+  assert.deepEqual(before.lines, ['a', 'b']);
   const other = path.join(dir, 'other');
   fs.writeFileSync(other, 'x\ny\n');
   fs.utimesSync(other, stamp, stamp);
   fs.renameSync(other, file);
-  assert.deepEqual(cache.read(file).lines, ['x', 'y']);
+  const after = cache.read(file);
+  assert.deepEqual(after.lines, ['x', 'y']);
+  assert.notEqual(after.lines, before.lines, 'an inode change replaces the array');
 });
 
 test('read starts over when a file that did not grow has a new mtime', (t) => {
@@ -85,7 +88,9 @@ test('read starts over when a file that did not grow has a new mtime', (t) => {
   fs.writeFileSync(file, 'x\ny\n');
   const later = new Date(first.mtimeMs + 60000);
   fs.utimesSync(file, later, later);
-  assert.deepEqual(cache.read(file).lines, ['x', 'y']);
+  const after = cache.read(file);
+  assert.deepEqual(after.lines, ['x', 'y']);
+  assert.notEqual(after.lines, first.lines, 'a same-size rewrite replaces the array');
 });
 
 test('read keeps one array while the file grows and raises version on each change', (t) => {
@@ -113,6 +118,23 @@ test('version does not repeat after an entry is dropped and read again', (t) => 
   assert.equal(cache.read(file), null);
   fs.writeFileSync(file, 'a\n');
   assert.ok(cache.read(file).version > before);
+});
+
+test('forget drops one entry, and the next read starts over', (t) => {
+  const { dir, file, cache } = setup(t);
+  const other = path.join(dir, 'g.jsonl');
+  fs.writeFileSync(file, 'a\n');
+  fs.writeFileSync(other, 'b\n');
+  const first = cache.read(file);
+  cache.read(other);
+  assert.equal(cache.size(), 2);
+  cache.forget(file);
+  assert.equal(cache.size(), 1);
+  const again = cache.read(file);
+  assert.deepEqual(again.lines, ['a']);
+  assert.notEqual(again.lines, first.lines);
+  cache.forget(path.join(dir, 'never-read'));
+  assert.equal(cache.size(), 2);
 });
 
 test('read returns null for a missing file', (t) => {

@@ -308,3 +308,13 @@ test('every dashboard steer note is a feed entry, with a task label or "a worker
   ]);
   assert.equal(feed[0].glyph, '↗');
 });
+
+test('a line whose parsed merges name the same task twice names the task once', () => {
+  const s = orchestration();
+  s.use('Bash', { command: 'git merge demo-t2' });
+  const parsed = parseOrchestrator(s.lines);
+  const last = parsed.merges.at(-1);
+  parsed.merges.push({ ...last });
+  assert.equal(parsed.merges.filter((m) => m.line === last.line).length, 2);
+  assert.equal(actionFeed(s.lines, parsed)[0].text, `Merged Task ${last.task}`);
+});
