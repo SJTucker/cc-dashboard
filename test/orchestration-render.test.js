@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
-const load = () => import('../public/orchestration/render.mjs');
+const load = () => import('../public/orchestration/view.mjs');
 
 test('statusView gives every status a glyph and a word', async () => {
   const { statusView } = await load();
@@ -121,4 +121,40 @@ test('stepAge reads now, then an age with ago, never a minus sign', async () => 
   const now = Date.now();
   assert.equal(stepAge(0, new Date(now - 60_000).toISOString(), now), 'now');
   assert.equal(stepAge(1, new Date(now - 60_000).toISOString(), now), '1m ago');
+});
+
+test('an ended orchestration reads Ended just now under a minute and Ended 2h ago after', async () => {
+  const { switcherState } = await load();
+  const now = Date.parse('2026-11-10T12:00:00Z');
+  assert.equal(switcherState({ phase: 'waves', wave: 1, live: false, lastActiveAt: now - 30_000 }, now), 'Ended just now');
+  assert.equal(switcherState({ phase: 'plan', live: false, lastActiveAt: now - 2 * 3600_000 }, now), 'Ended 2h ago');
+  assert.equal(switcherState({ phase: 'reset', live: false, lastActiveAt: now - 5 * 60_000 }, now), 'Ended 5m ago');
+  assert.equal(switcherState({ phase: 'finish', live: true }, now), 'Finishing');
+});
+
+test('postTime and switcherState share one seconds test', async () => {
+  const { postTime, isSeconds } = await load();
+  assert.equal(isSeconds('30s'), true);
+  assert.equal(isSeconds('2m'), false);
+  assert.equal(isSeconds('4h'), false);
+  const now = Date.parse('2026-11-10T12:00:00Z');
+  assert.equal(postTime(new Date(now - 30_000).toISOString(), now), 'just now');
+  assert.equal(postTime(new Date(now - 120_000).toISOString(), now), '2m ago');
+});
+
+test('unseenPosts counts only posts from others beyond the stored count, newest first', async () => {
+  const { unseenPosts, othersCount } = await load();
+  const board = [{ from: 'You' }, { from: 'a' }, { from: 'b' }, { from: 'c' }, { from: 'd' }, { from: 'e' }];
+  assert.equal(othersCount(board), 5);
+  assert.deepEqual([...unseenPosts(board, 3)], [board[1], board[2]]);
+  assert.equal(unseenPosts(board, 9).size, 0);
+});
+
+test('boardError asks for a title only when the title is empty, else says the text is too long', async () => {
+  const { boardError } = await load();
+  assert.equal(boardError(400, {}, ''), 'Write a title first.');
+  assert.equal(boardError(400, {}, '   '), 'Write a title first.');
+  assert.equal(boardError(400, {}, 'x'.repeat(121)), 'The title or details are too long.');
+  assert.equal(boardError(400, {}, 'Fine title'), 'The title or details are too long.');
+  assert.equal(boardError(500, {}, 'x'), 'Could not post. The server said 500.');
 });

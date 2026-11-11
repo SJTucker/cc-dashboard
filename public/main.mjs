@@ -25,8 +25,9 @@ import { refreshRecords } from './panels/records.mjs';
 import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews } from './panels/reviews.mjs';
 import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
-import { renderSwitcher, renderDetail, renderEmpty, EMPTY_TEXT } from './orchestration/render.mjs';
-import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS } from './panels/orchestration.mjs';
+import { renderSwitcher, renderDetail, renderEmpty } from './orchestration/render.mjs';
+import { EMPTY_TEXT, othersCount } from './orchestration/view.mjs';
+import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS, boardSeen, scheduleBoardSeen, sendBoardPost, sendSteer, savedOrchestrationId, saveOrchestrationId, createOrchestrationGate, syncOrchestrationPoller, removeOrchestrationTab } from './panels/orchestration.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
@@ -53,6 +54,34 @@ const livePoller = createPoller(() => {
 const stickyPoller = createPoller(() => loadStickyToday(), LIVE_POLL_MS);
 // Polls the open Orchestration tab's detail every ORCH_POLL_MS (loadOrchestration).
 const orchPoller = createPoller(() => loadOrchestration(), ORCH_POLL_MS);
+// Asks /api/orchestrations at startup and decides whether the tab exists. Only a
+// real { installed: false } answer, at startup or later, hides the tab and ends
+// every orchestration call. A failed startup request is retried (createOrchestrationGate).
+const orchGate = createOrchestrationGate({
+  isHidden: () => document.hidden,
+  onInstalled(body) {
+    document.getElementById('orchTabBtn').hidden = false;
+    applyOrchestrationList(body);
+    if (state.tab === 'orchestration') {
+      setPolling(false);
+      loadOrchestration();
+    }
+  },
+  onRemoved() {
+    removeOrchestrationTab({
+      tabButton: document.getElementById('orchTabBtn'),
+      badge: document.getElementById('orchLive'),
+      poller: orchPoller,
+      location,
+      onTab: state.tab === 'orchestration',
+      clearState() {
+        orchList = [];
+        orchSelected = null;
+        orchDetail = null;
+      },
+    });
+  },
+});
 // Signatures of the last rendered summary and the last rendered rtk response. A 5s
 // poll that redraws unconditionally would tear down the SVG under the cursor and kill
 // any open tooltip, so an unchanged response skips rendering entirely. The two are
@@ -135,15 +164,13 @@ function setBusy(on) {
 // plan limit warning, which show today on every tab.
 function setPolling(onNow) {
   // A hidden tab polls nothing. The visibilitychange listener calls this again on show.
+  // The Orchestration poller runs only on that tab, when the skill is installed and the page is shown.
+  syncOrchestrationPoller(orchPoller, { installed: orchGate.installed, tab: state.tab, hidden: document.hidden });
   if (document.hidden) {
     livePoller.stop();
     stickyPoller.stop();
-    orchPoller.stop();
     return;
   }
-  // The Orchestration poller runs only on that tab, and only when the skill is installed.
-  if (state.tab === 'orchestration' && orchInstalled) orchPoller.start();
-  else orchPoller.stop();
   if (onNow) {
     stickyPoller.stop();
     livePoller.start();
@@ -167,11 +194,12 @@ document.addEventListener('visibilitychange', () => {
   }
   resetWatch();
   refreshHighscores();
+  orchGate.resume();
   if (!loadInFlight) {
     if (state.tab === 'now') runLoad();
     else loadStickyToday();
   }
-  if (state.tab === 'orchestration' && orchInstalled) loadOrchestration();
+  if (state.tab === 'orchestration' && orchGate.installed) loadOrchestration();
   setPolling(state.tab === 'now');
   syncHighscores();
 });
@@ -202,34 +230,20 @@ function loadStickyToday() {
   });
 }
 
-// Orchestration tab. orchInstalled is set once at startup from the first
-// /api/orchestrations answer. When the skill is not installed, the tab button stays
-// hidden and no orchestration request is ever sent again.
-const ORCH_STORAGE_KEY = 'cc-dashboard:orchestration';
-let orchInstalled = false;
+// Orchestration tab. orchGate.installed is true once /api/orchestrations has said the
+// skill is installed. When it says it is not, at startup or later, the tab button is
+// hidden and no orchestration request is sent again.
 let orchList = [];
 let orchSelected = null;
 let orchDetail = null;
 
-function savedOrchestrationId() {
-  try {
-    return localStorage.getItem(ORCH_STORAGE_KEY);
-  } catch {
-    return null;
-  }
-}
-
-function saveOrchestrationId(id) {
-  try {
-    if (id) localStorage.setItem(ORCH_STORAGE_KEY, id);
-  } catch {
-    // Storage can be blocked. The selection then lasts for this page view.
-  }
-}
-
 // Keeps the list, picks the selected id, and sets the tab button's live count.
 function applyOrchestrationList(body) {
-  if (!body?.installed) return;
+  if (!body) return;
+  if (!body.installed) {
+    orchGate.accept(body);
+    return;
+  }
   orchList = body.orchestrations;
   orchSelected = pickSelected(orchList, orchSelected ?? savedOrchestrationId());
   const live = liveCount(orchList);
@@ -238,37 +252,11 @@ function applyOrchestrationList(body) {
   badge.replaceChildren(...(live ? [el('i', { class: 'orch-dot', 'aria-hidden': 'true' }), document.createTextNode(`${live} live`)] : []));
 }
 
-// How many board posts of an orchestration the viewer has seen, kept per
-// orchestration in localStorage. Posts beyond it get the new marker.
-const BOARD_SEEN_PREFIX = 'cc-dashboard:board-seen:';
-function boardSeen(id) {
-  try {
-    return Number(localStorage.getItem(BOARD_SEEN_PREFIX + id)) || 0;
-  } catch {
-    return 0;
-  }
-}
-function saveBoardSeen(id, count) {
-  try {
-    localStorage.setItem(BOARD_SEEN_PREFIX + id, String(count));
-  } catch {
-    // Storage can be blocked. Every post then shows as new on the next visit.
-  }
-}
+// The network calls the composers make, passed to renderDetail.
+const ORCH_ACTIONS = { sendBoardPost, sendSteer };
 
 // The id whose detail is on screen, so a selection change renders without motion.
 let orchRenderedId = null;
-let boardSeenTimer = null;
-
-// Stores the board count 6 s after a render that showed unseen posts. The next
-// poll then drops the new marker.
-function scheduleBoardSeen(id, count) {
-  if (boardSeenTimer || count <= boardSeen(id)) return;
-  boardSeenTimer = setTimeout(() => {
-    boardSeenTimer = null;
-    if (orchDetail?.id === id) saveBoardSeen(id, orchDetail.board.length);
-  }, 6000);
-}
 
 function selectOrchestration(id) {
   if (id === orchSelected) return;
@@ -284,16 +272,16 @@ function drawOrchestrationSwitcher() {
 
 // Never rejects: requestOrchestrations resolves to null on failure.
 function refreshOrchestrationList() {
-  if (!orchInstalled) return Promise.resolve();
+  if (!orchGate.installed) return Promise.resolve();
   return requestOrchestrations().then(applyOrchestrationList);
 }
 
 // The Orchestration poller's run. Refreshes the list, then fetches the selected
 // orchestration's detail, and draws both. Never rejects.
 async function loadOrchestration() {
-  if (!orchInstalled) return;
+  if (!orchGate.installed) return;
   await refreshOrchestrationList();
-  if (state.tab !== 'orchestration') return;
+  if (state.tab !== 'orchestration' || !orchGate.installed) return;
   drawOrchestrationSwitcher();
   const view = document.getElementById('orchView');
   if (!orchSelected) {
@@ -311,25 +299,32 @@ async function loadOrchestration() {
     return;
   }
   orchDetail = detail;
-  renderDetail(view, detail, { seenBoard: boardSeen(id), firstRender: orchRenderedId !== id });
+  renderDetail(view, detail, { seenBoard: boardSeen(id), firstRender: orchRenderedId !== id, actions: ORCH_ACTIONS });
   orchRenderedId = id;
-  scheduleBoardSeen(id, detail.board.length);
+  scheduleBoardSeen(id, othersCount(detail.board ?? []));
 }
 
-// Asked once at startup. A page opened on #orchestration without the skill falls back to Now.
-requestOrchestrations().then((body) => {
-  if (!body?.installed) {
-    if (state.tab === 'orchestration') location.hash = 'now';
-    return;
+// Asked at startup, and again on a backoff while the request fails. A page opened on
+// #orchestration waits for the first real answer, then falls back to Now when the
+// skill is not installed (onRemoved).
+orchGate.start();
+
+// The .topbar wraps onto more rows on a narrow window, so its height changes. The
+// sticky board sits below it, so --topbar-h follows the measured border-box height.
+const topbar = document.querySelector('.topbar');
+function setTopbarHeight(height) {
+  document.documentElement.style.setProperty('--topbar-h', `${height}px`);
+}
+if (topbar) {
+  // Measured once now, so the board does not sit under a wrapped header until the
+  // observer's first callback.
+  setTopbarHeight(topbar.getBoundingClientRect().height);
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(([entry]) => {
+      setTopbarHeight(entry.borderBoxSize?.[0]?.blockSize ?? topbar.getBoundingClientRect().height);
+    }).observe(topbar);
   }
-  orchInstalled = true;
-  document.getElementById('orchTabBtn').hidden = false;
-  applyOrchestrationList(body);
-  if (state.tab === 'orchestration') {
-    setPolling(false);
-    loadOrchestration();
-  }
-});
+}
 
 // The requests fetchAll skips when every panel they feed is hidden.
 // resumeRequests loads the page again when one of them was skipped at the last
@@ -587,7 +582,7 @@ function enterTab(tab) {
   syncHighscores();
   if (tab === 'highscores') refreshHighscores();
   if (tab === 'mod') modLoaded = loadModSettings();
-  if (tab === 'orchestration' && orchInstalled) loadOrchestration();
+  if (tab === 'orchestration' && orchGate.installed) loadOrchestration();
   const after = neededRequests(state.hiddenKeys, state.tab);
   if (after.has('changes') && !before.has('changes')) ensureChanges();
   if (after.has('prices') && !before.has('prices')) loadPricesSource();

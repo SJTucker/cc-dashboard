@@ -6,159 +6,10 @@
 import { el } from '../dom.mjs';
 import { formatDuration, formatTokens } from '../format.mjs';
 import { enter, fadeIn, swapText } from './motion.mjs';
-import { sendBoardPost, sendSteer } from '../panels/orchestration.mjs';
-
-export const CONTEXT_BUDGET = 120000;
-export const EMPTY_TEXT = 'No orchestration ran today. Start one with the orchestrate skill.';
-
-const STATUS_VIEWS = {
-  working: { glyph: '●', word: 'Working', tone: 'live' },
-  review: { glyph: '◐', word: 'In review', tone: 'plain' },
-  changes: { glyph: '◐', word: 'Changes asked', tone: 'plain' },
-  passed: { glyph: '✓', word: 'Passed', tone: 'plain' },
-  merged: { glyph: '✓', word: 'Merged', tone: 'plain' },
-  done: { glyph: '✓', word: 'Done', tone: 'plain' },
-  stuck: { glyph: '!', word: 'Stuck', tone: 'warn' },
-  quiet: { glyph: '○', word: 'Quiet', tone: 'plain' },
-  starting: { glyph: '○', word: 'Starting', tone: 'plain' },
-};
-
-// { glyph, word, tone } for a worker status. Every status has a shape and a word,
-// so no state depends on colour.
-export function statusView(status) {
-  return STATUS_VIEWS[status] ?? { glyph: '○', word: String(status), tone: 'plain' };
-}
-
-// "Ended 2h ago" for an orchestration that stopped before it reached Finish.
-function endedLine(summary, now) {
-  const ago = shortAgo(summary.lastActiveAt, now);
-  return ago.endsWith('s') ? 'Ended just now' : `Ended ${ago} ago`;
-}
-
-// The switcher card's one-line state.
-export function switcherState(summary, now = Date.now()) {
-  if (summary.waiting) return 'Waiting for you';
-  if (summary.phase === 'waves' && !summary.live) return endedLine(summary, now);
-  if (summary.phase === 'waves') return summary.wave ? `Wave ${summary.wave}` : 'Waves';
-  if (summary.phase === 'finish' && !summary.live) {
-    const ago = shortAgo(summary.lastActiveAt, now);
-    return ago.endsWith('s') ? 'Finished just now' : `Finished ${ago} ago`;
-  }
-  if (!summary.live) return endedLine(summary, now);
-  if (summary.phase === 'plan') return 'Planning';
-  if (summary.phase === 'reset') return 'Reset';
-  return 'Finishing';
-}
-
-// Context size as a 0 to 1 share of the budget.
-export function meterRatio(tokens) {
-  if (!tokens) return 0;
-  return Math.min(tokens / CONTEXT_BUDGET, 1);
-}
-
-const PHASES = [['plan', 'Plan'], ['reset', 'Reset'], ['waves', 'Waves'], ['finish', 'Finish']];
-
-// The four-step phase track: each step is done, now or todo. A finished
-// orchestration with no live session has every step done.
-export function phaseSteps(phase, live) {
-  const at = PHASES.findIndex(([key]) => key === phase);
-  const current = phase === 'finish' && !live ? PHASES.length : at;
-  return PHASES.map(([, name], i) => ({ name, state: i < current ? 'done' : i === current ? 'now' : 'todo' }));
-}
-
-// "2 working · 1 merged": the non-zero worker counts of a Summary.
-export function countsLine(counts) {
-  const parts = [];
-  if (counts.working) parts.push(`${counts.working} working`);
-  if (counts.review) parts.push(`${counts.review} in review`);
-  if (counts.merged) parts.push(`${counts.merged} merged`);
-  if (counts.attention) parts.push(`${counts.attention} need attention`);
-  return parts.join(' · ') || 'no workers yet';
-}
-
-// "12s", "4m", "2h" since an ISO time or epoch ms.
-export function shortAgo(time, now = Date.now()) {
-  const s = Math.max(0, Math.round((now - new Date(time).getTime()) / 1000));
-  if (s < 60) return `${s}s`;
-  const m = Math.floor(s / 60);
-  if (m < 60) return `${m}m`;
-  return `${Math.floor(m / 60)}h`;
-}
-
-// One line describing a worker step: the tool and its target, or the text said.
-export function stepLabel(step) {
-  if (step.tool) return `${step.tool} ${step.text ?? ''}`.trim();
-  if (step.kind === 'user') return 'Prompt';
-  return firstLine(step.text);
-}
-
-function firstLine(text, max = 110) {
-  const line = String(text ?? '').split('\n')[0];
-  return line.length > max ? `${line.slice(0, max - 1)}…` : line;
-}
-
-function clock(time) {
-  return new Date(time).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
-}
-
-// A board post's time: "4m ago" under an hour, then the same 24-hour clock the
-// actions feed uses.
-export function postTime(time, now = Date.now()) {
-  const ago = shortAgo(time, now);
-  if (ago.endsWith('s')) return 'just now';
-  return ago.endsWith('m') ? `${ago} ago` : clock(time);
-}
-
-// The review row text: "◐ Reviewer running · 2m".
-export function reviewLabel(review, now = Date.now()) {
-  const view = statusView(review.status === 'running' ? 'review' : review.status);
-  const word = review.status === 'running' ? 'running' : view.word.toLowerCase();
-  return `${view.glyph} Reviewer ${word} · ${formatDuration(Math.max(0, now - new Date(review.startedAt).getTime()))}`;
-}
-
-// { word, tone } for a worker's lastSteer, or null when it has none. Warn states
-// say what went wrong in words.
-export function steerView(lastSteer) {
-  if (!lastSteer) return null;
-  switch (lastSteer.state) {
-    case 'pending': return { word: 'Sending…', tone: 'plain' };
-    case 'delivered': return { word: `Delivered ${clock(lastSteer.at)}`, tone: 'plain' };
-    case 'failed':
-      if (lastSteer.reason === 'expired') return { word: 'Not sent: it reached the orchestrator too late. Send it again.', tone: 'warn' };
-      return { word: lastSteer.reason ? `Not delivered: ${lastSteer.reason}` : 'Not delivered', tone: 'warn' };
-    case 'unclaimed': return { word: 'Not picked up. Is the orchestrator session still open?', tone: 'warn' };
-    default: return null;
-  }
-}
-
-// The message under the board composer after a refused post.
-export function boardError(status, data) {
-  if (status === 409 && data?.error === 'no board yet') return 'This orchestration has no board yet. It gets one when the context image is written.';
-  if (status === 400) return 'Write a title first.';
-  return `Could not post. The server said ${status}.`;
-}
-
-// The message under the steer composer after a refused steer.
-export function steerError(status, data, text = '') {
-  if (status === 409 && data?.error === 'worker finished') return 'This worker has finished, so it was not steered.';
-  if (status === 409 && data?.error === 'orchestrator not live') return 'The orchestrator session is not running, so nothing can deliver the message.';
-  if (status === 400) return text.trim() ? 'The message is too long or not valid.' : 'Write a message first.';
-  return `Could not send. The server said ${status}.`;
-}
-
-const ATTENTION = new Set(['STUCK', 'DRIFT', 'BUDGET']);
-
-// What a worker card shows as its current action: the latest attention event for
-// a stuck worker, the report once the worker has reported, else its latest step.
-function actionText(w) {
-  if (w.status === 'stuck') {
-    const event = [...(w.events ?? [])].reverse().find((e) => ATTENTION.has(e.type));
-    if (event) return event.text;
-  }
-  if (w.report && w.status !== 'working' && w.status !== 'quiet') return `Report ${firstLine(w.report, 90)}`;
-  if (w.current) return stepLabel(w.current);
-  return statusView(w.status).word;
-}
+import {
+  CONTEXT_BUDGET, actionText, boardError, clock, countsLine, dotClass, meterRatio, phaseSteps, postTime,
+  reviewLabel, shortAgo, statusView, stepAge, stepLabel, steerError, steerView, switcherState, taskLabel, unseenPosts,
+} from './view.mjs';
 
 // Brings the keyed children of parent in line with items: creates missing ones,
 // updates all, orders them as items are, removes the rest. A repeated key gets a
@@ -198,10 +49,6 @@ function setClass(node, name, on) {
   node.classList.toggle(name, Boolean(on));
 }
 
-function dotClass(live, waiting) {
-  return waiting ? 'orch-dot wait' : live ? 'orch-dot' : 'orch-dot off';
-}
-
 // ---------- Switcher ----------
 
 export function renderSwitcher(root, list, selectedId, onSelect, now = Date.now()) {
@@ -224,10 +71,10 @@ export function renderSwitcher(root, list, selectedId, onSelect, now = Date.now(
     },
     (card, s) => {
       const r = card._r;
-      setText(r.name, s.topic);
-      setText(r.project, s.project);
+      setText(r.name, s.topic ?? '');
+      setText(r.project, s.project ?? '');
       setText(r.state, switcherState(s, now));
-      setText(r.counts, countsLine(s.counts));
+      setText(r.counts, countsLine(s.counts ?? {}));
       r.dot.className = dotClass(s.live, s.waiting);
       setClass(r.state, 'wait', s.waiting);
       setClass(card, 'done', !s.live);
@@ -273,7 +120,7 @@ function buildSkeleton(root, id) {
 
   const waves = el('div', { class: 'orch-waves' });
   const wavesEmpty = el('p', { class: 'orch-empty', text: 'Workers show here once the orchestrator starts a wave.' });
-  const workers = panel('waves', 'Workers', [waves, wavesEmpty]);
+  const workers = panel('waves orch-waves-panel', 'Workers', [waves, wavesEmpty]);
 
   const feed = el('ul', { class: 'feed' });
   const actions = panel('', 'Orchestrator actions', [el('div', { class: 'feed-wrap' }, [feed])]);
@@ -304,15 +151,18 @@ function buildSkeleton(root, id) {
 
 // Draws one orchestration's Detail. firstRender is true on the first render after
 // a selection change, and nothing animates then. seenBoard is how many board posts
-// the viewer has already seen.
-export function renderDetail(root, detail, { seenBoard = 0, firstRender = false, now = Date.now() } = {}) {
+// the viewer has already seen. actions is { sendBoardPost, sendSteer }, the calls the
+// composers make, so this module does no network I/O of its own.
+export function renderDetail(root, detail, { seenBoard = 0, firstRender = false, now = Date.now(), actions } = {}) {
+  if (!actions?.sendBoardPost || !actions?.sendSteer) throw new Error('renderDetail needs actions.sendBoardPost and actions.sendSteer');
   const fresh = root.dataset.id !== detail.id;
   const r = fresh ? buildSkeleton(root, detail.id) : root._orch;
+  r.actions = actions;
   const animate = !(firstRender || fresh);
 
   setText(r.orchMeta, detail.live ? 'live' : 'ended');
-  setText(r.title, detail.topic);
-  setText(r.project, detail.project);
+  setText(r.title, detail.topic ?? '');
+  setText(r.project, detail.project ?? '');
   setText(r.branch, detail.branch ?? '');
   renderPhases(r.phases, detail);
   renderNow(r, detail, animate, now);
@@ -343,11 +193,11 @@ function renderPhases(node, detail) {
 }
 
 function renderNow(r, detail, animate, now) {
-  const n = detail.now;
+  const n = detail.now ?? {};
   const waiting = n.state === 'waiting';
   setClass(r.nowBox, 'wait', waiting);
   r.nowDot.className = dotClass(n.state === 'working' || waiting, waiting);
-  swapText(r.nowWhat, n.text, { animate });
+  swapText(r.nowWhat, n.text ?? '', { animate });
   swapText(r.nowDetail, n.detail ?? '', { animate });
   setText(r.nowSince, n.since ? `for ${formatDuration(now - new Date(n.since).getTime())}` : '');
 }
@@ -355,7 +205,7 @@ function renderNow(r, detail, animate, now) {
 // ---------- Workers ----------
 
 function renderWaves(r, detail, animate, now) {
-  const waves = detail.waves ?? [];
+  const waves = (detail.waves ?? []).map((wave) => ({ ...wave, workers: wave.workers ?? [] }));
   const last = waves[waves.length - 1];
   const lastMerged = last && last.workers.every((w) => w.status === 'merged');
   const sections = [];
@@ -409,7 +259,7 @@ function updateWave(node, { mode, wave }, r, animate, now) {
     wave.workers,
     (worker) => worker.agentId,
     () => el('span', { class: 'chip' }),
-    (chip, worker) => setText(chip, `${statusView(worker.status).glyph} T${worker.task} ${worker.title ?? ''}`.trim()),
+    (chip, worker) => setText(chip, [statusView(worker.status).glyph, taskLabel(worker), worker.title ?? ''].filter(Boolean).join(' ')),
   );
 }
 
@@ -480,7 +330,7 @@ function updateWorker(card, w, r, animate, now) {
   card._worker = w;
   card._live = r.live;
   const view = statusView(w.status);
-  setText(c.taskNo, `T${w.task}`);
+  setText(c.taskNo, taskLabel(w));
   setText(c.titleText, w.title ?? '');
   c.status.className = `status ${view.tone}`;
   setText(c.glyph, view.glyph);
@@ -499,23 +349,19 @@ function updateWorker(card, w, r, animate, now) {
   setText(c.filesValue, `${(w.touched ?? []).length} of ${(w.files ?? []).length}`);
   c.steerItem.hidden = !(w.steerCount > 0);
   setText(c.steerValue, String(w.steerCount ?? 0));
-  setText(c.runningValue, formatDuration(Math.max(0, end - new Date(w.startedAt).getTime())));
+  const started = new Date(w.startedAt).getTime();
+  setText(c.runningValue, Number.isNaN(started) ? '—' : formatDuration(Math.max(0, end - started)));
 
   c.review.hidden = !w.review;
   if (w.review) {
     setText(c.reviewText, reviewLabel(w.review, now));
-    setText(c.reviewTask, `Task ${w.task}`);
+    setText(c.reviewTask, w.task == null ? '' : `Task ${w.task}`);
   }
   updateSteer(card, w, animate);
   const open = r.open.has(card.dataset.key);
   c.head.setAttribute('aria-expanded', String(open));
   c.more.hidden = !open;
   if (open) fillMore(c, w, now);
-}
-
-// The age of one step in the expanded list: "now" for the newest, else "4m ago".
-export function stepAge(i, time, now) {
-  return i === 0 ? 'now' : `${shortAgo(time, now)} ago`;
 }
 
 function fillMore(c, w, now) {
@@ -554,13 +400,14 @@ function renderFeed(node, feed) {
 
 function renderBoard(r, detail, seenBoard, animate, now) {
   const board = detail.board ?? [];
-  const unseen = Math.max(0, board.length - seenBoard);
+  const fresh = unseenPosts(board, seenBoard);
+  const unseen = fresh.size;
   setText(r.boardMeta, `${board.length} ${board.length === 1 ? 'post' : 'posts'}${unseen ? ` · ${unseen} new` : ''}`);
   r.boardEmpty.hidden = board.length > 0;
-  const total = board.length;
+  adoptPending(r.boardList, board);
   const created = reconcile(
     r.boardList,
-    board.map((post, i) => ({ post, isNew: total - i > seenBoard })),
+    board.map((post) => ({ post, isNew: fresh.has(post) })),
     ({ post }) => `${post.t}${post.from}`,
     ({ post }) => buildPost(post),
     (li, { post, isNew }) => {
@@ -575,6 +422,23 @@ function renderBoard(r, detail, seenBoard, animate, now) {
   const pending = [...r.boardList.querySelectorAll(':scope > [data-pending]')];
   for (const li of pending.reverse()) if (li !== r.boardList.firstChild) r.boardList.prepend(li);
   r.boardEmpty.hidden = board.length > 0 || pending.length > 0;
+}
+
+// A poll can land between the server writing the owner's post and the 201 answer.
+// A listed post from You with the same title and a time within 10 s of the request
+// takes over the pending node, so no solid copy appears beside it.
+const ADOPT_WINDOW_MS = 10_000;
+function adoptPending(list, board) {
+  const taken = new Set([...list.children].map((child) => child.dataset.key));
+  for (const li of list.querySelectorAll(':scope > [data-pending]')) {
+    const post = board.find((p) => p.from === 'You'
+      && p.title === li._r.title.textContent
+      && Math.abs(new Date(p.t).getTime() - li._sentAt) <= ADOPT_WINDOW_MS
+      && !taken.has(`${p.t}You`));
+    if (!post) continue;
+    li.dataset.key = `${post.t}You`;
+    taken.add(li.dataset.key);
+  }
 }
 
 function fillPost(li, post, now) {
@@ -649,7 +513,7 @@ function buildBoardComposer(root) {
     if (sending) return;
     const text = { title: title.value.trim(), body: body.value.trim() };
     if (!text.title) {
-      showError(boardError(400, null));
+      showError(boardError(400, null, text.title));
       title.focus();
       return;
     }
@@ -659,6 +523,7 @@ function buildBoardComposer(root) {
     const li = buildPost(text);
     li.dataset.key = `pending-${++sequence}`;
     li.setAttribute('data-pending', '');
+    li._sentAt = Date.now();
     fillPost(li, { t: new Date().toISOString(), from: 'You', ...text }, Date.now());
     list.prepend(li);
     root._orch.boardEmpty.hidden = true;
@@ -668,7 +533,7 @@ function buildBoardComposer(root) {
     body.value = '';
     sending = true;
     post.setAttribute('aria-disabled', 'true');
-    const result = await sendBoardPost(id, text);
+    const result = await root._orch.actions.sendBoardPost(id, text);
     sending = false;
     post.removeAttribute('aria-disabled');
     if (result.ok && result.data?.t) {
@@ -685,7 +550,7 @@ function buildBoardComposer(root) {
     li.remove();
     if (!title.value) title.value = typed.title;
     if (!body.value) body.value = typed.body;
-    showError(boardError(result.status, result.data));
+    showError(boardError(result.status, result.data, text.title));
     title.focus();
   });
   return { node: form };
@@ -733,9 +598,10 @@ function buildSteer(r, getCard) {
   };
   open.addEventListener('click', () => {
     const card = getCard();
-    input.setAttribute('aria-label', `Message to the ${card._worker ? `Task ${card._worker.task}` : 'task'} worker`);
+    input.setAttribute('aria-label', `Message to the ${card._worker?.task != null ? `Task ${card._worker.task}` : 'task'} worker`);
     input.placeholder = input.getAttribute('aria-label');
     showError('');
+    card._sendError = null;
     form.hidden = false;
     open.hidden = true;
     open.setAttribute('aria-expanded', 'true');
@@ -763,13 +629,21 @@ function buildSteer(r, getCard) {
       return;
     }
     showError('');
+    card._sendError = null;
     sending = true;
     send.setAttribute('aria-disabled', 'true');
-    const result = await sendSteer(r.root.dataset.id, { agentId: card.dataset.key, text });
+    const result = await r.actions.sendSteer(r.root.dataset.id, { agentId: card.dataset.key, text });
     sending = false;
     send.removeAttribute('aria-disabled');
     if (!result.ok) {
-      showError(steerError(result.status, result.data, text));
+      const message = steerError(result.status, result.data, text);
+      if (form.hidden) {
+        // Esc closed the form during the request, so the error goes in the status line.
+        card._sendError = { word: message, tone: 'warn', forId: card._worker?.lastSteer?.id };
+        updateSteer(card, card._worker, true);
+        return;
+      }
+      showError(message);
       input.focus();
       return;
     }
@@ -786,8 +660,10 @@ function buildSteer(r, getCard) {
 function updateSteer(card, w, animate) {
   const s = card._r.steer;
   if (card._sending && card._sending === w.lastSteer?.id) card._sending = null;
-  const view = card._sending ? { word: 'Sending…', tone: 'plain' } : steerView(w.lastSteer);
-  s.open.setAttribute('aria-label', `Steer Task ${w.task}`);
+  // A late send error ends when the worker has a newer steer or can no longer be steered.
+  if (card._sendError && (card._sendError.forId !== w.lastSteer?.id || !w.canSteer)) card._sendError = null;
+  const view = card._sending ? { word: 'Sending…', tone: 'plain' } : (card._sendError ?? steerView(w.lastSteer));
+  s.open.setAttribute('aria-label', w.task == null ? 'Steer this worker' : `Steer Task ${w.task}`);
   swapText(s.status, view?.word ?? '', { animate });
   setClass(s.status, 'warn', view?.tone === 'warn');
   if (s.form.hidden) s.open.hidden = !w.canSteer || !card._live;
