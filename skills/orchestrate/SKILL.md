@@ -303,12 +303,13 @@ work task's fields (`task`, `title`, `plan`, `worktree`, `branch`, `files`,
 `transcript` the implementer's transcript path.
 
 Build the reviewer message once per session, with the same absolute paths as the
-worker message, and reuse it byte for byte:
+worker message, plus `<TI>` filled in with the absolute path of `TI`. Reuse it byte
+for byte:
 
 ```
 Read <image> in full. Then run <CLAIM> <run> review and review the task it prints. Run every command in the worktree it names and touch no other checkout.
 Check the diff against the task and the image.
-Check how the work was done, reading the implementer's work only through `TI <transcript>` and `TI <transcript> --steps 60 --full`, with `TI` the absolute path of <clone>/bin/transcript-index. A step you doubt can be read with `sed -n '<line>p' <transcript> | cut -c1-2000`. Never read the transcript file whole.
+Check how the work was done, reading the implementer's work only through `<TI> <transcript>` and `<TI> <transcript> --steps 60 --full`, with <transcript> the implementer transcript the task names. A step you doubt can be read with `sed -n '<line>p' <transcript> | cut -c1-2000`. Never read the transcript file whole.
 Report pass, or each problem with file, line and why.
 ```
 
