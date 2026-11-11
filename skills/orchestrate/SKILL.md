@@ -108,6 +108,18 @@ point at the new session. The image's Sources keep the old ones.
 
 ## 5. Plan the waves
 
+Before grouping, revise the plan so every task includes:
+
+1. The exact test command, and which suite it runs. Check that by reading the
+   command's target (the package.json script, the Makefile target), not by
+   trusting its name.
+2. A concrete test that fails before the task's change and passes after it.
+3. A requirement that the worker's report pastes the real test output.
+
+Flag any task whose prescribed fix you cannot prove closes the bug. Show the
+flagged tasks to the user with the waves, and do not dispatch them until the
+user rules on each.
+
 From the plan's Interfaces blocks and file lists, group the tasks into waves:
 
 - A task joins the earliest wave after every task it consumes from.
@@ -147,7 +159,7 @@ Done when: <one narrow check, as a command and its expected result>.
 Image sections that matter most here: <names>.
 If you find something that affects work beyond this task (a fact that contradicts the image or plan, a problem in shared code, a name or interface other tasks depend on), post it and keep going: <POST> <board> --from "Task <N>" --title "<one line>" --body "<details>". If it blocks this task, stop and report instead.
 If the image or the plan contradicts the code, stop and report the contradiction instead of guessing.
-Commit on your branch with no attribution trailer. End your report with: files changed; the check you ran and its result; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
+Commit on your branch with no attribution trailer. End your report with: files changed; the task's test command and its real output, failing before your change and passing after, pasted verbatim; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
 ```
 
 ## 7. Watch
