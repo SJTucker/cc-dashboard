@@ -54,6 +54,24 @@ test('font sizes come from the type scale', () => {
   assert.deepStrictEqual(loose, []);
 });
 
+// The font shorthand carries a size too, so a px size there slips past the check above.
+test('the font shorthand does not set a px size', () => {
+  const shorthands = [...scaleCss.matchAll(/(?:^|[;{\s])font:\s*([^;}]+)/g)].map((m) => m[1].trim());
+  assert.deepStrictEqual(shorthands.filter((v) => /\d+(\.\d+)?px/.test(v)), []);
+});
+
+test('the Orchestration stylesheet uses the radius tokens and the topbar height token', () => {
+  const orch = fs.readFileSync(path.join(cssDir, 'orchestration.css'), 'utf8');
+  assert.deepStrictEqual(orch.match(/border-radius:\s*(?:4px|999px)/g), null);
+  assert.doesNotMatch(orch, /top:\s*96px/);
+});
+
+test('.orch-btn hover skips a button with aria-disabled', () => {
+  const orch = fs.readFileSync(path.join(cssDir, 'orchestration.css'), 'utf8');
+  assert.match(orch, /\.orch-btn:not\(:disabled\):not\(\[aria-disabled="true"\]\):hover/);
+  assert.doesNotMatch(orch, /\.orch-btn:not\(:disabled\):hover/);
+});
+
 test('letter-spacing is the label token or 0', () => {
   const values = [...scaleCss.matchAll(/letter-spacing:\s*([^;}]+)/g)].map((m) => m[1].trim());
   assert.deepStrictEqual(values.filter((v) => !['var(--ls-label)', '0', 'inherit'].includes(v)), []);

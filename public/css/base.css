@@ -48,6 +48,10 @@
   --sp-5: 24px;
   --radius-s: 2px;
   --radius-m: 6px;
+  --radius-field: 4px;
+  --radius-pill: 999px;
+  /* The sticky .topbar's height, for sticky elements that sit below it. */
+  --topbar-h: 80px;
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-data: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
