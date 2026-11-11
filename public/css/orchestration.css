@@ -51,7 +51,7 @@
 .tagline code { color: var(--text-primary); }
 .phases { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--sp-1); }
 .phase { display: grid; gap: 5px; }
-.phase .bar { height: 3px; border-radius: 2px; background: var(--border); }
+.phase .bar { height: 3px; border-radius: var(--radius-s); background: var(--border); }
 .phase.done .bar { background: var(--accent-cyan-dim); }
 .phase.now .bar { background: repeating-linear-gradient(90deg, var(--accent-cyan) 0 6px, var(--accent-cyan-dim) 6px 9px); }
 .phase .name { font-size: var(--fs-caption); color: var(--text-tertiary); }
@@ -98,8 +98,8 @@
 .w-now.attn .act { color: var(--warning); }
 .ctx { display: grid; gap: var(--sp-1); }
 .ctx-row { display: flex; justify-content: space-between; font-size: var(--fs-caption); color: var(--text-secondary); }
-.meter { position: relative; height: 5px; background: var(--bg); border-radius: 3px; overflow: hidden; }
-.meter .fill { position: absolute; inset: 0; transform-origin: left; background: var(--series-neutral); border-radius: 3px; transition: transform 500ms var(--orch-ease); }
+.meter { position: relative; height: 5px; background: var(--bg); border-radius: var(--radius-s); overflow: hidden; }
+.meter .fill { position: absolute; inset: 0; transform-origin: left; background: var(--series-neutral); border-radius: var(--radius-s); transition: transform 500ms var(--orch-ease); }
 /* Past the budget the fill is striped, so the state does not rest on colour. */
 .meter .fill.over { background: repeating-linear-gradient(135deg, var(--series-neutral) 0 4px, var(--bg) 4px 6px); }
 .meter .tick { position: absolute; top: 0; bottom: 0; right: 0; width: 2px; background: var(--text-secondary); }
@@ -121,7 +121,7 @@
 .board-list:empty { display: none; }
 .post { padding: 10px 14px; display: grid; gap: var(--sp-1); border-top: 1px solid color-mix(in srgb, var(--border) 60%, transparent); position: relative; }
 .post:first-child { border-top: 0; }
-.post.new::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 2px; background: var(--accent-cyan); border-radius: 2px; transition: opacity 1200ms ease; }
+.post.new::before { content: ""; position: absolute; left: 0; top: 12px; bottom: 12px; width: 2px; background: var(--accent-cyan); border-radius: var(--radius-s); transition: opacity 1200ms ease; }
 .post.seen::before { opacity: 0; }
 .post-top { display: flex; justify-content: space-between; gap: var(--sp-2); font-size: var(--fs-caption); }
 .post-from { color: var(--accent-cyan); font-weight: 500; }

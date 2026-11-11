@@ -24,10 +24,15 @@ export function statusView(status) {
   return STATUS_VIEWS[status] ?? { glyph: '○', word: String(status), tone: 'plain' };
 }
 
+// True for what shortAgo returns under a minute: "30s".
+export function isSeconds(ago) {
+  return /^\d+s$/.test(ago);
+}
+
 // "just now" under a minute, else "2h ago". shortAgo answers "<n>s" under a minute.
 function agoWords(summary, now) {
   const ago = shortAgo(summary.lastActiveAt, now);
-  return /^\d+s$/.test(ago) ? 'just now' : `${ago} ago`;
+  return isSeconds(ago) ? 'just now' : `${ago} ago`;
 }
 
 // The switcher card's one-line state.
@@ -95,7 +100,7 @@ export function clock(time) {
 // actions feed uses.
 export function postTime(time, now = Date.now()) {
   const ago = shortAgo(time, now);
-  if (ago.endsWith('s')) return 'just now';
+  if (isSeconds(ago)) return 'just now';
   return ago.endsWith('m') ? `${ago} ago` : clock(time);
 }
 
@@ -122,9 +127,9 @@ export function steerView(lastSteer) {
 }
 
 // The message under the board composer after a refused post.
-export function boardError(status, data) {
+export function boardError(status, data, title = '') {
   if (status === 409 && data?.error === 'no board yet') return 'This orchestration has no board yet. It gets one when the context image is written.';
-  if (status === 400) return 'Write a title first.';
+  if (status === 400) return title.trim() ? 'The title or details are too long.' : 'Write a title first.';
   return `Could not post. The server said ${status}.`;
 }
 
@@ -157,4 +162,21 @@ export function dotClass(live, waiting) {
 // The age of one step in the expanded list: "now" for the newest, else "4m ago".
 export function stepAge(i, time, now) {
   return i === 0 ? 'now' : `${shortAgo(time, now)} ago`;
+}
+
+// The posts from others that the viewer has not seen. board is newest first, and
+// seen is how many posts from others were seen. The owner's own posts are never new.
+export function unseenPosts(board, seen) {
+  const others = board.filter((post) => post.from !== 'You');
+  return new Set(others.slice(0, Math.max(0, others.length - seen)));
+}
+
+// How many posts of a board come from others: the count stored as seen.
+export function othersCount(board) {
+  return board.filter((post) => post.from !== 'You').length;
+}
+
+// "T3" for a worker with a task number, else "".
+export function taskLabel(worker) {
+  return worker.task == null ? '' : `T${worker.task}`;
 }

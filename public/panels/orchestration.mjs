@@ -84,14 +84,6 @@ export function scheduleBoardSeen(id, count, delay = 6000) {
   }, delay));
 }
 
-// The owner's board post. After a 201, the stored seen count goes up by one, so the
-// post the owner just made is not counted as new when a poll reads it.
-export async function postToBoard(id, post, opts) {
-  const result = await sendBoardPost(id, post, opts);
-  if (result.ok) saveBoardSeen(id, boardSeen(id) + 1);
-  return result;
-}
-
 // The selected orchestration id, kept in localStorage across page loads.
 const SELECTED_KEY = 'cc-dashboard:orchestration';
 let lastStoredId = null;
@@ -184,4 +176,15 @@ export function createOrchestrationGate({ request = requestOrchestrations, onIns
 export function syncOrchestrationPoller(poller, { installed, tab, hidden }) {
   if (installed && tab === 'orchestration' && !hidden) poller.start();
   else poller.stop();
+}
+
+// Takes the Orchestration tab away after the server said the skill is not installed:
+// hides the tab button and the live badge, stops the poller, clears the page state
+// (clearState) and sends #orchestration back to #now.
+export function removeOrchestrationTab({ tabButton, badge, poller, location, onTab, clearState }) {
+  poller.stop();
+  clearState();
+  tabButton.hidden = true;
+  badge.hidden = true;
+  if (onTab) location.hash = 'now';
 }

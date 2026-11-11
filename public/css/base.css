@@ -50,8 +50,9 @@
   --radius-m: 6px;
   --radius-field: 4px;
   --radius-pill: 999px;
-  /* The sticky .topbar's height, for sticky elements that sit below it. */
-  --topbar-h: 80px;
+  /* The sticky .topbar's height, for sticky elements that sit below it. This is its
+     height on one row. main.mjs sets the measured height, which grows when it wraps. */
+  --topbar-h: 71px;
 
   --font-ui: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
   --font-data: "JetBrains Mono", ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;

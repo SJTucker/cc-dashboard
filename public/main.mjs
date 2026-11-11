@@ -26,8 +26,8 @@ import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from '
 import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews } from './panels/reviews.mjs';
 import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
 import { renderSwitcher, renderDetail, renderEmpty } from './orchestration/render.mjs';
-import { EMPTY_TEXT } from './orchestration/view.mjs';
-import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS, boardSeen, scheduleBoardSeen, postToBoard, sendSteer, savedOrchestrationId, saveOrchestrationId, createOrchestrationGate, syncOrchestrationPoller } from './panels/orchestration.mjs';
+import { EMPTY_TEXT, othersCount } from './orchestration/view.mjs';
+import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS, boardSeen, scheduleBoardSeen, sendBoardPost, sendSteer, savedOrchestrationId, saveOrchestrationId, createOrchestrationGate, syncOrchestrationPoller, removeOrchestrationTab } from './panels/orchestration.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
@@ -68,13 +68,18 @@ const orchGate = createOrchestrationGate({
     }
   },
   onRemoved() {
-    orchPoller.stop();
-    orchList = [];
-    orchSelected = null;
-    orchDetail = null;
-    document.getElementById('orchTabBtn').hidden = true;
-    document.getElementById('orchLive').hidden = true;
-    if (state.tab === 'orchestration') location.hash = 'now';
+    removeOrchestrationTab({
+      tabButton: document.getElementById('orchTabBtn'),
+      badge: document.getElementById('orchLive'),
+      poller: orchPoller,
+      location,
+      onTab: state.tab === 'orchestration',
+      clearState() {
+        orchList = [];
+        orchSelected = null;
+        orchDetail = null;
+      },
+    });
   },
 });
 // Signatures of the last rendered summary and the last rendered rtk response. A 5s
@@ -248,7 +253,7 @@ function applyOrchestrationList(body) {
 }
 
 // The network calls the composers make, passed to renderDetail.
-const ORCH_ACTIONS = { sendBoardPost: postToBoard, sendSteer };
+const ORCH_ACTIONS = { sendBoardPost, sendSteer };
 
 // The id whose detail is on screen, so a selection change renders without motion.
 let orchRenderedId = null;
@@ -296,13 +301,23 @@ async function loadOrchestration() {
   orchDetail = detail;
   renderDetail(view, detail, { seenBoard: boardSeen(id), firstRender: orchRenderedId !== id, actions: ORCH_ACTIONS });
   orchRenderedId = id;
-  scheduleBoardSeen(id, (detail.board ?? []).length);
+  scheduleBoardSeen(id, othersCount(detail.board ?? []));
 }
 
 // Asked at startup, and again on a backoff while the request fails. A page opened on
 // #orchestration waits for the first real answer, then falls back to Now when the
 // skill is not installed (onRemoved).
 orchGate.start();
+
+// The .topbar wraps onto more rows on a narrow window, so its height changes. The
+// sticky board sits below it, so --topbar-h follows the measured border-box height.
+const topbar = document.querySelector('.topbar');
+if (topbar && typeof ResizeObserver === 'function') {
+  new ResizeObserver(([entry]) => {
+    const height = entry.borderBoxSize?.[0]?.blockSize ?? topbar.getBoundingClientRect().height;
+    document.documentElement.style.setProperty('--topbar-h', `${height}px`);
+  }).observe(topbar);
+}
 
 // The requests fetchAll skips when every panel they feed is hidden.
 // resumeRequests loads the page again when one of them was skipped at the last

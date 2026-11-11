@@ -89,18 +89,6 @@ test('scheduleBoardSeen keeps one pending timer per orchestration and saves each
   assert.equal(boardSeen('a'), 3);
 });
 
-test('postToBoard raises the seen count by one after a 201 and not after a refusal', async () => {
-  const { data } = fakeStorage();
-  const { postToBoard, boardSeen, saveBoardSeen } = await load();
-  saveBoardSeen('p', 4);
-  const ok = async () => ({ ok: true, status: 201, json: async () => ({ t: 'x' }) });
-  await postToBoard('p', { title: 'T', body: '' }, { fetchImpl: ok });
-  assert.equal(boardSeen('p'), 5);
-  const refused = async () => ({ ok: false, status: 409, json: async () => ({}) });
-  await postToBoard('p', { title: 'T', body: '' }, { fetchImpl: refused });
-  assert.equal(data.get('cc-dashboard:board-seen:p'), '5');
-});
-
 // The gate with a scripted request and timer queue.
 function gateHarness(answers, { hidden = false } = {}) {
   const calls = { request: 0, installed: [], removed: 0 };

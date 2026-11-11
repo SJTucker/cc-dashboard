@@ -62,7 +62,7 @@ test('the font shorthand does not set a px size', () => {
 
 test('the Orchestration stylesheet uses the radius tokens and the topbar height token', () => {
   const orch = fs.readFileSync(path.join(cssDir, 'orchestration.css'), 'utf8');
-  assert.deepStrictEqual(orch.match(/border-radius:\s*(?:4px|999px)/g), null);
+  assert.deepStrictEqual(orch.match(/border-radius:\s*[\d.]+px/g), null);
   assert.doesNotMatch(orch, /top:\s*96px/);
 });
 
