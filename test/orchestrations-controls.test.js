@@ -234,7 +234,7 @@ test('a refused steer does not advance the state the next poll builds on', async
   assert.equal(workerOf(await detailOf(url, o.sessionId), o.workerIds[0]).status, 'working');
 });
 
-test('board post is 409 when the board path does not end in .board.jsonl', async (t) => {
+test('a Monitor --board path that does not end in .board.jsonl is ignored, so a post never writes it', async (t) => {
   const { url, config } = await bootServer(t);
   install(config);
   const o = writeOrchestration(config.configDir, { live: true, workers: [] });
@@ -244,9 +244,9 @@ test('board post is 409 when the board path does not end in .board.jsonl', async
   lines.splice(1, 0, JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), message: { role: 'assistant', content: [{ type: 'tool_use', id: 'mon', name: 'Monitor', input: { command: `x --watch --board ${victim}`, description: 'w' } }] } }));
   fs.writeFileSync(o.transcript, lines.join('\n') + '\n');
   const res = await send(url, `/api/orchestrations/${o.sessionId}/board`, { title: 'x' });
-  assert.equal(res.status, 409);
-  assert.deepEqual(await res.json(), { error: 'no board yet' });
+  assert.equal(res.status, 201);
   assert.equal(fs.readFileSync(victim, 'utf8'), 'keep\n');
+  assert.equal(fs.readFileSync(o.boardPath, 'utf8').trim().split('\n').length, 1, 'the post went to the image-derived board');
 });
 
 test('temp files a crashed write left are deleted after 24 h, fresh ones are kept', (t) => {

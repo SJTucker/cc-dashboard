@@ -193,3 +193,108 @@ test('an ended orchestration without the finishing skill is Idle', () => {
   assert.equal(now.text, 'Idle');
   assert.equal(now.since, null);
 });
+
+test('nowLine reads the raw Monitor input, so the description wins over the command text', () => {
+  const s = orchestration();
+  const parsed = parseOrchestrator(s.lines);
+  const steps = stepsFor(s);
+  assert.equal(nowLine(parsed, steps, { state: 'working', tool: null, since: T0 }, true).text, 'Merged Task 1');
+  s.use('Monitor', { description: 'watch Task 2 progress', command: 'tail -f board' });
+  const again = parseOrchestrator(s.lines);
+  assert.equal(nowLine(again, stepsFor(s), null, true, s.lines).text, 'Watching Task 2');
+  assert.equal(nowLine(again, stepsFor(s), null, true).text, 'Watching workers', 'without the lines it still falls back to the step text');
+});
+
+test('nowLine finds a wt switch at the end of a very long Bash command', () => {
+  const s = orchestration().use('Bash', { command: `echo ${'x'.repeat(600)}; wt switch --create demo-t7 --base demo --no-cd` });
+  const now = nowLine(parseOrchestrator(s.lines), stepsFor(s), null, true, s.lines);
+  assert.equal(now.text, 'Created worktree demo-t7');
+});
+
+test('nowLine falls back to the step text when the raw line cannot be read', () => {
+  const s = orchestration().use('Bash', { command: 'wt switch --create demo-t8 --base demo --no-cd' });
+  const lines = [...s.lines];
+  lines[lines.length - 1] = '{broken';
+  const now = nowLine(parseOrchestrator(s.lines), stepsFor(s), null, true, lines);
+  assert.equal(now.text, 'Created worktree demo-t8');
+});
+
+test('a command that creates several worktrees reads Created worktrees a, b', () => {
+  const s = orchestration().use('Bash', { command: 'wt switch --create demo-t2 --base demo --no-cd && wt switch --create demo-t3 --base demo --no-cd' });
+  const { feed } = feedOf(s);
+  assert.equal(feed[0].text, 'Created worktrees demo-t2, demo-t3');
+});
+
+test('a command that merges and creates gives a merge entry and a create entry at the same time', () => {
+  const s = orchestration().use('Bash', { command: 'git merge demo-t2 && wt switch --create demo-t3 --base demo --no-cd' });
+  const { feed } = feedOf(s);
+  assert.deepEqual(feed.slice(0, 2).map((a) => a.text), ['Created worktree demo-t3', 'Merged Task 2']);
+  assert.equal(feed[0].at, feed[1].at);
+});
+
+test('each raw line is parsed once by the feed, though it holds two tool steps', () => {
+  const s = new Script().prompt('go');
+  s.push({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'x1', name: 'Skill', input: { skill: 'orchestrate' } }, { type: 'tool_use', id: 'x2', name: 'Skill', input: { skill: 'other' } }] } });
+  const target = s.lines[1];
+  const parsed = parseOrchestrator(s.lines);
+  const countFor = (fn) => {
+    let n = 0;
+    const real = JSON.parse;
+    JSON.parse = (text, ...rest) => {
+      if (text === target) n++;
+      return real(text, ...rest);
+    };
+    try {
+      fn();
+    } finally {
+      JSON.parse = real;
+    }
+    return n;
+  };
+  const stepsOnly = countFor(() => stepsOf(s.lines, 1, s.lines.length));
+  const whole = countFor(() => actionFeed(s.lines, parsed));
+  assert.equal(whole - stepsOnly, 1);
+});
+
+test('a malformed raw line does not break the feed', () => {
+  const s = orchestration();
+  s.lines.splice(4, 0, '{not json');
+  const { feed } = feedOf(s);
+  assert.ok(feed.length >= 8);
+  assert.ok(feed.every((a) => typeof a.text === 'string'));
+});
+
+test('a user prompt in the feed is cut at 60 characters', () => {
+  const s = orchestration();
+  s.prompt('p'.repeat(100));
+  const { feed } = feedOf(s);
+  assert.equal(feed[0].text, `You: ${'p'.repeat(60)}`);
+});
+
+test('a Monitor whose description names no task reads Watching workers', () => {
+  const s = orchestration().use('Monitor', { description: 'watch the board', command: 'tail -f b' });
+  assert.equal(feedOf(s).feed[0].text, 'Watching workers');
+});
+
+test('a SendMessage to an agent that is not in the orchestration is left out of the feed', () => {
+  const s = orchestration().use('SendMessage', { to: 'unknown', summary: 'hi', message: 'x' });
+  const { feed } = feedOf(s);
+  assert.equal(feed.length, 8);
+  assert.ok(!feed.some((a) => a.detail === 'hi'));
+});
+
+const metaNote = (s, text) => s.push({ type: 'user', isMeta: true, message: { role: 'user', content: [{ type: 'text', text }] } });
+
+test('every dashboard steer note is a feed entry, with a task label or "a worker"', () => {
+  const s = orchestration();
+  metaNote(s, 'You steered Task 1 from the dashboard: rebase');
+  metaNote(s, 'You steered a worker from the dashboard: look again');
+  metaNote(s, 'You steered Task 9 from the dashboard: no worker for this');
+  const { feed } = feedOf(s);
+  assert.deepEqual(feed.slice(0, 3).map((a) => [a.text, a.detail]), [
+    ['You steered Task 9', 'no worker for this'],
+    ['You steered a worker', 'look again'],
+    ['You steered Task 1', 'rebase'],
+  ]);
+  assert.equal(feed[0].glyph, '↗');
+});

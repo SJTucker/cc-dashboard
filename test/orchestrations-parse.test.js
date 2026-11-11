@@ -3,10 +3,10 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('node:fs');
-const os = require('node:os');
 const path = require('node:path');
 const { parseOrchestrator } = require('../lib/orchestrations/parse');
 const { writeOrchestration } = require('./orchestration-fixture');
+const { tmpDir } = require('./helpers');
 const { stepsOf, contextTokens, watchEvents } = require('../lib/transcript-index');
 const { readSessions, getSessionsDir, LIVE_WINDOW_MS } = require('../lib/sessions');
 
@@ -137,6 +137,49 @@ test('the dashboard steer note is a steer of that task\'s latest worker', () => 
   assert.match(r.steers[0].at, /^2026-11-10T/);
 });
 
+const monitor = (command, id = 'mon') => assistant(use('Monitor', { command, description: 'watch' }, id));
+const boardOf = (command) => parseOrchestrator([...orchestratorLines(), monitor(command)]).boardPath;
+const IMAGE_BOARD = '/p/docs/superpowers/images/2026-11-10-demo.board.jsonl';
+
+test('--board accepts an unquoted path, and a quoted path with spaces', () => {
+  assert.equal(boardOf('bin/transcript-index f --watch --board /p/a/x.board.jsonl'), '/p/a/x.board.jsonl');
+  assert.equal(boardOf('bin/transcript-index f --watch --board "/p/my dir/x.board.jsonl" --budget 1'), '/p/my dir/x.board.jsonl');
+  assert.equal(boardOf("bin/transcript-index f --watch --board '/p/my dir/x.board.jsonl'"), '/p/my dir/x.board.jsonl');
+});
+
+test('--board that does not end in .board.jsonl is ignored for the image-derived path', () => {
+  assert.equal(boardOf('bin/transcript-index f --board /p/notes.txt'), IMAGE_BOARD);
+  assert.equal(boardOf('bin/transcript-index f --board "/p/my dir/notes.txt"'), IMAGE_BOARD);
+});
+
+test('a files line that ends the prompt still yields its files', () => {
+  const prompt = `Your worktree is /p/.worktrees/demo-t1; work only there.\nRead ${IMAGE} in full, then do Task 1 of ${PLAN}, "T".\nFiles this task touches: lib/a.js, lib/b.js.`;
+  const r = parseOrchestrator([typed('go'), assistant(use('Skill', { skill: 'orchestrate' }, 'sk')), ...launch('ag1', 'aaa1', 'Task 1 worker', prompt)]);
+  assert.deepEqual(r.agents[0].files, ['lib/a.js', 'lib/b.js']);
+});
+
+const metaNote = (text) => rec({ type: 'user', isMeta: true, message: { role: 'user', content: [{ type: 'text', text }] } });
+
+test('the "a worker" steer note is read back, and stays out of steers', () => {
+  const r = parseOrchestrator([...orchestratorLines(), metaNote('You steered a worker from the dashboard: check the tests')]);
+  assert.deepEqual(r.notes.map((n) => [n.task, n.summary, n.line]), [[null, 'check the tests', 7]]);
+  assert.deepEqual(r.steers, []);
+});
+
+test('a note for a task with no worker is kept in notes and left out of steers', () => {
+  const r = parseOrchestrator([...orchestratorLines(), metaNote('You steered Task 9 from the dashboard: nobody home')]);
+  assert.deepEqual(r.notes.map((n) => [n.task, n.summary]), [[9, 'nobody home']]);
+  assert.deepEqual(r.unmappedNotes.map((n) => n.task), [9]);
+  assert.deepEqual(r.steers, []);
+});
+
+test('a note that maps to a worker is in notes and steers, and is not unmapped', () => {
+  const r = parseOrchestrator([...orchestratorLines(), metaNote('You steered Task 1 from the dashboard: go')]);
+  assert.equal(r.notes.length, 1);
+  assert.deepEqual(r.unmappedNotes, []);
+  assert.deepEqual(r.steers.map((s) => [s.to, s.source]), [['aaa1', 'dashboard']]);
+});
+
 test('git merge-base, merge-tree and merge --abort are not merges', () => {
   const lines = [
     ...orchestratorLines(),
@@ -182,12 +225,9 @@ test('malformed lines are skipped', () => {
 });
 
 // The fixture writer: its output has to parse, and its worker transcripts have to feed transcript-index.
-function tmpDir() {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'orch-fixture-'));
-}
 
-test('the fixture writes an orchestration the parser and transcript-index can read', () => {
-  const cfg = tmpDir();
+test('the fixture writes an orchestration the parser and transcript-index can read', (t) => {
+  const cfg = tmpDir(t, 'fixture');
   const out = writeOrchestration(cfg, {
     topic: 'demo',
     sessionId: 'sess-1',
@@ -223,8 +263,8 @@ test('the fixture writes an orchestration the parser and transcript-index can re
   assert.equal(snap.endedAt, undefined);
 });
 
-test('the fixture writes clearedFrom, an ended snapshot and a reset line as the first prompt', () => {
-  const cfg = tmpDir();
+test('the fixture writes clearedFrom, an ended snapshot and a reset line as the first prompt', (t) => {
+  const cfg = tmpDir(t, 'fixture');
   const out = writeOrchestration(cfg, { topic: 'demo', sessionId: 'sess-2', clearedFrom: 'sess-1', resetLine: true, workers: [] });
   const [snap] = readSessions(getSessionsDir(cfg));
   assert.equal(snap.clearedFrom, 'sess-1');
@@ -234,8 +274,8 @@ test('the fixture writes clearedFrom, an ended snapshot and a reset line as the 
   assert.equal(r.imagePath, out.imagePath);
 });
 
-test('watchEvents reports a finished fixture worker as done with its report, and a running one as not done', () => {
-  const cfg = tmpDir();
+test('watchEvents reports a finished fixture worker as done with its report, and a running one as not done', (t) => {
+  const cfg = tmpDir(t, 'fixture');
   const out = writeOrchestration(cfg, {
     topic: 'demo',
     sessionId: 'sess-w',
@@ -258,10 +298,25 @@ test('watchEvents reports a finished fixture worker as done with its report, and
   assert.ok(!running.events.some((e) => e.startsWith('DONE')));
 });
 
-test('a live fixture snapshot counts as live by the sessions rule', () => {
-  const cfg = tmpDir();
+test('a live fixture snapshot counts as live by the sessions rule', (t) => {
+  const cfg = tmpDir(t, 'fixture');
   writeOrchestration(cfg, { topic: 'demo', sessionId: 'sess-live', live: true, workers: [] });
   const [s] = readSessions(getSessionsDir(cfg));
   assert.equal(typeof s.endedAt, 'undefined');
   assert.ok(Date.now() - s.lastActiveAt <= LIVE_WINDOW_MS);
+});
+
+test('no fixture record is dated in the future, live or ended', (t) => {
+  const cfg = tmpDir(t, 'fixture');
+  const steps = Array.from({ length: 40 }, (_, k) => ({ tool: 'Edit', file_path: `lib/f${k}.js` }));
+  for (const live of [true, false]) {
+    const out = writeOrchestration(cfg, { topic: `t${live}`, sessionId: `future-${live}`, live, workers: Array.from({ length: 15 }, (_, k) => ({ task: k + 1, steps: k === 0 ? steps : [], finished: true, merged: true, steer: 'x' })) });
+    const files = [out.transcript, ...out.workerIds.slice(0, 3).map((id) => path.join(path.dirname(out.transcript), `future-${live}`, 'subagents', `agent-${id}.jsonl`))];
+    const before = Date.now();
+    for (const file of files) {
+      for (const line of fs.readFileSync(file, 'utf8').split('\n').filter(Boolean)) {
+        assert.ok(Date.parse(JSON.parse(line).timestamp) <= before, `${file}: ${line.slice(0, 80)}`);
+      }
+    }
+  }
 });

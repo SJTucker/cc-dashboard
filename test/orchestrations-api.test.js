@@ -268,3 +268,58 @@ test('list() does not advance the finished-flag state that detail() holds for a 
   assert.notEqual(statusOf(orch.detail(o.sessionId)), 'done');
   assert.equal(statusOf(orch.detail(o.sessionId)), 'done');
 });
+
+const skillCall = () => JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), message: { role: 'assistant', content: [{ type: 'tool_use', id: 's1', name: 'Skill', input: { skill: 'orchestrate' } }] } });
+
+test('a transcript line that is the JSON literal null does not break detection', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const file = plainSession(config, 'null-1');
+  fs.writeFileSync(file, 'null\n');
+  const o = createOrchestrations(config.configDir);
+  assert.deepEqual(o.list(), []);
+  fs.appendFileSync(file, skillCall() + '\n');
+  assert.deepEqual(o.list().map((s) => s.id), ['null-1']);
+});
+
+test('an orchestrate marker split across two offset reads is found once the line completes', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const file = plainSession(config, 'split-1');
+  const o = createOrchestrations(config.configDir);
+  assert.deepEqual(o.list(), []);
+  const call = skillCall();
+  const half = Math.floor(call.length / 2);
+  fs.appendFileSync(file, call.slice(0, half));
+  assert.deepEqual(o.list(), []);
+  fs.appendFileSync(file, call.slice(half) + '\n');
+  assert.deepEqual(o.list().map((s) => s.id), ['split-1']);
+});
+
+test('detail re-parses a transcript that grew, though the lines array keeps its identity', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const a = writeOrchestration(config.configDir, { sessionId: 'grow-1', live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  const o = createOrchestrations(config.configDir);
+  assert.equal(o.detail('grow-1').waves[0].workers.length, 1);
+  const prompt = 'Your worktree is /p/.worktrees/demo-t2; work only there.\nRead x.md in full, then do Task 2 of y.md, "Two".\nFiles this task touches: lib/b.js.\nDone when: ok\n';
+  const t0 = new Date().toISOString();
+  const launch = { type: 'assistant', timestamp: t0, message: { role: 'assistant', content: [{ type: 'tool_use', id: 'ag2', name: 'Agent', input: { description: 'Task 2 worker', prompt } }] } };
+  const result = { type: 'user', timestamp: t0, toolUseResult: { agentId: 'agent2', prompt }, message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'ag2', content: 'ok' }] } };
+  fs.appendFileSync(a.transcript, JSON.stringify(launch) + '\n' + JSON.stringify(result) + '\n');
+  assert.equal(o.detail('grow-1').waves.flatMap((w) => w.workers).length, 2);
+});
+
+test('a dashboard note after a reset counts as a steer of a worker launched before it', (t) => {
+  const config = testConfig(t);
+  install(config);
+  writeOrchestration(config.configDir, { sessionId: 'sess-a', live: false, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  const b = writeOrchestration(config.configDir, { sessionId: 'sess-b', clearedFrom: 'sess-a', resetLine: true, live: true, workers: [] });
+  const note = { type: 'user', isMeta: true, timestamp: new Date().toISOString(), message: { role: 'user', content: [{ type: 'text', text: 'You steered Task 1 from the dashboard: use the helper' }] } };
+  fs.appendFileSync(b.transcript, JSON.stringify(note) + '\n');
+  const d = createOrchestrations(config.configDir).detail('sess-a');
+  const workers = d.waves.flatMap((w) => w.workers);
+  assert.equal(workers.length, 1);
+  assert.equal(workers[0].steerCount, 1);
+  assert.ok(d.feed.some((f) => f.text === 'You steered Task 1'));
+});
