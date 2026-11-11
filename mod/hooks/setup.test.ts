@@ -77,6 +77,25 @@ test('includedPaths reads @ lines relative to the file, with ~ expanded', async 
   expect(includedPaths(text, '/h/.claude', '/h')).toEqual(['/h/.claude/RTK.md', '/h/notes/a.md', '/abs/b.md'])
 })
 
+test('includedPaths skips @ lines inside a fenced code block', async () => {
+  expect(includedPaths('@a.md\n```\n@b.md\n```\n@c.md', '/h/.claude', '/h')).toEqual(['/h/.claude/a.md', '/h/.claude/c.md'])
+})
+
+test('includedPaths treats a tilde fence and an unclosed fence as code', async () => {
+  expect(includedPaths('~~~\n@b.md\n~~~\n@c.md', '/h/.claude', '/h')).toEqual(['/h/.claude/c.md'])
+  expect(includedPaths('@a.md\n```md\n@b.md', '/h/.claude', '/h')).toEqual(['/h/.claude/a.md'])
+})
+
+test('includedPaths does not close a fence with the other character, a shorter run or a line with text after the run', async () => {
+  for (const text of ['```\n~~~\n@b.md\n```\n@c.md', '````\n```\n@b.md\n````\n@c.md', '```\n```js\n@b.md\n```\n@c.md']) {
+    expect(includedPaths(text, '/h/.claude', '/h')).toEqual(['/h/.claude/c.md'])
+  }
+})
+
+test('includedPaths opens a fence on an indented line', async () => {
+  expect(includedPaths('  ```\n@b.md\n  ```\n@c.md', '/h/.claude', '/h')).toEqual(['/h/.claude/c.md'])
+})
+
 test('commandPaths takes the first word of each hook and the statusline when it is a path', async () => {
   const settings = JSON.stringify({
     hooks: {

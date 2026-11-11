@@ -1,24 +1,30 @@
-// The sticky bar's Record day, and the 7d lines under its cost and tokens.
+// The sticky bar's record card, and the 7d lines under its cost and tokens.
 import { getJson } from '../api.mjs';
-import { formatCost, formatTokens, shortDate, localDateStr } from '../format.mjs';
+import { formatCost, formatTokens, localDateStr } from '../format.mjs';
 import { state } from '../state.mjs';
 import { neededRequests } from '../visibility.mjs';
-import { busiestDay, rollingWeek } from '../stats.mjs';
+import { rollingWeek } from '../stats.mjs';
 import { createSequence } from '../guards.mjs';
+import { BOARDS } from '../highscores/boards.mjs';
+import { stickyRecord } from '../highscores/view.mjs';
+import { getMerged } from './highscores.mjs';
 
-// The sticky bar's Record day, the all-time value. Fetched once on load and once on
-// Refresh, not on the 5s live poll or a range switch: /api/records reads the
-// all-time and 7-day aggregates, so polling it on every tick would buy nothing. A
-// failure, including a 500 whose body is { error }, resolves to null. Optional,
-// like requestSessions.
+// The record card moves to the next board this often.
+const ROTATE_MS = 6000;
+
+// The 6 days before today for the 7d lines. Fetched once on load and once on
+// Refresh, not on the 5s live poll or a range switch: /api/records reads the 7-day
+// aggregate, so polling it on every tick would buy nothing. A failure, including a
+// 500 whose body is { error }, resolves to null. Optional, like requestSessions.
 function requestRecords() {
   return getJson('/api/records', { optional: true });
 }
 
-// Kept so /api/records resolving after the first render can redraw Record day
-// with the same daily data the last summary produced.
-let lastRecordDaily = null;
 let lastSummary = null;
+// The BOARDS index of the record the card shows.
+let slot = 0;
+// True while the pointer is over the card, so the record being read stays.
+let paused = false;
 let recordsData = null;
 // The local date the last /api/records request was made on. recentDays holds the
 // 6 days before that date, so after midnight it is missing yesterday.
@@ -41,12 +47,11 @@ export function refreshRecords() {
   const isLatest = recordsLoads.next();
   requestRecords().then((data) => {
     if (!isLatest()) return;
-    // A failed request keeps the last good records, so Record day keeps its value.
+    // A failed request keeps the last good recentDays.
     if (data) {
       recordsData = data;
       recordsDataDay = day;
     }
-    if (lastRecordDaily) renderRecord(lastRecordDaily);
     if (lastSummary) renderWeekTotals(lastSummary);
   });
 }
@@ -69,15 +74,56 @@ export function renderWeekTotals(summary) {
   tokens.title = cost.title;
 }
 
-// The all-time record: the day with the most tokens, with its cost. Today's total
-// grows on every poll and can pass the fetched record, so it replaces the record
-// when it has more tokens. daily is today's hourly buckets.
-export function renderRecord(daily) {
-  lastRecordDaily = daily;
-  const todayStr = localDateStr(new Date());
-  const today = busiestDay(daily.filter((d) => d.date.slice(0, 10) === todayStr));
-  let record = recordsData && recordsData.allTime;
-  if (record && today && today.tokens > record.tokens) record = today;
-  document.getElementById('stickyRecord').textContent = record ? formatTokens(record.tokens) : '—';
-  document.getElementById('stickyRecordDate').textContent = record ? `${shortDate(record.date)} · ${formatCost(record.cost)}` : '';
+// The record card: the first place of one High scores board, from the boards with
+// today's live values merged in (getMerged), so today shows as soon as it takes
+// first place. Boards with no entry are skipped. Before the first /api/highscores
+// answer, and while its payload is from an earlier date, the card shows a dash.
+export function renderRecord() {
+  const boards = getMerged();
+  const label = document.getElementById('stickyRecordLabel');
+  const value = document.getElementById('stickyRecord');
+  const note = document.getElementById('stickyRecordDate');
+  const n = BOARDS.length;
+  let i = 0;
+  while (i < n && !boards?.[BOARDS[(slot + i) % n].key]?.[0]) i += 1;
+  if (i === n) {
+    label.textContent = 'Records';
+    value.textContent = '—';
+    note.textContent = '';
+    note.title = '';
+    return;
+  }
+  slot = (slot + i) % n;
+  const { key } = BOARDS[slot];
+  const text = stickyRecord(key, boards[key][0], localDateStr(new Date()));
+  label.textContent = text.label;
+  value.textContent = text.value;
+  note.textContent = text.note;
+  // A long session title is cut off by CSS; the tooltip holds all of it.
+  note.title = text.note;
+}
+
+function nextRecord() {
+  slot = (slot + 1) % BOARDS.length;
+  renderRecord();
+}
+
+// Starts the rotation. The card holds still while the pointer is over it, while
+// the browser tab is hidden, and when the user asked for less motion. A click
+// shows the next record at once, which is the only way to move it with less motion.
+export function setupRecord() {
+  const card = document.getElementById('stickyRecordCard');
+  card.addEventListener('mouseenter', () => { paused = true; });
+  card.addEventListener('mouseleave', () => { paused = false; });
+  card.addEventListener('click', nextRecord);
+  card.addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    nextRecord();
+  });
+  setInterval(() => {
+    if (paused || document.hidden || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    // Until the boards arrive the card shows a dash, and moving on would skip the first record.
+    if (getMerged()) nextRecord();
+  }, ROTATE_MS);
 }

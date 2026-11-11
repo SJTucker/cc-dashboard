@@ -1,7 +1,7 @@
 // Pure text formatting for the High scores boards. It touches no DOM, so the
 // tests run it under Node.
 import { BOARDS } from './boards.mjs';
-import { formatCost } from '../format.mjs';
+import { formatCost, formatTokens, shortDate } from '../format.mjs';
 
 const MONTHS = ['JAN', 'FEB', 'MAR', 'APR', 'MAY', 'JUN', 'JUL', 'AUG', 'SEP', 'OCT', 'NOV', 'DEC'];
 
@@ -75,4 +75,30 @@ function hallRows(boards, thisYear) {
   });
 }
 
-export { dayLabel, scoreText, boardRows, hallRows };
+// The sticky bar's record card labels, by board key.
+const STICKY_LABELS = {
+  tokens: 'Record tokens',
+  cost: 'Record cost',
+  prompts: 'Record prompts',
+  sessions: 'Record sessions',
+  linesAdded: 'Record lines added',
+  linesRemoved: 'Record lines deleted',
+  session: 'Biggest session',
+  turn: 'Longest turn',
+  streak: 'Longest streak',
+};
+
+// The record card's text for one board's first place: { label, value, note }.
+// Tokens are compact (1.29B) to fit the sticky bar; other scores read as on the
+// board. The note is the date as M/D or 'today', a start–end range for a streak,
+// and the title after the date for a session or a turn.
+function stickyRecord(key, entry, todayStr) {
+  const when = (date) => (date === todayStr ? 'today' : shortDate(date));
+  let note = when(entry.date);
+  if (key === 'streak' && entry.end && entry.end !== entry.date) note = `${note}–${when(entry.end)}`;
+  if (entry.title) note = `${note} · ${entry.title}`;
+  const value = key === 'tokens' ? formatTokens(entry.score) : scoreText(key, entry);
+  return { label: STICKY_LABELS[key], value, note };
+}
+
+export { dayLabel, scoreText, boardRows, hallRows, stickyRecord };

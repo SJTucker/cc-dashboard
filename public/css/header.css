@@ -184,6 +184,7 @@
 .sticky-stats {
   display: flex;
   gap: var(--sp-5);
+  min-width: 0; /* lets the record card shrink on a narrow screen */
   margin-left: auto;
   padding: 0 var(--sp-2);
   background: var(--bg);
@@ -200,6 +201,11 @@
 .stat-value { font-family: var(--font-num); font-size: var(--fs-stat); font-weight: 600; }
 .stat-value.money { color: var(--money); text-shadow: var(--money-glow); }
 .stat-note { font-size: var(--fs-caption); color: var(--text-tertiary); white-space: nowrap; }
+/* The rotating record card. A fixed width keeps the bar from shifting as the
+   records change. On a narrow screen the card shrinks instead, and a long
+   session title in the note is cut off with an ellipsis. */
+.record-stat { width: 11rem; cursor: pointer; }
+.record-stat .stat-note { overflow: hidden; text-overflow: ellipsis; }
 .topbar .menu-btn { margin-left: 0; }
 
 /* The range picker and Refresh, above the range's cards. */

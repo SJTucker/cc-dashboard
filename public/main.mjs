@@ -21,7 +21,7 @@ import { ensureChanges, loadChanges, redrawChanges } from './panels/changes.mjs'
 import { requestLimits, renderLimits, renderLimitsBanner } from './panels/limits.mjs';
 import { renderModelDailyCharts, renderModelsPanel, setupModelMixToggle } from './panels/models.mjs';
 import { loadPricesSource, setupPrices } from './panels/prices.mjs';
-import { refreshRecords } from './panels/records.mjs';
+import { refreshRecords, setupRecord, renderRecord } from './panels/records.mjs';
 import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews } from './panels/reviews.mjs';
 import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
@@ -664,12 +664,15 @@ setupUsageGroupToggles();
 setupModelMixToggle();
 setupPrices({ onApplied: reloadAll });
 refreshRecords();
+setupRecord();
 setupHighscores();
 wireModSettings((key) => {
   if (key === 'reviews') reloadReviews();
   else if (key === 'setupLabels' || key === 'setupMarkers') loadChanges();
 });
-refreshHighscores();
+// The record card reads the High scores boards, so it draws as soon as they arrive
+// instead of on the next poll.
+refreshHighscores().then(renderRecord);
 // A panel's "Mod settings" link opens the Mod tab and focuses that setting's row. The
 // hashchange listener added on click comes after setupTabs' own, so enterTab has run by then.
 document.addEventListener('click', (evt) => {

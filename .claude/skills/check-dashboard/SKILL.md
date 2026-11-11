@@ -76,7 +76,7 @@ playwright-cli screenshot ".topbar" --filename=$SP/topbar.png
 Mocks keep a test from writing to real data or from needing a specific state. Sessions mocked GET routes this way:
 
 ```bash
-playwright-cli route "**/api/records" --body='{"allTime":{"date":"2026-01-05","tokens":999000000000,"cost":1234.5}}'
+playwright-cli route "**/api/records" --body='{"recentDays":[{"date":"2026-01-05","tokens":999000000000,"cost":1234.5}]}'
 playwright-cli goto http://localhost:$PORT/
 playwright-cli unroute
 ```

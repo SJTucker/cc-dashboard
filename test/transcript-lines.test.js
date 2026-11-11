@@ -57,6 +57,10 @@ test('handoffPromptPath returns the .claude/handoffs tail of an absolute or rela
   assert.strictEqual(handoffPromptPath('Read .claude/handoffs/x.md, check'), '.claude/handoffs/x.md');
   assert.strictEqual(handoffPromptPath('Read notes/x.md, check'), null);
   assert.strictEqual(handoffPromptPath('fix the bug'), null);
+  assert.strictEqual(handoffPromptPath("Read '/my repo/.claude/handoffs/x.md', check Preconditions"), '.claude/handoffs/x.md');
+  assert.strictEqual(handoffPromptPath("Read '/my repo/notes/x.md', check"), null);
+  assert.strictEqual(handoffPromptPath("Read '/it'\\''s repo/.claude/handoffs/x.md', check Preconditions"), '.claude/handoffs/x.md');
+  assert.strictEqual(handoffPromptPath("Read '/a/foo.claude/handoffs/x.md', check"), null);
 });
 
 const imageBlock = { type: 'image', source: { type: 'base64', media_type: 'image/png', data: 'AAAA' } };

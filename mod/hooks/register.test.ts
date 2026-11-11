@@ -57,6 +57,8 @@ type World = {
   // Answers bin/cache-state. Its runs go to cacheRan. cacheMs delays the answer on the mock clock.
   cacheState: { exitCode: number; stdout: string; stderr?: string }
   cacheMs: number
+  // Delays each bin/review-session record answer on the mock clock.
+  reviewMs: number
   // What $.session.surfaces returns, and how far clock.now runs ahead of the mock timers.
   surfaces: string[]
   nowOffset: number
@@ -67,6 +69,8 @@ type World = {
   // The index files fs.exists finds. Any other path under cc-dashboard/transcript-index/
   // is missing, whatever `exists` answers.
   indexes: string[]
+  // The stderr the generic process.run branch returns, as a failing bin script prints a reason.
+  runStderr: string
   // What $.model.fork answers, and how long it takes on the mock clock.
   forkReply: { isAnswered: true; text: string } | { isAnswered: false; reason: 'nothing-to-fork' | 'aborted' }
   forkMs: number
@@ -74,6 +78,9 @@ type World = {
   // entry of readMs, and an fs.exists of a transcript index path takes indexExistsMs, then
   // throws when indexExistsFails is set. The transcript fallback awaits that check last.
   readMs: number[]
+  // Each read of limit-warnings.json takes the next entry of limitReadMs on the mock clock.
+  // The read returns the file as it was when the read began.
+  limitReadMs: number[]
   indexExistsMs: number
   indexExistsFails: boolean
   // How long the fs.exists of the orchestrate skill file takes, and whether session.send never resolves.
@@ -171,14 +178,17 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     contextTokens: undefined,
     cacheState: { exitCode: 0, stdout: '{}' },
     cacheMs: 0,
+    reviewMs: 0,
     surfaces: ['terminal'],
     nowOffset: 0,
     rootFails: false,
     indexMs: 0,
     indexes: [],
+    runStderr: '',
     forkReply: { isAnswered: false, reason: 'nothing-to-fork' },
     forkMs: 0,
     readMs: [],
+    limitReadMs: [],
     indexExistsMs: 0,
     indexExistsFails: false,
     skillExistsMs: 0,
@@ -261,6 +271,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
       if (ms > 0) await clock.sleep(ms)
     }
     const text = state.files[e.path]
+    if (e.path.endsWith('/cc-dashboard/limit-warnings.json')) {
+      const ms = state.limitReadMs.shift() ?? 0
+      if (ms > 0) await clock.sleep(ms)
+    }
     if (text === undefined) throw new Error(`ENOENT ${e.path}`)
     return { value: text }
   })
@@ -350,6 +364,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
         // left as text
       }
       reviewRan.push({ argv: e.argv, stdin: parsed, timeoutMs: e.init?.timeoutMs })
+      if (e.argv[1] === 'record' && state.reviewMs > 0) await clock.sleep(state.reviewMs)
       const out = state.reviews[e.argv[1] ?? ''] ?? { exitCode: 1, stdout: '', stderr: 'review-session: no answer set' }
       return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
     }
@@ -380,7 +395,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     }
     ran.push({ argv: e.argv, stdin: parsed, timeoutMs: e.init?.timeoutMs })
     const script = e.argv[0]?.endsWith('/judge-updates') ? state.scripts[e.argv[1] ?? ''] : undefined
-    const out = script ?? { exitCode, stdout: '', stderr: '' }
+    const out = script ?? { exitCode, stdout: '', stderr: state.runStderr }
     return { value: { stderr: '', ...out, isStdoutTruncated: false, isStderrTruncated: false } }
   })
   const writes: Record<string, string> = {}
@@ -390,6 +405,8 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     const ms = state.writeMs.shift() ?? 0
     if (ms > 0) await clock.sleep(ms)
     writes[e.path] = e.text
+    // The limit levels file is read back by the band, so a read after this write sees it.
+    if (e.path.endsWith('/cc-dashboard/limit-warnings.json')) state.files[e.path] = e.text
     writeLog.push({ path: e.path, text: e.text })
     return { value: undefined }
   })
@@ -494,6 +511,34 @@ test('a fresh session with no transcript yet logs nothing, and one after a promp
   expect(logged).toEqual(['transcript not found'])
 })
 
+test('a missing transcript is searched for once per 30 s', async ($, on) => {
+  const { listed, clock } = world(on, { exists: () => false, turns: () => 1, dirs: { '/home/u/.claude/projects': ['-a', '-b'] } })
+  await $.session.measure(measure([FIVE]))
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(1)
+  await clock.advance(30_001)
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(2)
+})
+
+test('a new turn ends the wait after a miss', async ($, on) => {
+  const found = '/home/u/.claude/projects/-other/s1.jsonl'
+  let turns = 0
+  let written = false
+  const { ran, listed, clock } = world(on, {
+    exists: (path) => written && path === found,
+    turns: () => turns,
+    dirs: { '/home/u/.claude/projects': ['-other'] },
+  })
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(1)
+  written = true
+  turns = 1
+  await clock.advance(1000)
+  await $.session.measure(measure([FIVE]))
+  expect(ran.filter((r) => r.argv[0] === '/repo/bin/record-statusline').length).toBe(1)
+})
+
 test('a measure without cost records once the transcript appears', async ($, on) => {
   let written = false
   const { ran } = world(on, { exists: () => written })
@@ -571,9 +616,10 @@ test('a /clear of a session this process never measured still links the new sess
 })
 
 test('two /clears with no prompt between link the new session to the first one', async ($, on) => {
-  const { ran, state } = world(on, { exists: (path) => !path.endsWith('/s2.jsonl') })
+  const { ran, state, clock } = world(on, { exists: (path) => !path.endsWith('/s2.jsonl') })
   await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
   await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  await clock.settle()
   state.id = 's3'
   await $.session.measure(measure([FIVE]))
   expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual(['s1'])
@@ -588,6 +634,32 @@ test('a second /clear whose session.root rejects still calls the next hook and s
   await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
   await clock.settle()
   expect(reviewRan.length).toBeGreaterThan(before)
+})
+
+test('a /clear\'s cleared_from lookup does not cache the ended session\'s path', async ($, on) => {
+  const found = '/home/u/.claude/projects/-other/s2.jsonl'
+  const { listed, state, clock } = world(on, {
+    exists: (path) => path === found,
+    dirs: { '/home/u/.claude/projects': ['-other'] },
+  })
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  state.id = 's2'
+  await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  await clock.settle()
+  expect(listed.length).toBe(1)
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(2)
+})
+
+test('a later end is not overwritten by an earlier cleared_from scan', async ($, on) => {
+  const { ran, state, clock } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await $.session.end({ reason: 'clear', sessionId: 's2', resume: { id: 's2' } })
+  await $.session.end({ reason: 'prompt_input_exit', sessionId: 's2', resume: { id: 's2' } })
+  await clock.settle()
+  state.id = 's3'
+  await $.session.measure(measure([FIVE]))
+  expect(statuslines(ran).map((s) => s.cleared_from ?? null)).toEqual([null])
 })
 
 test('after an in-process /resume the next measure sends no cleared_from', async ($, on) => {
@@ -675,6 +747,12 @@ test('a failing run logs once, and a second failure logs nothing', async ($, on)
   await $.session.measure(measure([FIVE]))
   expect(ran.length).toBe(2)
   expect(logged).toEqual(['record-statusline failed (exit 1)'])
+})
+
+test('a failing script logs the first line of its stderr', async ($, on) => {
+  const { logged } = world(on, { runStderr: 'record-statusline: cannot read /x\nstack\n' }, 1)
+  await $.session.measure(measure([FIVE]))
+  expect(logged).toEqual(['record-statusline failed (exit 1): record-statusline: cannot read /x'])
 })
 
 test('a different failure logs after the first one, and each message logs once', async ($, on) => {
@@ -1284,6 +1362,14 @@ test('session.start returns before the check fetches', async ($, on) => {
   expect(fetched.length).toBe(1)
 })
 
+test('a -p run fetches no changelog and makes no Haiku call', async ($, on) => {
+  const { fetched, asked, clock } = world(on, { files: {}, version: { version: '2.1.290', base: '2.1.290' } })
+  await $.session.start({ ...start, isInteractive: false })
+  await clock.settle()
+  expect(fetched).toEqual([])
+  expect(asked).toEqual([])
+})
+
 test('a version that has a verdict makes no request', async ($, on) => {
   const { fetched, asked, clock } = world(on, { files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
   await $.session.start(start)
@@ -1482,6 +1568,39 @@ test('session.start reviews ended sessions after it returns', async ($, on) => {
   expect(reviewRan[0]?.timeoutMs).toBe(60000)
   expect(asked).toEqual([{ model: 'haiku', system: 'REVIEW SYSTEM', prompt: 'USER: fix it', maxTokens: 1024, effort: 'low', timeoutMs: 60000 }])
   expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', reply: '{"suggestions":[]}' })
+})
+
+test('reviews off: session.start runs no review-session and makes no Haiku call', async ($, on) => {
+  const { reviewRan, asked, clock } = world(on, { files: { ...judged, ...setting({ reviews: false }) }, reviews: reviewing() })
+  await $.session.start(start)
+  await clock.settle()
+  expect(reviewRan).toEqual([])
+  expect(asked).toEqual([])
+})
+
+test('reviews off: a /clear starts no review', async ($, on) => {
+  const { reviewRan, asked, clock } = world(on, { files: { ...judged, ...setting({ reviews: false }) }, reviews: reviewing() })
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  expect(reviewRan).toEqual([])
+  expect(asked).toEqual([])
+})
+
+test('reviews switched off while a claimed batch runs stops the remaining Haiku calls', async ($, on) => {
+  const { reviewRan, asked, state, clock } = world(on, {
+    files: { ...judged }, // world keeps files by reference, so the shared judged fixture must be copied
+    reviewMs: 1_000,
+    reviews: reviewing([REVIEW, { ...REVIEW, sessionId: 'older' }]),
+    replies: [{ isAnswered: true, text: '{"suggestions":[]}' }, { isAnswered: true, text: '{"suggestions":[]}' }],
+  })
+  await $.session.start(start)
+  await clock.advance(1)
+  expect(asked.length).toBe(1)
+  state.files[DASH_SETTINGS] = '{"reviews":false}'
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(asked.length).toBe(1)
+  expect(reviewRan.map((r) => r.argv[1])).toEqual(['prompt', 'record'])
 })
 
 test('no ended session means no Haiku call', async ($, on) => {
@@ -2189,6 +2308,18 @@ test('a failed marker write leaves the snapshots and the index as they were', as
   expect(logged.some((line) => line.startsWith('setup check failed'))).toBe(true)
 })
 
+test('a corrupt changes file from an earlier run does not stop the setup markers', async ($, on) => {
+  const { writes, logged, clock } = world(on, {
+    files: { ...judged, [CLAUDE_MD]: 'a\nb', [snap(CLAUDE_MD)]: snapText(CLAUDE_MD, 1000, 'a'), [CHANGES]: '{broken' },
+    stats: { [CLAUDE_MD]: 2000 },
+    store: { setup: { folders: [CFG], mtimes: { [CLAUDE_MD]: 1000 } } },
+    replies: [{ isAnswered: true, text: 'add b' }],
+  })
+  await startAndSettle($, clock)
+  expect(JSON.parse(writes[CHANGES] ?? 'null')).toHaveLength(1)
+  expect(logged.some((line) => line.startsWith('setup check failed'))).toBe(false)
+})
+
 test('a non-interactive session runs no setup check', async ($, on) => {
   const { state, clock } = world(on, { files: { ...judged, [CLAUDE_MD]: 'a' }, stats: { [CLAUDE_MD]: 1000 } })
   await $.session.start({ ...start, isInteractive: false })
@@ -2457,6 +2588,19 @@ test('a main-thread turn runs transcript-index one second later with the transcr
   expect(indexRan).toEqual([])
   await clock.advance(1_000)
   expect(indexRan).toEqual([{ argv: ['/repo/bin/transcript-index'], timeoutMs: 10_000, stdin: { transcript: TRANSCRIPT, out: INDEX_OUT } }])
+})
+
+test('a /clear while the index timer reads the settings runs no transcript-index', async ($, on) => {
+  const { indexRan, state, clock } = world(on, { files: setting({ handoff: 'off' }) })
+  await idleTurn($)
+  await clock.advance(999)
+  await clock.settle()
+  state.readMs = [500]
+  await clock.advance(1)
+  await $.session.end(clear)
+  await clock.advance(500)
+  await clock.settle()
+  expect(indexRan).toEqual([])
 })
 
 test('a subagent turn runs no transcript-index', async ($, on) => {
@@ -2758,6 +2902,24 @@ test('Dismiss records the shown levels in limit-warnings.json and hides the band
   await ui.unmount()
 })
 
+test('a Dismiss that lands while measureBand reads the levels file stays dismissed', async ($, on) => {
+  const { state, writes, clock } = world(on, { files: {} })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80)]))
+  expect(await bandLine(ui)).toBeDefined()
+  // measureBand's read returns the empty file after 150 ms. The Dismiss finishes first.
+  state.limitReadMs = [150, 0]
+  const measured = $.session.measure(measure([at(80)]))
+  await clock.advance(10)
+  await ui.press({ key: 'dismiss-limits' })
+  await clock.advance(300)
+  await measured
+  await clock.settle()
+  expect(await bandLine(ui)).toBeUndefined()
+  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 0 })
+  await ui.unmount()
+})
+
 test('after a dismissal at 75 the band stays hidden at 80% and comes back at 90%', async ($, on) => {
   world(on, { files: { [LIMITS]: '{"five_hour":75,"seven_day":0}' } })
   const ui = await $.ui.mount(BAND)
@@ -2814,6 +2976,40 @@ test('a dismissal another session wrote hides the band within a minute', async (
   state.files[LIMITS] = '{"five_hour":75,"seven_day":0}'
   await clock.advance(60_000)
   expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a failed Dismiss write during a measure stays unsaved, so the next recheck keeps the band hidden', async ($, on) => {
+  const { state, clock } = world(on, { files: {}, writeFails: true })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80)]))
+  state.limitReadMs = [150, 0]
+  const measured = $.session.measure(measure([at(80)]))
+  await clock.advance(10)
+  await ui.press({ key: 'dismiss-limits' })
+  await clock.advance(300)
+  await measured
+  await clock.settle()
+  expect(await bandLine(ui)).toBeUndefined()
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a Dismiss that lands while recheckBand reads the levels file stays dismissed', async ($, on) => {
+  const { state, writes, clock } = world(on, { files: {} })
+  const ui = await $.ui.mount(BAND)
+  await $.session.measure(measure([at(80)]))
+  expect(await bandLine(ui)).toBeDefined()
+  await clock.advance(59_990)
+  // The recheck's read and the Dismiss's read both return the empty file after 150 ms.
+  state.limitReadMs = [150, 150]
+  const advanced = clock.advance(20)
+  await ui.press({ key: 'dismiss-limits' })
+  await advanced
+  await clock.advance(300)
+  expect(await bandLine(ui)).toBeUndefined()
+  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 0 })
   await ui.unmount()
 })
 
@@ -3095,6 +3291,33 @@ test('a subagent that ends drops its in-memory steps, and a later step re-reads 
   await clock.settle()
   expect(readLog).toContain(AGENT_FILE)
   expect(JSON.parse(writes[AGENT_FILE]).steps).toHaveLength(2)
+})
+
+test('session.end drops the steps of a subagent that never completed', async ($, on) => {
+  const { writes, clock, state, readLog } = world(on)
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  state.files[AGENT_FILE] = writes[AGENT_FILE]
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  readLog.length = 0
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(readLog).toContain(AGENT_FILE)
+})
+
+test('a step under a malformed session id creates no record, so session.end frees no subagent steps', async ($, on) => {
+  const { writes, clock, state, readLog } = world(on)
+  state.id = 'bad/id'
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  state.files[AGENT_FILE] = writes[AGENT_FILE]
+  await $.session.end({ reason: 'clear', sessionId: 'bad/id', resume: { id: 'bad/id' } })
+  await clock.settle()
+  readLog.length = 0
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.settle()
+  expect(readLog).not.toContain(AGENT_FILE)
 })
 
 test('a step queued after a subagent ends but before its chain settles is dropped too', async ($, on) => {
@@ -3466,6 +3689,42 @@ test('transcript handoff keeps today\'s prompt and makes no fork call', async ($
   expect(state.store['handoff:s1']).toEqual({ resume: RESUME, at: FIRE })
 })
 
+test('a document handoff whose cache expired before the timer fired makes the transcript handoff and no fork', async ($, on) => {
+  const { forked, statuses, state, clock } = world(on, docWorld({ nowOffset: HOUR }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  await clock.settle()
+  expect(forked).toEqual([])
+  expect(statuses).toEqual([undefined, READY])
+  expect(state.store['handoff:s1']).toEqual(expect.objectContaining({ resume: RESUME }))
+})
+
+test('a handoff switched to off while the fork runs writes no file and sets no status', async ($, on) => {
+  const { forked, writes, statuses, state, clock } = world(on, docWorld({ forkMs: 1_000 }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  await clock.set(FIRE)
+  state.files[DASH_SETTINGS] = '{"handoff":"off"}'
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(forked.length).toBe(1)
+  expect(writes[DOC_PATH]).toBe(undefined)
+  expect(statuses).toEqual([undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('a handoff switched to off while the fork runs and then fails makes no transcript fallback', async ($, on) => {
+  const { statuses, state, clock } = world(on, docWorld({ forkMs: 1_000, forkReply: { isAnswered: false, reason: 'nothing-to-fork' } }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  await clock.set(FIRE)
+  state.files[DASH_SETTINGS] = '{"handoff":"off"}'
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(statuses).toEqual([undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
 test('a missing handoff key means the document handoff', async ($, on) => {
   const { forked, clock } = world(on, docWorld({ files: setting({ reviews: true }) }))
   await idleTurn($)
@@ -3621,4 +3880,130 @@ test('a turn.start while fireHandoff reads the settings starts no fork', async (
   await clock.settle()
   expect(forked).toEqual([])
   expect(statuses).toEqual([undefined])
+})
+
+// Wraps `on` so the first call of `event` after arm() waits for open(). `reached`
+// resolves when that call arrives. Later calls pass straight through.
+function gateNext(on: On, event: string) {
+  let held: Promise<void> | undefined
+  let release = () => {}
+  let arrived = () => {}
+  const reached = new Promise<void>((resolve) => {
+    arrived = resolve
+  })
+  const gated = ((name: string, ...rest: unknown[]) => {
+    const hook = rest.pop() as (...args: unknown[]) => unknown
+    const wrapped = name === event
+      ? async (...args: unknown[]) => {
+        if (held) {
+          const waiting = held
+          held = undefined
+          arrived()
+          await waiting
+        }
+        return hook(...args)
+      }
+      : hook
+    return (on as (...args: unknown[]) => unknown)(name, ...rest, wrapped)
+  }) as unknown as On
+  return {
+    gated,
+    reached,
+    arm: () => {
+      held = new Promise((resolve) => {
+        release = resolve
+      })
+    },
+    open: () => release(),
+  }
+}
+
+test('a session.end during track\'s awaits leaves no activity file, no index run and no handoff timer', async ($, on) => {
+  const gate = gateNext(on, 'clock.now')
+  const { writes, indexRan, cacheRan, clock } = world(gate.gated, timed({ files: { [DASH_SETTINGS]: '{"handoff":"transcript","transcriptIndex":true}' } }))
+  gate.arm()
+  const turn = $.turn.complete(turnEnd())
+  await gate.reached
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  gate.open()
+  await turn
+  await clock.advance(1_500)
+  await clock.settle()
+  expect(writes[ACTIVITY]).toBeUndefined()
+  expect(indexRan).toEqual([])
+  expect(cacheRan).toEqual([])
+})
+
+test('a turn.start of an id that ended tracks it again', async ($, on) => {
+  const { writes, clock } = world(on)
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  await $.turn.start({ text: 'hi', turnId: 't2' })
+  await clock.advance(500)
+  expect(activityOf(writes).state).toBe('working')
+})
+
+test('a transcript found during a session.end is not cached for the ended session', async ($, on) => {
+  const gate = gateNext(on, 'fs.exists')
+  const found = '/home/u/.claude/projects/-other/s1.jsonl'
+  const { listed, clock } = world(gate.gated, { exists: (path) => path === found, dirs: { '/home/u/.claude/projects': ['-other'] } })
+  gate.arm()
+  const measured = $.session.measure(measure([FIVE]))
+  await gate.reached
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  gate.open()
+  await measured
+  await clock.settle()
+  const before = listed.length
+  // The session starts again under the same id. A cached path would skip the search.
+  await $.session.start(start)
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(before + 1)
+})
+
+test('a missing transcript during a session.end leaves no miss window for the ended session', async ($, on) => {
+  const gate = gateNext(on, 'fs.exists')
+  const { listed, clock } = world(gate.gated, { exists: () => false, turns: () => 1, dirs: { '/home/u/.claude/projects': ['-other'] } })
+  gate.arm()
+  const measured = $.session.measure(measure([FIVE]))
+  await gate.reached
+  await $.session.end({ reason: 'clear', sessionId: 's1', resume: { id: 's1' } })
+  gate.open()
+  await measured
+  await clock.settle()
+  const before = listed.length
+  await $.session.start(start)
+  await $.session.measure(measure([FIVE]))
+  expect(listed.length).toBe(before + 1)
+})
+
+test('a session.end during the transcript lookup of a handoff leaves no status and no stored handoff', async ($, on) => {
+  const gate = gateNext(on, 'fs.exists')
+  const { statuses, state, clock } = world(gate.gated, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  gate.arm()
+  const fired = clock.set(FIRE)
+  await gate.reached
+  await $.session.end(clear)
+  gate.open()
+  await fired
+  await clock.settle()
+  expect(statuses).not.toContain(READY)
+  expect(Object.keys(state.store).filter((key) => key.startsWith('handoff:'))).toEqual([])
+})
+
+test('a turn.start during the transcript lookup of a handoff leaves no status and no stored handoff', async ($, on) => {
+  const gate = gateNext(on, 'fs.exists')
+  const { statuses, state, clock } = world(gate.gated, timed())
+  await idleTurn($)
+  await clock.advance(ARM)
+  gate.arm()
+  const fired = clock.set(FIRE)
+  await gate.reached
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  gate.open()
+  await fired
+  await clock.settle()
+  expect(statuses).not.toContain(READY)
+  expect(Object.keys(state.store).filter((key) => key.startsWith('handoff:'))).toEqual([])
 })
