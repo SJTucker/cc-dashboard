@@ -1206,10 +1206,33 @@ for (const row of ORDERINGS) {
     listed.length = 0
     await clock.advance(10_000)
     await clock.settle()
-    if (row.relay === null) expect(steerListed(listed)).toEqual([])
-    else expect(listed).toContain(row.relay)
+    if (row.relay === null) {
+      expect(steerListed(listed)).toEqual([])
+      // A stopped timer makes no more ticks, so no tick reads the session id again.
+      const idCalls = state.idCalls
+      await clock.advance(10_000)
+      await clock.settle()
+      expect(state.idCalls).toBe(idCalls)
+    } else {
+      expect(listed).toContain(row.relay)
+    }
   })
 }
+
+test('an end with no id whose id read fails stops the relay timer', async ($, on) => {
+  const { listed, clock, state } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  state.idFailsOnce = true
+  await $.session.end(stopEnd(''))
+  await clock.settle()
+  const idCalls = state.idCalls
+  listed.length = 0
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(state.idCalls).toBe(idCalls)
+  expect(steerListed(listed)).toEqual([])
+})
 
 test('a hung send is answered timed out and the next tick lists the steer folder again', async ($, on) => {
   const { sent, writes, listed, clock } = world(on, {
