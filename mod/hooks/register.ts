@@ -1416,25 +1416,31 @@ export const register: Register = (on) => {
       steerEnded = false
       steerEndsDuringStart = ends
     }
-    sessionModes.set(await $.session.id(), { interactive: e.isInteractive, cwd: e.cwd })
-    await $.command.register({
-      name: 'backfill-updates',
-      description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
-    }).catch((err) => note($, `could not register /backfill-updates (${errorName(err)})`))
-    await $.command.register({
-      name: 'transcript-handoff',
-      description: 'Print a prompt that resumes this session in a fresh one by reading its transcript',
-    }).catch((err) => note($, `could not register /transcript-handoff (${errorName(err)})`))
-    const result = await next(e)
-    $.clock.after(0, () => {
-      checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
-    })
-    if (e.isInteractive) {
-      startReviews($)
-      steerSessionId = await $.session.id().catch(() => undefined)
+    let result: Awaited<ReturnType<typeof next>>
+    try {
+      sessionModes.set(await $.session.id(), { interactive: e.isInteractive, cwd: e.cwd })
+      await $.command.register({
+        name: 'backfill-updates',
+        description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
+      }).catch((err) => note($, `could not register /backfill-updates (${errorName(err)})`))
+      await $.command.register({
+        name: 'transcript-handoff',
+        description: 'Print a prompt that resumes this session in a fresh one by reading its transcript',
+      }).catch((err) => note($, `could not register /transcript-handoff (${errorName(err)})`))
+      result = await next(e)
+      $.clock.after(0, () => {
+        checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
+      })
+      if (e.isInteractive) {
+        startReviews($)
+        steerSessionId = await $.session.id().catch(() => undefined)
+        // An end seen during the awaits was compared with an id that was not known yet.
+        if (ends.some((id) => id === '' || id === steerSessionId)) steerEnded = true
+      }
+    } finally {
       steerEndsDuringStart = undefined
-      // An end seen during the await was compared with an id that was not known yet.
-      if (ends.some((id) => id === '' || id === steerSessionId)) steerEnded = true
+    }
+    if (e.isInteractive) {
       $.clock.after(0, () => {
         startSteerRelay($).catch((err) => note($, `steer relay failed (${errorName(err)})`))
       })

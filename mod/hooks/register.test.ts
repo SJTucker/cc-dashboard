@@ -80,6 +80,8 @@ type World = {
   skillExistsMs: number
   // How long $.session.id takes on the mock clock.
   idMs: number
+  // Makes the next $.session.id reject, which fails session.start before its end.
+  idFailsOnce: boolean
   sendHangs: boolean
   // Stdout of each git or date command the document handoff runs, by its argv joined with
   // spaces. Their runs go to repoRan, and a command not listed prints nothing.
@@ -174,6 +176,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     indexExistsFails: false,
     skillExistsMs: 0,
     idMs: 0,
+    idFailsOnce: false,
     sendHangs: false,
     repo: {},
     ...w,
@@ -298,6 +301,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('session.id', async () => {
     if (state.idMs > 0) await clock.sleep(state.idMs)
+    if (state.idFailsOnce) {
+      state.idFailsOnce = false
+      throw new Error('no id')
+    }
     return { value: state.id }
   })
   on('session.surfaces', () => ({ value: state.surfaces }))
@@ -760,6 +767,22 @@ test('a session.end for the same id while session.start resolves the id leaves n
   await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
   await clock.advance(1_000)
   await starting
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+})
+
+test('a session.start that throws before it finishes does not disturb a later start and end', async ($, on) => {
+  const { listed, clock, state } = world(on)
+  state.idFailsOnce = true
+  await $.session.start(start).catch(() => {})
+  await $.session.start(start)
+  await clock.settle()
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(listed).toContain(STEER_DIR)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  listed.length = 0
   await clock.advance(10_000)
   await clock.settle()
   expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
