@@ -24,22 +24,17 @@ export function statusView(status) {
   return STATUS_VIEWS[status] ?? { glyph: '○', word: String(status), tone: 'plain' };
 }
 
-// "Ended 2h ago" for an orchestration that stopped before it reached Finish.
-export function endedLine(summary, now) {
+// "just now" under a minute, else "2h ago". shortAgo answers "<n>s" under a minute.
+function agoWords(summary, now) {
   const ago = shortAgo(summary.lastActiveAt, now);
-  return ago.endsWith('s') ? 'Ended just now' : `Ended ${ago} ago`;
+  return /^\d+s$/.test(ago) ? 'just now' : `${ago} ago`;
 }
 
 // The switcher card's one-line state.
 export function switcherState(summary, now = Date.now()) {
   if (summary.waiting) return 'Waiting for you';
-  if (summary.phase === 'waves' && !summary.live) return endedLine(summary, now);
+  if (!summary.live) return `${summary.phase === 'finish' ? 'Finished' : 'Ended'} ${agoWords(summary, now)}`;
   if (summary.phase === 'waves') return summary.wave ? `Wave ${summary.wave}` : 'Waves';
-  if (summary.phase === 'finish' && !summary.live) {
-    const ago = shortAgo(summary.lastActiveAt, now);
-    return ago.endsWith('s') ? 'Finished just now' : `Finished ${ago} ago`;
-  }
-  if (!summary.live) return endedLine(summary, now);
   if (summary.phase === 'plan') return 'Planning';
   if (summary.phase === 'reset') return 'Reset';
   return 'Finishing';

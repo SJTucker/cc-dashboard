@@ -122,3 +122,12 @@ test('stepAge reads now, then an age with ago, never a minus sign', async () => 
   assert.equal(stepAge(0, new Date(now - 60_000).toISOString(), now), 'now');
   assert.equal(stepAge(1, new Date(now - 60_000).toISOString(), now), '1m ago');
 });
+
+test('an ended orchestration reads Ended just now under a minute and Ended 2h ago after', async () => {
+  const { switcherState } = await load();
+  const now = Date.parse('2026-11-10T12:00:00Z');
+  assert.equal(switcherState({ phase: 'waves', wave: 1, live: false, lastActiveAt: now - 30_000 }, now), 'Ended just now');
+  assert.equal(switcherState({ phase: 'plan', live: false, lastActiveAt: now - 2 * 3600_000 }, now), 'Ended 2h ago');
+  assert.equal(switcherState({ phase: 'reset', live: false, lastActiveAt: now - 5 * 60_000 }, now), 'Ended 5m ago');
+  assert.equal(switcherState({ phase: 'finish', live: true }, now), 'Finishing');
+});
