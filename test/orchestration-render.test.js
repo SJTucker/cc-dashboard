@@ -3,7 +3,7 @@
 const { test } = require('node:test');
 const assert = require('node:assert');
 
-const load = () => import('../public/orchestration/render.mjs');
+const load = () => import('../public/orchestration/view.mjs');
 
 test('statusView gives every status a glyph and a word', async () => {
   const { statusView } = await load();
