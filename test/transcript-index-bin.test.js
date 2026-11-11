@@ -209,12 +209,25 @@ test('--watch on a finished worker prints DONE and exits 0', (t) => {
   const r = spawnSync(process.execPath, [BIN, file, '--watch', '--files', '/r/b.ts', '--budget', '40000'], { encoding: 'utf8', timeout: 10_000 });
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout, [
-    'MSG landed at line 6',
     'DRIFT edit outside task files: /r/a.ts',
     'BUDGET context 41250 tokens, over 40000',
     'DONE Report: done',
     '',
   ].join('\n'));
+});
+
+test('--watch on a killed worker prints KILLED and exits 0', (t) => {
+  const file = path.join(tmpDir(t, 'transcript-index-killed'), 'agent-a1.jsonl');
+  const rec = (o) => JSON.stringify({ agentId: 'a1', isSidechain: true, sessionId: 's1', timestamp: '2026-11-08T14:02:00.000Z', ...o });
+  fs.writeFileSync(file, [
+    rec({ type: 'user', message: { role: 'user', content: 'Do task 3' } }),
+    rec({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'k1', name: 'Bash', input: { command: 'npm test' } }] } }),
+    rec({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'k1', is_error: true, content: "The user doesn't want to proceed with this tool use." }] } }),
+    rec({ type: 'user', message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }),
+  ].join('\n') + '\n');
+  const r = spawnSync(process.execPath, [BIN, file, '--watch'], { encoding: 'utf8', timeout: 10_000 });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout, 'KILLED Bash npm test\n');
 });
 
 test('--watch prints DONE when the meta file says finished', (t) => {
@@ -245,7 +258,7 @@ test('--watch prints QUIET once per quiet stretch and ignores a line still being
   t.after(() => w.child.kill());
   assert.ok(await until(() => w.stdout().includes('QUIET'), 8_000), w.stdout());
   await new Promise((r) => setTimeout(r, 3_000));
-  assert.equal(w.stdout(), 'MSG landed at line 6\nQUIET no new lines for 0.02 min\n');
+  assert.equal(w.stdout(), 'QUIET no new lines for 0.02 min\n');
   fs.appendFileSync(file, HANDBACK.slice('{"type":"assist'.length) + '\n');
   const { status } = await w.exited;
   assert.equal(status, 0);
