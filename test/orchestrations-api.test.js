@@ -533,3 +533,108 @@ test('a transcript that disappears between the size check and the read does not 
   clock += 2000;
   assert.deepEqual(orch.list().map((o) => o.id), [a.sessionId]);
 });
+
+const detailOf = (config, id) => createOrchestrations(config.configDir).detail(id);
+const workersOf = (d) => d.waves.flatMap((w) => w.workers);
+
+test('detail gives each claimed worker its task, title, files and Done when from the task file', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, {
+    live: true,
+    claims: true,
+    workers: [
+      { task: 1, title: 'Parse it', files: ['lib/a.js', 'test/a.test.js'], doneWhen: 'a.test.js passes', steps: working('lib/a.js') },
+      { task: 2, title: 'Render it', files: ['lib/b.js'], steps: working('lib/b.js') },
+    ],
+  });
+  const workers = workersOf(detailOf(config, o.sessionId));
+  assert.deepEqual(workers.map((w) => [w.task, w.title, w.files, w.doneWhen]), [
+    [1, 'Parse it', ['lib/a.js', 'test/a.test.js'], 'a.test.js passes'],
+    [2, 'Render it', ['lib/b.js'], 'the tests for this task pass'],
+  ]);
+});
+
+test('a worker that has not claimed yet has task null and files []', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 1, claim: false, steps: [] }] });
+  const [w] = workersOf(detailOf(config, o.sessionId));
+  assert.deepEqual([w.task, w.title, w.files], [null, null, []]);
+});
+
+test('a reviewer is matched to its worker through the task number in its claim', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, {
+    live: true,
+    claims: true,
+    workers: [{ task: 1, files: ['lib/a.js'], finished: true, steps: working('lib/a.js') }, { task: 2, files: ['lib/b.js'], finished: true, steps: working('lib/b.js') }],
+    reviewers: [{ task: 2, finished: true, report: 'PASS: fine.' }],
+  });
+  // A reviewer's verdict is read once its finished flag has held for two polls.
+  const orch = createOrchestrations(config.configDir);
+  orch.detail(o.sessionId);
+  const workers = workersOf(orch.detail(o.sessionId));
+  assert.equal(workers.find((w) => w.task === 1).review, null);
+  assert.equal(workers.find((w) => w.task === 2).review?.status, 'passed');
+});
+
+test('a dashboard steer note for Task N in the same session maps to the worker that claimed task N', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }, { task: 2, files: ['lib/b.js'], steps: working('lib/b.js') }] });
+  const note = { type: 'user', isMeta: true, timestamp: new Date().toISOString(), message: { role: 'user', content: [{ type: 'text', text: 'You steered Task 2 from the dashboard: use the helper' }] } };
+  fs.appendFileSync(o.transcript, JSON.stringify(note) + '\n');
+  const workers = workersOf(detailOf(config, o.sessionId));
+  assert.deepEqual(workers.map((w) => [w.task, w.steerCount]), [[1, 0], [2, 1]]);
+});
+
+test('the action feed names the claimed task for a started worker', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 2, files: ['lib/b.js'], steps: working('lib/b.js') }] });
+  const d = detailOf(config, o.sessionId);
+  assert.ok(d.feed.some((f) => f.text.includes('Task 2')), JSON.stringify(d.feed.map((f) => f.text)));
+});
+
+test('planPath comes from the claimed task when the transcript names none', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  const d = detailOf(config, o.sessionId);
+  assert.equal(d.planPath, path.join(path.dirname(path.dirname(o.imagePath)), 'plans', path.basename(o.imagePath)));
+});
+
+test('a claim file outside <claimRun>/claimed/, malformed, or under a /../ run folder leaves task null', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  const worker = path.join(path.dirname(o.transcript), o.sessionId, 'subagents', `agent-${o.workerIds[0]}.jsonl`);
+  const claimedDir = path.join(o.runDir, 'claimed');
+  const name = fs.readdirSync(claimedDir)[0];
+  const original = { orchestrator: fs.readFileSync(o.transcript, 'utf8'), worker: fs.readFileSync(worker, 'utf8'), task: fs.readFileSync(path.join(claimedDir, name), 'utf8') };
+  // A valid task file where a bad claim would reach.
+  fs.writeFileSync(path.join(o.runDir, 'escape.json'), original.task);
+  const variants = {
+    'a path in the claim result': { worker: original.worker.replace(name, '../escape.json') },
+    'a name that is not a task file': { worker: original.worker.replace(name, 'notes.json') },
+    'malformed task JSON': { task: '{ not json' },
+    'a /../ run folder': { orchestrator: original.orchestrator.split(o.runDir).join(`${path.dirname(o.runDir)}/x/../${path.basename(o.runDir)}`) },
+  };
+  for (const [label, change] of Object.entries(variants)) {
+    fs.writeFileSync(o.transcript, change.orchestrator ?? original.orchestrator);
+    fs.writeFileSync(worker, change.worker ?? original.worker);
+    fs.writeFileSync(path.join(claimedDir, name), change.task ?? original.task);
+    const [w] = workersOf(detailOf(config, o.sessionId));
+    assert.deepEqual([w.task, w.files], [null, []], label);
+  }
+});
+
+test('a worker with two claims is stuck in detail', { todo: 'needs Task 2' }, (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 1, claims: 2, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  const [w] = workersOf(detailOf(config, o.sessionId));
+  assert.equal(w.status, 'stuck');
+});
