@@ -207,6 +207,9 @@ step is cut to one short line; `--steps <n> --full` prints each step whole.
 
 Read the post's full entry in `<board>` (the last lines of the file). Then:
 
+- A post from "You" is the user's own words. Act on it as you would a user
+  message: steer the worker it concerns, update the image, or stop and bring it
+  back to the user.
 - Steer each running worker the post affects.
 - Add it to the image's "Updates" section, so later waves start with it.
 - If it changes the plan itself, stop dispatching new waves and bring it to the
@@ -233,6 +236,10 @@ that file. If they want it fixed:
 
 SendMessage to the worker with one concrete correction, and the image section
 or board post it rests on.
+
+A user row `You steered Task <N> from the dashboard: <text>` is a steer the user
+already delivered to the worker from the dashboard. Do not send a steer that
+contradicts it. If it affects later waves, add it to "Updates".
 
 ## 11. Review and merge
 

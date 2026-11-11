@@ -19,6 +19,6 @@
 .mod-affects { margin: var(--sp-1) 0 0; font-size: var(--fs-caption); color: var(--text-secondary); }
 .mod-row .info { border: 0; background: none; color: var(--text-secondary); cursor: pointer; font: inherit; padding: 0 var(--sp-1); }
 .mod-row .info:hover { color: var(--text-primary); }
-.mod-info { max-width: 28rem; padding: var(--sp-3); border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text-primary); font-size: var(--fs-caption); }
+.mod-info { max-width: 28rem; padding: var(--sp-3); border: 1px solid var(--border); border-radius: var(--radius-m); background: var(--surface); color: var(--text-primary); font-size: var(--fs-caption); }
 .mod-info p { margin: 0 0 var(--sp-2); }
 .mod-info p:last-child { margin-bottom: 0; }

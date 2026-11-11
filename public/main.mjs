@@ -10,7 +10,7 @@ import { loadStickyData } from './sticky-poll.mjs';
 
 import { escapeHtml } from './format.mjs';
 
-import { spinnerNode } from './dom.mjs';
+import { spinnerNode, el } from './dom.mjs';
 
 import { formatStatus } from './hud.mjs';
 import { neededRequests } from './visibility.mjs';
@@ -25,6 +25,9 @@ import { refreshRecords, setupRecord, renderRecord } from './panels/records.mjs'
 import { setupHighscores, refreshHighscores, syncHighscores, resetWatch } from './panels/highscores.mjs';
 import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews } from './panels/reviews.mjs';
 import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
+import { renderSwitcher, renderDetail, renderEmpty } from './orchestration/render.mjs';
+import { EMPTY_TEXT, othersCount } from './orchestration/view.mjs';
+import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS, boardSeen, scheduleBoardSeen, sendBoardPost, sendSteer, savedOrchestrationId, saveOrchestrationId, createOrchestrationGate, syncOrchestrationPoller, removeOrchestrationTab, redirectFromRemovedTab } from './panels/orchestration.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
@@ -44,8 +47,42 @@ const LIVE_POLL_MS = 5000;
 // While Today is shown, runLoad runs LIVE_POLL_MS after the previous run finished
 // (createPoller in public/poll.mjs), so a slow scan delays the next poll instead of
 // overlapping it. On any other range only the sticky bar polls (stickyPoller).
-const livePoller = createPoller(() => runLoad(), LIVE_POLL_MS);
+const livePoller = createPoller(() => {
+  refreshOrchestrationList();
+  return runLoad();
+}, LIVE_POLL_MS);
 const stickyPoller = createPoller(() => loadStickyToday(), LIVE_POLL_MS);
+// Polls the open Orchestration tab's detail every ORCH_POLL_MS (loadOrchestration).
+const orchPoller = createPoller(() => loadOrchestration(), ORCH_POLL_MS);
+// Asks /api/orchestrations at startup and decides whether the tab exists. Only a
+// real { installed: false } answer, at startup or later, hides the tab and ends
+// every orchestration call. A failed startup request is retried (createOrchestrationGate).
+const orchGate = createOrchestrationGate({
+  isHidden: () => document.hidden,
+  onInstalled(body) {
+    document.getElementById('orchTabBtn').hidden = false;
+    applyOrchestrationList(body);
+    if (state.tab === 'orchestration') {
+      setPolling(false);
+      loadOrchestration();
+    }
+  },
+  onRemoved() {
+    removeOrchestrationTab({
+      tabButton: document.getElementById('orchTabBtn'),
+      badge: document.getElementById('orchLive'),
+      poller: orchPoller,
+      location,
+      onTab: state.tab === 'orchestration',
+      views: [document.getElementById('orchView'), document.getElementById('orchSwitcher')],
+      clearState() {
+        orchList = [];
+        orchSelected = null;
+        orchDetail = null;
+      },
+    });
+  },
+});
 // Signatures of the last rendered summary and the last rendered rtk response. A 5s
 // poll that redraws unconditionally would tear down the SVG under the cursor and kill
 // any open tooltip, so an unchanged response skips rendering entirely. The two are
@@ -128,6 +165,8 @@ function setBusy(on) {
 // plan limit warning, which show today on every tab.
 function setPolling(onNow) {
   // A hidden tab polls nothing. The visibilitychange listener calls this again on show.
+  // The Orchestration poller runs only on that tab, when the skill is installed and the page is shown.
+  syncOrchestrationPoller(orchPoller, { installed: orchGate.installed, tab: state.tab, hidden: document.hidden });
   if (document.hidden) {
     livePoller.stop();
     stickyPoller.stop();
@@ -150,15 +189,18 @@ document.addEventListener('visibilitychange', () => {
   if (document.hidden) {
     livePoller.stop();
     stickyPoller.stop();
+    orchPoller.stop();
     syncHighscores();
     return;
   }
   resetWatch();
   refreshHighscores();
+  orchGate.resume();
   if (!loadInFlight) {
     if (state.tab === 'now') runLoad();
     else loadStickyToday();
   }
+  if (state.tab === 'orchestration' && orchGate.installed) loadOrchestration();
   setPolling(state.tab === 'now');
   syncHighscores();
 });
@@ -177,6 +219,8 @@ function drawSticky(data) {
 // request rejects (public/api.mjs). The tab check drops a response that lands
 // after a switch to the Now tab, where the full load draws both.
 function loadStickyToday() {
+  // The Orchestration tab's own poller refreshes the list there.
+  if (state.tab !== 'orchestration') refreshOrchestrationList();
   return loadStickyData({ getJson, requestLimits }).then(({ summary, limits }) => {
     if (state.tab === 'now') return;
     drawSticky(summary);
@@ -185,6 +229,102 @@ function loadStickyToday() {
     // the "Loading…" lines (.first-load) that drawSummary ends on other tabs.
     if (!hasRange(state.tab)) document.body.classList.remove('first-load');
   });
+}
+
+// Orchestration tab. orchGate.installed is true once /api/orchestrations has said the
+// skill is installed. When it says it is not, at startup or later, the tab button is
+// hidden and no orchestration request is sent again.
+let orchList = [];
+let orchSelected = null;
+let orchDetail = null;
+
+// Keeps the list, picks the selected id, and sets the tab button's live count.
+function applyOrchestrationList(body) {
+  if (!body) return;
+  if (!body.installed) {
+    orchGate.accept(body);
+    return;
+  }
+  orchList = body.orchestrations;
+  orchSelected = pickSelected(orchList, orchSelected ?? savedOrchestrationId());
+  const live = liveCount(orchList);
+  const badge = document.getElementById('orchLive');
+  badge.hidden = live === 0;
+  badge.replaceChildren(...(live ? [el('i', { class: 'orch-dot', 'aria-hidden': 'true' }), document.createTextNode(`${live} live`)] : []));
+}
+
+// The network calls the composers make, passed to renderDetail.
+const ORCH_ACTIONS = { sendBoardPost, sendSteer };
+
+// The id whose detail is on screen, so a selection change renders without motion.
+let orchRenderedId = null;
+
+function selectOrchestration(id) {
+  if (id === orchSelected) return;
+  orchSelected = id;
+  saveOrchestrationId(id);
+  drawOrchestrationSwitcher();
+  loadOrchestration();
+}
+
+function drawOrchestrationSwitcher() {
+  renderSwitcher(document.getElementById('orchSwitcher'), orchList, orchSelected, selectOrchestration);
+}
+
+// Never rejects: requestOrchestrations resolves to null on failure.
+function refreshOrchestrationList() {
+  if (!orchGate.installed) return Promise.resolve();
+  return requestOrchestrations().then(applyOrchestrationList);
+}
+
+// The Orchestration poller's run. Refreshes the list, then fetches the selected
+// orchestration's detail, and draws both. Never rejects.
+async function loadOrchestration() {
+  if (!orchGate.installed) return;
+  await refreshOrchestrationList();
+  if (state.tab !== 'orchestration' || !orchGate.installed) return;
+  drawOrchestrationSwitcher();
+  const view = document.getElementById('orchView');
+  if (!orchSelected) {
+    orchDetail = null;
+    orchRenderedId = null;
+    renderEmpty(view, EMPTY_TEXT);
+    return;
+  }
+  saveOrchestrationId(orchSelected);
+  const id = orchSelected;
+  const detail = await requestOrchestration(id);
+  if (state.tab !== 'orchestration' || id !== orchSelected) return;
+  if (!detail) {
+    if (orchRenderedId !== id) renderEmpty(view, 'Could not load this orchestration.');
+    return;
+  }
+  orchDetail = detail;
+  renderDetail(view, detail, { seenBoard: boardSeen(id), firstRender: orchRenderedId !== id, actions: ORCH_ACTIONS });
+  orchRenderedId = id;
+  scheduleBoardSeen(id, othersCount(detail.board ?? []));
+}
+
+// Asked at startup, and again on a backoff while the request fails. A page opened on
+// #orchestration waits for the first real answer, then falls back to Now when the
+// skill is not installed (onRemoved).
+orchGate.start();
+
+// The .topbar wraps onto more rows on a narrow window, so its height changes. The
+// sticky board sits below it, so --topbar-h follows the measured border-box height.
+const topbar = document.querySelector('.topbar');
+function setTopbarHeight(height) {
+  document.documentElement.style.setProperty('--topbar-h', `${height}px`);
+}
+if (topbar) {
+  // Measured once now, so the board does not sit under a wrapped header until the
+  // observer's first callback.
+  setTopbarHeight(topbar.getBoundingClientRect().height);
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(([entry]) => {
+      setTopbarHeight(entry.borderBoxSize?.[0]?.blockSize ?? topbar.getBoundingClientRect().height);
+    }).observe(topbar);
+  }
 }
 
 // The requests fetchAll skips when every panel they feed is hidden.
@@ -430,6 +570,7 @@ let tabEntered = false;
 // settles, because the render replaces the rows.
 let modLoaded = Promise.resolve();
 function enterTab(tab) {
+  if (redirectFromRemovedTab(tab, orchGate, location)) return;
   const before = tabEntered ? neededRequests(state.hiddenKeys, state.tab) : new Set();
   tabEntered = true;
   state.tab = tab;
@@ -443,6 +584,7 @@ function enterTab(tab) {
   syncHighscores();
   if (tab === 'highscores') refreshHighscores();
   if (tab === 'mod') modLoaded = loadModSettings();
+  if (tab === 'orchestration' && orchGate.installed) loadOrchestration();
   const after = neededRequests(state.hiddenKeys, state.tab);
   if (after.has('changes') && !before.has('changes')) ensureChanges();
   if (after.has('prices') && !before.has('prices')) loadPricesSource();

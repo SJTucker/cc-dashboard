@@ -1,8 +1,8 @@
-// The three tabs. Now holds Plan usage, Where usage goes, the timeline and Live
+// The five tabs, in button order. Now holds Plan usage, Where usage goes, the timeline and Live
 // sessions, always on the Today range. Analysis holds everything else, on the range
-// picked there. High scores has no range and loads no range summary. The tab is the URL hash, so reload, Back and a bookmark keep it.
+// picked there. Orchestration, Mod and High scores have no range and loads no range summary. The tab is the URL hash, so reload, Back and a bookmark keep it.
 // Nothing here touches the DOM at load time (test/modules-load.test.js).
-export const TABS = ['now', 'analysis', 'highscores', 'mod'];
+export const TABS = ['now', 'analysis', 'orchestration', 'mod', 'highscores'];
 
 // Every panel row in either tab: a full-width panel or a .panel-row pair.
 export const ROW_SELECTOR = '.tab > .panel-row, .tab > .panel';
@@ -16,15 +16,16 @@ export function tabFromHash(hash) {
 // The range a tab loads. Now is always Today. Analysis keeps the range last picked
 // on it (Today included) in this page view. High scores returns 'highscores',
 // which no summary request accepts, so callers skip the range summary on it. The
-// Mod tab does the same with 'mod'.
+// Mod and Orchestration tabs do the same with their own names.
 export function rangeForTab(tab, analysisDays) {
-  if (tab === 'highscores' || tab === 'mod') return tab;
+  if (!hasRange(tab)) return tab;
   return tab === 'now' ? 'today' : analysisDays;
 }
 
-// Whether the tab has a range summary to load and draw. High scores and Mod do not.
+// Whether the tab has a range summary to load and draw. High scores, Mod and
+// Orchestration do not.
 export function hasRange(tab) {
-  return tab !== 'highscores' && tab !== 'mod';
+  return tab !== 'highscores' && tab !== 'mod' && tab !== 'orchestration';
 }
 
 // The panels each tab draws from the summary (drawSummaryPanels in main.mjs). The
@@ -33,15 +34,22 @@ export function hasRange(tab) {
 const SUMMARY_PANELS = {
   now: ['attribution', 'models'],
   analysis: ['cards', 'usage', 'lines', 'modelDaily', 'tools'],
-  highscores: [],
+  orchestration: [],
   mod: [],
+  highscores: [],
 };
 
 export function summaryPanelsFor(tab) {
   return SUMMARY_PANELS[tab] ?? SUMMARY_PANELS.now;
 }
 
-const CONTAINER_IDS = { now: 'tabNow', analysis: 'tabAnalysis', highscores: 'tabHighscores', mod: 'tabMod' };
+const CONTAINER_IDS = {
+  now: 'tabNow',
+  analysis: 'tabAnalysis',
+  orchestration: 'tabOrchestration',
+  mod: 'tabMod',
+  highscores: 'tabHighscores',
+};
 
 // Shows the tab's container, hides the other, and presses the tab's button.
 export function showTab(tab) {

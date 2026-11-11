@@ -21,6 +21,9 @@ const { readLimits, readUsageFetchedAt, readDailyShare, getRateLimitsPath } = re
 const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = require('./lib/sessions');
 const { readCacheState, getCacheDir } = require('./lib/cache');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
+const { createOrchestrations } = require('./lib/orchestrations/discover');
+const { appendPost } = require('./lib/orchestrations/board');
+const { writeSteerRequest } = require('./lib/orchestrations/controls');
 const { readActivity, getActivityDir } = require('./lib/activity');
 const { SETTING_SPECS, readSettings, writeSettings, validSettingValue } = require('./lib/settings');
 const { reviewBacklog, skipBacklog } = require('./lib/review');
@@ -574,6 +577,101 @@ function createServer(config) {
       return;
     }
     res.json(result);
+  });
+
+  // The Orchestration tab. The browser polls the list and, for the selected
+  // orchestration, its detail. Without the orchestrate skill installed the list
+  // answers at once without reading any session.
+  const orchestrations = createOrchestrations(config.configDir, { now: config.now });
+  app.get('/api/orchestrations', (req, res) => {
+    try {
+      if (!orchestrations.installed()) {
+        res.json({ installed: false, orchestrations: [] });
+        return;
+      }
+      res.json({ installed: true, orchestrations: orchestrations.list() });
+    } catch (err) {
+      console.error('[API] /api/orchestrations failed:', err);
+      res.status(500).json({ error: 'Failed to read orchestrations', detail: err.message });
+    }
+  });
+  app.get('/api/orchestrations/:id', (req, res) => {
+    if (!SESSION_ID_PATTERN.test(req.params.id)) {
+      res.status(400).json({ error: 'Invalid orchestration id' });
+      return;
+    }
+    try {
+      const detail = orchestrations.detail(req.params.id);
+      if (!detail) {
+        res.status(404).json({ error: 'Unknown orchestration' });
+        return;
+      }
+      res.json(detail);
+    } catch (err) {
+      console.error('[API] /api/orchestrations/:id failed:', err);
+      res.status(500).json({ error: 'Failed to read the orchestration', detail: err.message });
+    }
+  });
+
+  // The owner's board post, from "You", appended to the orchestration's board file.
+  // The board path comes from the orchestration, never from the request.
+  // Text over max is refused, not cut, as the steer route does. appendPost still cuts for bin/board-post.
+  const cleanText = (v, max) => (typeof v === 'string' && v.trim() && v.trim().length <= max ? v.trim() : null);
+  app.post('/api/orchestrations/:id/board', express.json({ limit: '8kb' }), (req, res) => {
+    const body = req.body;
+    const title = cleanText(body?.title, 120);
+    const text = body?.body === undefined ? '' : typeof body.body === 'string' && body.body.trim().length <= 2000 ? body.body.trim() : null;
+    if (!SESSION_ID_PATTERN.test(req.params.id) || title === null || text === null) {
+      res.status(400).json({ error: 'Send a title of 1 to 120 characters, and optionally a body of up to 2000, as text.' });
+      return;
+    }
+    try {
+      const target = orchestrations.boardPathOf(req.params.id);
+      if (!target) {
+        res.status(404).json({ error: 'Unknown orchestration' });
+        return;
+      }
+      if (!target.boardPath || !path.isAbsolute(target.boardPath) || !target.boardPath.endsWith('.board.jsonl')) {
+        res.status(409).json({ error: 'no board yet' });
+        return;
+      }
+      res.status(201).json(appendPost(target.boardPath, { from: 'You', title, body: text }));
+    } catch (err) {
+      console.error('[API] /api/orchestrations/:id/board failed:', err);
+      res.status(500).json({ error: 'Failed to post to the board', detail: err.message });
+    }
+  });
+
+  // A steer for one worker: a request file in the folder of the orchestrator's live
+  // session, which the mod in that session delivers.
+  app.post('/api/orchestrations/:id/steer', express.json({ limit: '8kb' }), (req, res) => {
+    const agentId = req.body?.agentId;
+    const text = typeof req.body?.text === 'string' ? req.body.text.trim() : '';
+    if (!SESSION_ID_PATTERN.test(req.params.id) || typeof agentId !== 'string' || !/^[a-z0-9]{1,64}$/.test(agentId) || !text || text.length > 2000) {
+      res.status(400).json({ error: 'Send an agentId and text of 1 to 2000 characters.' });
+      return;
+    }
+    try {
+      const target = orchestrations.controlsOf(req.params.id);
+      const worker = target?.workers.get(agentId);
+      if (!worker) {
+        res.status(404).json({ error: target ? 'Unknown worker' : 'Unknown orchestration' });
+        return;
+      }
+      if (!worker.canSteer) {
+        res.status(409).json({ error: 'worker finished' });
+        return;
+      }
+      if (!target.liveSessionId) {
+        res.status(409).json({ error: 'orchestrator not live' });
+        return;
+      }
+      const request = writeSteerRequest(config.configDir, target.liveSessionId, { agentId, task: worker.task, text });
+      res.status(202).json({ id: request.id });
+    } catch (err) {
+      console.error('[API] /api/orchestrations/:id/steer failed:', err);
+      res.status(500).json({ error: 'Failed to queue the steer', detail: err.message });
+    }
   });
 
   // Express 4 answers a body-parser error (malformed JSON, body over the limit)

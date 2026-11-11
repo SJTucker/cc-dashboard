@@ -82,3 +82,12 @@ test('the header has a High scores tab and its container starts hidden', () => {
   assert.match(html, /<button[^>]*data-tab="highscores"[^>]*>High scores<\/button>/);
   assert.match(html, /<div class="tab" id="tabHighscores" hidden>\s*<section class="arcade" id="arcade"><\/section>/);
 });
+
+test('the tab buttons and containers are in the order Now, Analysis, Orchestration, Mod, High scores', () => {
+  const buttons = [...html.matchAll(/<button[^>]*data-tab="(\w+)"/g)].map((m) => m[1]);
+  assert.deepEqual(buttons, ['now', 'analysis', 'orchestration', 'mod', 'highscores']);
+  const containers = [...html.matchAll(/<div class="tab" id="(tab\w+)"/g)].map((m) => m[1]);
+  assert.deepEqual(containers, ['tabNow', 'tabAnalysis', 'tabOrchestration', 'tabMod', 'tabHighscores']);
+  assert.match(html, /<button[^>]*data-tab="orchestration"[^>]*\bhidden\b/);
+  assert.match(html, /<div class="tab" id="tabOrchestration" hidden>/);
+});
