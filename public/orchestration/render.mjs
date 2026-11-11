@@ -71,10 +71,10 @@ export function renderSwitcher(root, list, selectedId, onSelect, now = Date.now(
     },
     (card, s) => {
       const r = card._r;
-      setText(r.name, s.topic);
-      setText(r.project, s.project);
+      setText(r.name, s.topic ?? '');
+      setText(r.project, s.project ?? '');
       setText(r.state, switcherState(s, now));
-      setText(r.counts, countsLine(s.counts));
+      setText(r.counts, countsLine(s.counts ?? {}));
       r.dot.className = dotClass(s.live, s.waiting);
       setClass(r.state, 'wait', s.waiting);
       setClass(card, 'done', !s.live);
@@ -160,8 +160,8 @@ export function renderDetail(root, detail, { seenBoard = 0, firstRender = false,
   const animate = !(firstRender || fresh);
 
   setText(r.orchMeta, detail.live ? 'live' : 'ended');
-  setText(r.title, detail.topic);
-  setText(r.project, detail.project);
+  setText(r.title, detail.topic ?? '');
+  setText(r.project, detail.project ?? '');
   setText(r.branch, detail.branch ?? '');
   renderPhases(r.phases, detail);
   renderNow(r, detail, animate, now);
@@ -192,11 +192,11 @@ function renderPhases(node, detail) {
 }
 
 function renderNow(r, detail, animate, now) {
-  const n = detail.now;
+  const n = detail.now ?? {};
   const waiting = n.state === 'waiting';
   setClass(r.nowBox, 'wait', waiting);
   r.nowDot.className = dotClass(n.state === 'working' || waiting, waiting);
-  swapText(r.nowWhat, n.text, { animate });
+  swapText(r.nowWhat, n.text ?? '', { animate });
   swapText(r.nowDetail, n.detail ?? '', { animate });
   setText(r.nowSince, n.since ? `for ${formatDuration(now - new Date(n.since).getTime())}` : '');
 }
@@ -204,7 +204,7 @@ function renderNow(r, detail, animate, now) {
 // ---------- Workers ----------
 
 function renderWaves(r, detail, animate, now) {
-  const waves = detail.waves ?? [];
+  const waves = (detail.waves ?? []).map((wave) => ({ ...wave, workers: wave.workers ?? [] }));
   const last = waves[waves.length - 1];
   const lastMerged = last && last.workers.every((w) => w.status === 'merged');
   const sections = [];

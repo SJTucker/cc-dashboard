@@ -296,7 +296,7 @@ async function loadOrchestration() {
   orchDetail = detail;
   renderDetail(view, detail, { seenBoard: boardSeen(id), firstRender: orchRenderedId !== id, actions: ORCH_ACTIONS });
   orchRenderedId = id;
-  scheduleBoardSeen(id, detail.board.length);
+  scheduleBoardSeen(id, (detail.board ?? []).length);
 }
 
 // Asked at startup, and again on a backoff while the request fails. A page opened on
