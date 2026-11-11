@@ -425,3 +425,27 @@ test('a symlinked steer root is not walked', (t) => {
   createOrchestrations(config.configDir).list();
   assert.deepEqual(fs.readdirSync(folder), ['old-1.json']);
 });
+
+test('readSteers does not follow a symlinked session folder or delete files in its target', (t) => {
+  const cfg = tmpDir(t, 'steer-link');
+  const outside = tmpDir(t, 'steer-outside');
+  const old = Date.now() - 48 * 3600 * 1000;
+  const victim = path.join(outside, 'abc.json');
+  fs.writeFileSync(victim, JSON.stringify({ agentId: 'a1', text: 'x', at: old }));
+  fs.utimesSync(victim, new Date(old), new Date(old));
+  const steerRoot = path.join(cfg, 'cc-dashboard', 'steer');
+  fs.mkdirSync(steerRoot, { recursive: true });
+  fs.symlinkSync(outside, path.join(steerRoot, 'sess-1'));
+  assert.equal(readSteers(cfg, 'sess-1', Date.now()).size, 0);
+  assert.ok(fs.existsSync(victim));
+  // A symlinked steer/ folder is refused the same way.
+  const cfg2 = tmpDir(t, 'steer-link2');
+  fs.mkdirSync(path.join(cfg2, 'cc-dashboard'), { recursive: true });
+  fs.mkdirSync(path.join(outside, 'sess-2'));
+  const victim2 = path.join(outside, 'sess-2', 'abc.json');
+  fs.writeFileSync(victim2, JSON.stringify({ agentId: 'a1', text: 'x', at: old }));
+  fs.utimesSync(victim2, new Date(old), new Date(old));
+  fs.symlinkSync(outside, path.join(cfg2, 'cc-dashboard', 'steer'));
+  assert.equal(readSteers(cfg2, 'sess-2', Date.now()).size, 0);
+  assert.ok(fs.existsSync(victim2));
+});

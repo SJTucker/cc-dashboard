@@ -509,3 +509,24 @@ test('a worker with no transcript yet leaves no stepsMemo entry', (t) => {
   assert.equal(orch.list()[0].counts.working, 1);
   assert.equal(orch.sizes().stepsMemo, 0);
 });
+
+test('a transcript that disappears between the size check and the read does not fail list()', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const a = writeOrchestration(config.configDir, { sessionId: 'sess-gone', live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  writeOrchestration(config.configDir, { sessionId: 'sess-kept', live: true, workers: [{ task: 1, files: ['lib/b.js'], steps: working('lib/b.js') }] });
+  const real = fs.openSync;
+  let thrown = 0;
+  t.mock.method(fs, 'openSync', (...args) => {
+    if (thrown === 0 && String(args[0]).endsWith('.jsonl')) {
+      thrown += 1;
+      throw Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' });
+    }
+    return real.apply(fs, args);
+  });
+  const orch = createOrchestrations(config.configDir);
+  const listed = orch.list();
+  assert.equal(thrown, 1);
+  assert.ok(listed.length >= 1);
+  assert.ok(a.sessionId);
+});

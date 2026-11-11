@@ -426,3 +426,10 @@ test('a finished worker with an empty file made before its sibling started stays
   assert.equal(a.lastActiveAt, null);
   assert.deepEqual(groupWaves(resolveStatuses([a, b], [], [], [])).map((w) => w.workers.map((x) => x.agentId)), [['a', 'b']]);
 });
+
+test('a settled review carries endedAt from the reviewer last activity, a running one does not', () => {
+  const done = resolveStatuses([st({ raw: 'done' })], [st({ raw: 'done', report: 'pass', startedAt: iso(50), lastActiveAt: iso(170) })], [], []);
+  assert.deepEqual(done[0].review, { status: 'passed', startedAt: iso(50), endedAt: iso(170) });
+  const bare = resolveStatuses([st({ raw: 'done' })], [st({ raw: 'done', report: 'fix it', startedAt: iso(50), lastActiveAt: undefined })], [], []);
+  assert.deepEqual(bare[0].review, { status: 'changes', startedAt: iso(50), endedAt: null });
+});

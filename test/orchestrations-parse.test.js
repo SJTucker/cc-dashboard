@@ -320,3 +320,26 @@ test('no fixture record is dated in the future, live or ended', (t) => {
     }
   }
 });
+
+test('a dashboard note maps to the worker launched before it, not one launched after it in the same session', () => {
+  const lines = [
+    ...orchestratorLines(),
+    metaNote('You steered Task 1 from the dashboard: go slower'),
+    ...launch('ag2', 'bbb2', 'Task 1 worker again', workerPrompt(1)),
+  ];
+  const r = parseOrchestrator(lines);
+  assert.deepEqual(r.steers.map((s) => [s.to, s.source]), [['aaa1', 'dashboard']]);
+  assert.deepEqual(r.unmappedNotes, []);
+});
+
+test('a dashboard note with no earlier worker in its session is unmapped, even when a later worker has its task', () => {
+  const lines = [
+    typed('orchestrate the plan'),
+    assistant(use('Skill', { skill: 'orchestrate' }, 'sk')),
+    metaNote('You steered Task 1 from the dashboard: go slower'),
+    ...launch('ag2', 'bbb2', 'Task 1 worker', workerPrompt(1)),
+  ];
+  const r = parseOrchestrator(lines);
+  assert.deepEqual(r.steers, []);
+  assert.deepEqual(r.unmappedNotes.map((n) => n.task), [1]);
+});
