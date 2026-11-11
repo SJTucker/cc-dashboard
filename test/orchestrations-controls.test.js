@@ -4,10 +4,11 @@ const { test } = require('node:test');
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const { bootServer, tmpDir } = require('./helpers');
+const { bootServer, tmpDir, testConfig } = require('./helpers');
 const { writeOrchestration } = require('./orchestration-fixture');
 const { parseBoard } = require('../lib/orchestrations/board');
 const { readSteers, writeSteerRequest } = require('../lib/orchestrations/controls');
+const { createOrchestrations } = require('../lib/orchestrations/discover');
 const { parseOrchestrator } = require('../lib/orchestrations/parse');
 const { actionFeed } = require('../lib/orchestrations/feed');
 const { stepsOf } = require('../lib/transcript-index');
@@ -292,4 +293,71 @@ test('board post is 409 when the board path in the transcript is relative', asyn
   assert.equal(res.status, 409);
   assert.deepEqual(await res.json(), { error: 'no board yet' });
   assert.ok(!fs.existsSync(path.join(process.cwd(), rel)));
+});
+
+// A steer folder of a session that is not in any discovered group.
+function steerFolder(config, name, files) {
+  const dir = path.join(config.configDir, 'cc-dashboard', 'steer', name);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const [file, ageH] of Object.entries(files)) {
+    const full = path.join(dir, file);
+    fs.writeFileSync(full, JSON.stringify({ id: 'x', agentId: 'a1', text: 't', at: Date.now() - ageH * 3600 * 1000 }));
+    const when = new Date(Date.now() - ageH * 3600 * 1000);
+    fs.utimesSync(full, when, when);
+  }
+  return dir;
+}
+
+test('list() cleans steer folders of sessions outside any group, and removes the emptied ones', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const stale = steerFolder(config, 'gone-1', { 'a-1.json': 30, 'a-1.result.json': 30, 'b-2.json.4242': 30 });
+  const mixed = steerFolder(config, 'gone-2', { 'old-1.json': 30, 'new-1.json': 1 });
+  const empty = steerFolder(config, 'gone-3', {});
+  const foreign = steerFolder(config, 'gone-4', { 'notes.txt': 30, 'old-1.json': 30 });
+  const badName = steerFolder(config, 'not a session.id', { 'old-1.json': 30 });
+  const outside = tmpDir(t, 'outside');
+  fs.writeFileSync(path.join(outside, 'old-1.json'), '{}');
+  const when = new Date(Date.now() - 30 * 3600 * 1000);
+  fs.utimesSync(path.join(outside, 'old-1.json'), when, when);
+  fs.symlinkSync(outside, path.join(config.configDir, 'cc-dashboard', 'steer', 'linked-1'));
+  fs.writeFileSync(path.join(config.configDir, 'cc-dashboard', 'steer', 'stray.json'), '{}');
+  createOrchestrations(config.configDir).list();
+  assert.equal(fs.existsSync(stale), false, 'an emptied folder is removed');
+  assert.deepEqual(fs.readdirSync(mixed), ['new-1.json']);
+  assert.equal(fs.existsSync(empty), false, 'an empty folder is removed');
+  assert.deepEqual(fs.readdirSync(foreign).sort(), ['notes.txt'], 'a name outside the patterns is kept');
+  assert.deepEqual(fs.readdirSync(badName), ['old-1.json'], 'a folder name outside SESSION_ID_PATTERN is skipped');
+  assert.deepEqual(fs.readdirSync(outside), ['old-1.json'], 'a symlinked folder is not followed');
+  assert.ok(fs.lstatSync(path.join(config.configDir, 'cc-dashboard', 'steer', 'linked-1')).isSymbolicLink());
+  assert.ok(fs.existsSync(path.join(config.configDir, 'cc-dashboard', 'steer', 'stray.json')));
+});
+
+test('the steer folder cleanup runs at most once per 10 minutes', (t) => {
+  const config = testConfig(t);
+  install(config);
+  let clock = Date.now();
+  const orch = createOrchestrations(config.configDir, { now: () => clock });
+  orch.list();
+  const dir = steerFolder(config, 'gone-1', { 'old-1.json': 30 });
+  clock += 9 * 60 * 1000;
+  orch.list();
+  assert.deepEqual(fs.readdirSync(dir), ['old-1.json']);
+  clock += 61 * 1000;
+  orch.list();
+  assert.equal(fs.existsSync(dir), false);
+});
+
+test('a symlinked file in a steer folder is neither read nor deleted', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const dir = steerFolder(config, 'gone-1', {});
+  const target = path.join(tmpDir(t, 'target'), 'keep.json');
+  fs.writeFileSync(target, '{}');
+  const when = new Date(Date.now() - 30 * 3600 * 1000);
+  fs.utimesSync(target, when, when);
+  fs.symlinkSync(target, path.join(dir, 'link-1.json'));
+  createOrchestrations(config.configDir).list();
+  assert.ok(fs.lstatSync(path.join(dir, 'link-1.json')).isSymbolicLink());
+  assert.ok(fs.existsSync(target));
 });
