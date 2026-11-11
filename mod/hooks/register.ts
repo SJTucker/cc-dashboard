@@ -643,6 +643,10 @@ let steerBusy = false
 const steerHandled = new Set<string>()
 let steerSessionId: string | undefined
 let steerEnded = false
+// The ids of stopping session.end events that arrive while session.start is still
+// reading the session id. An empty string stands for an event with no id. It is
+// undefined when no start is resolving.
+let steerEndsDuringStart: string[] | undefined
 
 async function relaySteers($: EngineInterface, dir: string) {
   if (steerBusy) return
@@ -1405,6 +1409,13 @@ export const register: Register = (on) => {
   // first prompt. A -p or Agent SDK run starts no reviews: it can exit mid-call and
   // leave claimed sessions pending for an hour.
   on('session.start', async ($, e, next) => {
+    // Recording starts before the handler's first await, so an end that arrives while
+    // the handler registers commands or resolves the id is not missed.
+    const ends: string[] = []
+    if (e.isInteractive) {
+      steerEnded = false
+      steerEndsDuringStart = ends
+    }
     sessionModes.set(await $.session.id(), { interactive: e.isInteractive, cwd: e.cwd })
     await $.command.register({
       name: 'backfill-updates',
@@ -1420,8 +1431,10 @@ export const register: Register = (on) => {
     })
     if (e.isInteractive) {
       startReviews($)
-      steerEnded = false
       steerSessionId = await $.session.id().catch(() => undefined)
+      steerEndsDuringStart = undefined
+      // An end seen during the await was compared with an id that was not known yet.
+      if (ends.some((id) => id === '' || id === steerSessionId)) steerEnded = true
       $.clock.after(0, () => {
         startSteerRelay($).catch((err) => note($, `steer relay failed (${errorName(err)})`))
       })
@@ -1495,9 +1508,12 @@ export const register: Register = (on) => {
     const interactive = sessionModes.get(e.sessionId)?.interactive !== false
     const writing = headlessWrites.get(e.sessionId)
     forgetSession(e.sessionId)
-    if (e.reason !== 'clear' && e.reason !== 'resume' && (!e.sessionId || e.sessionId === steerSessionId)) {
-      steerEnded = true
-      stopSteerRelay()
+    if (e.reason !== 'clear' && e.reason !== 'resume') {
+      steerEndsDuringStart?.push(e.sessionId ?? '')
+      if (!e.sessionId || e.sessionId === steerSessionId) {
+        steerEnded = true
+        stopSteerRelay()
+      }
     }
     if (!interactive) {
       // A claude -p process exits once session.end returns, so a queued headless write

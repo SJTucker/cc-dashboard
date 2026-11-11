@@ -78,6 +78,8 @@ type World = {
   indexExistsFails: boolean
   // How long the fs.exists of the orchestrate skill file takes, and whether session.send never resolves.
   skillExistsMs: number
+  // How long $.session.id takes on the mock clock.
+  idMs: number
   sendHangs: boolean
   // Stdout of each git or date command the document handoff runs, by its argv joined with
   // spaces. Their runs go to repoRan, and a command not listed prints nothing.
@@ -171,6 +173,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     indexExistsMs: 0,
     indexExistsFails: false,
     skillExistsMs: 0,
+    idMs: 0,
     sendHangs: false,
     repo: {},
     ...w,
@@ -293,7 +296,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     logged.push(e.text)
     return { value: undefined }
   })
-  on('session.id', () => ({ value: state.id }))
+  on('session.id', async () => {
+    if (state.idMs > 0) await clock.sleep(state.idMs)
+    return { value: state.id }
+  })
   on('session.surfaces', () => ({ value: state.surfaces }))
   on('session.root', () => {
     if (state.rootFails) throw new Error('no root')
@@ -742,6 +748,18 @@ test('a session.end while the config check is pending leaves no relay timer', as
   await $.session.start(start)
   await clock.advance(100)
   await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+})
+
+test('a session.end for the same id while session.start resolves the id leaves no relay timer', async ($, on) => {
+  const { listed, clock } = world(on, { idMs: 500 })
+  const starting = $.session.start(start)
+  await clock.advance(100)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(1_000)
+  await starting
   await clock.advance(10_000)
   await clock.settle()
   expect(listed.some((path) => path.includes('/steer/'))).toBe(false)

@@ -15,7 +15,7 @@ test('steerNote names the task', async () => {
   expect(steerNote(null, 'Stop')).toBe('You steered a worker from the dashboard: Stop')
 })
 
-// lib/orchestrations/parse.js STEER_NOTE reads both forms back (the 'a worker' form is added in the server fixes).
+// lib/orchestrations/parse.js STEER_NOTE reads both forms back.
 test('steerNote writes the exact strings the server parses', async () => {
   expect(steerNote(12, 'a\nb')).toBe('You steered Task 12 from the dashboard: a\nb')
   expect(steerNote(null, 'Stop now')).toBe('You steered a worker from the dashboard: Stop now')
