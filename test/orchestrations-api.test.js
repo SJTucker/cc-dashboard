@@ -262,11 +262,26 @@ test('list() does not advance the finished-flag state that detail() holds for a 
   install(config);
   const o = writeOrchestration(config.configDir, { live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js'), finished: true }] });
   const orch = createOrchestrations(config.configDir);
-  const statusOf = (d) => d.waves.flatMap((w) => w.workers)[0].status;
+  const worker = (d) => d.waves.flatMap((w) => w.workers)[0];
   const summary = orch.list()[0];
-  assert.equal(summary.counts.working, 1);
-  assert.notEqual(statusOf(orch.detail(o.sessionId)), 'done');
-  assert.equal(statusOf(orch.detail(o.sessionId)), 'done');
+  assert.equal(summary.counts.review, 1);
+  // watchEvents adds the DONE event once the flag has held for a poll with no new lines.
+  assert.equal(worker(orch.detail(o.sessionId)).events.some((e) => e.type === 'DONE'), false);
+  assert.equal(worker(orch.detail(o.sessionId)).events.some((e) => e.type === 'DONE'), true);
+});
+
+test('one detail poll after the meta flag flips shows done and canSteer false', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  const orch = createOrchestrations(config.configDir);
+  const worker = (d) => d.waves.flatMap((w) => w.workers)[0];
+  assert.equal(worker(orch.detail(o.sessionId)).status, 'working');
+  const meta = path.join(path.dirname(o.transcript), o.sessionId, 'subagents', `agent-${o.workerIds[0]}.meta.json`);
+  fs.writeFileSync(meta, JSON.stringify({ finished: true }));
+  const w = worker(orch.detail(o.sessionId));
+  assert.equal(w.status, 'done');
+  assert.equal(w.canSteer, false);
 });
 
 const skillCall = () => JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), message: { role: 'assistant', content: [{ type: 'tool_use', id: 's1', name: 'Skill', input: { skill: 'orchestrate' } }] } });

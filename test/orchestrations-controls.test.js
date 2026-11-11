@@ -230,8 +230,10 @@ test('a refused steer does not advance the state the next poll builds on', async
   await detailOf(url, o.sessionId);
   fs.writeFileSync(meta, JSON.stringify({ finished: true }));
   await send(url, `/api/orchestrations/${o.sessionId}/steer`, { agentId: o.workerIds[0], text: 'x' });
-  // If the POST had recorded finished at this line count, this first detail poll would already be done.
-  assert.equal(workerOf(await detailOf(url, o.sessionId), o.workerIds[0]).status, 'working');
+  // If the POST had recorded finished at this line count, this first detail poll would already hold the DONE event.
+  const hasDone = (d) => workerOf(d, o.workerIds[0]).events.some((e) => e.type === 'DONE');
+  assert.equal(hasDone(await detailOf(url, o.sessionId)), false);
+  assert.equal(hasDone(await detailOf(url, o.sessionId)), true);
 });
 
 test('a Monitor --board path that does not end in .board.jsonl is ignored, so a post never writes it', async (t) => {

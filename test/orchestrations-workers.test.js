@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { workerState, resolveStatuses, groupWaves } = require('../lib/orchestrations/workers.js');
+const { stepsOf } = require('../lib/transcript-index.js');
 
 const T0 = Date.parse('2026-11-10T10:00:00Z');
 const iso = (sec) => new Date(T0 + sec * 1000).toISOString();
@@ -24,7 +25,9 @@ function failure(sec) {
 
 const agent = { agentId: 'a1', task: '3', title: 'Workers', files: ['lib/orchestrations/workers.js'], doneWhen: 'tests pass', startedAt: iso(0) };
 const opts = (secAfter) => ({ now: T0 + secAfter * 1000 });
-const read = (lines, mtimeSec) => ({ lines, mtimeMs: T0 + mtimeSec * 1000 });
+// The lines cache keeps one array while a file grows and raises version on each change.
+// A test grows its array in place, so the line count stands in for the version.
+const read = (lines, mtimeSec) => ({ lines, mtimeMs: T0 + mtimeSec * 1000, version: lines.length });
 
 test('a worker with no transcript yet is starting', () => {
   const { state } = workerState(agent, null, null, undefined, opts(1));
@@ -73,9 +76,11 @@ test('quiet after 5 minutes without growth', () => {
 
 test('a finished transcript is done and carries its report', () => {
   const lines = [tool('Read', { file_path: 'a.js' }, 1), text('All green.', 2)];
-  // The finished flag ends the watch only once it has held for a poll with no new lines.
+  // The meta flag shows done at once. watchEvents settles one poll later and adds the DONE event.
   const first = workerState(agent, read(lines, 2), { finished: true }, undefined, opts(3));
-  assert.equal(first.state.raw, 'working');
+  assert.equal(first.state.raw, 'done');
+  assert.equal(first.state.report, 'All green.');
+  assert.equal(first.state.events.some((e) => e.type === 'DONE'), false);
   const { state } = workerState(agent, read(lines, 2), { finished: true }, first.seen, opts(6));
   assert.equal(state.raw, 'done');
   assert.equal(state.report, 'All green.');
@@ -88,8 +93,8 @@ test('seen carries over so events are not repeated', () => {
   const second = workerState(agent, read(lines, 1), null, first.seen, opts(3));
   assert.equal(first.state.events.length, 1);
   assert.equal(second.state.events.length, 1);
-  const more = [...lines, tool('Edit', { file_path: 'other.js' }, 4)];
-  const third = workerState(agent, read(more, 4), null, second.seen, opts(5));
+  lines.push(tool('Edit', { file_path: 'other.js' }, 4));
+  const third = workerState(agent, read(lines, 4), null, second.seen, opts(5));
   assert.equal(third.state.events.length, 2);
 });
 
@@ -230,4 +235,105 @@ test('step paths under the worker worktree are shown relative to it, and touched
   assert.deepEqual(state.steps.map((s) => s.text), ['lib/a.js', `${wt}-other/lib/b.js`, '/elsewhere/c.js']);
   assert.deepEqual(state.edited, [`${wt}/lib/a.js`]);
   assert.deepEqual(state.touched, [`${wt}/lib/a.js`]);
+});
+
+test('a finished meta flag with a coordinator message last is not done', () => {
+  const msg = JSON.stringify({ type: 'user', timestamp: iso(3), origin: { kind: 'coordinator' }, message: { role: 'user', content: 'The coordinator sent a message while you were working:\nGo on.' } });
+  const lines = [tool('Read', { file_path: 'a.js' }, 1), text('Done.', 2), msg];
+  const { state } = workerState(agent, read(lines, 3), { finished: true }, undefined, opts(4));
+  assert.equal(state.lastIsMsg, true);
+  assert.equal(state.raw, 'working');
+});
+
+test('a second poll with no new lines does not run stepsOf again', () => {
+  const calls = [];
+  const spy = (lines, from, to) => {
+    calls.push([from, to]);
+    return stepsOf(lines, from, to);
+  };
+  const lines = [tool('Read', { file_path: 'a.js' }, 1, { input_tokens: 1, cache_read_input_tokens: 500 })];
+  const first = workerState(agent, read(lines, 1), null, undefined, { ...opts(2), stepsOf: spy });
+  const second = workerState(agent, read(lines, 1), null, first.seen, { ...opts(3), stepsOf: spy });
+  assert.equal(calls.length, 1);
+  assert.deepEqual(second.state, first.state);
+});
+
+test('steps over appended lines, with the earlier ones kept, equal a full recompute', () => {
+  const calls = [];
+  const spy = (lines, from, to) => {
+    calls.push([from, to]);
+    return stepsOf(lines, from, to);
+  };
+  const lines = [tool('Read', { file_path: 'a.js' }, 1, { input_tokens: 1, cache_read_input_tokens: 500 })];
+  const first = workerState(agent, read(lines, 1), null, undefined, { ...opts(2), stepsOf: spy });
+  lines.push(tool('Edit', { file_path: 'lib/orchestrations/workers.js' }, 3, { input_tokens: 1, cache_read_input_tokens: 900 }), ...failure(4));
+  const grown = workerState(agent, read(lines, 4), null, first.seen, { ...opts(5), stepsOf: spy });
+  assert.deepEqual(calls, [[1, 1], [2, 4]]);
+  const full = workerState(agent, read(lines, 4), null, undefined, opts(5)).state;
+  for (const key of ['steps', 'current', 'edited', 'touched', 'contextTokens', 'lastIsMsg', 'lastActiveAt', 'raw']) assert.deepEqual(grown.state[key], full[key], key);
+  assert.equal(grown.state.contextTokens, 901);
+  assert.equal(grown.state.steps.length, 4);
+});
+
+test('a worker transcript that shrank starts its state over', () => {
+  const lines = [tool('Edit', { file_path: 'a.js' }, 1), tool('Edit', { file_path: 'b.js' }, 2), tool('Edit', { file_path: 'c.js' }, 3)];
+  const first = workerState(agent, { lines, mtimeMs: T0, version: 1 }, null, undefined, opts(4));
+  assert.equal(first.state.events.length, 3);
+  // The lines cache replaces its array when a file starts over.
+  const again = [tool('Edit', { file_path: 'd.js' }, 5)];
+  const reset = workerState(agent, { lines: again, mtimeMs: T0, version: 2 }, null, first.seen, opts(6));
+  assert.deepEqual(reset.state.events.map((e) => e.text), ['DRIFT edit outside task files: d.js']);
+  assert.deepEqual(reset.state.edited, ['d.js']);
+  // The same array cut short is a reset too.
+  lines.splice(1);
+  const cut = workerState(agent, { lines, mtimeMs: T0, version: 3 }, null, first.seen, opts(6));
+  assert.deepEqual(cut.state.events.map((e) => e.text.includes('a.js')), [true]);
+  assert.equal(cut.seen.next, 2);
+  lines.push(tool('Edit', { file_path: 'e.js' }, 7));
+  const next = workerState(agent, { lines, mtimeMs: T0, version: 4 }, null, cut.seen, opts(8));
+  assert.equal(next.state.events.length, 2);
+});
+
+test('an emptied transcript after a shrink is starting, with no old events', () => {
+  const lines = [tool('Edit', { file_path: 'a.js' }, 1)];
+  const first = workerState(agent, { lines, mtimeMs: T0, version: 1 }, null, undefined, opts(2));
+  const empty = workerState(agent, { lines: [], mtimeMs: T0, version: 2 }, null, first.seen, opts(3));
+  assert.equal(empty.state.raw, 'starting');
+  assert.deepEqual(empty.state.events, []);
+  assert.equal(empty.seen, undefined);
+});
+
+test('a STUCK event carries the time of the failing step, not of the last step', () => {
+  const lines = [...failure(1), ...failure(2), ...failure(3), tool('Read', { file_path: 'a.js' }, 9)];
+  const { state } = workerState(agent, read(lines, 9), null, undefined, opts(10));
+  const stuck = state.events.find((e) => e.type === 'STUCK');
+  assert.equal(stuck.at, iso(3));
+});
+
+test('a MSG event carries the time of its message line', () => {
+  const msg = JSON.stringify({ type: 'user', timestamp: iso(5), origin: { kind: 'coordinator' }, message: { role: 'user', content: 'The coordinator sent a message while you were working:\nGo on.' } });
+  const lines = [tool('Read', { file_path: 'a.js' }, 1), msg, tool('Read', { file_path: 'b.js' }, 9)];
+  const { state } = workerState(agent, read(lines, 9), null, undefined, opts(10));
+  const m = state.events.find((e) => e.type === 'MSG');
+  assert.equal(m.line, 2);
+  assert.equal(m.at, iso(5));
+});
+
+test('a worker with no startedAt goes last and joins the current wave', () => {
+  const w = (id, sec, status, lastSec = sec + 10) => ({ agentId: id, startedAt: sec == null ? undefined : iso(sec), lastActiveAt: iso(lastSec ?? 0), status });
+  const single = groupWaves([w('x', null, 'working', 5), w('a', 0, 'working')]);
+  assert.equal(single.length, 1);
+  assert.deepEqual(single[0].workers.map((x) => x.agentId), ['a', 'x']);
+  assert.equal(single[0].startedAt, iso(0));
+  const second = groupWaves([w('x', null, 'working', 5), w('b', 100, 'working'), w('a', 0, 'merged', 10)]);
+  assert.deepEqual(second.map((x) => x.workers.map((y) => y.agentId)), [['a'], ['b', 'x']]);
+  const only = groupWaves([w('x', null, 'working', 5), w('y', null, 'done', 6)]);
+  assert.equal(only.length, 1);
+  assert.equal(only[0].workers.length, 2);
+});
+
+test('with no startedAt on the worker, a reviewer or merge of its task still applies', () => {
+  const w = st({ raw: 'done', startedAt: undefined });
+  assert.equal(resolveStatuses([w], [st({ agentId: 'r', raw: 'done', report: 'pass', startedAt: iso(5) })], [], [])[0].status, 'passed');
+  assert.equal(resolveStatuses([w], [], [{ task: '1', at: iso(0) }], [])[0].status, 'merged');
 });
