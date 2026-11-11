@@ -67,6 +67,35 @@ test('BUDGET once context passes 200000', () => {
   assert.equal(state.events.at(-1).type, 'BUDGET');
 });
 
+test('a killed worker is stuck once the interrupt has held for a poll', () => {
+  const lines = [
+    tool('Bash', { command: 'npm test' }, 1),
+    JSON.stringify({ type: 'user', timestamp: iso(2), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'id1', is_error: true, content: "The user doesn't want to proceed" }] } }),
+    JSON.stringify({ type: 'user', timestamp: iso(3), message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }),
+  ];
+  const first = workerState(agent, read(lines, 3), null, undefined, opts(4));
+  const second = workerState(agent, read(lines, 3), null, first.seen, { ...opts(6), memo: first.memo });
+  assert.equal(second.state.events.at(-1).type, 'KILLED');
+  assert.equal(second.state.raw, 'stuck');
+  const [w] = resolveStatuses([second.state], [], [], []);
+  assert.equal(w.status, 'stuck');
+});
+
+test('a killed worker that is resumed and reports reaches done', () => {
+  const lines = [
+    tool('Bash', { command: 'npm test' }, 1),
+    JSON.stringify({ type: 'user', timestamp: iso(2), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'id1', is_error: true, content: "The user doesn't want to proceed" }] } }),
+    JSON.stringify({ type: 'user', timestamp: iso(3), message: { role: 'user', content: [{ type: 'text', text: '[Request interrupted by user for tool use]' }] } }),
+  ];
+  const first = workerState(agent, read(lines, 3), null, undefined, opts(4));
+  const second = workerState(agent, read(lines, 3), null, first.seen, { ...opts(6), memo: first.memo });
+  assert.equal(second.state.raw, 'stuck');
+  lines.push(JSON.stringify({ type: 'user', timestamp: iso(7), isMeta: true, origin: { kind: 'coordinator' }, message: { role: 'user', content: 'Carry on.' } }));
+  lines.push(tool('SubagentHandback', { message: 'All green.' }, 8));
+  const third = workerState(agent, read(lines, 8), null, second.seen, { ...opts(9), memo: second.memo });
+  assert.equal(third.state.raw, 'done');
+});
+
 test('quiet after 5 minutes without growth', () => {
   const lines = [tool('Read', { file_path: 'a.js' }, 1)];
   assert.equal(workerState(agent, read(lines, 1), null, undefined, opts(1 + 300)).state.raw, 'working');

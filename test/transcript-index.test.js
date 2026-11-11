@@ -448,6 +448,105 @@ test('watchEvents follows a worker resumed after its report to its last report',
   assert.equal(r.done, false, 'a finished flag left from the first run does not end a resumed worker');
 });
 
+function interrupted(s, form = ' for tool use') {
+  return rec({ type: 'user', ...at(s), message: { role: 'user', content: [{ type: 'text', text: `[Request interrupted by user${form}]` }] } });
+}
+function killedLines() {
+  return [
+    rec({ type: 'user', ...at('00'), message: { role: 'user', content: 'Do task 3' } }),
+    assistant([text('Running the tests.'), tool('Bash', { command: 'npm test' }, 'k1')], at('01')),
+    toolResult('k1', { isError: true, body: "The user doesn't want to proceed with this tool use. The tool use was rejected.", extra: at('02') }),
+    interrupted('03'),
+  ];
+}
+function apiErrorLine(s) {
+  return rec({ type: 'assistant', ...at(s), isApiErrorMessage: true, error: 'rate_limit', message: { role: 'assistant', content: [{ type: 'text', text: 'You have hit your limit' }] } });
+}
+
+test('watchEvents reports KILLED after a poll with no new lines, with the last tool', () => {
+  let r = watchEvents(killedLines(), null, NO_LIMITS);
+  assert.deepEqual(r.events, []);
+  assert.equal(r.done, false, 'not before the interrupt has held for a poll');
+  r = watchEvents(killedLines(), r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, ['KILLED Bash npm test']);
+  assert.equal(r.done, true);
+});
+
+test('watchEvents accepts the plain interrupt form and waits again when lines arrive', () => {
+  const lines = [...killedLines().slice(0, 3), interrupted('03', '')];
+  let r = watchEvents(lines, null, NO_LIMITS);
+  r = watchEvents(lines, r.seen, NO_LIMITS);
+  assert.equal(r.done, true);
+  r = watchEvents(killedLines(), null, NO_LIMITS);
+  r = watchEvents([...killedLines(), assistant([text('Still here')], at('04'))], r.seen, NO_LIMITS);
+  r = watchEvents([...killedLines(), assistant([text('Still here')], at('04'))], r.seen, NO_LIMITS);
+  assert.equal(r.done, false);
+});
+
+test('a coordinator message after the interrupt clears KILLED', () => {
+  const lines = [...killedLines(), coordinator('Carry on.', at('05'))];
+  let r = watchEvents(lines, null, NO_LIMITS);
+  r = watchEvents(lines, r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, []);
+  assert.equal(r.done, false);
+});
+
+test('watchEvents reports FAILED only after the error has held for the hold time', () => {
+  const lines = [...killedLines().slice(0, 2), apiErrorLine('05')];
+  const opts = { ...NO_LIMITS, holdMs: 30_000 };
+  let r = watchEvents(lines, null, { ...opts, now: 1_000 });
+  assert.deepEqual(r.events, []);
+  r = watchEvents(lines, r.seen, { ...opts, now: 20_000 });
+  assert.equal(r.done, false);
+  r = watchEvents(lines, r.seen, { ...opts, now: 31_000 });
+  assert.deepEqual(r.events, ['FAILED You have hit your limit']);
+  assert.equal(r.done, true);
+});
+
+test('a retry that succeeds cancels a pending FAILED', () => {
+  const failed = [...killedLines().slice(0, 2), apiErrorLine('05')];
+  const opts = { ...NO_LIMITS, holdMs: 30_000 };
+  let r = watchEvents(failed, null, { ...opts, now: 1_000 });
+  const retried = [...failed, assistant([text('Back again')], at('06'))];
+  r = watchEvents(retried, r.seen, { ...opts, now: 40_000 });
+  assert.deepEqual(r.events, []);
+  assert.equal(r.done, false);
+});
+
+test('a coordinator message after the API error clears FAILED', () => {
+  const lines = [...killedLines().slice(0, 2), apiErrorLine('05'), coordinator('Retry.', at('06'))];
+  const r = watchEvents(lines, null, { ...NO_LIMITS, holdMs: 0, now: 99_000 });
+  assert.equal(r.done, false);
+});
+
+test('KILLED is not repeated on an unchanged transcript', () => {
+  let r = watchEvents(killedLines(), null, NO_LIMITS);
+  r = watchEvents(killedLines(), r.seen, NO_LIMITS);
+  assert.equal(r.events.length, 1);
+  r = watchEvents(killedLines(), r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, []);
+  assert.equal(r.done, true);
+});
+
+test('a killed worker that is resumed is followed to its report, and a second kill is reported', () => {
+  let r = watchEvents(killedLines(), null, NO_LIMITS);
+  r = watchEvents(killedLines(), r.seen, NO_LIMITS);
+  const resumed = [...killedLines(), coordinator('Carry on.', at('05')), handback('back again', '06')];
+  r = watchEvents(resumed, r.seen, NO_LIMITS);
+  assert.deepEqual(r.events, ['MSG landed at line 5', 'DONE back again']);
+  assert.equal(r.done, true);
+  const again = [...killedLines(), coordinator('Carry on.', at('05')), assistant([tool('Edit', { file_path: '/r/a.ts' }, 'e9')], at('06')), interrupted('07')];
+  let q = watchEvents(killedLines(), null, NO_LIMITS);
+  q = watchEvents(killedLines(), q.seen, NO_LIMITS);
+  q = watchEvents(again, q.seen, NO_LIMITS);
+  q = watchEvents(again, q.seen, NO_LIMITS);
+  assert.deepEqual(q.events, ['KILLED Edit /r/a.ts']);
+});
+
+test('watchEvents still returns MSG events', () => {
+  assert.deepEqual(watchEvents(workerLines(), null, NO_LIMITS).events, ['MSG landed at line 6']);
+});
+
 test('a task file entry ending in / covers every file under that folder', () => {
   const opts = { files: ['lib/a.js', '/tmp/scratch/', 'docs/superpowers/'], budget: null };
   for (const file of ['/tmp/scratch/x.js', '/wt/docs/superpowers/plans/p.md']) {

@@ -22,7 +22,9 @@
 //
 // With `--watch`, run by the orchestrate skill through the Monitor tool, it polls
 // the worker's transcript every 2 seconds and prints one line per event (DRIFT,
-// STUCK, BUDGET, MSG, QUIET, DONE; see watchEvents), then exits 0 after DONE. It
+// STUCK, BUDGET, QUIET, DONE, KILLED, FAILED; see watchEvents), then exits 0 after
+// DONE, KILLED or FAILED. It does not print the MSG events watchEvents returns, because
+// they tell the orchestrator nothing to act on. It
 // waits for a missing file to appear, and leaves a last line that has no newline
 // yet for the next poll. `--since-line <n>` skips events up to line n, for a
 // watch re-armed after the Monitor tool's time limit. With `--board <path>` it also prints a POST line for each
@@ -178,7 +180,7 @@ async function watch(file, opts) {
       }
       const r = watchEvents(lines, seen, { files: opts.files, budget: opts.budget, sinceLine: opts.sinceLine, finished: readMeta(file)?.finished === true });
       seen = r.seen;
-      for (const e of r.events) process.stdout.write(e + '\n');
+      for (const e of r.events) if (!e.startsWith('MSG ')) process.stdout.write(e + '\n');
       if (r.done) return;
     }
     if (!quietSent && Date.now() - grewAt >= quietMs) {

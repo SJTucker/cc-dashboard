@@ -148,7 +148,7 @@ export function steerError(status, data, text = '') {
   return `Could not send. The server said ${status}.`;
 }
 
-const ATTENTION = new Set(['STUCK', 'DRIFT', 'BUDGET']);
+const ATTENTION = new Set(['STUCK', 'DRIFT', 'BUDGET', 'KILLED', 'FAILED']);
 
 // What a worker card shows as its current action: the latest attention event for
 // a stuck worker, the report once the worker has reported, else its latest step.

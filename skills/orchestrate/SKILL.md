@@ -177,13 +177,15 @@ For each worker, its transcript is
 - `description`: `Task <N> worker`.
 
 The watch waits for a transcript that does not exist yet, so start it right
-after the Agent call. It prints one line per event and exits after `DONE`.
+after the Agent call. It prints one line per event and exits after `DONE`,
+`KILLED` or `FAILED`.
 
-A watch expires after 30 minutes. Re-arm it until its `DONE`, adding
+A watch expires after 30 minutes. Re-arm it until it exits, adding
 `--since-line <n>`, with `<n>` the line count from the worker's `--steps`
 header, so the new watch does not repeat events you already handled. Do the
 same when you resume a finished worker with SendMessage: its watch exited at
-`DONE`, so start a new one from the line count at that `DONE`.
+`DONE`, so start a new one from the line count at that `DONE`. Do the same
+after a `KILLED` or `FAILED` watch.
 
 ## 8. On each watch event
 
@@ -198,14 +200,17 @@ Run `TI <worker transcript> --steps 20` and decide:
   task for a later wave.
 - `QUIET no new lines for 5 min`: look. Steer only if the steps show the worker
   is lost.
-- `MSG landed at line <n>`: confirms where a steer arrived. Nothing to do.
 - `DONE <report>`: go to Review and merge. In `--steps`, the worker's final
   report is the `REPORT` step.
+- `KILLED <text>`: the worker was stopped, by you, the user or Claude Code, and
+  `<text>` is its last action. Check `--steps`, then relaunch it or resume it
+  with SendMessage and re-arm the watch.
+- `FAILED <error>`: an API error ended the worker. If it is a limit, tell the
+  user. Otherwise resume it with SendMessage and re-arm the watch.
 - `POST <from>: <title>`: go to section 9.
 
-A worker that is killed, or whose Agent call fails, never prints `DONE`. When
-the Agent tool reports that a worker failed or was stopped, stop its watch with
-TaskStop.
+A worker that is killed or fails ends its own watch with `KILLED` or `FAILED`,
+so there is no watch to stop with TaskStop.
 
 The `--steps` header shows the worker's context size, and its `Read:` line lists
 every file the worker read, so you can see which reads the image could have
