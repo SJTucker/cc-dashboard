@@ -54,11 +54,14 @@ function writeOrchestration(configDir, opts = {}) {
   const transcript = path.join(projectDir, `${sessionId}.jsonl`);
   const subagents = path.join(projectDir, sessionId, 'subagents');
 
-  // One clock for every record, ending about now for a live session.
+  // One clock for every record. Records are written with a placeholder time, counted
+  // as they are made. Once the count is known the base is set to now (or 30 minutes
+  // ago) minus count * 3 s, so the last record is at or before the end time and none
+  // is in the future.
   const midnight = new Date().setHours(0, 0, 0, 0);
-  const total = 30 + workers.reduce((n, w) => n + 6 + 2 * (w.steps?.length ?? 0), 0);
-  let clock = Date.now() - (live ? 0 : 30 * 60 * 1000) - total * 3000;
-  const stamp = () => new Date((clock += 3000)).toISOString();
+  const STEP_MS = 3000;
+  let count = 0;
+  const stamp = () => `@@${++count}@@`;
 
   const rec = (extra, o) => JSON.stringify({ sessionId, cwd: project, gitBranch: topic, timestamp: stamp(), ...extra, ...o });
   const parent = (o) => rec({}, o);
@@ -139,12 +142,16 @@ function writeOrchestration(configDir, opts = {}) {
     }
   });
 
+  const base = Date.now() - (live ? 0 : 30 * 60 * 1000) - count * STEP_MS;
+  const clock = base + count * STEP_MS;
+  const timed = (text) => text.replace(/"@@(\d+)@@"/g, (_, n) => JSON.stringify(new Date(base + Number(n) * STEP_MS).toISOString()));
+
   writeFile(imagePath, `# Context image: ${topic}\n\nPlan: ${planPath}\n`);
   writeFile(planPath, `# Plan: ${topic}\n`);
   writeFile(boardPath, (opts.board ?? []).map((p) => JSON.stringify(p)).join('\n') + (opts.board?.length ? '\n' : ''));
-  writeFile(transcript, lines.join('\n') + '\n');
+  writeFile(transcript, timed(lines.join('\n') + '\n'));
   for (const wf of workerFiles) {
-    writeFile(wf.file, wf.lines.join('\n') + '\n');
+    writeFile(wf.file, timed(wf.lines.join('\n') + '\n'));
     writeFile(wf.file.replace(/\.jsonl$/, '.meta.json'), JSON.stringify(wf.meta));
   }
 
