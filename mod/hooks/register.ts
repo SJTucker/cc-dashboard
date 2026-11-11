@@ -1411,14 +1411,21 @@ export const register: Register = (on) => {
   on('session.start', async ($, e, next) => {
     // Recording starts before the handler's first await, so an end that arrives while
     // the handler registers commands or resolves the id is not missed.
+    // Each start has its own record, and only the latest start reconciles it. The stale
+    // id of an earlier session is cleared, so a late end for that session cannot match.
     const ends: string[] = []
     if (e.isInteractive) {
       steerEnded = false
+      steerSessionId = undefined
       steerEndsDuringStart = ends
     }
     let result: Awaited<ReturnType<typeof next>>
+    let sessionId: string | undefined
+    let latest = false
     try {
-      sessionModes.set(await $.session.id(), { interactive: e.isInteractive, cwd: e.cwd })
+      sessionId = await $.session.id()
+      if (e.isInteractive && steerEndsDuringStart === ends) steerSessionId = sessionId
+      sessionModes.set(sessionId, { interactive: e.isInteractive, cwd: e.cwd })
       await $.command.register({
         name: 'backfill-updates',
         description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
@@ -1431,19 +1438,23 @@ export const register: Register = (on) => {
       $.clock.after(0, () => {
         checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
       })
-      if (e.isInteractive) {
-        startReviews($)
-        steerSessionId = await $.session.id().catch(() => undefined)
-        // An end seen during the awaits was compared with an id that was not known yet.
-        if (ends.some((id) => id === '' || id === steerSessionId)) steerEnded = true
-      }
+      if (e.isInteractive) startReviews($)
     } finally {
-      steerEndsDuringStart = undefined
+      // An end seen during the awaits was compared with an id that was not known yet,
+      // so steerEnded is assigned from the record, not only raised.
+      latest = steerEndsDuringStart === ends
+      if (latest) {
+        steerEndsDuringStart = undefined
+        if (e.isInteractive) steerEnded = ends.some((id) => id === '' || id === sessionId)
+      }
     }
     if (e.isInteractive) {
-      $.clock.after(0, () => {
-        startSteerRelay($).catch((err) => note($, `steer relay failed (${errorName(err)})`))
-      })
+      // An earlier start that a later one overtook leaves the relay to the later one.
+      if (latest) {
+        $.clock.after(0, () => {
+          startSteerRelay($).catch((err) => note($, `steer relay failed (${errorName(err)})`))
+        })
+      }
       $.clock.after(0, () => {
         dashboardSettings($)
           .then((settings) => (settings.setupMarkers ? checkSetup($) : undefined))

@@ -82,6 +82,11 @@ type World = {
   idMs: number
   // Makes the next $.session.id reject, which fails session.start before its end.
   idFailsOnce: boolean
+  // idDelays: how long each $.session.id call takes, in call order (then idMs).
+  // idFailsOnCall: the 1-based call number that rejects, 0 for none.
+  idDelays: number[]
+  idFailsOnCall: number
+  idCalls: number
   sendHangs: boolean
   // Stdout of each git or date command the document handoff runs, by its argv joined with
   // spaces. Their runs go to repoRan, and a command not listed prints nothing.
@@ -177,6 +182,9 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     skillExistsMs: 0,
     idMs: 0,
     idFailsOnce: false,
+    idDelays: [],
+    idFailsOnCall: 0,
+    idCalls: 0,
     sendHangs: false,
     repo: {},
     ...w,
@@ -300,7 +308,11 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     return { value: undefined }
   })
   on('session.id', async () => {
-    if (state.idMs > 0) await clock.sleep(state.idMs)
+    state.idCalls += 1
+    const call = state.idCalls
+    const delay = state.idDelays.shift() ?? state.idMs
+    if (delay > 0) await clock.sleep(delay)
+    if (state.idFailsOnCall === call) throw new Error('no id')
     if (state.idFailsOnce) {
       state.idFailsOnce = false
       throw new Error('no id')
@@ -783,6 +795,53 @@ test('a session.start that throws before it finishes does not disturb a later st
   expect(listed).toContain(STEER_DIR)
   await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
   listed.length = 0
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+})
+
+test('a late end for the previous session id during a new start does not stop the new relay', async ($, on) => {
+  const { listed, clock, state } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  state.id = 's2'
+  state.idMs = 500
+  const starting = $.session.start(start)
+  await clock.advance(100)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(1_000)
+  await starting
+  state.idMs = 0
+  await clock.settle()
+  listed.length = 0
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(listed).toContain('/home/u/.claude/cc-dashboard/steer/s2')
+})
+
+test('an end with the real id still counts when a second id read would have failed', async ($, on) => {
+  const { listed, clock, state } = world(on, { idMs: 500 })
+  state.idFailsOnCall = 2
+  const starting = $.session.start(start)
+  await clock.advance(100)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(2_000)
+  await starting.catch(() => {})
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+})
+
+test('an end during two overlapping starts is not lost when the first start finishes', async ($, on) => {
+  const { listed, clock, state } = world(on)
+  state.idDelays = [300, 400, 0, 0, 0, 0, 0, 0]
+  const first = $.session.start(start)
+  await clock.advance(100)
+  const second = $.session.start(start)
+  await clock.advance(300)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(2_000)
+  await Promise.all([first, second])
   await clock.advance(10_000)
   await clock.settle()
   expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
