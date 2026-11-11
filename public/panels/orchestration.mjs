@@ -51,3 +51,35 @@ export function sendBoardPost(id, { title, body }, { fetchImpl } = {}) {
 export function sendSteer(id, { agentId, text }, { fetchImpl } = {}) {
   return postJson(`/api/orchestrations/${encodeURIComponent(id)}/steer`, { agentId, text }, fetchImpl);
 }
+
+// How many board posts of an orchestration the viewer has seen, kept per
+// orchestration in localStorage. Posts beyond it get the new marker.
+const BOARD_SEEN_PREFIX = 'cc-dashboard:board-seen:';
+
+export function boardSeen(id) {
+  try {
+    return Number(localStorage.getItem(BOARD_SEEN_PREFIX + id)) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+export function saveBoardSeen(id, count) {
+  try {
+    localStorage.setItem(BOARD_SEEN_PREFIX + id, String(count));
+  } catch {
+    // Storage can be blocked. Every post then shows as new on the next visit.
+  }
+}
+
+// Stores the board count 6 s after a render that showed unseen posts. The next
+// poll then drops the new marker.
+let boardSeenTimer = null;
+export function scheduleBoardSeen(id, count, latestCount) {
+  if (boardSeenTimer || count <= boardSeen(id)) return;
+  boardSeenTimer = setTimeout(() => {
+    boardSeenTimer = null;
+    const latest = latestCount(id);
+    if (latest != null) saveBoardSeen(id, latest);
+  }, 6000);
+}

@@ -151,10 +151,12 @@ function buildSkeleton(root, id) {
 
 // Draws one orchestration's Detail. firstRender is true on the first render after
 // a selection change, and nothing animates then. seenBoard is how many board posts
-// the viewer has already seen.
-export function renderDetail(root, detail, { seenBoard = 0, firstRender = false, now = Date.now() } = {}) {
+// the viewer has already seen. actions is { sendBoardPost, sendSteer }, the calls the
+// composers make, so this module does no network I/O of its own.
+export function renderDetail(root, detail, { seenBoard = 0, firstRender = false, now = Date.now(), actions } = {}) {
   const fresh = root.dataset.id !== detail.id;
   const r = fresh ? buildSkeleton(root, detail.id) : root._orch;
+  if (actions) r.actions = actions;
   const animate = !(firstRender || fresh);
 
   setText(r.orchMeta, detail.live ? 'live' : 'ended');
@@ -510,7 +512,7 @@ function buildBoardComposer(root) {
     body.value = '';
     sending = true;
     post.setAttribute('aria-disabled', 'true');
-    const result = await sendBoardPost(id, text);
+    const result = await root._orch.actions.sendBoardPost(id, text);
     sending = false;
     post.removeAttribute('aria-disabled');
     if (result.ok && result.data?.t) {
@@ -607,7 +609,7 @@ function buildSteer(r, getCard) {
     showError('');
     sending = true;
     send.setAttribute('aria-disabled', 'true');
-    const result = await sendSteer(r.root.dataset.id, { agentId: card.dataset.key, text });
+    const result = await r.actions.sendSteer(r.root.dataset.id, { agentId: card.dataset.key, text });
     sending = false;
     send.removeAttribute('aria-disabled');
     if (!result.ok) {

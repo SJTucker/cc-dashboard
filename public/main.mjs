@@ -27,7 +27,7 @@ import { requestReviews, renderReviews, reviewsMark, reviewsSince, reloadReviews
 import { loadModSettings, wireModSettings, focusModSetting } from './panels/mod-settings.mjs';
 import { renderSwitcher, renderDetail, renderEmpty } from './orchestration/render.mjs';
 import { EMPTY_TEXT } from './orchestration/view.mjs';
-import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS } from './panels/orchestration.mjs';
+import { requestOrchestrations, requestOrchestration, pickSelected, liveCount, ORCH_POLL_MS, boardSeen, scheduleBoardSeen, sendBoardPost, sendSteer } from './panels/orchestration.mjs';
 import { renderRtk } from './panels/rtk.mjs';
 import { requestSessions, renderSessions } from './panels/sessions.mjs';
 import { renderSticky } from './panels/sticky.mjs';
@@ -239,37 +239,11 @@ function applyOrchestrationList(body) {
   badge.replaceChildren(...(live ? [el('i', { class: 'orch-dot', 'aria-hidden': 'true' }), document.createTextNode(`${live} live`)] : []));
 }
 
-// How many board posts of an orchestration the viewer has seen, kept per
-// orchestration in localStorage. Posts beyond it get the new marker.
-const BOARD_SEEN_PREFIX = 'cc-dashboard:board-seen:';
-function boardSeen(id) {
-  try {
-    return Number(localStorage.getItem(BOARD_SEEN_PREFIX + id)) || 0;
-  } catch {
-    return 0;
-  }
-}
-function saveBoardSeen(id, count) {
-  try {
-    localStorage.setItem(BOARD_SEEN_PREFIX + id, String(count));
-  } catch {
-    // Storage can be blocked. Every post then shows as new on the next visit.
-  }
-}
+// The network calls the composers make, passed to renderDetail.
+const ORCH_ACTIONS = { sendBoardPost, sendSteer };
 
 // The id whose detail is on screen, so a selection change renders without motion.
 let orchRenderedId = null;
-let boardSeenTimer = null;
-
-// Stores the board count 6 s after a render that showed unseen posts. The next
-// poll then drops the new marker.
-function scheduleBoardSeen(id, count) {
-  if (boardSeenTimer || count <= boardSeen(id)) return;
-  boardSeenTimer = setTimeout(() => {
-    boardSeenTimer = null;
-    if (orchDetail?.id === id) saveBoardSeen(id, orchDetail.board.length);
-  }, 6000);
-}
 
 function selectOrchestration(id) {
   if (id === orchSelected) return;
@@ -312,9 +286,9 @@ async function loadOrchestration() {
     return;
   }
   orchDetail = detail;
-  renderDetail(view, detail, { seenBoard: boardSeen(id), firstRender: orchRenderedId !== id });
+  renderDetail(view, detail, { seenBoard: boardSeen(id), firstRender: orchRenderedId !== id, actions: ORCH_ACTIONS });
   orchRenderedId = id;
-  scheduleBoardSeen(id, detail.board.length);
+  scheduleBoardSeen(id, detail.board.length, (seenId) => (orchDetail?.id === seenId ? orchDetail.board.length : null));
 }
 
 // Asked once at startup. A page opened on #orchestration without the skill falls back to Now.
