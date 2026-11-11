@@ -53,6 +53,65 @@ test('read starts over when the file shrinks', (t) => {
   assert.deepEqual(cache.read(file).lines, ['x']);
 });
 
+test('read drops the entry and returns null when the file vanishes before it is opened', (t) => {
+  const { file, cache } = setup(t);
+  fs.writeFileSync(file, 'a\n');
+  cache.read(file);
+  fs.appendFileSync(file, 'b\n');
+  t.mock.method(fs, 'openSync', () => {
+    throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+  });
+  assert.equal(cache.read(file), null);
+  assert.equal(cache.size(), 0);
+});
+
+test('read starts over when the file is replaced by one of the same size', (t) => {
+  const { dir, file, cache } = setup(t);
+  fs.writeFileSync(file, 'a\nb\n');
+  assert.deepEqual(cache.read(file).lines, ['a', 'b']);
+  const other = path.join(dir, 'other');
+  fs.writeFileSync(other, 'x\ny\n');
+  fs.renameSync(other, file);
+  assert.deepEqual(cache.read(file).lines, ['x', 'y']);
+});
+
+test('read starts over when a file that did not grow has a new mtime', (t) => {
+  const { file, cache } = setup(t);
+  fs.writeFileSync(file, 'a\nb\n');
+  const first = cache.read(file);
+  fs.writeFileSync(file, 'x\ny\n');
+  const later = new Date(first.mtimeMs + 60000);
+  fs.utimesSync(file, later, later);
+  assert.deepEqual(cache.read(file).lines, ['x', 'y']);
+});
+
+test('read keeps one array while the file grows and raises version on each change', (t) => {
+  const { file, cache } = setup(t);
+  fs.writeFileSync(file, 'a\n');
+  const first = cache.read(file);
+  assert.equal(cache.read(file).version, first.version, 'no change, same version');
+  fs.appendFileSync(file, 'b\n');
+  const second = cache.read(file);
+  assert.equal(second.lines, first.lines);
+  assert.ok(second.version > first.version);
+  fs.appendFileSync(file, 'partial');
+  assert.equal(cache.read(file).version, second.version, 'an unterminated tail adds no lines');
+  fs.writeFileSync(file, 'x\n');
+  const reset = cache.read(file);
+  assert.notEqual(reset.lines, first.lines);
+  assert.ok(reset.version > second.version);
+});
+
+test('version does not repeat after an entry is dropped and read again', (t) => {
+  const { file, cache } = setup(t);
+  fs.writeFileSync(file, 'a\n');
+  const before = cache.read(file).version;
+  fs.rmSync(file);
+  assert.equal(cache.read(file), null);
+  fs.writeFileSync(file, 'a\n');
+  assert.ok(cache.read(file).version > before);
+});
+
 test('read returns null for a missing file', (t) => {
   const { dir, cache } = setup(t);
   assert.equal(cache.read(path.join(dir, 'nope')), null);
