@@ -108,3 +108,17 @@ test('steerError asks for a message only when the text is empty, else says it is
   assert.equal(steerError(400, {}, ''), 'Write a message first.');
   assert.equal(steerError(400, {}, 'x'.repeat(2001)), 'The message is too long or not valid.');
 });
+
+test('a dead orchestration that never reached Finish reads Ended', async () => {
+  const { switcherState } = await load();
+  const now = Date.now();
+  assert.equal(switcherState({ phase: 'waves', wave: 2, live: false, lastActiveAt: now - 2 * 3600_000 }, now), 'Ended 2h ago');
+  assert.equal(switcherState({ phase: 'plan', live: false, lastActiveAt: now - 20_000 }, now), 'Ended just now');
+});
+
+test('stepAge reads now, then an age with ago, never a minus sign', async () => {
+  const { stepAge } = await load();
+  const now = Date.now();
+  assert.equal(stepAge(0, new Date(now - 60_000).toISOString(), now), 'now');
+  assert.equal(stepAge(1, new Date(now - 60_000).toISOString(), now), '1m ago');
+});

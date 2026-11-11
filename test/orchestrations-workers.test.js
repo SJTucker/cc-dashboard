@@ -193,3 +193,41 @@ test('steerCount counts the steers sent to the worker', () => {
   assert.equal(resolved[0].steerCount, 2);
   assert.equal(resolved[1].steerCount, 0);
 });
+
+test('a relaunched worker does not take the verdict of the reviewer of its earlier run', () => {
+  const oldWorker = st({ agentId: 'old', raw: 'done', startedAt: iso(0) });
+  const newWorker = st({ agentId: 'new', raw: 'working', startedAt: iso(200) });
+  const reviewer = st({ agentId: 'r', raw: 'done', report: 'Changes: fix x', startedAt: iso(100) });
+  const [a, b] = resolveStatuses([oldWorker, newWorker], [reviewer], [], []);
+  assert.equal(a.status, 'changes');
+  assert.equal(b.status, 'working');
+  assert.equal(b.review, null);
+});
+
+test('a rerun worker does not take the merge of its earlier run', () => {
+  const oldWorker = st({ agentId: 'old', raw: 'done', startedAt: iso(0) });
+  const newWorker = st({ agentId: 'new', raw: 'working', startedAt: iso(200) });
+  const [a, b] = resolveStatuses([oldWorker, newWorker], [], [{ task: '1', at: iso(100) }], []);
+  assert.equal(a.status, 'merged');
+  assert.equal(b.status, 'working');
+});
+
+test('a merge or reviewer after the worker started still applies', () => {
+  const w = st({ raw: 'done', startedAt: iso(0) });
+  assert.equal(resolveStatuses([w], [], [{ task: '1', at: iso(0) }], [])[0].status, 'merged');
+  assert.equal(resolveStatuses([w], [st({ agentId: 'r', raw: 'done', report: 'pass', startedAt: iso(5) })], [], [])[0].status, 'passed');
+});
+
+test('step paths under the worker worktree are shown relative to it, and touched keeps matching', () => {
+  const wt = '/work/.worktrees/x-t3';
+  const task = { ...agent, worktree: wt, files: ['lib/a.js'] };
+  const lines = [
+    tool('Edit', { file_path: `${wt}/lib/a.js` }, 1),
+    tool('Read', { file_path: `${wt}-other/lib/b.js` }, 2),
+    tool('Read', { file_path: '/elsewhere/c.js' }, 3),
+  ];
+  const { state } = workerState(task, read(lines, 3), null, undefined, opts(4));
+  assert.deepEqual(state.steps.map((s) => s.text), ['lib/a.js', `${wt}-other/lib/b.js`, '/elsewhere/c.js']);
+  assert.deepEqual(state.edited, [`${wt}/lib/a.js`]);
+  assert.deepEqual(state.touched, [`${wt}/lib/a.js`]);
+});

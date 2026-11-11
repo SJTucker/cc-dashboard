@@ -248,10 +248,23 @@ test('state for a session that left the snapshot window is dropped', (t) => {
   plainSession(config, 'plain-2');
   const o = createOrchestrations(config.configDir);
   assert.equal(o.list().length, 1);
+  o.detail(o1.sessionId); // only detail() keeps seen state
   const before = o.sizes();
   assert.ok(before.transcripts > 0 && before.parsed > 0 && before.seen > 0 && before.scans > 0);
   fs.rmSync(path.join(config.configDir, 'cc-dashboard', 'sessions', `${o1.sessionId}.json`));
   fs.rmSync(path.join(config.configDir, 'cc-dashboard', 'sessions', 'plain-2.json'));
   assert.deepEqual(o.list(), []);
   assert.deepEqual(o.sizes(), { transcripts: 0, scans: 0, parsed: 0, seen: 0, misses: 0, lines: o.sizes().lines });
+});
+
+test('list() does not advance the finished-flag state that detail() holds for a poll', (t) => {
+  const { config } = { config: testConfig(t) };
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js'), finished: true }] });
+  const orch = createOrchestrations(config.configDir);
+  const statusOf = (d) => d.waves.flatMap((w) => w.workers)[0].status;
+  const summary = orch.list()[0];
+  assert.equal(summary.counts.working, 1);
+  assert.notEqual(statusOf(orch.detail(o.sessionId)), 'done');
+  assert.equal(statusOf(orch.detail(o.sessionId)), 'done');
 });

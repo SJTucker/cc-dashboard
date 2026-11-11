@@ -29,14 +29,22 @@ export function statusView(status) {
   return STATUS_VIEWS[status] ?? { glyph: '○', word: String(status), tone: 'plain' };
 }
 
+// "Ended 2h ago" for an orchestration that stopped before it reached Finish.
+function endedLine(summary, now) {
+  const ago = shortAgo(summary.lastActiveAt, now);
+  return ago.endsWith('s') ? 'Ended just now' : `Ended ${ago} ago`;
+}
+
 // The switcher card's one-line state.
 export function switcherState(summary, now = Date.now()) {
   if (summary.waiting) return 'Waiting for you';
+  if (summary.phase === 'waves' && !summary.live) return endedLine(summary, now);
   if (summary.phase === 'waves') return summary.wave ? `Wave ${summary.wave}` : 'Waves';
   if (summary.phase === 'finish' && !summary.live) {
     const ago = shortAgo(summary.lastActiveAt, now);
     return ago.endsWith('s') ? 'Finished just now' : `Finished ${ago} ago`;
   }
+  if (!summary.live) return endedLine(summary, now);
   if (summary.phase === 'plan') return 'Planning';
   if (summary.phase === 'reset') return 'Reset';
   return 'Finishing';
@@ -308,6 +316,7 @@ export function renderDetail(root, detail, { seenBoard = 0, firstRender = false,
   setText(r.branch, detail.branch ?? '');
   renderPhases(r.phases, detail);
   renderNow(r, detail, animate, now);
+  r.live = detail.live;
   renderWaves(r, detail, animate, now);
   renderFeed(r.feed, detail.feed);
   renderBoard(r, detail, seenBoard, animate, now);
@@ -469,6 +478,7 @@ function buildWorker(r) {
 function updateWorker(card, w, r, animate, now) {
   const c = card._r;
   card._worker = w;
+  card._live = r.live;
   const view = statusView(w.status);
   setText(c.taskNo, `T${w.task}`);
   setText(c.titleText, w.title ?? '');
@@ -503,6 +513,11 @@ function updateWorker(card, w, r, animate, now) {
   if (open) fillMore(c, w, now);
 }
 
+// The age of one step in the expanded list: "now" for the newest, else "4m ago".
+export function stepAge(i, time, now) {
+  return i === 0 ? 'now' : `${shortAgo(time, now)} ago`;
+}
+
 function fillMore(c, w, now) {
   const steps = [...(w.steps ?? [])].reverse().map((step, i) => ({ step, i }));
   reconcile(
@@ -511,7 +526,7 @@ function fillMore(c, w, now) {
     ({ step }) => String(step.line),
     () => el('li', {}, [el('span'), el('span')]),
     (li, { step, i }) => {
-      setText(li.children[0], i === 0 ? 'now' : `-${shortAgo(step.time, now)}`);
+      setText(li.children[0], stepAge(i, step.time, now));
       setText(li.children[1], stepLabel(step));
     },
   );
@@ -709,7 +724,7 @@ function buildSteer(r, getCard) {
     form.hidden = true;
     input.value = '';
     showError('');
-    open.hidden = !getCard()._worker?.canSteer;
+    open.hidden = !getCard()._worker?.canSteer || !getCard()._live;
     open.setAttribute('aria-expanded', 'false');
     // A hidden button cannot take focus, so the status row does.
     if (!open.hidden) open.focus();
@@ -775,6 +790,6 @@ function updateSteer(card, w, animate) {
   s.open.setAttribute('aria-label', `Steer Task ${w.task}`);
   swapText(s.status, view?.word ?? '', { animate });
   setClass(s.status, 'warn', view?.tone === 'warn');
-  if (s.form.hidden) s.open.hidden = !w.canSteer;
+  if (s.form.hidden) s.open.hidden = !w.canSteer || !card._live;
   s.row.hidden = !view && s.open.hidden;
 }

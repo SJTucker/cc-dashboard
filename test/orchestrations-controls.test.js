@@ -279,3 +279,15 @@ test('steer is cross-site refused', async (t) => {
   assert.equal(res.status, 403);
   assert.equal(fs.existsSync(steerDir(config, o.sessionId)), false);
 });
+
+test('board post is 409 when the board path in the transcript is relative', async (t) => {
+  const { url, config } = await bootServer(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  const rel = 'docs/relative.board.jsonl';
+  fs.writeFileSync(o.transcript, fs.readFileSync(o.transcript, 'utf8').split(o.boardPath).join(rel));
+  const res = await send(url, `/api/orchestrations/${o.sessionId}/board`, { title: 'x' });
+  assert.equal(res.status, 409);
+  assert.deepEqual(await res.json(), { error: 'no board yet' });
+  assert.ok(!fs.existsSync(path.join(process.cwd(), rel)));
+});
