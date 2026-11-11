@@ -449,3 +449,18 @@ test('readSteers does not follow a symlinked session folder or delete files in i
   assert.equal(readSteers(cfg2, 'sess-2', Date.now()).size, 0);
   assert.ok(fs.existsSync(victim2));
 });
+
+test('writeSteerRequest refuses a symlinked session folder or steer folder and writes nothing in the target', (t) => {
+  const outside = tmpDir(t, 'steer-write-outside');
+  const cfg = tmpDir(t, 'steer-write');
+  const root = path.join(cfg, 'cc-dashboard', 'steer');
+  fs.mkdirSync(root, { recursive: true });
+  fs.symlinkSync(outside, path.join(root, 'sess-1'));
+  assert.throws(() => writeSteerRequest(cfg, 'sess-1', { agentId: 'a1', task: 1, text: 'hi' }), /symlink|directory/);
+  assert.deepEqual(fs.readdirSync(outside), []);
+  const cfg2 = tmpDir(t, 'steer-write2');
+  fs.mkdirSync(path.join(cfg2, 'cc-dashboard'), { recursive: true });
+  fs.symlinkSync(outside, path.join(cfg2, 'cc-dashboard', 'steer'));
+  assert.throws(() => writeSteerRequest(cfg2, 'sess-2', { agentId: 'a1', task: 1, text: 'hi' }), /symlink|directory/);
+  assert.deepEqual(fs.readdirSync(outside), []);
+});

@@ -514,19 +514,22 @@ test('a transcript that disappears between the size check and the read does not 
   const config = testConfig(t);
   install(config);
   const a = writeOrchestration(config.configDir, { sessionId: 'sess-gone', live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
-  writeOrchestration(config.configDir, { sessionId: 'sess-kept', live: true, workers: [{ task: 1, files: ['lib/b.js'], steps: working('lib/b.js') }] });
   const real = fs.openSync;
   let thrown = 0;
-  t.mock.method(fs, 'openSync', (...args) => {
-    if (thrown === 0 && String(args[0]).endsWith('.jsonl')) {
+  // The first open of the orchestrator transcript is isDetected's scan, because a
+  // session is read by the lines cache only after it is detected.
+  const open = t.mock.method(fs, 'openSync', (...args) => {
+    if (thrown === 0 && args[0] === a.transcript) {
       thrown += 1;
       throw Object.assign(new Error('ENOENT: no such file'), { code: 'ENOENT' });
     }
     return real.apply(fs, args);
   });
-  const orch = createOrchestrations(config.configDir);
-  const listed = orch.list();
+  let clock = Date.now();
+  const orch = createOrchestrations(config.configDir, { now: () => clock });
+  assert.doesNotThrow(() => orch.list());
   assert.equal(thrown, 1);
-  assert.ok(listed.length >= 1);
-  assert.ok(a.sessionId);
+  open.mock.restore();
+  clock += 2000;
+  assert.deepEqual(orch.list().map((o) => o.id), [a.sessionId]);
 });

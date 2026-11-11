@@ -61,8 +61,8 @@ test('reviewLabel says Reviewer running for a running review', async () => {
   const now = Date.parse('2026-11-10T12:00:00Z');
   const startedAt = new Date(now - 120_000).toISOString();
   assert.equal(reviewLabel({ status: 'running', startedAt }, now), '◐ Reviewer running · 2m');
-  assert.equal(reviewLabel({ status: 'passed', startedAt }, now), '✓ Reviewer passed · 2m');
-  assert.equal(reviewLabel({ status: 'changes', startedAt }, now), '◐ Reviewer changes asked · 2m');
+  assert.equal(reviewLabel({ status: 'passed', startedAt, endedAt: new Date(now).toISOString() }, now), '✓ Reviewer passed · 2m');
+  assert.equal(reviewLabel({ status: 'changes', startedAt, endedAt: new Date(now).toISOString() }, now), '◐ Reviewer changes asked · 2m');
 });
 
 test('steerView covers every state', async () => {
@@ -185,4 +185,12 @@ test('boardError and steerError word a 413 like text that is too long', async ()
   const { boardError, steerError } = await load();
   assert.equal(boardError(413, null, 'A title'), 'The title or details are too long.');
   assert.equal(steerError(413, null, 'hello'), 'The message is too long or not valid.');
+});
+
+test('a settled review with no endedAt shows a dash and does not count up', async () => {
+  const { reviewLabel } = await load();
+  const now = Date.parse('2026-11-10T12:00:00Z');
+  const startedAt = new Date(now - 120_000).toISOString();
+  assert.equal(reviewLabel({ status: 'passed', startedAt }, now), '✓ Reviewer passed · —');
+  assert.equal(reviewLabel({ status: 'changes', startedAt, endedAt: null }, now + 3600_000), '◐ Reviewer changes asked · —');
 });
