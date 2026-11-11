@@ -6,6 +6,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const { bootServer, testConfig } = require('./helpers');
 const { createOrchestrations } = require('../lib/orchestrations/discover');
+const { stepsOf } = require('../lib/transcript-index');
 const { writeOrchestration } = require('./orchestration-fixture');
 
 function install(config) {
@@ -115,12 +116,12 @@ test('two orchestrations in one project stay separate', async (t) => {
 });
 
 test('reset keeps one card and one id', async (t) => {
-  const { url, config } = await bootServer(t);
+  let clock = Date.now(); // the server reuses groups() for 1 s, so the test moves its clock
+  const { url, config } = await bootServer(t, { ...testConfig(t, 'boot'), now: () => clock });
   install(config);
   const a = writeOrchestration(config.configDir, { sessionId: 'sess-a', live: false });
   queueReset(config, a.sessionId);
   let { body } = await get(url + '/api/orchestrations');
-  const secondPoll = () => new Promise((resolve) => setTimeout(resolve, 1100)); // the server reuses groups() for 1 s
   assert.equal(body.orchestrations.length, 1);
   assert.equal(body.orchestrations[0].id, 'sess-a');
   assert.equal(body.orchestrations[0].phase, 'reset');
@@ -129,7 +130,7 @@ test('reset keeps one card and one id', async (t) => {
     sessionId: 'sess-b', clearedFrom: 'sess-a', resetLine: true, live: true,
     workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }],
   });
-  await secondPoll();
+  clock += 1000;
   ({ body } = await get(url + '/api/orchestrations'));
   assert.equal(body.orchestrations.length, 1);
   assert.equal(body.orchestrations[0].id, 'sess-a');
@@ -389,11 +390,13 @@ test('boardPathOf reads no worker transcript, and controlsOf does', (t) => {
   install(config);
   const o = writeOrchestration(config.configDir, { live: true, workers: [1, 2].map((n) => ({ task: n, files: [`lib/f${n}.js`], steps: working(`lib/f${n}.js`) })) });
   const orch = createOrchestrations(config.configDir);
+  const stat = t.mock.method(fs, 'statSync');
+  const workerStats = () => stat.mock.calls.filter((c) => String(c.arguments[0]).includes('subagents')).length;
   assert.equal(orch.boardPathOf('nope'), null);
   assert.deepEqual(orch.boardPathOf(o.sessionId), { boardPath: o.boardPath });
-  assert.equal(orch.sizes().lines, 1, 'only the orchestrator transcript');
+  assert.equal(workerStats(), 0);
   assert.equal(orch.controlsOf(o.sessionId).boardPath, o.boardPath);
-  assert.equal(orch.sizes().lines, 4, 'orchestrator, two workers and the board');
+  assert.ok(workerStats() >= 2);
 });
 
 test('a worker with no .meta.json is listed as working and can be steered', (t) => {
@@ -426,4 +429,73 @@ test('a group that called the finishing skill is in the finish phase in list and
   fs.appendFileSync(o.transcript, JSON.stringify(call) + '\n');
   assert.equal((await get(url + '/api/orchestrations')).body.orchestrations[0].phase, 'finish');
   assert.equal((await get(`${url}/api/orchestrations/${o.sessionId}`)).body.phase, 'finish');
+});
+
+test('a second list() with no growth runs no stepsOf for any worker', (t) => {
+  const config = testConfig(t);
+  install(config);
+  writeOrchestration(config.configDir, { live: true, workers: [1, 2].map((n) => ({ task: n, files: [`lib/f${n}.js`], steps: working(`lib/f${n}.js`) })) });
+  let clock = Date.now();
+  const calls = [];
+  const orch = createOrchestrations(config.configDir, { now: () => clock, stepsOf: (...a) => (calls.push(a), stepsOf(...a)) });
+  orch.list();
+  assert.equal(calls.length, 2);
+  clock += 1000;
+  orch.list();
+  assert.equal(calls.length, 2);
+});
+
+test('a worker that grew is parsed from its appended lines by list(), and by detail() from its own next line', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  let clock = Date.now();
+  const calls = [];
+  const orch = createOrchestrations(config.configDir, { now: () => clock, stepsOf: (l, from, to, ctx) => (calls.push([from, to, Boolean(ctx)]), stepsOf(l, from, to, ctx)) });
+  orch.list();
+  const file = path.join(path.dirname(o.transcript), o.sessionId, 'subagents', `agent-${o.workerIds[0]}.jsonl`);
+  const before = fs.readFileSync(file, 'utf8').split('\n').length - 1;
+  fs.appendFileSync(file, JSON.stringify({ type: 'assistant', timestamp: new Date().toISOString(), agentId: o.workerIds[0], message: { role: 'assistant', content: [{ type: 'tool_use', id: 'late', name: 'Read', input: { file_path: 'x.js' } }] } }) + '\n');
+  clock += 1000;
+  orch.list();
+  assert.deepEqual(calls.at(-1), [before + 1, before + 1, true]);
+  clock += 1000;
+  const detail = orch.detail(o.sessionId);
+  assert.equal(detail.waves[0].workers[0].steps.at(-1).text, 'x.js');
+  assert.deepEqual(calls.findLast((c) => c[2]), [1, before + 1, true], 'detail has never polled this worker, so its seen starts at line 1');
+});
+
+test('detail() runs stepsOf over the orchestrator transcript once per version', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, workers: [] });
+  let clock = Date.now();
+  const calls = [];
+  const orch = createOrchestrations(config.configDir, { now: () => clock, stepsOf: (...a) => (calls.push(a), stepsOf(...a)) });
+  assert.ok(orch.detail(o.sessionId).feed.length > 0);
+  assert.equal(calls.length, 1, 'nowLine and actionFeed share one run');
+  clock += 1000;
+  orch.detail(o.sessionId);
+  assert.equal(calls.length, 1, 'no growth, no new run');
+  fs.appendFileSync(o.transcript, skillCall() + '\n');
+  clock += 1000;
+  orch.detail(o.sessionId);
+  assert.equal(calls.length, 2);
+});
+
+test('the sweep keeps the board a remaining member of the group still uses', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const board = [{ t: '2026-11-10T09:00:00.000Z', from: 'Task 1', title: 'kept', body: '' }];
+  const a = writeOrchestration(config.configDir, { sessionId: 'sess-a', live: false, board, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  // Each session's Monitor names the board, so both parse a boardPath.
+  writeOrchestration(config.configDir, { sessionId: 'sess-b', clearedFrom: 'sess-a', resetLine: true, live: true, board, workers: [{ task: 2, files: ['lib/b.js'], steps: working('lib/b.js') }] });
+  let clock = Date.now();
+  const orch = createOrchestrations(config.configDir, { now: () => clock });
+  assert.equal(orch.list()[0].boardCount, 1);
+  fs.rmSync(path.join(config.configDir, 'cc-dashboard', 'sessions', 'sess-a.json'));
+  const open = t.mock.method(fs, 'openSync');
+  clock += 1000;
+  assert.equal(orch.list().length, 1);
+  assert.equal(open.mock.calls.filter((c) => c.arguments[0] === a.boardPath).length, 0, 'the board was not read again from the start');
 });

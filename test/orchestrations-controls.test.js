@@ -385,3 +385,43 @@ test('appendPost still cuts long text for bin/board-post', (t) => {
   assert.equal(post.title.length, 120);
   assert.equal(post.body.length, 2000);
 });
+
+test('writeSteerRequest tries again once when its folder vanishes before the write', (t) => {
+  const cfg = tmpDir(t, 'steer');
+  const orig = fs.writeFileSync;
+  let thrown = 0;
+  t.mock.method(fs, 'writeFileSync', (file, ...rest) => {
+    if (String(file).includes('.json.') && thrown++ === 0) throw Object.assign(new Error('gone'), { code: 'ENOENT' });
+    return orig(file, ...rest);
+  });
+  const request = writeSteerRequest(cfg, 's1', { agentId: 'a1', task: 1, text: 'hello' });
+  assert.equal(thrown >= 2, true, 'the write was attempted twice');
+  assert.ok(fs.existsSync(path.join(steerDir({ configDir: cfg }, 's1'), `${request.id}.json`)));
+});
+
+test('detail() ignores a symlinked request file in a listed orchestration folder', async (t) => {
+  const { config, o } = await setup(t);
+  const dir = steerDir(config, o.sessionId);
+  fs.mkdirSync(dir, { recursive: true });
+  const target = path.join(tmpDir(t, 'target'), 'real.json');
+  fs.writeFileSync(target, JSON.stringify({ id: 'link-1', agentId: o.workerIds[0], text: 'via link', at: Date.now() }));
+  fs.symlinkSync(target, path.join(dir, 'link-1.json'));
+  const detail = createOrchestrations(config.configDir).detail(o.sessionId);
+  assert.equal(workerOf(detail, o.workerIds[0]).lastSteer, null);
+  assert.ok(fs.existsSync(target));
+});
+
+test('a symlinked steer root is not walked', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const outside = tmpDir(t, 'outside');
+  const folder = path.join(outside, 'gone-1');
+  fs.mkdirSync(folder);
+  fs.writeFileSync(path.join(folder, 'old-1.json'), '{}');
+  const when = new Date(Date.now() - 30 * 3600 * 1000);
+  fs.utimesSync(path.join(folder, 'old-1.json'), when, when);
+  fs.mkdirSync(path.join(config.configDir, 'cc-dashboard'), { recursive: true });
+  fs.symlinkSync(outside, path.join(config.configDir, 'cc-dashboard', 'steer'));
+  createOrchestrations(config.configDir).list();
+  assert.deepEqual(fs.readdirSync(folder), ['old-1.json']);
+});

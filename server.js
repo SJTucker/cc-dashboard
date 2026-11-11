@@ -585,7 +585,7 @@ function createServer(config) {
   // The Orchestration tab. The browser polls the list and, for the selected
   // orchestration, its detail. Without the orchestrate skill installed the list
   // answers at once without reading any session.
-  const orchestrations = createOrchestrations(config.configDir);
+  const orchestrations = createOrchestrations(config.configDir, { now: config.now });
   app.get('/api/orchestrations', (req, res) => {
     try {
       if (!orchestrations.installed()) {

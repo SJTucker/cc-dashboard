@@ -79,7 +79,7 @@ test('a finished transcript is done and carries its report', () => {
   // The meta flag shows done at once. watchEvents settles one poll later and adds the DONE event.
   const first = workerState(agent, read(lines, 2), { finished: true }, undefined, opts(3));
   assert.equal(first.state.raw, 'done');
-  assert.equal(first.state.report, 'All green.');
+  assert.equal(first.state.report, null);
   assert.equal(first.state.events.some((e) => e.type === 'DONE'), false);
   const { state } = workerState(agent, read(lines, 2), { finished: true }, first.seen, opts(6));
   assert.equal(state.raw, 'done');
@@ -98,7 +98,7 @@ test('seen carries over so events are not repeated', () => {
   assert.equal(third.state.events.length, 2);
 });
 
-const st = (over) => ({ agentId: 'w', task: '1', raw: 'working', report: null, steps: [], events: [], quiet: false, startedAt: iso(0), lastActiveAt: iso(1), ...over });
+const st = (over) => ({ agentId: 'w', task: '1', raw: 'working', settled: true, report: null, steps: [], events: [], quiet: false, startedAt: iso(0), lastActiveAt: iso(1), ...over });
 
 test('a running reviewer puts its task in review', () => {
   const resolved = resolveStatuses([st({ raw: 'done' })], [st({ agentId: 'r', raw: 'working', startedAt: iso(50) })], [], []);
@@ -245,34 +245,63 @@ test('a finished meta flag with a coordinator message last is not done', () => {
   assert.equal(state.raw, 'working');
 });
 
+const usage = (n) => ({ input_tokens: 1, cache_read_input_tokens: n });
+const spyOn = (calls) => (lines, from, to, ctx) => {
+  calls.push([from, to]);
+  return stepsOf(lines, from, to, ctx);
+};
+
 test('a second poll with no new lines does not run stepsOf again', () => {
   const calls = [];
-  const spy = (lines, from, to) => {
-    calls.push([from, to]);
-    return stepsOf(lines, from, to);
-  };
-  const lines = [tool('Read', { file_path: 'a.js' }, 1, { input_tokens: 1, cache_read_input_tokens: 500 })];
-  const first = workerState(agent, read(lines, 1), null, undefined, { ...opts(2), stepsOf: spy });
-  const second = workerState(agent, read(lines, 1), null, first.seen, { ...opts(3), stepsOf: spy });
+  const lines = [tool('Read', { file_path: 'a.js' }, 1, usage(500))];
+  const o = { stepsOf: spyOn(calls) };
+  const first = workerState(agent, read(lines, 1), null, undefined, { ...opts(2), ...o });
+  const second = workerState(agent, read(lines, 1), null, first.seen, { ...opts(3), ...o, memo: first.memo });
   assert.equal(calls.length, 1);
   assert.deepEqual(second.state, first.state);
 });
 
-test('steps over appended lines, with the earlier ones kept, equal a full recompute', () => {
+test('growth runs stepsOf over the appended lines only, and the result equals a full recompute', () => {
   const calls = [];
-  const spy = (lines, from, to) => {
-    calls.push([from, to]);
-    return stepsOf(lines, from, to);
-  };
-  const lines = [tool('Read', { file_path: 'a.js' }, 1, { input_tokens: 1, cache_read_input_tokens: 500 })];
-  const first = workerState(agent, read(lines, 1), null, undefined, { ...opts(2), stepsOf: spy });
-  lines.push(tool('Edit', { file_path: 'lib/orchestrations/workers.js' }, 3, { input_tokens: 1, cache_read_input_tokens: 900 }), ...failure(4));
-  const grown = workerState(agent, read(lines, 4), null, first.seen, { ...opts(5), stepsOf: spy });
+  const o = { stepsOf: spyOn(calls) };
+  const lines = [tool('Read', { file_path: 'a.js' }, 1, usage(500))];
+  const first = workerState(agent, read(lines, 1), null, undefined, { ...opts(2), ...o });
+  lines.push(tool('Edit', { file_path: 'lib/orchestrations/workers.js' }, 3, usage(900)), ...failure(4));
+  const grown = workerState(agent, read(lines, 4), null, first.seen, { ...opts(5), ...o, memo: first.memo });
   assert.deepEqual(calls, [[1, 1], [2, 4]]);
   const full = workerState(agent, read(lines, 4), null, undefined, opts(5)).state;
   for (const key of ['steps', 'current', 'edited', 'touched', 'contextTokens', 'lastIsMsg', 'lastActiveAt', 'raw']) assert.deepEqual(grown.state[key], full[key], key);
   assert.equal(grown.state.contextTokens, 901);
   assert.equal(grown.state.steps.length, 4);
+});
+
+test('growth parses only the appended lines', (t) => {
+  const lines = [];
+  for (let i = 0; i < 40; i++) lines.push(tool('Read', { file_path: `f${i}.js` }, i, usage(500 + i)));
+  const first = workerState(agent, read(lines, 40), null, undefined, opts(41));
+  lines.push(tool('Read', { file_path: 'g.js' }, 41, usage(900)), tool('Read', { file_path: 'h.js' }, 42, usage(901)));
+  const parse = t.mock.method(JSON, 'parse');
+  workerState(agent, read(lines, 42), null, first.seen, { ...opts(43), memo: first.memo });
+  assert.ok(parse.mock.callCount() < 12, `parsed ${parse.mock.callCount()} lines for 2 appended`);
+});
+
+test('an error result in a later batch finds its tool_use from an earlier batch', () => {
+  const lines = [tool('Bash', { command: 'npm test' }, 1)];
+  const first = workerState(agent, read(lines, 1), null, undefined, opts(2));
+  lines.push(JSON.stringify({ type: 'user', timestamp: iso(3), message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'id1', is_error: true, content: 'boom' }] } }));
+  const grown = workerState(agent, read(lines, 3), null, first.seen, { ...opts(4), memo: first.memo });
+  const full = workerState(agent, read(lines, 3), null, undefined, opts(4)).state;
+  assert.deepEqual(grown.state.steps, full.steps);
+  assert.equal(grown.state.steps.at(-1).kind, 'error');
+  assert.equal(grown.state.steps.at(-1).tool, 'Bash');
+});
+
+test('the steps memo keeps only the last 8 steps, not every step', () => {
+  const lines = [];
+  for (let i = 0; i < 30; i++) lines.push(tool('Read', { file_path: `f${i}.js` }, i));
+  const { memo } = workerState(agent, read(lines, 30), null, undefined, opts(31));
+  assert.equal(memo.recent.length, 8);
+  assert.equal(memo.lines.deref(), lines);
 });
 
 test('a worker transcript that shrank starts its state over', () => {
@@ -281,16 +310,17 @@ test('a worker transcript that shrank starts its state over', () => {
   assert.equal(first.state.events.length, 3);
   // The lines cache replaces its array when a file starts over.
   const again = [tool('Edit', { file_path: 'd.js' }, 5)];
-  const reset = workerState(agent, { lines: again, mtimeMs: T0, version: 2 }, null, first.seen, opts(6));
+  const reset = workerState(agent, { lines: again, mtimeMs: T0, version: 2 }, null, first.seen, { ...opts(6), memo: first.memo });
   assert.deepEqual(reset.state.events.map((e) => e.text), ['DRIFT edit outside task files: d.js']);
   assert.deepEqual(reset.state.edited, ['d.js']);
+  assert.equal(reset.state.steps.length, 1);
   // The same array cut short is a reset too.
   lines.splice(1);
-  const cut = workerState(agent, { lines, mtimeMs: T0, version: 3 }, null, first.seen, opts(6));
+  const cut = workerState(agent, { lines, mtimeMs: T0, version: 3 }, null, first.seen, { ...opts(6), memo: first.memo });
   assert.deepEqual(cut.state.events.map((e) => e.text.includes('a.js')), [true]);
   assert.equal(cut.seen.next, 2);
   lines.push(tool('Edit', { file_path: 'e.js' }, 7));
-  const next = workerState(agent, { lines, mtimeMs: T0, version: 4 }, null, cut.seen, opts(8));
+  const next = workerState(agent, { lines, mtimeMs: T0, version: 4 }, null, cut.seen, { ...opts(8), memo: cut.memo });
   assert.equal(next.state.events.length, 2);
 });
 
@@ -301,6 +331,40 @@ test('an emptied transcript after a shrink is starting, with no old events', () 
   assert.equal(empty.state.raw, 'starting');
   assert.deepEqual(empty.state.events, []);
   assert.equal(empty.seen, undefined);
+});
+
+test('a detail seen that lags the memo still gets every event, parsing only from its own next line', () => {
+  const calls = [];
+  const o = { stepsOf: spyOn(calls) };
+  const lines = [tool('Edit', { file_path: 'a.js' }, 1)];
+  // A list poll advances the memo; the detail seen has not been polled since.
+  const listed = workerState(agent, read(lines, 1), null, undefined, { ...opts(2), ...o });
+  lines.push(tool('Edit', { file_path: 'b.js' }, 3));
+  const memoOnly = workerState(agent, read(lines, 2), null, listed.seen, { ...opts(4), ...o, memo: listed.memo });
+  const detail = workerState(agent, read(lines, 2), null, listed.seen, { ...opts(5), ...o, memo: memoOnly.memo });
+  assert.equal(detail.state.events.length, 2);
+  assert.deepEqual(calls.at(-1), [2, 2]);
+});
+
+test('a worker with the finished flag and no transcript lines is done, not starting', () => {
+  assert.equal(workerState(agent, read([], 0), { finished: true }, undefined, opts(1)).state.raw, 'done');
+  assert.equal(workerState(agent, null, { finished: true }, undefined, opts(1)).state.raw, 'done');
+  assert.equal(workerState(agent, null, null, undefined, opts(1)).state.raw, 'starting');
+});
+
+test('a reviewer whose flag is set before its handback line is running, then takes the verdict', () => {
+  const lines = [text('Reading the diff now.', 1)];
+  const w = st({ raw: 'done', task: agent.task });
+  const early = workerState({ ...agent, agentId: 'r' }, read(lines, 1), { finished: true }, undefined, opts(2));
+  assert.equal(early.state.raw, 'done');
+  assert.equal(early.state.settled, false);
+  assert.equal(early.state.report, null);
+  assert.equal(resolveStatuses([w], [early.state], [], [])[0].status, 'review');
+  lines.push(tool('SubagentHandback', { message: 'Pass - looks good' }, 3));
+  const late = workerState({ ...agent, agentId: 'r' }, read(lines, 2), { finished: true }, early.seen, { ...opts(4), memo: early.memo });
+  assert.equal(late.state.settled, true);
+  assert.equal(late.state.report, 'Pass - looks good');
+  assert.equal(resolveStatuses([w], [late.state], [], [])[0].status, 'passed');
 });
 
 test('a STUCK event carries the time of the failing step, not of the last step', () => {
