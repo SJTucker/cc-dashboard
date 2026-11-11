@@ -633,11 +633,16 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
 // once at session.start. The process keeps one timer. The session id is read on every
 // tick, because a /clear moves the process to a new session id and fires no
 // session.start. session.end stops the timer for any reason except clear and resume,
-// after which the process goes on.
+// when the ended session is the relay's current one or the event has no session id.
+// steerEnded records such an end, so a start deferred with clock.after(0) that has not
+// run yet does nothing, and so does one that is still reading the config when the end
+// arrives. session.start clears the record.
 const STEER_POLL_MS = 2000
 let steerTimer: Timer | undefined
 let steerBusy = false
 const steerHandled = new Set<string>()
+let steerSessionId: string | undefined
+let steerEnded = false
 
 async function relaySteers($: EngineInterface, dir: string) {
   if (steerBusy) return
@@ -645,6 +650,7 @@ async function relaySteers($: EngineInterface, dir: string) {
   try {
     const sessionId = await $.session.id()
     if (!SESSION_ID.test(sessionId)) return
+    steerSessionId = sessionId
     await relayOnce({
       list: async (path) => (await $.fs.list(path)).map((entry) => entry.name),
       read: async (path) => String(await $.fs.read(path)),
@@ -655,6 +661,7 @@ async function relaySteers($: EngineInterface, dir: string) {
       },
       append: (text) => $.session.append({ message: { type: 'user', content: [{ type: 'text', text }] } }),
       now: () => $.clock.now(),
+      sleep: (ms) => $.clock.sleep(ms),
       log: (text) => fail($, text),
     }, `${dir}/${sessionId}`, steerHandled)
   } finally {
@@ -663,8 +670,10 @@ async function relaySteers($: EngineInterface, dir: string) {
 }
 
 async function startSteerRelay($: EngineInterface) {
+  if (steerEnded) return
   const paths = await configPaths($)
   if (!paths || !(await $.fs.exists(`${paths.dir}/skills/orchestrate/SKILL.md`))) return
+  if (steerEnded) return
   stopSteerRelay()
   const dir = `${paths.dir}/cc-dashboard/steer`
   steerTimer = $.clock.every(STEER_POLL_MS, () => {
@@ -675,6 +684,7 @@ async function startSteerRelay($: EngineInterface) {
 function stopSteerRelay() {
   steerTimer?.cancel()
   steerTimer = undefined
+  steerSessionId = undefined
 }
 
 // Releases everything held for a session that ended. Its throttle timer is
@@ -1411,6 +1421,7 @@ export const register: Register = (on) => {
     })
     if (e.isInteractive) {
       startReviews($)
+      steerEnded = false
       $.clock.after(0, () => {
         startSteerRelay($).catch((err) => note($, `steer relay failed (${errorName(err)})`))
       })
@@ -1484,7 +1495,10 @@ export const register: Register = (on) => {
     const interactive = sessionModes.get(e.sessionId)?.interactive !== false
     const writing = headlessWrites.get(e.sessionId)
     forgetSession(e.sessionId)
-    if (e.reason !== 'clear' && e.reason !== 'resume') stopSteerRelay()
+    if (e.reason !== 'clear' && e.reason !== 'resume' && (!e.sessionId || steerSessionId === undefined || e.sessionId === steerSessionId)) {
+      steerEnded = true
+      stopSteerRelay()
+    }
     if (!interactive) {
       // A claude -p process exits once session.end returns, so a queued headless write
       // finishes first. The chain never rejects.

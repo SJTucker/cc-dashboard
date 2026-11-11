@@ -15,6 +15,15 @@ test('steerNote names the task', async () => {
   expect(steerNote(null, 'Stop')).toBe('You steered a worker from the dashboard: Stop')
 })
 
+// lib/orchestrations/parse.js reads these notes back. Its STEER_NOTE matches the
+// 'Task <n>' form, and the server also accepts 'a worker'. Changing either string
+// here breaks that reader.
+test('steerNote writes the exact strings the server parses', async () => {
+  expect(steerNote(12, 'a\nb')).toBe('You steered Task 12 from the dashboard: a\nb')
+  expect(/^You steered Task (\d+) from the dashboard: ([\s\S]*)$/.exec(steerNote(12, 'a\nb'))?.[1]).toBe('12')
+  expect(steerNote(null, 'Stop now')).toBe('You steered a worker from the dashboard: Stop now')
+})
+
 const DIR = '/cfg/cc-dashboard/steer/s1'
 
 function fake(files: Record<string, string>, send: SteerIo['send'], now = 99) {
@@ -38,6 +47,7 @@ function fake(files: Record<string, string>, send: SteerIo['send'], now = 99) {
       calls.push(`append ${text}`)
     },
     now: async () => now,
+    sleep: async () => { await new Promise(() => {}) },
     log: (text) => { logs.push(text) },
   }
   return { io, calls, files, logs }
@@ -103,3 +113,28 @@ test('a failed append and a failed result write are logged', async () => {
   await relayOnce(io, DIR, new Set())
   expect(logs).toEqual(['steer note not appended (append refused)', 'steer result b not written (disk full)'])
 })
+
+test('a send that never resolves is answered timed out after 10 s, logged, and the pass returns', async () => {
+  const { io, calls, logs } = fake({ [`${DIR}/b.json`]: request }, () => new Promise(() => {}))
+  const slept: number[] = []
+  io.sleep = async (ms) => { slept.push(ms) }
+  await relayOnce(io, DIR, new Set())
+  expect(slept).toEqual([10_000])
+  expect(calls).toEqual(['send a1 Use resolveRoot', 'write b.result.json {"id":"b","delivered":false,"reason":"timed out","at":99}'])
+  expect(logs).toEqual(['steer b timed out after 10000 ms'])
+})
+
+test('a send that resolves first is not reported as timed out', async () => {
+  const { io, logs } = fake({ [`${DIR}/b.json`]: request }, async () => ({ isDelivered: true }))
+  await relayOnce(io, DIR, new Set())
+  expect(logs).toEqual([])
+})
+
+for (const at of [undefined, 'soon', null]) {
+  test(`a request with at ${JSON.stringify(at) ?? 'missing'} is answered invalid request and not sent`, async () => {
+    const body = JSON.stringify({ id: 'b', agentId: 'a1', task: 5, text: 'Use resolveRoot', ...(at === undefined ? {} : { at }) })
+    const { io, calls } = fake({ [`${DIR}/b.json`]: body }, async () => ({ isDelivered: true }))
+    await relayOnce(io, DIR, new Set())
+    expect(calls).toEqual(['write b.result.json {"id":"b","delivered":false,"reason":"invalid request","at":99}'])
+  })
+}

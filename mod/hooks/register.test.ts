@@ -719,6 +719,41 @@ test('the relay stops at a session end other than clear or resume', async ($, on
   expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
 })
 
+test('a session.end for another session id leaves the relay running', async ($, on) => {
+  const { listed, clock } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  await clock.advance(2_000)
+  await clock.settle()
+  await $.session.end({ reason: 'other', sessionId: 'other-session', resume: { id: 'other-session' } })
+  listed.length = 0
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(listed).toContain(STEER_DIR)
+})
+
+test('a session.end before the deferred start leaves no relay timer', async ($, on) => {
+  const { listed, clock } = world(on)
+  await $.session.start(start)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+})
+
+test('a session.start after an earlier end starts the relay again', async ($, on) => {
+  const { listed, clock } = world(on)
+  await $.session.start(start)
+  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.settle()
+  await $.session.start(start)
+  await clock.settle()
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(listed).toContain(STEER_DIR)
+})
+
 test('session.start returns before the check fetches', async ($, on) => {
   const { fetched, clock } = world(on, { scripts: judging, replies: [{ isAnswered: true, text: VERDICT }] })
   await $.session.start(start)

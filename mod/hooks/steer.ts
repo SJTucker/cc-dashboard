@@ -11,6 +11,7 @@ export type SteerIo = {
   send: (agentId: string, text: string) => Promise<{ isDelivered: boolean, reason?: string }>
   append: (text: string) => Promise<unknown>
   now: () => Promise<number>
+  sleep: (ms: number) => Promise<void>
   log: (text: string) => void
 }
 
@@ -19,6 +20,11 @@ export type SteerIo = {
 // request as not picked up. A request that waited longer, across a /clear, a crash or a
 // resume, may be stale: the owner may have re-sent it, and the worker may have finished.
 export const EXPIRED_AFTER_MS = 30 * 1000
+
+// A send that has not answered after this long is abandoned and the request is answered
+// 'timed out'. Without it, one send that never resolves would hold the relay's busy flag
+// for the rest of the process.
+export const SEND_TIMEOUT_MS = 10 * 1000
 
 // A request is a name that is exactly <id>.json, with the id characters of STEER_FILE
 // in controls.js. The server's temp file <id>.json.<pid> and <id>.result.json are not
@@ -40,7 +46,7 @@ export function steerNote(task: number | null, text: string): string {
   return `You steered ${task === null ? 'a worker' : `Task ${task}`} from the dashboard: ${text}`
 }
 
-function parseRequest(text: string): { agentId: string, task: number | null, text: string, at: number | null } | null {
+function parseRequest(text: string): { agentId: string, task: number | null, text: string, at: number } | null {
   let body: unknown
   try {
     body = JSON.parse(text)
@@ -50,7 +56,7 @@ function parseRequest(text: string): { agentId: string, task: number | null, tex
   if (typeof body !== 'object' || body === null) return null
   const { agentId, task, text: steerText, at } = body as Record<string, unknown>
   if (typeof agentId !== 'string' || !agentId || typeof steerText !== 'string' || !steerText) return null
-  return { agentId, task: typeof task === 'number' ? task : null, text: steerText, at: typeof at === 'number' ? at : null }
+  return { agentId, task: typeof task === 'number' ? task : null, text: steerText, at: typeof at === 'number' && Number.isFinite(at) ? at : NaN }
 }
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
@@ -68,13 +74,20 @@ export async function relayOnce(io: SteerIo, dir: string, handled: Set<string>):
       const request = parseRequest(await io.read(`${dir}/${id}.json`))
       if (!request) {
         reason = 'the request file is not a valid steer'
-      } else if (request.at !== null && (await io.now()) - request.at > EXPIRED_AFTER_MS) {
+      } else if (Number.isNaN(request.at)) {
+        reason = 'invalid request'
+      } else if ((await io.now()) - request.at > EXPIRED_AFTER_MS) {
         reason = 'expired'
       } else {
-        const sent = await io.send(request.agentId, request.text)
-        delivered = sent.isDelivered === true
-        if (!delivered) reason = sent.reason ?? 'the worker did not accept the message'
-        else await io.append(steerNote(request.task, request.text)).catch((err) => io.log(`steer note not appended (${errText(err)})`))
+        const sent = await Promise.race([io.send(request.agentId, request.text), io.sleep(SEND_TIMEOUT_MS).then(() => null)])
+        if (sent === null) {
+          io.log(`steer ${id} timed out after ${SEND_TIMEOUT_MS} ms`)
+          reason = 'timed out'
+        } else {
+          delivered = sent.isDelivered === true
+          if (!delivered) reason = sent.reason ?? 'the worker did not accept the message'
+          else await io.append(steerNote(request.task, request.text)).catch((err) => io.log(`steer note not appended (${errText(err)})`))
+        }
       }
     } catch (err) {
       reason = errText(err)
