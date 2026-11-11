@@ -54,7 +54,7 @@ export function sendSteer(id, { agentId, text }, { fetchImpl } = {}) {
 
 // How many board posts of an orchestration the viewer has seen, kept per
 // orchestration in localStorage. Posts beyond it get the new marker.
-const BOARD_SEEN_PREFIX = 'cc-dashboard:board-seen:';
+const BOARD_SEEN_PREFIX = 'cc-dashboard:board-seen-others:';
 
 export function boardSeen(id) {
   try {

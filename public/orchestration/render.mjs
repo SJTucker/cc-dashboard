@@ -120,7 +120,7 @@ function buildSkeleton(root, id) {
 
   const waves = el('div', { class: 'orch-waves' });
   const wavesEmpty = el('p', { class: 'orch-empty', text: 'Workers show here once the orchestrator starts a wave.' });
-  const workers = panel('waves', 'Workers', [waves, wavesEmpty]);
+  const workers = panel('waves orch-waves-panel', 'Workers', [waves, wavesEmpty]);
 
   const feed = el('ul', { class: 'feed' });
   const actions = panel('', 'Orchestrator actions', [el('div', { class: 'feed-wrap' }, [feed])]);

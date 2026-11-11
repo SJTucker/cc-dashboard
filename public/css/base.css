@@ -48,6 +48,7 @@
   --sp-5: 24px;
   --radius-s: 2px;
   --radius-m: 6px;
+  --radius-l: 8px;
   --radius-field: 4px;
   --radius-pill: 999px;
   /* The sticky .topbar's height, for sticky elements that sit below it. This is its

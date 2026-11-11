@@ -82,8 +82,8 @@ test('scheduleBoardSeen keeps one pending timer per orchestration and saves each
   t.mock.timers.tick(5999);
   assert.equal(boardSeen('a'), 0);
   t.mock.timers.tick(1);
-  assert.equal(data.get('cc-dashboard:board-seen:a'), '3');
-  assert.equal(data.get('cc-dashboard:board-seen:b'), '7');
+  assert.equal(data.get('cc-dashboard:board-seen-others:a'), '3');
+  assert.equal(data.get('cc-dashboard:board-seen-others:b'), '7');
   scheduleBoardSeen('a', 3);
   t.mock.timers.tick(6000);
   assert.equal(boardSeen('a'), 3);

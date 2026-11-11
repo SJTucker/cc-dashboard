@@ -312,11 +312,18 @@ orchGate.start();
 // The .topbar wraps onto more rows on a narrow window, so its height changes. The
 // sticky board sits below it, so --topbar-h follows the measured border-box height.
 const topbar = document.querySelector('.topbar');
-if (topbar && typeof ResizeObserver === 'function') {
-  new ResizeObserver(([entry]) => {
-    const height = entry.borderBoxSize?.[0]?.blockSize ?? topbar.getBoundingClientRect().height;
-    document.documentElement.style.setProperty('--topbar-h', `${height}px`);
-  }).observe(topbar);
+function setTopbarHeight(height) {
+  document.documentElement.style.setProperty('--topbar-h', `${height}px`);
+}
+if (topbar) {
+  // Measured once now, so the board does not sit under a wrapped header until the
+  // observer's first callback.
+  setTopbarHeight(topbar.getBoundingClientRect().height);
+  if (typeof ResizeObserver === 'function') {
+    new ResizeObserver(([entry]) => {
+      setTopbarHeight(entry.borderBoxSize?.[0]?.blockSize ?? topbar.getBoundingClientRect().height);
+    }).observe(topbar);
+  }
 }
 
 // The requests fetchAll skips when every panel they feed is hidden.

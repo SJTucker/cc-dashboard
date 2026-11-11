@@ -78,7 +78,7 @@
 
 .panel-link { margin-left: var(--sp-3); font-size: var(--fs-caption); color: var(--text-secondary); }
 .panel-note .panel-link { margin-left: 0; font-size: var(--fs-caption); }
-.backlog-dialog { max-width: 420px; padding: var(--sp-4); border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); color: var(--text-primary); }
+.backlog-dialog { max-width: 420px; padding: var(--sp-4); border: 1px solid var(--border); border-radius: var(--radius-l); background: var(--surface-raised); color: var(--text-primary); }
 .backlog-dialog::backdrop { background: rgb(0 0 0 / 50%); }
 .backlog-dialog h3 { margin: 0 0 var(--sp-2); font-size: var(--fs-body); }
 .backlog-actions { display: flex; gap: var(--sp-2); justify-content: flex-end; margin-top: var(--sp-3); }

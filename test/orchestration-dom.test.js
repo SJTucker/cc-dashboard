@@ -52,7 +52,7 @@ test('renderDetail draws a Detail that has no now, board, waves or feed', () => 
   render.renderDetail(root, { id: 'x', live: true, phase: 'waves', waves: [{ n: 1 }] }, { now: NOW, actions: actions() });
   assert.equal(root.querySelector('.orch-waves').children.length, 1);
   assert.equal(root.querySelector('.orch-waves').children[0].querySelector('.chips').children.length, 0);
-  assert.equal(root.querySelector('.orch-empty').hidden, true);
+  assert.equal(root.querySelector('.orch-waves-panel').querySelector('.orch-empty').hidden, true);
 });
 
 test('renderDetail throws a clear error when the actions are missing', () => {

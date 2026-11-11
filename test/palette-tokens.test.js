@@ -66,6 +66,16 @@ test('the Orchestration stylesheet uses the radius tokens and the topbar height 
   assert.doesNotMatch(orch, /top:\s*96px/);
 });
 
+// Every border-radius comes from a token in base.css, so no stylesheet repeats a px value.
+test('no stylesheet except base.css sets a px border-radius', () => {
+  const found = [];
+  for (const file of fs.readdirSync(cssDir).sort().filter((f) => f !== 'base.css')) {
+    const text = fs.readFileSync(path.join(cssDir, file), 'utf8');
+    for (const m of text.matchAll(/border-radius:\s*[\d.]+px/g)) found.push(`${file}: ${m[0]}`);
+  }
+  assert.deepStrictEqual(found, []);
+});
+
 test('.orch-btn hover skips a button with aria-disabled', () => {
   const orch = fs.readFileSync(path.join(cssDir, 'orchestration.css'), 'utf8');
   assert.match(orch, /\.orch-btn:not\(:disabled\):not\(\[aria-disabled="true"\]\):hover/);
