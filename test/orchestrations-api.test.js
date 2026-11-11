@@ -561,6 +561,7 @@ test('a worker that has not claimed yet has task null and files []', (t) => {
   const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 1, claim: false, steps: [] }] });
   const [w] = workersOf(detailOf(config, o.sessionId));
   assert.deepEqual([w.task, w.title, w.files], [null, null, []]);
+  assert.equal(w.status, 'starting');
 });
 
 test('a reviewer is matched to its worker through the task number in its claim', (t) => {
@@ -616,6 +617,7 @@ test('a claim file outside <claimRun>/claimed/, malformed, or under a /../ run f
   const original = { orchestrator: fs.readFileSync(o.transcript, 'utf8'), worker: fs.readFileSync(worker, 'utf8'), task: fs.readFileSync(path.join(claimedDir, name), 'utf8') };
   // A valid task file where a bad claim would reach.
   fs.writeFileSync(path.join(o.runDir, 'escape.json'), original.task);
+  fs.writeFileSync(path.join(claimedDir, 'notes.json'), original.task);
   const variants = {
     'a path in the claim result': { worker: original.worker.replace(name, '../escape.json') },
     'a name that is not a task file': { worker: original.worker.replace(name, 'notes.json') },
@@ -631,7 +633,7 @@ test('a claim file outside <claimRun>/claimed/, malformed, or under a /../ run f
   }
 });
 
-test('a worker with two claims is stuck in detail', { todo: 'needs Task 2' }, (t) => {
+test('a worker with two claims is stuck in detail', (t) => {
   const config = testConfig(t);
   install(config);
   const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 1, claims: 2, files: ['lib/a.js'], steps: working('lib/a.js') }] });
