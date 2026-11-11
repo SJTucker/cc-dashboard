@@ -628,7 +628,7 @@ function createServer(config) {
       return;
     }
     try {
-      const target = orchestrations.controlsOf(req.params.id);
+      const target = orchestrations.boardPathOf(req.params.id);
       if (!target) {
         res.status(404).json({ error: 'Unknown orchestration' });
         return;
