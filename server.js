@@ -27,7 +27,7 @@ const { reviewBacklog, skipBacklog } = require('./lib/review');
 const { readReviews, readClosedPage, parseCursor, suggestionReason, setDismissal, DISMISS_REASONS, CLOSED_PAGE_SIZE, CLOSED_PAGE_MAX } = require('./lib/review');
 const { createReviewDbGetter, legacyReviewsDir } = require('./lib/review-db');
 const { createServerDb, getStorePath, isBusy } = require('./lib/db');
-const { busiestDay, dayTotals } = require('./public/stats.mjs');
+const { dayTotals } = require('./public/stats.mjs');
 const { buildHighscores, todayRecords } = require('./lib/highscores');
 const { loadPriceFile, pricesSource, getPricesPath } = require('./lib/price-store');
 const { fetchPricingPage } = require('./lib/price-fetch');
@@ -320,19 +320,16 @@ function createServer(config) {
     }
   });
 
-  // The Record day card's all-time value: the day with the most tokens, with its
-  // token total and cost, from the all-time aggregate. recentDays is the per-day totals
-  // for the 6 days before today (not today), which the Today range adds to its live
-  // totals for the rolling 7-day lines. It reads the 7-day aggregate, the one the 7d
-  // range also uses.
+  // The sticky bar's 7d lines: recentDays is the per-day totals for the 6 days
+  // before today (not today), which the browser adds to today's live totals. It
+  // reads the 7-day aggregate, the one the 7d range also uses.
   app.get('/api/records', async (req, res) => {
     try {
       const todayStr = localDateStr(new Date());
       const weekStart = localDateStr(new Date(windowStart(7)));
-      const [all, week] = await Promise.all([scan(null), scan(7)]);
-      const allTime = busiestDay(all.daily);
+      const week = await scan(7);
       const recentDays = dayTotals(week.daily).filter((d) => d.date >= weekStart && d.date < todayStr);
-      res.json({ allTime, recentDays });
+      res.json({ recentDays });
     } catch (err) {
       console.error('[API] /api/records failed:', err);
       res.status(500).json({ error: 'Failed to scan Claude Code logs', detail: err.message });

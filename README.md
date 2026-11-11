@@ -13,7 +13,7 @@ and when you click Check prices. The optional Claude Code mod in `mod/` also fet
 Claude Code's changelog and calls Haiku through your Claude Code login. See "What it
 does and doesn't do" below.
 
-The page has three tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline, Live sessions and Models. The Analysis tab shows Today, 7d, 30d, 90d and All, picked with the range picker, with panels that include Lines of code. It opens on Today, where its charts have hourly buckets and their titles say Hourly. The High scores tab lists the records of all time. The URL hash `#now`, `#analysis` or `#highscores` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and Record day on every tab. Cost today and Tokens today each add a 7d total.
+The page has three tabs under one sticky bar. The Now tab shows today: Plan usage, Where usage goes, the Session timeline, Live sessions and Models. The Analysis tab shows Today, 7d, 30d, 90d and All, picked with the range picker, with panels that include Lines of code. It opens on Today, where its charts have hourly buckets and their titles say Hourly. The High scores tab lists the records of all time. The URL hash `#now`, `#analysis` or `#highscores` selects the tab, so a reload or a link opens the same one. The bar stays at the top of the page and shows Cost today, Tokens today and a record card on every tab. Cost today and Tokens today each add a 7d total. The record card shows the first place of each High scores board in turn, changing every 6 seconds. It holds still while the pointer is over it, and a click shows the next record.
 
 ![The Now tab: Plan usage, Where usage goes and Session timeline](docs/screenshots/overview.png)
 
@@ -531,13 +531,14 @@ is hidden:
 - `/api/rtk`: both rtk panels
 - `/api/sessions/live`: Live sessions and Session timeline
 - `/api/reviews`: Session reviews
-- `/api/records`: the 7d lines under Cost today and Tokens today in the sticky bar, and Record day. The sticky bar cannot be hidden, so this request always runs
+- `/api/records`: the 7d lines under Cost today and Tokens today in the sticky bar. The sticky bar cannot be hidden, so this request always runs
 - `/api/prices`: the Models panel
 
 `/api/summary` and `/api/limits` are always requested.
 
-The sticky bar's Record day value is the busiest day in the All range. It is
-computed from the stored rows on each request, so no separate cache file exists.
+The sticky bar's record card reads the same `/api/highscores` boards as the High
+scores tab, with today's live values merged in, so `/api/highscores` also always
+runs. The boards are computed from the stored rows, so no separate cache file exists.
 
 ## Setup changes
 
@@ -600,7 +601,7 @@ Claude Code deletes transcripts older than `cleanupPeriodDays` (30 by default). 
 dashboard stores the usage rows of each transcript last modified before today's local
 midnight in `~/.claude/cc-dashboard/transcripts.db`. The stored rows hold each tool
 result's length in characters and each turn's duration, but no result text. The All
-range, the sticky bar's Record day and these before/after windows keep the history
+range, the High scores boards and these before/after windows keep the history
 of every transcript the dashboard stored before Claude Code deleted it. A transcript deleted on the day it was
 written is never stored. History starts at the first stored transcript. A
 before/after needs history on both sides of a change, so a change less than 7 days
@@ -754,11 +755,11 @@ public/panels/lines.mjs  The Lines of code panel: repoSeries picks the top repos
 public/panels/models.mjs  The Models panel (share bar and table) and the model daily charts
 public/panels/prices.mjs  The prices note in the Models panel and the Check prices button; uses the /api/prices routes
 public/price-lines.mjs  Text for the prices note and the lines a price check prints
-public/panels/records.mjs  Fetches /api/records for the sticky bar's 7d lines and Record day
+public/panels/records.mjs  Fetches /api/records for the sticky bar's 7d lines, and draws the rotating record card
 public/panels/reviews.mjs  The Session reviews panel: suggestions, Done, Duplicate, Not useful, Undo and Copy prompt; fetches /api/reviews
 public/panels/rtk.mjs  The rtk panels: tokens rtk kept out of context per day and per command
 public/panels/sessions.mjs  The Live sessions table with its Running now and Earlier today bands; fetches /api/sessions/live
-public/panels/sticky.mjs  The sticky bar's Cost today, Tokens today and Record day
+public/panels/sticky.mjs  The sticky bar's Cost today, Tokens today and record card
 public/panels/timeline.mjs  The Session timeline: one lane per session with activity today, with its cache rebuild marks
 public/panels/tools.mjs  The Tool calls panel: calls per tool, the selected tool's breakdown, its errors and an error table per model
 public/panels/usage.mjs  Daily cost, daily tokens, cumulative cost, token types and the weekday and hour heatmap

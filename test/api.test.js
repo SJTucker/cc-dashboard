@@ -384,18 +384,6 @@ test('usageRefreshFrom is off only for off, and names claude by default', () => 
   assert.deepStrictEqual(usageRefreshFrom({ CC_DASHBOARD_CLAUDE_BIN: '  ' }), { bin: 'claude' });
 });
 
-test('GET /api/records returns the all-time busiest day', async (t) => {
-  const { url } = await startServer(t);
-  const day = localDateStr(new Date());
-
-  const res = await fetch(`${url}/api/records`);
-  const data = await res.json();
-  if (localDateStr(new Date()) !== day) return t.skip('crossed local midnight');
-
-  assert.strictEqual(res.status, 200);
-  assert.deepStrictEqual(data.allTime, { date: day, tokens: 1200, cost: 0.006 });
-});
-
 test('GET /api/records returns recentDays: the 6 days before today, not today', async (t) => {
   const { url, config } = await startServer(t);
   const day = localDateStr(new Date());
@@ -489,7 +477,7 @@ function writeStoredTranscript(config) {
   return { file, when };
 }
 
-test('a transcript that is deleted after it was stored still counts in the All range, the record day and /api/changes', async (t) => {
+test('a transcript that is deleted after it was stored still counts in the All range, the High scores boards and /api/changes', async (t) => {
   const { url: base, config } = await startServer(t);
   const { file, when } = writeStoredTranscript(config);
 
@@ -512,8 +500,8 @@ test('a transcript that is deleted after it was stored still counts in the All r
   const changesAfter = await (await fetch(`${base}/api/changes`)).json();
   assert.deepStrictEqual(changesAfter.sessions, changesBefore.sessions, 'the deleted session is still listed');
 
-  const records = await (await fetch(`${base}/api/records`)).json();
-  assert.deepStrictEqual(records.allTime, { date: localDateStr(when), tokens: 5000, cost: 0.015 });
+  const highscores = await (await fetch(`${base}/api/highscores`)).json();
+  assert.deepStrictEqual([highscores.boards.tokens[0].date, highscores.boards.tokens[0].score], [localDateStr(when), 5000]);
 });
 
 test('a transcript that is deleted while the server is stopped still counts after a restart', async (t) => {

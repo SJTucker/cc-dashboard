@@ -34,19 +34,6 @@ function dayTotals(daily) {
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
 }
 
-// The busiest calendar day across a `daily` array, with that day's token total and
-// cost. The day is chosen by tokens, and a tie keeps the earlier date. The cost is
-// that day's cost, even when another day cost more.
-// Returns null for an empty array or when every day has 0 tokens.
-function busiestDay(daily) {
-  let best = null;
-  for (const { date, tokens, cost } of dayTotals(daily)) {
-    if (tokens <= 0) continue;
-    if (!best || tokens > best.tokens) best = { date, tokens, cost };
-  }
-  return best;
-}
-
 // Today plus the 6 calendar days before it. `priorDays` is a dayTotals list; only
 // its entries from the 6 days before `todayStr` count, so an entry dated today is
 // ignored and `today` ({ cost, tokens }, the live total) is not counted twice.
@@ -67,4 +54,4 @@ function rollingWeek(priorDays, todayStr, today) {
   return week;
 }
 
-export { median, percentile, dayTotals, busiestDay, rollingWeek };
+export { median, percentile, dayTotals, rollingWeek };

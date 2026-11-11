@@ -42,6 +42,15 @@ test('hallRows gives a dash for an empty board', () => {
   assert.deepEqual([rows[0].label, rows[0].day, rows[0].score], ['TOKENS', '—', '—']);
   assert.equal(V.hallRows({ cost: [{ id: 'x', date: '2025-01-02', at: 0, score: 3.5 }] }, 2026)[1].score, '$3.50');
 });
+test('stickyRecord gives a compact value and a dated note for each kind of board', () => {
+  const today = '2026-10-16';
+  assert.deepEqual(V.stickyRecord('tokens', { date: '2026-10-15', score: 1292566482 }, today), { label: 'Record tokens', value: '1.29B', note: '10/15' });
+  assert.deepEqual(V.stickyRecord('cost', { date: today, score: 466.0929, today: true }, today), { label: 'Record cost', value: '$466.09', note: 'today' });
+  assert.equal(V.stickyRecord('session', { date: '2026-10-01', score: 12.5, title: 'Fix the parser' }, today).note, '10/1 · Fix the parser');
+  assert.equal(V.stickyRecord('turn', { date: '2026-10-01', score: 2832000 }, today).value, '47m 12s');
+  assert.equal(V.stickyRecord('streak', { date: '2026-09-18', end: today, score: 29 }, today).note, '9/18–today');
+  assert.equal(V.stickyRecord('streak', { date: '2026-09-18', end: '2026-09-18', score: 1 }, today).note, '9/18');
+});
 test('seededRandom repeats for the same seed', () => {
   const a = V.seededRandom(7), b = V.seededRandom(7);
   assert.deepEqual([a(), a(), a()], [b(), b(), b()]);
