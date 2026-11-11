@@ -62,22 +62,23 @@ test('the font shorthand does not set a px size', () => {
 
 test('the Orchestration stylesheet uses the radius tokens and the topbar height token', () => {
   const orch = fs.readFileSync(path.join(cssDir, 'orchestration.css'), 'utf8');
-  assert.deepStrictEqual(orch.match(/border-radius:\s*[\d.]+px/g), null);
   assert.doesNotMatch(orch, /top:\s*96px/);
 });
 
-// Every border-radius comes from a token in base.css, so no stylesheet repeats a px value.
 // pxRadii returns each radius declaration whose value has a px size, in the shorthand
 // (any number of values) or a longhand such as border-top-left-radius.
-const pxRadii = (text) => [...text.matchAll(/border(?:-[a-z]+)*-radius:\s*([^;}]*)/g)].filter((m) => /\d(?:\.\d+)?px/.test(m[1])).map((m) => m[0]);
+const pxRadii = (css) => [...css.replace(/\/\*[\s\S]*?\*\//g, '').matchAll(/border(?:-[a-z]+)*-radius:\s*([^;}]*)/gi)].filter((m) => /\d(?:\.\d+)?px/.test(m[1])).map((m) => m[0]);
 
 test('pxRadii finds a px radius in a shorthand with several values and in a longhand', () => {
   assert.equal(pxRadii('a { border-radius: 6px; }').length, 1);
   assert.equal(pxRadii('a { border-radius: 0 0 6px 6px; }').length, 1);
   assert.equal(pxRadii('a { border-top-left-radius: 6px; }').length, 1);
+  assert.equal(pxRadii('a { BORDER-RADIUS: 6px; }').length, 1);
+  assert.equal(pxRadii('a { /* border-radius: 6px; */ color: red; }').length, 0);
   assert.equal(pxRadii('a { border-radius: 0; border-radius: 50%; border-radius: var(--radius-m); }').length, 0);
 });
 
+// Every border-radius comes from a token in base.css, so no stylesheet repeats a px value.
 test('no stylesheet except base.css sets a px border-radius', () => {
   const found = [];
   for (const file of fs.readdirSync(cssDir).sort().filter((f) => f !== 'base.css')) {
