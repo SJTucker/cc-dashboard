@@ -88,6 +88,8 @@ type World = {
   idFailsOnCall: number
   idCalls: number
   sendHangs: boolean
+  // How long each session.send takes on the mock clock.
+  sendMs: number
   // Stdout of each git or date command the document handoff runs, by its argv joined with
   // spaces. Their runs go to repoRan, and a command not listed prints nothing.
   repo: Record<string, string>
@@ -186,6 +188,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     idFailsOnCall: 0,
     idCalls: 0,
     sendHangs: false,
+    sendMs: 0,
     repo: {},
     ...w,
   }
@@ -241,9 +244,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const logged: string[] = []
   const sent: Array<{ to: unknown; text: string }> = []
   const appended: unknown[] = []
-  on('session.send', (_$, e) => {
+  on('session.send', async (_$, e) => {
     sent.push({ to: e.to, text: e.text })
     if (state.sendHangs) return new Promise(() => {})
+    if (state.sendMs > 0) await clock.sleep(state.sendMs)
     return { isDelivered: true }
   })
   on('session.append', (_$, e, next) => {
@@ -700,6 +704,12 @@ test('session.start registers /backfill-updates and /transcript-handoff', async 
 
 const STEER_DIR = '/home/u/.claude/cc-dashboard/steer/s1'
 const STEER_REQUEST = JSON.stringify({ id: 'r1', agentId: 'a1', task: 2, text: 'Use resolveRoot', at: 60_000 })
+const STEER_REQUEST_2 = JSON.stringify({ id: 'r2', agentId: 'a2', task: 3, text: 'Stop', at: 60_000 })
+const S2_DIR = '/home/u/.claude/cc-dashboard/steer/s2'
+// A session.end with a reason that stops the relay. An empty id stands for an end with no id.
+const stopEnd = (id: string) => ({ reason: 'other' as const, sessionId: id, resume: { id } })
+const steerListed = (listed: string[]) => listed.filter((path) => path.includes('/steer/'))
+type TestEngine = Parameters<Parameters<typeof test>[1]>[0]
 
 test('with the orchestrate skill present, the relay delivers a steer request and writes its result', async ($, on) => {
   const { sent, appended, writes, clock } = world(on, {
@@ -832,20 +842,374 @@ test('an end with the real id still counts when a second id read would have fail
   expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
 })
 
-test('an end during two overlapping starts is not lost when the first start finishes', async ($, on) => {
+test('overlapping starts where the id moves between their reads leave no relay after an end of the second id', async ($, on) => {
   const { listed, clock, state } = world(on)
-  state.idDelays = [300, 400, 0, 0, 0, 0, 0, 0]
+  state.idDelays = [100, 400]
   const first = $.session.start(start)
-  await clock.advance(100)
+  await clock.advance(50)
   const second = $.session.start(start)
-  await clock.advance(300)
-  await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
+  await clock.advance(100)
+  state.id = 's2'
+  await clock.advance(100)
+  await $.session.end(stopEnd('s2'))
   await clock.advance(2_000)
   await Promise.all([first, second])
   await clock.advance(10_000)
   await clock.settle()
-  expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
+  expect(steerListed(listed)).toEqual([])
 })
+
+test('a late end of the old session and an end of the new one during a new start stop the running timer', async ($, on) => {
+  const { listed, clock, state } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  state.id = 's2'
+  state.idMs = 500
+  const starting = $.session.start(start)
+  await clock.advance(100)
+  await $.session.end(stopEnd('s1'))
+  await clock.advance(100)
+  await $.session.end(stopEnd('s2'))
+  await clock.advance(1_000)
+  await starting
+  state.idMs = 0
+  await clock.settle()
+  listed.length = 0
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(steerListed(listed)).toEqual([])
+})
+
+test('an end of the new session after a /clear and before the first tick stops the relay', async ($, on) => {
+  const { listed, clock, state } = world(on)
+  await $.session.start(start)
+  await clock.settle()
+  await clock.advance(2_000)
+  await clock.settle()
+  await $.session.end(clear)
+  state.id = 's2'
+  await $.session.end(stopEnd('s2'))
+  listed.length = 0
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(steerListed(listed)).toEqual([])
+})
+
+test('an end between two overlapping starts that read the same id leaves no relay', async ($, on) => {
+  const { listed, clock, state } = world(on)
+  state.idDelays = [300, 400]
+  const first = $.session.start(start)
+  await clock.advance(50)
+  await $.session.end(stopEnd('s1'))
+  await clock.advance(50)
+  const second = $.session.start(start)
+  await clock.advance(2_000)
+  await Promise.all([first, second])
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(steerListed(listed)).toEqual([])
+})
+
+test('a live session keeps a relay when the later of two overlapping starts rejects', async ($, on) => {
+  const { listed, clock, state } = world(on)
+  state.idDelays = [300, 100]
+  state.idFailsOnCall = 2
+  const first = $.session.start(start)
+  await clock.advance(50)
+  const second = $.session.start(start).catch(() => {})
+  await clock.advance(2_000)
+  await Promise.all([first, second])
+  listed.length = 0
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(listed).toContain(STEER_DIR)
+})
+
+test('an end that arrives while a tick is sending stops the rest of that tick\'s sends', async ($, on) => {
+  const { sent, writes, clock } = world(on, {
+    sendMs: 500,
+    dirs: { [STEER_DIR]: ['r1.json', 'r2.json'] },
+    files: { [`${STEER_DIR}/r1.json`]: STEER_REQUEST, [`${STEER_DIR}/r2.json`]: STEER_REQUEST_2 },
+  })
+  await $.session.start(start)
+  await clock.settle()
+  await clock.advance(2_100)
+  expect(sent.length).toBe(1)
+  await $.session.end(stopEnd('s1'))
+  await clock.advance(10_000)
+  await clock.settle()
+  expect(sent.map((s) => s.text)).toEqual(['Use resolveRoot'])
+  expect(writes[`${STEER_DIR}/r2.result.json`]).toBe(undefined)
+})
+
+type Ordering = {
+  name: string
+  w?: Partial<World>
+  steps: (t: { $: TestEngine; clock: ReturnType<typeof world>['clock']; state: World }) => Promise<void>
+  // The steer folder the relay lists after the steps, or null for a relay that lists nothing.
+  relay: string | null
+}
+
+// Each row runs its steps, then 10 s of ticks, and checks what the relay listed in
+// those 10 s. The relay must list nothing once the session it follows has ended,
+// whatever order the events came in.
+const ORDERINGS: Ordering[] = [
+  {
+    name: 'start, tick, end',
+    steps: async ({ $, clock }) => {
+      await $.session.start(start)
+      await clock.settle()
+      await clock.advance(2_000)
+      await clock.settle()
+      await $.session.end(stopEnd('s1'))
+    },
+    relay: null,
+  },
+  {
+    name: 'an end during the id await',
+    w: { idMs: 500 },
+    steps: async ({ $, clock }) => {
+      const starting = $.session.start(start)
+      await clock.advance(100)
+      await $.session.end(stopEnd('s1'))
+      await clock.advance(1_000)
+      await starting
+    },
+    relay: null,
+  },
+  {
+    name: 'an end with no id after a tick',
+    steps: async ({ $, clock }) => {
+      await $.session.start(start)
+      await clock.settle()
+      await clock.advance(2_000)
+      await clock.settle()
+      await $.session.end(stopEnd(''))
+      await clock.settle()
+    },
+    relay: null,
+  },
+  {
+    name: 'an end with no id during the id await',
+    w: { idMs: 500 },
+    steps: async ({ $, clock }) => {
+      const starting = $.session.start(start)
+      await clock.advance(100)
+      await $.session.end(stopEnd(''))
+      await clock.advance(1_000)
+      await starting
+      await clock.settle()
+    },
+    relay: null,
+  },
+  {
+    name: '/clear, then an end of the new session before the first tick',
+    steps: async ({ $, clock, state }) => {
+      await $.session.start(start)
+      await clock.settle()
+      await clock.advance(2_000)
+      await clock.settle()
+      await $.session.end(clear)
+      state.id = 's2'
+      await $.session.end(stopEnd('s2'))
+    },
+    relay: null,
+  },
+  {
+    name: '/clear, then an end of the new session while a send holds the tick',
+    w: { sendMs: 5_000, dirs: { [STEER_DIR]: ['r1.json'] }, files: { [`${STEER_DIR}/r1.json`]: STEER_REQUEST } },
+    steps: async ({ $, clock, state }) => {
+      await $.session.start(start)
+      await clock.settle()
+      await clock.advance(2_100)
+      await $.session.end(clear)
+      state.id = 's2'
+      await clock.advance(2_000)
+      await $.session.end(stopEnd('s2'))
+    },
+    relay: null,
+  },
+  {
+    name: 'resume',
+    steps: async ({ $, clock, state }) => {
+      await $.session.start(start)
+      await clock.settle()
+      await $.session.end({ reason: 'resume', sessionId: 's1', resume: { id: 's1' } })
+      state.id = 's2'
+    },
+    relay: S2_DIR,
+  },
+  {
+    name: 'a late end of the old session during a new start',
+    steps: async ({ $, clock, state }) => {
+      await $.session.start(start)
+      await clock.settle()
+      state.id = 's2'
+      state.idMs = 500
+      const starting = $.session.start(start)
+      await clock.advance(100)
+      await $.session.end(stopEnd('s1'))
+      await clock.advance(1_000)
+      await starting
+      state.idMs = 0
+      await clock.settle()
+    },
+    relay: S2_DIR,
+  },
+  {
+    name: 'a late end of the old session and an end of the new one during a new start',
+    steps: async ({ $, clock, state }) => {
+      await $.session.start(start)
+      await clock.settle()
+      state.id = 's2'
+      state.idMs = 500
+      const starting = $.session.start(start)
+      await clock.advance(100)
+      await $.session.end(stopEnd('s1'))
+      await clock.advance(100)
+      await $.session.end(stopEnd('s2'))
+      await clock.advance(1_000)
+      await starting
+      state.idMs = 0
+      await clock.settle()
+    },
+    relay: null,
+  },
+  ...([
+    ['before both starts', 0],
+    ['between the starts', 1],
+    ['while both starts read the id', 2],
+    ['after the first start reads the id', 3],
+    ['after both starts finish', 4],
+  ] as const).map(([where, at]): Ordering => ({
+    name: `overlapping starts, an end ${where}`,
+    w: { idDelays: [300, 400] },
+    steps: async ({ $, clock }) => {
+      const end = () => $.session.end(stopEnd('s1'))
+      if (at === 0) await end()
+      const first = $.session.start(start)
+      await clock.advance(50)
+      if (at === 1) await end()
+      const second = $.session.start(start)
+      await clock.advance(100)
+      if (at === 2) await end()
+      await clock.advance(200)
+      if (at === 3) await end()
+      await clock.advance(2_000)
+      await Promise.all([first, second])
+      if (at === 4) await end()
+    },
+    relay: null,
+  })),
+  {
+    name: 'overlapping starts and no end',
+    w: { idDelays: [300, 400] },
+    steps: async ({ $, clock }) => {
+      const first = $.session.start(start)
+      await clock.advance(50)
+      const second = $.session.start(start)
+      await clock.advance(2_000)
+      await Promise.all([first, second])
+    },
+    relay: STEER_DIR,
+  },
+  {
+    name: 'overlapping starts where the id moves between reads, and an end of the second id',
+    w: { idDelays: [100, 400] },
+    steps: async ({ $, clock, state }) => {
+      const first = $.session.start(start)
+      await clock.advance(50)
+      const second = $.session.start(start)
+      await clock.advance(100)
+      state.id = 's2'
+      await clock.advance(100)
+      await $.session.end(stopEnd('s2'))
+      await clock.advance(2_000)
+      await Promise.all([first, second])
+    },
+    relay: null,
+  },
+  {
+    name: 'overlapping starts where the later one rejects',
+    w: { idDelays: [300, 100], idFailsOnCall: 2 },
+    steps: async ({ $, clock }) => {
+      const first = $.session.start(start)
+      await clock.advance(50)
+      const second = $.session.start(start).catch(() => {})
+      await clock.advance(2_000)
+      await Promise.all([first, second])
+    },
+    relay: STEER_DIR,
+  },
+  {
+    name: 'a rejected id read and no earlier timer',
+    w: { idFailsOnce: true },
+    steps: async ({ $, clock }) => {
+      await $.session.start(start).catch(() => {})
+      await clock.settle()
+    },
+    relay: STEER_DIR,
+  },
+  {
+    name: 'a rejected id read while an earlier timer runs',
+    steps: async ({ $, clock, state }) => {
+      await $.session.start(start)
+      await clock.settle()
+      await clock.advance(2_000)
+      await clock.settle()
+      state.idFailsOnce = true
+      await $.session.start(start).catch(() => {})
+      await clock.settle()
+    },
+    relay: STEER_DIR,
+  },
+  {
+    name: 'a rejected id read while an earlier timer runs, then an end',
+    steps: async ({ $, clock, state }) => {
+      await $.session.start(start)
+      await clock.settle()
+      await clock.advance(2_000)
+      await clock.settle()
+      state.idFailsOnce = true
+      await $.session.start(start).catch(() => {})
+      await clock.settle()
+      await $.session.end(stopEnd('s1'))
+    },
+    relay: null,
+  },
+  {
+    name: 'an end of another session id',
+    steps: async ({ $, clock }) => {
+      await $.session.start(start)
+      await clock.settle()
+      await $.session.end(stopEnd('other-session'))
+    },
+    relay: STEER_DIR,
+  },
+  {
+    name: 'a later start finds SKILL.md gone while a timer runs',
+    steps: async ({ $, clock, state }) => {
+      await $.session.start(start)
+      await clock.settle()
+      state.exists = (path) => !path.endsWith('/skills/orchestrate/SKILL.md')
+      await $.session.start(start)
+      await clock.settle()
+    },
+    relay: null,
+  },
+]
+
+for (const row of ORDERINGS) {
+  test(`steer relay ordering: ${row.name}`, async ($, on) => {
+    const { listed, clock, state } = world(on, row.w)
+    await row.steps({ $, clock, state })
+    listed.length = 0
+    await clock.advance(10_000)
+    await clock.settle()
+    if (row.relay === null) expect(steerListed(listed)).toEqual([])
+    else expect(listed).toContain(row.relay)
+  })
+}
 
 test('a hung send is answered timed out and the next tick lists the steer folder again', async ($, on) => {
   const { sent, writes, listed, clock } = world(on, {
@@ -876,16 +1240,17 @@ test('a session.end before the deferred start leaves no relay timer', async ($, 
   expect(listed.some((path) => path.includes('/steer/'))).toBe(false)
 })
 
-test('a session.start after an earlier end starts the relay again', async ($, on) => {
-  const { listed, clock } = world(on)
+test('a session.start for a new session id after an end starts the relay again', async ($, on) => {
+  const { listed, clock, state } = world(on)
   await $.session.start(start)
   await $.session.end({ reason: 'other', sessionId: 's1', resume: { id: 's1' } })
   await clock.settle()
+  state.id = 's2'
   await $.session.start(start)
   await clock.settle()
   await clock.advance(2_000)
   await clock.settle()
-  expect(listed).toContain(STEER_DIR)
+  expect(listed).toContain(S2_DIR)
 })
 
 test('session.start returns before the check fetches', async ($, on) => {

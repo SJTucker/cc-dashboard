@@ -15,6 +15,9 @@ export type SteerIo = {
   // document it for a hook's dispatch, not for a clock.every callback, where this runs.
   after: (ms: number, fn: () => void) => { cancel: () => void }
   log: (text: string) => void
+  // True once the session this pass relays for has ended. relayOnce checks it before
+  // each send.
+  ended: () => boolean
 }
 
 // A request older than this is answered 'expired' and not sent. It matches
@@ -65,7 +68,8 @@ const errText = (err: unknown) => (err instanceof Error ? err.message : String(e
 
 // One pass over dir. An id joins handled before its first await, so a second pass
 // that starts while this one is still sending skips it, and a request is sent once
-// even when the result file cannot be written.
+// even when the result file cannot be written. When io.ended() turns true during the
+// pass, the pass returns before its next send and leaves that request unanswered.
 export async function relayOnce(io: SteerIo, dir: string, handled: Set<string>): Promise<void> {
   const names = await io.list(dir).catch(() => [] as string[])
   for (const id of pendingRequests(names, handled)) {
@@ -80,6 +84,8 @@ export async function relayOnce(io: SteerIo, dir: string, handled: Set<string>):
         reason = 'invalid request'
       } else if ((await io.now()) - request.at > EXPIRED_AFTER_MS) {
         reason = 'expired'
+      } else if (io.ended()) {
+        return
       } else {
         let timer: { cancel: () => void } | undefined
         const timeout = new Promise<null>((resolve) => { timer = io.after(SEND_TIMEOUT_MS, () => resolve(null)) })

@@ -47,6 +47,7 @@ function fake(files: Record<string, string>, send: SteerIo['send'], now = 99) {
     now: async () => now,
     after: (_ms, _fn) => ({ cancel: () => { cancelled.push('timeout') } }),
     log: (text) => { logs.push(text) },
+    ended: () => false,
   }
   return { io, calls, files, logs, cancelled }
 }
@@ -55,6 +56,22 @@ const request = JSON.stringify({ id: 'b', agentId: 'a1', task: 5, text: 'Use res
 
 test('relay sends, appends the note, and writes a delivered result', async () => {
   const { io, calls } = fake({ [`${DIR}/b.json`]: request }, async () => ({ isDelivered: true }))
+  await relayOnce(io, DIR, new Set())
+  expect(calls).toEqual([
+    'send a1 Use resolveRoot',
+    'append You steered Task 5 from the dashboard: Use resolveRoot',
+    'write b.result.json {"id":"b","delivered":true,"at":99}',
+  ])
+})
+
+test('a pass makes no send after io.ended turns true, and leaves that request unanswered', async () => {
+  const second = JSON.stringify({ id: 'c', agentId: 'a2', task: 6, text: 'Stop', at: 1 })
+  let ended = false
+  const { io, calls } = fake({ [`${DIR}/b.json`]: request, [`${DIR}/c.json`]: second }, async () => {
+    ended = true
+    return { isDelivered: true }
+  })
+  io.ended = () => ended
   await relayOnce(io, DIR, new Set())
   expect(calls).toEqual([
     'send a1 Use resolveRoot',
