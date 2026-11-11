@@ -629,21 +629,35 @@ async function track($: EngineInterface, change: (a: Activity, now: number) => v
 // <config dir>/cc-dashboard/steer/<session id>/<request id>.json. Every STEER_POLL_MS
 // the relay hands each new request to relayOnce in steer.ts, which sends it to the
 // worker with $.session.send and writes the result file. The relay runs for an
-// interactive session when <config dir>/skills/orchestrate/SKILL.md exists, checked
-// once at session.start. The process keeps one timer. The session id is read on every
-// tick, because a /clear moves the process to a new session id and fires no
-// session.start. session.end stops the timer for any reason except clear and resume,
-// after which the process goes on.
+// interactive session when <config dir>/skills/orchestrate/SKILL.md exists. The
+// process keeps one timer. Each interactive session.start schedules startSteerRelay,
+// which replaces the timer, or stops it when SKILL.md is missing.
+//
+// Each tick reads the session id, because a /clear or a resume moves the process to a
+// new session id and fires no session.start. A session.end for any reason except clear
+// and resume adds its session id to steerEnded, and an end with no id adds the id
+// $.session.id() reads at that moment. A tick whose id is in steerEnded stops the
+// timer and sends nothing, and relayOnce checks the same set before each send. So an
+// ended session gets no steer, whatever order the start, end and tick events arrive
+// in. A session.end does not cancel the timer itself, because the end can arrive
+// before the start or the tick that reads its session id. The one exception is an end
+// with no id whose id read fails. An id never leaves steerEnded, because an ended
+// session does not come back.
 const STEER_POLL_MS = 2000
 let steerTimer: Timer | undefined
 let steerBusy = false
 const steerHandled = new Set<string>()
+const steerEnded = new Set<string>()
 
 async function relaySteers($: EngineInterface, dir: string) {
   if (steerBusy) return
   steerBusy = true
   try {
     const sessionId = await $.session.id()
+    if (steerEnded.has(sessionId)) {
+      stopSteerRelay()
+      return
+    }
     if (!SESSION_ID.test(sessionId)) return
     await relayOnce({
       list: async (path) => (await $.fs.list(path)).map((entry) => entry.name),
@@ -655,7 +669,9 @@ async function relaySteers($: EngineInterface, dir: string) {
       },
       append: (text) => $.session.append({ message: { type: 'user', content: [{ type: 'text', text }] } }),
       now: () => $.clock.now(),
+      after: (ms, fn) => $.clock.after(ms, fn),
       log: (text) => fail($, text),
+      ended: () => steerEnded.has(sessionId),
     }, `${dir}/${sessionId}`, steerHandled)
   } finally {
     steerBusy = false
@@ -664,12 +680,26 @@ async function relaySteers($: EngineInterface, dir: string) {
 
 async function startSteerRelay($: EngineInterface) {
   const paths = await configPaths($)
-  if (!paths || !(await $.fs.exists(`${paths.dir}/skills/orchestrate/SKILL.md`))) return
+  const enabled = paths ? await $.fs.exists(`${paths.dir}/skills/orchestrate/SKILL.md`) : false
   stopSteerRelay()
+  if (!paths || !enabled) return
   const dir = `${paths.dir}/cc-dashboard/steer`
   steerTimer = $.clock.every(STEER_POLL_MS, () => {
     relaySteers($, dir).catch((err) => fail($, `steer relay failed (${errorName(err)})`))
   })
+}
+
+// Records a session.end for the relay. Ends with reason clear or resume leave the relay
+// running, because the process goes on under a new session id.
+function endSteerRelay($: EngineInterface, e: { reason: string, sessionId?: string }) {
+  if (e.reason === 'clear' || e.reason === 'resume') return
+  if (e.sessionId) {
+    steerEnded.add(e.sessionId)
+    return
+  }
+  // An end with no id is the end of the session the process runs now. When that id
+  // cannot be read, the timer is stopped instead.
+  $.session.id().then((id) => { steerEnded.add(id) }, () => stopSteerRelay())
 }
 
 function stopSteerRelay() {
@@ -1391,36 +1421,44 @@ async function dismissBand($: EngineInterface) {
 
 export const register: Register = (on) => {
   // Registers /backfill-updates inline. The version check runs in every session. The
-  // reviews and the setup check run in interactive sessions only. All three run from
-  // timers after session.start returns, because session.start is awaited before the
-  // first prompt. A -p or Agent SDK run starts no reviews: it can exit mid-call and
-  // leave claimed sessions pending for an hour.
+  // reviews, the setup check and the steer relay run in interactive sessions only. All
+  // of them run from timers after session.start returns, because session.start is
+  // awaited before the first prompt. A -p or Agent SDK run starts no reviews: it can
+  // exit mid-call and leave claimed sessions pending for an hour.
   on('session.start', async ($, e, next) => {
-    sessionModes.set(await $.session.id(), { interactive: e.isInteractive, cwd: e.cwd })
-    await $.command.register({
-      name: 'backfill-updates',
-      description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
-    }).catch((err) => note($, `could not register /backfill-updates (${errorName(err)})`))
-    await $.command.register({
-      name: 'transcript-handoff',
-      description: 'Print a prompt that resumes this session in a fresh one by reading its transcript',
-    }).catch((err) => note($, `could not register /transcript-handoff (${errorName(err)})`))
-    const result = await next(e)
-    $.clock.after(0, () => {
-      checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
-    })
-    if (e.isInteractive) {
-      startReviews($)
+    try {
+      const sessionId = await $.session.id()
+      sessionModes.set(sessionId, { interactive: e.isInteractive, cwd: e.cwd })
+      await $.command.register({
+        name: 'backfill-updates',
+        description: 'Judge every Claude Code version in the transcripts for changes that could affect usage',
+      }).catch((err) => note($, `could not register /backfill-updates (${errorName(err)})`))
+      await $.command.register({
+        name: 'transcript-handoff',
+        description: 'Print a prompt that resumes this session in a fresh one by reading its transcript',
+      }).catch((err) => note($, `could not register /transcript-handoff (${errorName(err)})`))
+      const result = await next(e)
       $.clock.after(0, () => {
-        startSteerRelay($).catch((err) => note($, `steer relay failed (${errorName(err)})`))
+        checkVersion($).catch((err) => note($, `update check failed (${errorName(err)})`))
       })
-      $.clock.after(0, () => {
-        dashboardSettings($)
-          .then((settings) => (settings.setupMarkers ? checkSetup($) : undefined))
-          .catch((err) => note($, `setup check failed (${errorName(err)})`))
-      })
+      if (e.isInteractive) {
+        startReviews($)
+        $.clock.after(0, () => {
+          dashboardSettings($)
+            .then((settings) => (settings.setupMarkers ? checkSetup($) : undefined))
+            .catch((err) => note($, `setup check failed (${errorName(err)})`))
+        })
+      }
+      return result
+    } finally {
+      // An interactive session gets a relay even when this start throws, because the
+      // relay reads the session id on each tick and does not need this start's read.
+      if (e.isInteractive) {
+        $.clock.after(0, () => {
+          startSteerRelay($).catch((err) => note($, `steer relay failed (${errorName(err)})`))
+        })
+      }
     }
-    return result
   })
 
   on('command.run', { command: 'backfill-updates' }, async ($) => ((await dashboardSettings($)).setupLabels ? { text: backfillText(await judgeUpdates($)) } : { text: LABELS_OFF_TEXT }))
@@ -1484,7 +1522,7 @@ export const register: Register = (on) => {
     const interactive = sessionModes.get(e.sessionId)?.interactive !== false
     const writing = headlessWrites.get(e.sessionId)
     forgetSession(e.sessionId)
-    if (e.reason !== 'clear' && e.reason !== 'resume') stopSteerRelay()
+    endSteerRelay($, e)
     if (!interactive) {
       // A claude -p process exits once session.end returns, so a queued headless write
       // finishes first. The chain never rejects.
