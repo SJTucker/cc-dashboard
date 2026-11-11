@@ -343,3 +343,28 @@ test('a dashboard note with no earlier worker in its session is unmapped, even w
   assert.deepEqual(r.steers, []);
   assert.deepEqual(r.unmappedNotes.map((n) => n.task), [1]);
 });
+
+const claimPrompt = (run, kind) => `Read ${IMAGE} in full, then every file it lists under "Read before starting", in that order. Then run /c/bin/orch-claim ${run} ${kind} and do the task it prints.`;
+
+test('a prompt that runs orch-claim work is a worker with its run folder and no task', () => {
+  const r = parseOrchestrator([...orchestratorLines().slice(0, 2), ...launch('agc', 'aaac', 'Task 3 worker', claimPrompt('/p/img.run', 'work'))]);
+  const a = r.agents[0];
+  assert.equal(a.role, 'worker');
+  assert.equal(a.claimRun, '/p/img.run');
+  assert.equal(a.claimKind, 'work');
+  assert.equal(a.task, null);
+});
+
+test('a prompt that runs orch-claim review is a reviewer', () => {
+  const r = parseOrchestrator([...orchestratorLines().slice(0, 2), ...launch('agr', 'aaar', 'orchestrate reviewer', claimPrompt('"/p/img.run"', 'review'))]);
+  const a = r.agents[0];
+  assert.deepEqual([a.role, a.claimRun, a.claimKind, a.task], ['reviewer', '/p/img.run', 'review', null]);
+});
+
+test('a claim prompt with a relative or /../ run folder gives claimRun null', () => {
+  for (const run of ['img.run', '/p/../q/img.run', '/p/img']) {
+    const r = parseOrchestrator([...orchestratorLines().slice(0, 2), ...launch('agb', 'aaab', 'orchestrate worker', claimPrompt(run, 'work'))]);
+    assert.equal(r.agents[0].claimRun, null, run);
+    assert.equal(r.agents[0].claimKind, 'work');
+  }
+});
