@@ -39,7 +39,7 @@ test('not installed: list() reads no session and finds no transcript', (t) => {
   writeOrchestration(config.configDir, { live: true, workers: [{ steps: working('lib/x.js') }] });
   const o = createOrchestrations(config.configDir);
   assert.deepEqual(o.list(), []);
-  assert.deepEqual(o.sizes(), { transcripts: 0, scans: 0, parsed: 0, seen: 0, misses: 0, lines: 0 });
+  assert.deepEqual(o.sizes(), { transcripts: 0, scans: 0, parsed: 0, seen: 0, listSeen: 0, stepsMemo: 0, misses: 0, lines: 0 });
   const readdir = t.mock.method(fs, 'readdirSync');
   o.list();
   assert.equal(readdir.mock.callCount(), 0);
@@ -256,12 +256,12 @@ test('state for a session that left the snapshot window is dropped', (t) => {
   assert.equal(o.list().length, 1);
   o.detail(o1.sessionId); // only detail() keeps seen state
   const before = o.sizes();
-  assert.ok(before.transcripts > 0 && before.parsed > 0 && before.seen > 0 && before.scans > 0);
+  assert.ok(before.transcripts > 0 && before.parsed > 0 && before.seen > 0 && before.listSeen > 0 && before.stepsMemo > 0 && before.scans > 0);
   fs.rmSync(path.join(config.configDir, 'cc-dashboard', 'sessions', `${o1.sessionId}.json`));
   fs.rmSync(path.join(config.configDir, 'cc-dashboard', 'sessions', 'plain-2.json'));
   clock += 1000;
   assert.deepEqual(o.list(), []);
-  assert.deepEqual(o.sizes(), { transcripts: 0, scans: 0, parsed: 0, seen: 0, misses: 0, lines: 0 });
+  assert.deepEqual(o.sizes(), { transcripts: 0, scans: 0, parsed: 0, seen: 0, listSeen: 0, stepsMemo: 0, misses: 0, lines: 0 });
 });
 
 test('list() does not advance the finished-flag state that detail() holds for a poll', (t) => {
