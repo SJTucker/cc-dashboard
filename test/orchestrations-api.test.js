@@ -323,3 +323,16 @@ test('a dashboard note after a reset counts as a steer of a worker launched befo
   assert.equal(workers[0].steerCount, 1);
   assert.ok(d.feed.some((f) => f.text === 'You steered Task 1'));
 });
+
+test('a dashboard note is not mapped to a worker a later session launched', (t) => {
+  const config = testConfig(t);
+  install(config);
+  writeOrchestration(config.configDir, { sessionId: 'sess-a', live: false, workers: [] });
+  const b = writeOrchestration(config.configDir, { sessionId: 'sess-b', clearedFrom: 'sess-a', resetLine: true, live: false, workers: [] });
+  writeOrchestration(config.configDir, { sessionId: 'sess-c', clearedFrom: 'sess-b', resetLine: true, live: true, workers: [{ task: 1, files: ['lib/a.js'], steps: working('lib/a.js') }] });
+  const note = { type: 'user', isMeta: true, timestamp: new Date().toISOString(), message: { role: 'user', content: [{ type: 'text', text: 'You steered Task 1 from the dashboard: early' }] } };
+  fs.appendFileSync(b.transcript, JSON.stringify(note) + '\n');
+  const workers = createOrchestrations(config.configDir).detail('sess-a').waves.flatMap((w) => w.workers);
+  assert.equal(workers.length, 1);
+  assert.equal(workers[0].steerCount, 0);
+});

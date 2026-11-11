@@ -68,9 +68,12 @@ test('read drops the entry and returns null when the file vanishes before it is 
 test('read starts over when the file is replaced by one of the same size', (t) => {
   const { dir, file, cache } = setup(t);
   fs.writeFileSync(file, 'a\nb\n');
+  const stamp = new Date(Math.floor(Date.now() / 1000) * 1000 - 5000);
+  fs.utimesSync(file, stamp, stamp);
   assert.deepEqual(cache.read(file).lines, ['a', 'b']);
   const other = path.join(dir, 'other');
   fs.writeFileSync(other, 'x\ny\n');
+  fs.utimesSync(other, stamp, stamp);
   fs.renameSync(other, file);
   assert.deepEqual(cache.read(file).lines, ['x', 'y']);
 });
@@ -92,13 +95,13 @@ test('read keeps one array while the file grows and raises version on each chang
   assert.equal(cache.read(file).version, first.version, 'no change, same version');
   fs.appendFileSync(file, 'b\n');
   const second = cache.read(file);
-  assert.equal(second.lines, first.lines);
+  assert.equal(second.lines, first.lines, 'growth keeps the same array');
   assert.ok(second.version > first.version);
   fs.appendFileSync(file, 'partial');
   assert.equal(cache.read(file).version, second.version, 'an unterminated tail adds no lines');
   fs.writeFileSync(file, 'x\n');
   const reset = cache.read(file);
-  assert.notEqual(reset.lines, first.lines);
+  assert.notEqual(reset.lines, first.lines, 'starting over replaces the array');
   assert.ok(reset.version > second.version);
 });
 

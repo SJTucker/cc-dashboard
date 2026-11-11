@@ -228,8 +228,18 @@ test('a command that creates several worktrees reads Created worktrees a, b', ()
 test('a command that merges and creates gives a merge entry and a create entry at the same time', () => {
   const s = orchestration().use('Bash', { command: 'git merge demo-t2 && wt switch --create demo-t3 --base demo --no-cd' });
   const { feed } = feedOf(s);
-  assert.deepEqual(feed.slice(0, 2).map((a) => a.text), ['Created worktree demo-t3', 'Merged Task 2']);
+  assert.deepEqual(feed.slice(0, 2).map((a) => a.text), ['Merged Task 2', 'Created worktree demo-t3']);
   assert.equal(feed[0].at, feed[1].at);
+  const now = nowLine(parseOrchestrator(s.lines), stepsFor(s), null, true, s.lines);
+  assert.equal(now.text, 'Merged Task 2');
+});
+
+test('a command with several merges reads Merged Tasks 1, 2, before its creates', () => {
+  const s = new Script().prompt('go').use('Skill', { skill: 'orchestrate' });
+  s.use('Bash', { command: 'wt switch --create demo --base main --no-cd' });
+  s.use('Bash', { command: 'git merge demo-t1 && git merge demo-t2 && wt switch --create demo-t3 --base demo --no-cd' });
+  const { feed } = feedOf(s);
+  assert.deepEqual(feed.slice(0, 2).map((a) => a.text), ['Merged Tasks 1, 2', 'Created worktree demo-t3']);
 });
 
 test('each raw line is parsed once by the feed, though it holds two tool steps', () => {
@@ -256,12 +266,12 @@ test('each raw line is parsed once by the feed, though it holds two tool steps',
   assert.equal(whole - stepsOnly, 1);
 });
 
-test('a malformed raw line does not break the feed', () => {
-  const s = orchestration();
-  s.lines.splice(4, 0, '{not json');
-  const { feed } = feedOf(s);
-  assert.ok(feed.length >= 8);
-  assert.ok(feed.every((a) => typeof a.text === 'string'));
+test('a malformed raw line does not change the feed', () => {
+  const clean = orchestration();
+  const bad = orchestration();
+  bad.lines.splice(4, 0, '{not json');
+  const view = (s) => feedOf(s).feed.map((a) => [a.text, a.detail]);
+  assert.deepEqual(view(bad), view(clean));
 });
 
 test('a user prompt in the feed is cut at 60 characters', () => {
