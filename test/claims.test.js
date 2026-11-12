@@ -157,3 +157,15 @@ test('claimsInTranscript finds each orch-claim Bash result that starts with CLAI
   ];
   assert.deepEqual(claimsInTranscript(lines), [{ file: '0001-t3-a1.json', line: 2 }, { file: '0003-t4-a1.json', line: 10 }]);
 });
+
+test('claimsInTranscript finds CLAIMED at the start of any line and ignores non-task names', () => {
+  const use = (id, command) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } });
+  const res = (id, content) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+  const lines = [
+    use('u1', 'cd /wt && pwd && /c/bin/orch-claim /p/img.run work'),
+    res('u1', '/wt\nCLAIMED 0004-t2-a1.json\nYour worktree is /wt'),
+    use('u2', '/c/bin/orch-claim /p/img.run work'),
+    res('u2', 'CLAIMED: none\nCLAIMED notes.txt'),
+  ];
+  assert.deepEqual(claimsInTranscript(lines), [{ file: '0004-t2-a1.json', line: 2 }]);
+});
