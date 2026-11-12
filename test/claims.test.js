@@ -169,3 +169,10 @@ test('claimsInTranscript finds CLAIMED at the start of any line and ignores non-
   ];
   assert.deepEqual(claimsInTranscript(lines), [{ file: '0004-t2-a1.json', line: 2 }]);
 });
+
+test('claimsInTranscript matches an orch-claim command whose run folder is quoted and has spaces', () => {
+  const use = (id, command) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } });
+  const res = (id, content) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+  const lines = [use('u1', `/c/bin/orch-claim "/p/my runs/img.run" work`), res('u1', 'CLAIMED 0001-t1-a1.json'), use('u2', `/c/bin/orch-claim '/p/my runs/img.run' review`), res('u2', 'CLAIMED 0002-t1-a1.json')];
+  assert.deepEqual(claimsInTranscript(lines).map((c) => c.file), ['0001-t1-a1.json', '0002-t1-a1.json']);
+});

@@ -344,7 +344,7 @@ test('a dashboard note with no earlier worker in its session is unmapped, even w
   assert.deepEqual(r.unmappedNotes.map((n) => n.task), [1]);
 });
 
-const claimPrompt = (run, kind) => `Read ${IMAGE} in full, then every file it lists under "Read before starting", in that order. Then run /c/bin/orch-claim ${run} ${kind} and do the task it prints.`;
+const claimPrompt = (run, kind) => `Read ${IMAGE} in full, then every file it lists under "Read before starting", in that order. Then run /c/bin/orch-claim ${run} ${kind} and ${kind === 'review' ? 'review' : 'do'} the task it prints.`;
 
 test('a prompt that runs orch-claim work is a worker with its run folder and no task', () => {
   const r = parseOrchestrator([...orchestratorLines().slice(0, 2), ...launch('agc', 'aaac', 'Task 3 worker', claimPrompt('/p/img.run', 'work'))]);
@@ -365,6 +365,26 @@ test('a claim prompt with a relative or /../ run folder gives claimRun null', ()
   for (const run of ['img.run', '/p/../q/img.run', '/p/img']) {
     const r = parseOrchestrator([...orchestratorLines().slice(0, 2), ...launch('agb', 'aaab', 'orchestrate worker', claimPrompt(run, 'work'))]);
     assert.equal(r.agents[0].claimRun, null, run);
+    assert.equal(r.agents[0].claimKind, 'work');
+  }
+});
+
+test('a legacy worker prompt that mentions orch-claim in Done when keeps its task and is not a claim agent', () => {
+  const prompt = workerPrompt(2).replace('the parse tests pass', 'run /c/bin/orch-claim /p/img.run work and see it print NO TASK');
+  const r = parseOrchestrator([...orchestratorLines().slice(0, 2), ...launch('agl', 'aaal', 'Task 2 worker', prompt)]);
+  const a = r.agents[0];
+  assert.deepEqual([a.role, a.task, a.claimRun, a.claimKind], ['worker', 2, null, null]);
+});
+
+test('an Explore prompt that mentions orch-claim is not a worker', () => {
+  const r = parseOrchestrator([...orchestratorLines().slice(0, 2), ...launch('age', 'aaae', 'Explore the queue', 'Find where orch-claim /p/img.run work is documented.')]);
+  assert.deepEqual([r.agents[0].role, r.agents[0].claimKind], ['agent', null]);
+});
+
+test('a claim prompt with a quoted run folder that has spaces gives that folder', () => {
+  for (const q of ['"', "'"]) {
+    const r = parseOrchestrator([...orchestratorLines().slice(0, 2), ...launch('agq', 'aaaq', 'orchestrate worker', claimPrompt(`${q}/p/my runs/img.run${q}`, 'work'))]);
+    assert.equal(r.agents[0].claimRun, '/p/my runs/img.run', q);
     assert.equal(r.agents[0].claimKind, 'work');
   }
 });

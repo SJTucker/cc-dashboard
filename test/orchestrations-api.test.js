@@ -630,6 +630,9 @@ test('a claim file outside <claimRun>/claimed/, malformed, or under a /../ run f
     fs.writeFileSync(path.join(claimedDir, name), change.task ?? original.task);
     const [w] = workersOf(detailOf(config, o.sessionId));
     assert.deepEqual([w.task, w.files], [null, []], label);
+    // The claim message matched, so the agent is waiting for a claim, not drifting.
+    assert.ok(!w.events.some((e) => e.type === 'DRIFT'), label);
+    if (label === 'a /../ run folder') assert.equal(w.status, 'starting', label);
   }
 });
 

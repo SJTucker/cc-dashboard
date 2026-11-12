@@ -100,7 +100,7 @@ function writeOrchestration(configDir, opts = {}) {
     claimFiles.push({ file: path.join(runDir, 'claimed', file), task: { kind, task: n, title, plan: planPath, worktree: path.join(project, '.worktrees', `${topic}-t${n}`), branch: `${topic}-t${n}`, files, doneWhen, sections: [], attempt: 1, claimedAt: new Date().toISOString(), ...extra } });
     return file;
   };
-  const firstMessage = (kind) => `Read ${imagePath} in full, then every file it lists under "Read before starting", in that order. Then run ${CLONE}/bin/orch-claim ${runDir} ${kind} and do the task it prints.\n`;
+  const firstMessage = (kind) => `Read ${imagePath} in full, then every file it lists under "Read before starting", in that order. Then run ${CLONE}/bin/orch-claim ${runDir} ${kind} and ${kind === 'review' ? 'review' : 'do'} the task it prints.\n`;
   // The tool records of one orch-claim call and its CLAIMED result, in a sidechain.
   const claimRecords = (side, id, kind, file) => [
     assistantOf(side, [use('Bash', { command: `${CLONE}/bin/orch-claim ${runDir} ${kind}` }, id)]),

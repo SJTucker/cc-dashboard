@@ -464,7 +464,7 @@ test('a settled review carries endedAt from the reviewer last activity, a runnin
 });
 
 test('a worker with two claims is stuck', () => {
-  const claimed = { ...agent, claimRun: '/p/img.run', claims: [{ file: '0001-t3-a1.json', line: 2 }, { file: '0002-t4-a1.json', line: 4 }] };
+  const claimed = { ...agent, claimRun: '/p/img.run', claimKind: 'work', claimResolved: true, claims: [{ file: '0001-t3-a1.json', line: 2 }, { file: '0002-t4-a1.json', line: 4 }] };
   const lines = [tool('Read', { file_path: 'a.js' }, 1), text('claimed', 2), tool('Read', { file_path: 'b.js' }, 3), text('again', 4)];
   const { state } = workerState(claimed, read(lines, 4), null, undefined, opts(5));
   assert.equal(state.events.at(-1).type, 'CLAIM');
@@ -472,9 +472,25 @@ test('a worker with two claims is stuck', () => {
 });
 
 test('a claim-run worker reading before its claim is starting and reports no DRIFT', () => {
-  const waiting = { ...agent, claimRun: '/p/img.run', claims: [], files: [] };
+  const waiting = { ...agent, claimRun: '/p/img.run', claimKind: 'work', claims: [], files: [] };
   const lines = [tool('Read', { file_path: 'a.js' }, 1), tool('Edit', { file_path: 'server.js' }, 2)];
   const { state } = workerState(waiting, read(lines, 2), null, undefined, opts(3));
+  assert.equal(state.raw, 'starting');
+  assert.ok(!state.events.some((e) => e.type === 'DRIFT'));
+});
+
+test('a claim worker whose claim did not resolve to a task is starting even with claims, and one whose task has no files is not', () => {
+  const lines = [tool('Read', { file_path: 'a.js' }, 1), text('claimed', 2)];
+  const unresolved = { ...agent, claimRun: '/p/img.run', claimKind: 'work', claims: [{ file: '0001-t3-a1.json', line: 2 }], files: [] };
+  assert.equal(workerState(unresolved, read(lines, 2), null, undefined, opts(3)).state.raw, 'starting');
+  const empty = { ...unresolved, claimResolved: true };
+  assert.equal(workerState(empty, read(lines, 2), null, undefined, opts(3)).state.raw, 'working');
+});
+
+test('an agent that matched the claim template with an invalid run folder is starting, with no DRIFT', () => {
+  const noRun = { ...agent, claimRun: null, claimKind: 'work', files: [] };
+  const lines = [tool('Edit', { file_path: 'server.js' }, 1)];
+  const { state } = workerState(noRun, read(lines, 1), null, undefined, opts(2));
   assert.equal(state.raw, 'starting');
   assert.ok(!state.events.some((e) => e.type === 'DRIFT'));
 });
