@@ -32,13 +32,16 @@
 // the watch finds the worker's orch-claim result in its transcript and reads the task's
 // files from <run>/claimed/<file>, so it can be armed before the worker claims: there is
 // no DRIFT until the claim, and none for edits at or before it. `--files` adds to the
-// claimed task's files. A second claim prints CLAIM.
+// claimed task's files. A second claim prints CLAIM. With `--run`, it also reports DRIFT
+// for files that changed in the claimed task's `worktree` since the watch started,
+// found with git, so edits made through Bash count.
 
 const fs = require('fs');
 const path = require('path');
 const { parseArgs } = require('util');
 const { claimsInTranscript, readClaimed, validRunDir } = require('../lib/orchestrations/claims');
 const { buildIndex, renderIndex, recentSteps, contextTokens, watchEvents, boardEvents, filesRead } = require('../lib/transcript-index');
+const { changedSince, worktreeBase } = require('../lib/worktree-changes');
 
 const POLL_MS = 2000;
 const { readStdin } = require('../lib/stdin');
@@ -175,6 +178,8 @@ async function watch(file, opts) {
   let taskFile = null;
   let task = null;
   let told = false;
+  // The claimed worktree's HEAD and already-changed files when the task resolved.
+  let base = null;
   for (;;) {
     if (opts.board !== null) {
       const b = boardEvents(readText(opts.board), boardSeen);
@@ -183,7 +188,8 @@ async function watch(file, opts) {
     }
     const lines = completeLines(file);
     if (lines !== null) {
-      if (lines.length !== lineCount) {
+      const grew = lines.length !== lineCount;
+      if (grew) {
         lineCount = lines.length;
         grewAt = Date.now();
         quietSent = false;
@@ -203,13 +209,18 @@ async function watch(file, opts) {
         }
         // Until the first claim resolves to a task there is no file list, so no DRIFT.
         files = task ? [...task.files, ...(opts.files ?? [])] : null;
+        // Taken before CLAIMED is printed, so no edit after the claim can fall into it.
+        if (base === null && grew && typeof task?.worktree === 'string') base = worktreeBase(task.worktree);
         // Tell the orchestrator once which task this agent took. A re-armed watch has already reported a claim at or before its start line.
         if (task && !told) {
           told = true;
           if (first.line > opts.sinceLine) process.stdout.write(`CLAIMED ${first.file} task ${task.task}: ${task.title ?? ''}\n`);
         }
       }
-      const r = watchEvents(lines, seen, { files, claims, driftAfterLine: claims[0]?.line ?? 0, budget: opts.budget, sinceLine: opts.sinceLine, finished: readMeta(file)?.finished === true });
+      // git runs only when the transcript grew: a Bash edit shows up as its tool result line.
+      let changed = null;
+      if (grew && base) changed = changedSince(task.worktree, base.head)?.filter((p) => !base.before.has(p)) ?? null;
+      const r = watchEvents(lines, seen, { files, claims, changed, driftAfterLine: claims[0]?.line ?? 0, budget: opts.budget, sinceLine: opts.sinceLine, finished: readMeta(file)?.finished === true });
       seen = r.seen;
       for (const e of r.events) if (!e.startsWith('MSG ')) process.stdout.write(e + '\n');
       if (r.done) return;
@@ -262,7 +273,7 @@ function main() {
   const { values, positionals } = args;
   if (values.help) return process.stdout.write(USAGE);
   const [file] = positionals;
-  if (positionals.length > 1) return fail(`expected one transcript path, got ${positionals.length}`);
+  if (positionals.length > 1) return fail(`expected one transcript path, got ${positionals.length}${values.files === undefined ? '' : ' (separate --files entries with commas)'}`);
   if (values.full && values.steps === undefined) return fail('--full works only with --steps');
   if (values.steps !== undefined && values.watch) return fail('--steps and --watch cannot be used together');
   if (values.steps !== undefined) {

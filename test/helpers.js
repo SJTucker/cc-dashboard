@@ -6,7 +6,7 @@
 const fs = require('fs');
 const os = require('os');
 const path = require('path');
-const { spawn } = require('child_process');
+const { spawn, execFileSync } = require('child_process');
 
 // A test that chmods a folder to 000 leaves rmSync unable to list it. Making each
 // directory in the tree 0o700 again lets the second removal succeed.
@@ -167,4 +167,21 @@ function gatedExtract() {
   return { extract, reads, ctl, release: (file) => gateFor(file).open() };
 }
 
-module.exports = { emptyRows, gatedExtract, tmpDir, removeTree, testConfig, bootServer, holdWriteLock, freshServerDb };
+// Runs git in dir with a fixed author, so a commit works without a global git config.
+function git(dir, ...args) {
+  return execFileSync('git', ['-C', dir, '-c', 'user.name=t', '-c', 'user.email=t@t', ...args], { encoding: 'utf8' });
+}
+
+// A temp git repo with lib/a.js and a .gitignore holding target/, both committed.
+function gitRepo(t) {
+  const dir = tmpDir(t, 'repo');
+  git(dir, 'init', '-q');
+  fs.mkdirSync(path.join(dir, 'lib'));
+  fs.writeFileSync(path.join(dir, '.gitignore'), 'target/\n');
+  fs.writeFileSync(path.join(dir, 'lib/a.js'), 'a');
+  git(dir, 'add', '-A');
+  git(dir, 'commit', '-qm', 'init');
+  return dir;
+}
+
+module.exports = { emptyRows, gatedExtract, tmpDir, removeTree, testConfig, bootServer, holdWriteLock, freshServerDb, git, gitRepo };
