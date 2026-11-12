@@ -201,7 +201,11 @@ For each worker, its transcript is
   whole folder: the scratchpad folder is this session's, so a worker's scratch
   files are not reported as drift.
 - `timeout_ms`: 1800000.
-- `description`: `Task <N> worker`.
+- `description`: `Task <N> worker`, with `<N>` the number of the task you added just
+  before starting that agent. The label is only a name for the watch, because the
+  first agent to run `orch-claim` takes the oldest task, which may not be that one.
+  The dashboard feed reads `Task <N>` from it, so keep the form. Take the real task
+  from the agent's `CLAIMED` line (section 8).
 
 The watch waits for a transcript that does not exist yet, so start it right
 after the Agent call. It prints one line per event and exits after `DONE`,
@@ -225,6 +229,10 @@ Run `TI <worker transcript> --steps 20` and decide:
 - `BUDGET context <n> tokens, over 200000`: steer the worker to finish its
   current step, commit, and report. Then split the rest of its task into a new
   task for a later wave.
+- `CLAIMED <file> task <N>: <title>`: informational, no steer. It says which task
+  this agent took. Note the pairing of agent, `<file>` and `<N>`. Section 11 and
+  section 13 take the task from the claimed file `<run>/claimed/<file>`, not from
+  dispatch order.
 - `CLAIM second claim <file2> after <file1>`: the worker took a second task.
   Steer it back to its first task, then return the second with
   `CLAIM <run> --release <file2>`.
@@ -233,16 +241,21 @@ Run `TI <worker transcript> --steps 20` and decide:
 - `DONE <report>`: go to Review and merge. In `--steps`, the worker's final
   report is the `REPORT` step.
 - `KILLED <text>`: the worker was stopped, by you, the user or Claude Code, and
-  `<text>` is its last action. Check `--steps`, then relaunch it or resume it
-  with SendMessage and re-arm the watch.
+  `<text>` is its last action. Check whether it claimed: its watch printed
+  `CLAIMED`, or `TI <transcript> --steps` shows an `orch-claim` result. If it did
+  not claim, start a new worker with the fixed message and add no task, because the
+  task is still pending. If it claimed, add that task again with `"attempt"` one
+  higher, then start a new worker. Or resume the worker with SendMessage and
+  re-arm the watch.
 - `FAILED <error>`: an API error ended the worker. If it is a limit, tell the
   user. Otherwise resume it with SendMessage and re-arm the watch.
 - `POST <from>: <title>`: go to section 9.
 
 Before ending a wave, run `CLAIM <run> --status`. For each pending file left, start
-a worker with the fixed message. Release each file listed under "claimed, no time"
-with `CLAIM <run> --release <file>`. A relaunch of a task adds a new work task with
-`"attempt"` one higher.
+a worker with the fixed message. Do these in order: release each file listed under
+"claimed, no time" with `CLAIM <run> --release <file>`, run `CLAIM <run> --status`
+again, then start one worker per pending file. A relaunch of a claimed task adds a
+new work task with `"attempt"` one higher.
 
 A worker that is killed or fails ends its own watch with `KILLED` or `FAILED`,
 so there is no watch to stop with TaskStop.
@@ -273,7 +286,8 @@ that file. If they want it fixed:
 
 1. Start one worker in the plan branch's worktree to fix it test-first and
    commit, with a watch and a review like any task. Its task file has
-   `"task": 0`, the plan branch's worktree, and the fix in `notes`. Do not fix it yourself. Your
+   `"task": 0`, the plan branch's worktree, the fix in `notes`, and `files` naming
+   the files the fix touches. Do not fix it yourself. Your
    context stays on coordination, and a worker's fix leaves a transcript the
    reviewer can check.
 2. Add the fix commit to "Updates".
@@ -297,10 +311,14 @@ contradicts it. If it affects later waves, add it to "Updates".
 ## 11. Review and merge
 
 When a worker reports, start a reviewer worker the same way: add a review task
-with `CLAIM <run> --add review`, then start the reviewer. The task carries the
-work task's fields (`task`, `title`, `plan`, `worktree`, `branch`, `files`,
+with `CLAIM <run> --add review`, then start the reviewer. Take the task from the
+reporting agent's claimed file `<run>/claimed/<file>`, the one its `CLAIMED` line
+names. Dispatch order does not say which task the agent did. The task carries that
+file's fields (`task`, `title`, `plan`, `worktree`, `branch`, `files`,
 `doneWhen`, `sections`) and `implementer: { agentId, transcript }`, with
-`transcript` the implementer's transcript path.
+`transcript` the transcript path of the agent that claimed the work task. A
+reviewer's task is likewise the one in the claimed file its own `CLAIMED` line
+names.
 
 Build the reviewer message once per session, with the same absolute paths as the
 worker message, plus `<TI>` filled in with the absolute path of `TI`. Reuse it byte
@@ -319,7 +337,7 @@ one per message, like workers. A relaunched implementer gets a new work task wit
 the next `attempt` and the review findings in `notes`.
 
 Read the whole review. When it fails, steer or relaunch the implementer with the
-findings. When it passes, merge the worker's branch into the plan branch. Check
+findings. When it passes, merge the worker's branch into the plan branch. With `<N>` the task in the claimed file of the worker being merged, check
 `git merge-base --is-ancestor <plan branch>-t<N> <plan branch>`, then run
 `wt remove -D <plan branch>-t<N>`. Without `-D`, `wt` keeps the branch, because
 it checks merges against the default branch, not the plan branch.
@@ -334,7 +352,7 @@ need: new names, moved files, board posts. Then dispatch the next wave.
 
 ## 13. Feedback
 
-For each worker, append one entry to `<feedback>`:
+For each worker, append one entry to `<feedback>`, with `<N>` and `<title>` from its claimed file:
 
 ```
 ## Task <N>: <title> (<date>)
