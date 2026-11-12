@@ -251,10 +251,9 @@ Run `TI <worker transcript> --steps 20` and decide:
   user. Otherwise resume it with SendMessage and re-arm the watch.
 - `POST <from>: <title>`: go to section 9.
 
-Before ending a wave, run `CLAIM <run> --status`. For each pending file left, start
-a worker with the fixed message. Do these in order: release each file listed under
-"claimed, no time" with `CLAIM <run> --release <file>`, run `CLAIM <run> --status`
-again, then start one worker per pending file. A relaunch of a claimed task adds a
+Before ending a wave, run `CLAIM <run> --status`. Release each file listed under
+"claimed, no time" with `CLAIM <run> --release <file>`. Then run `CLAIM <run> --status`
+again and start one worker with the fixed message per pending file. A relaunch of a claimed task adds a
 new work task with `"attempt"` one higher.
 
 A worker that is killed or fails ends its own watch with `KILLED` or `FAILED`,
