@@ -176,3 +176,25 @@ test('claimsInTranscript matches an orch-claim command whose run folder is quote
   const lines = [use('u1', `/c/bin/orch-claim "/p/my runs/img.run" work`), res('u1', 'CLAIMED 0001-t1-a1.json'), use('u2', `/c/bin/orch-claim '/p/my runs/img.run' review`), res('u2', 'CLAIMED 0002-t1-a1.json')];
   assert.deepEqual(claimsInTranscript(lines).map((c) => c.file), ['0001-t1-a1.json', '0002-t1-a1.json']);
 });
+
+test('a claimer that dies after link leaves an unstamped claim, the next claimer takes the next task, and release restores it', (t) => {
+  const run = runIn(t);
+  addTask(run, 'work', task(1));
+  addTask(run, 'work', task(2));
+  assert.throws(() => claimNext(run, 'work', new Date(), { afterLink: () => { throw new Error('died'); } }), /died/);
+  // The link exists in claimed/ with no claimedAt, and the pending name is still there.
+  let s = status(run);
+  assert.deepEqual(s.unstamped, ['0001-t1-a1.json']);
+  assert.deepEqual(s.work, ['0001-t1-a1.json', '0002-t2-a1.json']);
+  // The next claimer finds 0001 already claimed, drops its pending copy and takes 0002.
+  const next = claimNext(run, 'work');
+  assert.equal(next.file, '0002-t2-a1.json');
+  s = status(run);
+  assert.deepEqual(s.work, []);
+  assert.deepEqual(s.unstamped, ['0001-t1-a1.json']);
+  release(run, '0001-t1-a1.json');
+  s = status(run);
+  assert.deepEqual(s.work, ['0001-t1-a1.json']);
+  assert.deepEqual(s.unstamped, []);
+  assert.equal(claimNext(run, 'work').file, '0001-t1-a1.json');
+});

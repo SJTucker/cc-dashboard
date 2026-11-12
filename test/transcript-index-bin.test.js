@@ -396,3 +396,45 @@ test('--watch --run does not print CLAIMED when the claimed file cannot be read'
   const r = watchRun(file, '--run', run);
   assert.ok(!r.stdout.includes('CLAIMED'), r.stdout);
 });
+
+test('--watch --run armed before the transcript exists follows lines appended across polls', async (t) => {
+  const dir = tmpDir(t, 'transcript-index-late');
+  const run = path.join(dir, 'img.run');
+  fs.mkdirSync(path.join(run, 'claimed'), { recursive: true });
+  fs.writeFileSync(path.join(run, 'claimed', '0001-t3-a1.json'), JSON.stringify({ task: 3, title: 'Parse it', files: ['lib/a.js'] }));
+  const file = path.join(dir, 'agent-a1.jsonl');
+  const rec = (o) => JSON.stringify({ agentId: 'a1', isSidechain: true, sessionId: 's1', timestamp: '2026-11-08T14:02:00.000Z', ...o });
+  const asst = (content) => rec({ type: 'assistant', message: { role: 'assistant', content } });
+  const use = (id, name, input) => ({ type: 'tool_use', id, name, input });
+  const claim = (id, f) => [asst([use(id, 'Bash', { command: `/c/bin/orch-claim '${run}' work` })]), rec({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: `CLAIMED ${f}\nYour worktree is /wt` }] } })];
+  const w = start([file, '--watch', '--run', run]);
+  t.after(() => w.child.kill());
+  await new Promise((r) => setTimeout(r, 2_500));
+  assert.equal(w.stdout(), '');
+  const add = (lines) => fs.appendFileSync(file, lines.join('\n') + '\n');
+  // An edit before the claim, then the claim.
+  add([asst([use('e1', 'Edit', { file_path: '/wt/lib/b.js' })]), ...claim('c1', '0001-t3-a1.json')]);
+  assert.ok(await until(() => w.stdout().includes('CLAIMED 0001-t3-a1.json task 3: Parse it\n'), 8_000), w.stdout());
+  assert.ok(!w.stdout().includes('DRIFT'), w.stdout());
+  // An edit outside the claimed files, then a second claim.
+  add([asst([use('e2', 'Edit', { file_path: '/wt/lib/c.js' })])]);
+  assert.ok(await until(() => w.stdout().includes('DRIFT edit outside task files: /wt/lib/c.js'), 8_000), w.stdout());
+  add(claim('c2', '0002-t4-a1.json'));
+  assert.ok(await until(() => w.stdout().includes('CLAIM second claim 0002-t4-a1.json after 0001-t3-a1.json\n'), 8_000), w.stdout());
+  add([HANDBACK]);
+  await w.exited;
+  const out = w.stdout();
+  assert.equal(out.split('CLAIMED ').length, 2, out);
+  assert.equal(out.split('CLAIM second').length, 2, out);
+  assert.equal(out.split('DRIFT').length, 2, out);
+  assert.ok(!out.includes('/wt/lib/b.js'), out);
+});
+
+test('a re-armed --watch --run --since-line past the claim does not repeat CLAIM or CLAIMED', (t) => {
+  const { file, run } = claimWorker(t, { task: { task: 3, title: 'Parse it', files: ['lib/a.js'] }, extra: [{ id: 'c2', file: '0002-t4-a1.json' }] });
+  // Lines: 1 prompt, 2 edit, 3-4 claim, 5 edit, 6-7 second claim, 8 handback.
+  const r = watchRun(file, '--run', run, '--since-line', '7');
+  assert.equal(r.status, 0, r.stderr);
+  assert.ok(!r.stdout.includes('CLAIM'), r.stdout);
+  assert.ok(r.stdout.endsWith('DONE Report: done\n'), r.stdout);
+});
