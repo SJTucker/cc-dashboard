@@ -791,6 +791,14 @@ test('a mod-style resume prompt takes its title from the handoff heading, shorte
   assert.strictEqual(rows.sessions.s1.handoffTitle, 'Fix the deploy failure');
 });
 
+test('an image resume prompt takes its title from the Context image heading', async () => {
+  const file = '/Users/me/code/app/.claude/context-images/2026-11-10-120000-main.md';
+  const prompt = `Read ${file} in full, then every file it lists under "Read before starting". Continue from "Next steps".`;
+  const result = '     1\t# Context image: Fix the login redirect\n     2\t\n     3\t## Sources';
+  const rows = await extractFile(writeTranscript(handoffLines({ prompt, readPath: file, result })));
+  assert.strictEqual(rows.sessions.s1.handoffTitle, 'Fix the login redirect');
+});
+
 test('a skill-style relative resume prompt matches the absolute Read path', async () => {
   const prompt = 'Read .claude/handoffs/2026-09-08-142310-feat-auth-refresh.md, check Preconditions, then continue.';
   const rows = await extractFile(writeTranscript(handoffLines({ prompt, result: HANDOFF_TEXT })));

@@ -1,6 +1,6 @@
 import type { AgentInfo, EngineInterface, On, SessionRateLimit, UsageUnit } from 'claude-code'
 import { test, expect, mock } from 'claude-code/testing'
-import { documentResumePrompt, handoffText, resumePrompt } from './handoff'
+import { documentResumePrompt, imageResumePrompt, resumePrompt } from './handoff'
 import { snapshotName } from './setup'
 import { rateLimitsInput } from './statusline'
 
@@ -774,10 +774,10 @@ const judging = {
   record: { exitCode: 0, stdout: '{"recorded":1,"relevant":1,"unjudged":0}' },
 }
 
-test('session.start registers /backfill-updates and /transcript-handoff', async ($, on) => {
+test('session.start registers /backfill-updates and /context-image-handoff', async ($, on) => {
   const { registered } = world(on, { files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
   await $.session.start(start)
-  expect(registered).toEqual(['backfill-updates', 'transcript-handoff'])
+  expect(registered).toEqual(['backfill-updates', 'context-image-handoff'])
 })
 
 const STEER_DIR = '/home/u/.claude/cc-dashboard/steer/s1'
@@ -1521,7 +1521,7 @@ test('/backfill-updates names a failing script', async ($, on) => {
 test('a failing command.register is logged and session.start still resolves', async ($, on) => {
   const { logged } = world(on, { registerFails: true, files: { [UPDATES]: '{"2.1.290":{"relevant":false}}' } })
   await $.session.start(start)
-  expect(logged).toEqual(['could not register /backfill-updates (HooksError)', 'could not register /transcript-handoff (HooksError)'])
+  expect(logged).toEqual(['could not register /backfill-updates (HooksError)', 'could not register /context-image-handoff (HooksError)'])
 })
 
 test('/backfill-updates names a prompt that printed no batches', async ($, on) => {
@@ -2340,6 +2340,7 @@ test('the first rule in a folder that was empty at the first check is marked add
 
 const TRANSCRIPT = '/home/u/.claude/projects/-work-my-demo/s1.jsonl'
 const READY = 'cache expires soon · /clear to resume from the transcript'
+const EXPIRED = 'cache expired · /clear to resume from the transcript'
 const RESUME = resumePrompt(TRANSCRIPT)
 // One finished main-thread turn, which leaves the session waiting. Named idleTurn
 // because this file already has a constant called idle.
@@ -2354,13 +2355,14 @@ const EXPIRES = 61_000 + HOUR
 const FIRE = EXPIRES - LEAD
 const TRANSCRIPT_ARGS = { transcript: TRANSCRIPT }
 const cache = (ttl: '1h' | '5m', expiresAt: number) => ({ exitCode: 0, stdout: JSON.stringify({ ttl, expiresAt }) })
-// Defaults to the transcript handoff, which the tests below that predate the document
-// mode cover. A test of the document mode passes its own files.
+// Defaults to the image handoff with a fork that answers nothing, so each handoff falls
+// back to the transcript prompt, which the tests below that predate the image mode
+// cover. A test of the document or image mode passes its own files and fork reply.
 const timed = (over: Partial<World> = {}): Partial<World> => ({
   contextTokens: 103_224,
   cacheState: cache('1h', EXPIRES),
   ...over,
-  files: { [DASH_SETTINGS]: '{"handoff":"transcript"}', ...over.files },
+  files: { [DASH_SETTINGS]: '{"handoff":"image"}', ...over.files },
 })
 
 test('an idle turn over 50k tokens on a 1h cache shows the status 7 minutes before the cache expires, with no fork', async ($, on) => {
@@ -2412,12 +2414,30 @@ test('a timer armed after the fire time but before the expiry shows the status a
   expect(statuses).toEqual([undefined, READY])
 })
 
-test('a cache that expired before the timer was armed gets the status at once', async ($, on) => {
+test('a cache that expired before the timer was armed gets the expired status at once', async ($, on) => {
   const { statuses, clock } = world(on, timed({ cacheState: cache('1h', 61_000 + 100) }))
   await idleTurn($)
   await clock.advance(ARM)
   await clock.settle()
+  expect(statuses).toEqual([undefined, EXPIRED])
+})
+
+test('the status says the cache expired once the cache expires', async ($, on) => {
+  const { statuses, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.set(EXPIRES - 1)
   expect(statuses).toEqual([undefined, READY])
+  await clock.set(EXPIRES)
+  expect(statuses).toEqual([undefined, READY, EXPIRED])
+})
+
+test('turn.start after the status shows cancels the expired status', async ($, on) => {
+  const { statuses, clock } = world(on, timed())
+  await idleTurn($)
+  await clock.set(FIRE)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.set(EXPIRES)
+  expect(statuses).toEqual([undefined, READY, undefined])
 })
 
 test('no transcript arms nothing and logs nothing', async ($, on) => {
@@ -2838,27 +2858,7 @@ test('a new ready handoff prunes stored handoffs older than 7 days and keeps new
   expect(state.store['handoff:s1']).toBeDefined()
 })
 
-const handoffCmd = { command: 'transcript-handoff', args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }
-
-test('/transcript-handoff prints the cd command, the transcript path and the resume prompt', async ($, on) => {
-  world(on)
-  const result = await $.command.run(handoffCmd)
-  expect(result).toEqual({ text: handoffText('/work/my.demo', TRANSCRIPT) })
-  expect(result.text).toContain('cd /work/my.demo && claude')
-  expect(result.text).toContain(TRANSCRIPT)
-})
-
-test('/transcript-handoff names the index when it exists', async ($, on) => {
-  world(on, { indexes: [INDEX_OUT] })
-  const result = await $.command.run(handoffCmd)
-  expect(result).toEqual({ text: handoffText('/work/my.demo', TRANSCRIPT, INDEX_OUT) })
-})
-
-test('/transcript-handoff with no transcript prints the error text', async ($, on) => {
-  world(on, { exists: () => false })
-  const result = await $.command.run(handoffCmd)
-  expect(result).toEqual({ text: 'transcript-handoff: transcript not found. Send a prompt first, then run /transcript-handoff again.' })
-})
+// /context-image-handoff tests live with the image handoff tests further down.
 
 // The plan limit band (register.ts).
 const LIMITS = '/home/u/.claude/cc-dashboard/limit-warnings.json'
@@ -3678,24 +3678,232 @@ test('document handoff writes the fork reply under .claude/handoffs', async ($, 
   expect(fills).toEqual([`Read ${DOC_PATH}, check Preconditions, then continue from "Next steps".`])
 })
 
-test('transcript handoff keeps today\'s prompt and makes no fork call', async ($, on) => {
-  const { forked, repoRan, statuses, state, clock } = world(on, docWorld({ files: setting({ handoff: 'transcript' }) }))
+// The image handoff: a fork writes <root>/.claude/context-images/<stamp>-<branch>.md.
+const IMG_PATH = '/work/my.demo/.claude/context-images/2026-11-10-120000-main.md'
+const IMG_READY = 'cache expires soon · /clear to resume from the context image'
+const IMG_EXPIRED = 'cache expired · /clear to resume from the context image'
+const IMG_REPLY = { isAnswered: true as const, text: '# Context image: Fix login\nbody' }
+const INDEX_TEXT = '# Session index\n\n## Turn 1 (lines 1-9)\nfix the login'
+const imageWorld = (over: Partial<World> = {}) =>
+  timed({ files: setting({ handoff: 'image' }), repo: DOC_REPO, forkReply: IMG_REPLY, ...over })
+
+test('image handoff forks with the index text, writes under .claude/context-images and prefills the image prompt after /clear', async ($, on) => {
+  const { forked, writes, statuses, fills, state, clock } = world(on, imageWorld({ indexes: [INDEX_OUT], files: { ...setting({ handoff: 'image' }), [INDEX_OUT]: INDEX_TEXT } }))
   await idleTurn($)
   await clock.set(FIRE)
   await clock.settle()
-  expect(forked).toEqual([])
-  expect(repoRan).toEqual([])
-  expect(statuses).toEqual([undefined, READY])
-  expect(state.store['handoff:s1']).toEqual({ resume: RESUME, at: FIRE })
+  expect(forked.length).toBe(1)
+  expect(forked[0]).toContain('# Context image: <the task, in at most 6 words>')
+  expect(forked[0]).toContain(`Transcript path: ${TRANSCRIPT}`)
+  expect(forked[0]).toContain(`Transcript index path: ${INDEX_OUT}`)
+  expect(forked[0].endsWith(INDEX_TEXT)).toBe(true)
+  expect(writes[IMG_PATH]).toBe('# Context image: Fix login\nbody\n')
+  expect(Object.keys(writes).some((path) => path.includes('/.claude/handoffs/'))).toBe(false)
+  expect(statuses).toEqual([undefined, IMG_READY])
+  expect(state.store['handoff:s1']).toEqual({ resume: imageResumePrompt(IMG_PATH), at: FIRE })
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(4_000)
+  await clock.settle()
+  expect(fills).toEqual([imageResumePrompt(IMG_PATH)])
 })
 
-test('a document handoff whose cache expired before the timer fired makes the transcript handoff and no fork', async ($, on) => {
+test('image handoff with no index says so in the fork prompt', async ($, on) => {
+  const { forked, clock } = world(on, imageWorld())
+  await idleTurn($)
+  await clock.set(FIRE)
+  await clock.settle()
+  expect(forked[0]).toContain('Transcript index path: (no index exists)')
+})
+
+test('a ready image changes its status to the expired text at the cache expiry', async ($, on) => {
+  const { statuses, clock } = world(on, imageWorld())
+  await idleTurn($)
+  await clock.set(FIRE)
+  await clock.settle()
+  expect(statuses).toEqual([undefined, IMG_READY])
+  await clock.set(EXPIRES - 1)
+  expect(statuses).toEqual([undefined, IMG_READY])
+  await clock.set(EXPIRES)
+  expect(statuses).toEqual([undefined, IMG_READY, IMG_EXPIRED])
+})
+
+test('a turn after a ready image cancels the expiry status', async ($, on) => {
+  const { statuses, clock } = world(on, imageWorld())
+  await idleTurn($)
+  await clock.set(FIRE)
+  await clock.settle()
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.set(EXPIRES + 1)
+  expect(statuses).toEqual([undefined, IMG_READY, undefined])
+})
+
+test('an image whose fork ends after the cache expired gets the expired status at once', async ($, on) => {
+  const { statuses, writes, clock } = world(on, imageWorld({ forkMs: LEAD + 1_000 }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await clock.set(EXPIRES + 1_000)
+  await clock.settle()
+  expect(writes[IMG_PATH]).toBeDefined()
+  expect(statuses).toEqual([undefined, IMG_EXPIRED])
+})
+
+test('an image handoff whose cache expired before the timer fired makes the expired transcript handoff and no fork', async ($, on) => {
+  const { forked, statuses, state, clock } = world(on, imageWorld({ nowOffset: HOUR }))
+  await idleTurn($)
+  await clock.advance(ARM)
+  await clock.settle()
+  expect(forked).toEqual([])
+  expect(statuses).toEqual([undefined, EXPIRED])
+  expect(state.store['handoff:s1']).toEqual(expect.objectContaining({ resume: RESUME }))
+})
+
+test('image handoff falls back to the transcript prompt when the fork fails', async ($, on) => {
+  const { forked, statuses, logged, state, clock } = world(on, imageWorld({ forkReply: { isAnswered: false, reason: 'nothing-to-fork' } }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await clock.settle()
+  expect(forked.length).toBe(1)
+  expect(statuses).toEqual([undefined, READY])
+  expect(state.store['handoff:s1']).toEqual({ resume: RESUME, at: FIRE })
+  expect(logged.some((l) => l.includes('handoff image failed (fork nothing-to-fork)'))).toBe(true)
+})
+
+test('image handoff falls back to the transcript prompt when the write fails', async ($, on) => {
+  const { statuses, logged, state, clock } = world(on, imageWorld({ writeFails: true }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await clock.settle()
+  expect(statuses).toEqual([undefined, READY])
+  expect(state.store['handoff:s1']).toEqual(expect.objectContaining({ resume: RESUME }))
+  expect(logged.some((l) => l.startsWith('handoff image failed ('))).toBe(true)
+})
+
+test('an image switched to off while the fork runs writes no file and sets no status', async ($, on) => {
+  const { writes, statuses, state, clock } = world(on, imageWorld({ forkMs: 1_000 }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await clock.advance(500)
+  state.files[DASH_SETTINGS] = '{"handoff":"off"}'
+  await clock.advance(1_000)
+  await clock.settle()
+  expect(writes[IMG_PATH]).toBe(undefined)
+  expect(statuses).toEqual([undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('a turn during the image fork drops the image prompt', async ($, on) => {
+  const { statuses, state, clock } = world(on, imageWorld({ forkMs: 5_000 }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(statuses).toEqual([undefined, undefined])
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('a /clear during the image fork leaves the image prompt out of the new session', async ($, on) => {
+  const { fills, statuses, state, clock } = world(on, imageWorld({ forkMs: 5_000 }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(fills).toEqual([])
+  expect(statuses.includes(IMG_READY)).toBe(false)
+  expect(state.store['handoff:s1']).toBe(undefined)
+})
+
+test('a saved "transcript" handoff setting runs the image handoff', async ($, on) => {
+  const { forked, writes, clock } = world(on, imageWorld({ files: setting({ handoff: 'transcript' }) }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  await clock.settle()
+  expect(forked.length).toBe(1)
+  expect(writes[IMG_PATH]).toBe('# Context image: Fix login\nbody\n')
+})
+
+// /context-image-handoff: writes the image on request and queues it in the reset file.
+const imageCmd = { command: 'context-image-handoff', args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }
+const CMD_STARTED = 'context-image-handoff: writing the context image. The status line says when /clear will resume from it.'
+const CMD_READY = 'context image ready · /clear to resume'
+const CMD_FAILED = 'context image failed · see the cc-dashboard log'
+
+test('/context-image-handoff returns at once, then queues the image prompt in the reset file even with handoff off', async ($, on) => {
+  const { forked, writes, statuses, clock } = world(on, { files: setting({ handoff: 'off' }), repo: DOC_REPO, forkReply: IMG_REPLY, forkMs: 2_000 })
+  const result = await $.command.run(imageCmd)
+  expect(result).toEqual({ text: CMD_STARTED })
+  expect(writes[RESET_FILE]).toBe(undefined)
+  await clock.advance(2_000)
+  await clock.settle()
+  expect(forked.length).toBe(1)
+  expect(writes[IMG_PATH]).toBe('# Context image: Fix login\nbody\n')
+  expect(writes[RESET_FILE]).toBe(`${imageResumePrompt(IMG_PATH)}\n`)
+  expect(statuses).toEqual([CMD_READY])
+})
+
+test('the image queued by /context-image-handoff fills the input after the next /clear', async ($, on) => {
+  const { fills, state, clock } = world(on, { files: setting({ handoff: 'off' }), repo: DOC_REPO, forkReply: IMG_REPLY })
+  await $.command.run(imageCmd)
+  await clock.settle()
+  state.files[RESET_FILE] = `${imageResumePrompt(IMG_PATH)}\n`
+  state.stats[RESET_FILE] = 60_000
+  await $.session.end(clear)
+  state.id = 's2'
+  await clock.advance(4_000)
+  await clock.settle()
+  expect(fills).toEqual([imageResumePrompt(IMG_PATH)])
+})
+
+test('/context-image-handoff with no transcript prints the error text and forks nothing', async ($, on) => {
+  const { forked, clock } = world(on, { exists: () => false })
+  const result = await $.command.run(imageCmd)
+  await clock.settle()
+  expect(result).toEqual({ text: 'context-image-handoff: transcript not found. Send a prompt first, then run /context-image-handoff again.' })
+  expect(forked).toEqual([])
+})
+
+test('/context-image-handoff while a handoff is being written starts nothing', async ($, on) => {
+  const { forked, writes, clock } = world(on, imageWorld({ forkMs: 5_000 }))
+  await idleTurn($)
+  await clock.set(FIRE)
+  const result = await $.command.run(imageCmd)
+  expect(result).toEqual({ text: 'context-image-handoff: a context image or handoff is already being written.' })
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(forked.length).toBe(1)
+  expect(writes[RESET_FILE]).toBe(undefined)
+})
+
+test('/context-image-handoff run twice while it writes forks once', async ($, on) => {
+  const { forked, clock } = world(on, imageWorld({ forkMs: 5_000 }))
+  await $.command.run(imageCmd)
+  await clock.advance(1)
+  const second = await $.command.run(imageCmd)
+  expect(second).toEqual({ text: 'context-image-handoff: a context image or handoff is already being written.' })
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(forked.length).toBe(1)
+})
+
+test('/context-image-handoff logs a fork failure, sets the failed status and queues nothing', async ($, on) => {
+  const { writes, statuses, logged, clock } = world(on, imageWorld({ forkReply: { isAnswered: false, reason: 'nothing-to-fork' } }))
+  await $.command.run(imageCmd)
+  await clock.settle()
+  expect(writes[RESET_FILE]).toBe(undefined)
+  expect(statuses).toEqual([CMD_FAILED])
+  expect(logged).toEqual(['context image failed (fork nothing-to-fork)'])
+})
+
+test('a document handoff whose cache expired before the timer fired makes the expired transcript handoff and no fork', async ($, on) => {
   const { forked, statuses, state, clock } = world(on, docWorld({ nowOffset: HOUR }))
   await idleTurn($)
   await clock.advance(ARM)
   await clock.settle()
   expect(forked).toEqual([])
-  expect(statuses).toEqual([undefined, READY])
+  expect(statuses).toEqual([undefined, EXPIRED])
   expect(state.store['handoff:s1']).toEqual(expect.objectContaining({ resume: RESUME }))
 })
 
@@ -3920,7 +4128,7 @@ function gateNext(on: On, event: string) {
 
 test('a session.end during track\'s awaits leaves no activity file, no index run and no handoff timer', async ($, on) => {
   const gate = gateNext(on, 'clock.now')
-  const { writes, indexRan, cacheRan, clock } = world(gate.gated, timed({ files: { [DASH_SETTINGS]: '{"handoff":"transcript","transcriptIndex":true}' } }))
+  const { writes, indexRan, cacheRan, clock } = world(gate.gated, timed({ files: { [DASH_SETTINGS]: '{"handoff":"image","transcriptIndex":true}' } }))
   gate.arm()
   const turn = $.turn.complete(turnEnd())
   await gate.reached

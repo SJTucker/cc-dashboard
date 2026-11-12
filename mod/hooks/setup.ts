@@ -40,8 +40,9 @@ const bare = (line: string) => line.replace(/^[-*#>\s]+/, '').trim()
 // The dashboard's settings.json, written by lib/settings.js, which holds the same
 // defaults (test/mod-contract.test.js keeps the two parses alike). A missing or
 // invalid file or a non-object gives every default. Only a literal false turns a
-// boolean key off. A handoff value other than the three allowed ones is 'document'.
-export type HandoffMode = 'document' | 'transcript' | 'off'
+// boolean key off. A saved handoff 'transcript' is 'image'. A handoff value other than
+// the three allowed ones is 'document'.
+export type HandoffMode = 'document' | 'image' | 'off'
 export function parseDashboardSettings(text: unknown) {
   let parsed: unknown
   try {
@@ -50,7 +51,7 @@ export function parseDashboardSettings(text: unknown) {
     parsed = null
   }
   const v = isObject(parsed) ? parsed : {}
-  const handoff: HandoffMode = v.handoff === 'transcript' || v.handoff === 'off' ? v.handoff : 'document'
+  const handoff: HandoffMode = v.handoff === 'transcript' ? 'image' : v.handoff === 'image' || v.handoff === 'off' ? v.handoff : 'document'
   return {
     handoff,
     transcriptIndex: v.transcriptIndex !== false,

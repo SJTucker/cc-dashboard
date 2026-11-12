@@ -52,6 +52,17 @@ test('handoffHeading strips the line-number prefix and ignores other lines', () 
   assert.strictEqual(handoffHeading('     1\t# Something else'), null);
 });
 
+test('handoffHeading reads a Context image heading too', () => {
+  assert.strictEqual(handoffHeading('     1\t# Context image: fix the login\n     2\tbody'), 'fix the login');
+  assert.strictEqual(handoffHeading('# Context image: fix the login'), 'fix the login');
+});
+
+test('handoffPromptPath returns the .claude/context-images tail of an image resume prompt', () => {
+  assert.strictEqual(handoffPromptPath('Read /a/b/.claude/context-images/x.md in full, then every file'), '.claude/context-images/x.md');
+  assert.strictEqual(handoffPromptPath("Read '/my repo/.claude/context-images/x.md' in full, then"), '.claude/context-images/x.md');
+  assert.strictEqual(handoffPromptPath('Read /a/b/.claude/other/x.md in full'), null);
+});
+
 test('handoffPromptPath returns the .claude/handoffs tail of an absolute or relative path', () => {
   assert.strictEqual(handoffPromptPath('Read /a/b/.claude/handoffs/x.md, check Preconditions'), '.claude/handoffs/x.md');
   assert.strictEqual(handoffPromptPath('Read .claude/handoffs/x.md, check'), '.claude/handoffs/x.md');

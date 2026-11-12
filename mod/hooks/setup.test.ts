@@ -169,7 +169,8 @@ test('parseDashboardSettings defaults every key', async () => {
 test('parseDashboardSettings reads an unknown handoff value as document', async () => {
   expect(parseDashboardSettings('{"handoff":"fork"}').handoff).toBe('document')
   expect(parseDashboardSettings('{"handoff":7}').handoff).toBe('document')
-  expect(parseDashboardSettings('{"handoff":"transcript"}').handoff).toBe('transcript')
+  expect(parseDashboardSettings('{"handoff":"image"}').handoff).toBe('image')
+  expect(parseDashboardSettings('{"handoff":"transcript"}').handoff).toBe('image')
 })
 
 test('parseDashboardSettings counts only false as off', async () => {
@@ -184,4 +185,6 @@ test('parseDashboardSettings matches the server fixtures', async () => {
   expect(parseDashboardSettings('[]')).toEqual(SETTING_DEFAULTS)
   expect(parseDashboardSettings('{"handoff":"off","activity":false}')).toEqual({ ...SETTING_DEFAULTS, handoff: 'off', activity: false })
   expect(parseDashboardSettings('{"handoff":7}')).toEqual(SETTING_DEFAULTS)
+  expect(parseDashboardSettings('{"handoff":"transcript"}')).toEqual({ ...SETTING_DEFAULTS, handoff: 'image' })
+  expect(parseDashboardSettings('{"handoff":"image"}')).toEqual({ ...SETTING_DEFAULTS, handoff: 'image' })
 })
