@@ -26,7 +26,7 @@ Paths used below:
 - `<clone>`: the cc-dashboard clone that holds this skill. Claude Code prints
   "Base directory for this skill: <dir>" when it loads the skill, and `<dir>` may be
   a symlink. Resolve it once, at the start, with
-  `cd "$(realpath '<dir>')/../.." && pwd -P`, and use that absolute path everywhere
+  `(cd "$(realpath '<dir>')/../.." && pwd -P)`, and use that absolute path everywhere
   below.
 - `TI`: `<clone>/bin/transcript-index`.
 - `POST`: `<clone>/bin/board-post`.
@@ -147,6 +147,13 @@ match at its start, so identical first messages let a worker read the image and 
 "Read before starting" files from the cache entries the previous worker wrote. A
 `SendMessage` would land in the middle of that reading, so it does not work here.
 
+A worker's system prompt also holds the folder your shell is in when you call Agent,
+so every Agent call must start from the folder the session started in. Claude Code
+keeps a `cd` that ends inside the project, and a worktree is usually inside it. Run a
+command in a worktree as `(cd <worktree> && …)` or with `git -C <worktree>`, never as
+a bare `cd <worktree> && …`. If your shell's folder has moved anyway, `cd` back to the
+project root before the next Agent call.
+
 Build the worker message once per session from this template, filling in `<image>`,
 `<CLAIM>`, `<run>`, `<POST>` and `<board>` with absolute paths (a worker has no
 `<clone>`). Reuse it byte for byte for every worker of the run, including relaunches:
@@ -197,7 +204,9 @@ For each worker, its transcript is
 - `command`: `TI <worker transcript> --watch --run <run> --files <scratchpad folder>/ --budget 200000`,
   plus `--board <board>` on exactly one watch per wave, so each post wakes you
   once. `--run` reads the worker's task files from its claim, so the watch can be
-  armed before the worker has claimed. A `--files` entry ending in `/` covers a
+  armed before the worker has claimed. `--run` also reports files changed in the
+  claimed worktree, found with git, so a worker that edits through Bash (`sed -i`,
+  a heredoc) raises DRIFT too. A `--files` entry ending in `/` covers a
   whole folder: the scratchpad folder is this session's, so a worker's scratch
   files are not reported as drift.
 - `timeout_ms`: 1800000.
@@ -221,8 +230,14 @@ after a `KILLED` or `FAILED` watch.
 
 Run `TI <worker transcript> --steps 20` and decide:
 
-- `DRIFT edit outside task files: <path>`: steer, unless the steps show the edit
-  is a file the plan missed and the task needs. Then note it for Updates.
+- `DRIFT edit outside task files: <path>`: the watch reports each path once.
+  - When the steps show a file the plan missed and the task needs (a test helper,
+    the test file that really covers the code), do not steer and do not re-arm
+    the watch. Note the file for Updates and for the task's review.
+  - When it is scratch or out of scope, steer: move scratch files to the
+    scratchpad, or revert the edit.
+  - A DRIFT from a Bash edit shows in the steps as the Bash command that wrote
+    the file.
 - `STUCK <tool> <text> failed 3 times in a row`: steer with the fix, or tell the
   worker to stop and report if you do not know it.
 - `BUDGET context <n> tokens, over 200000`: steer the worker to finish its

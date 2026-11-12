@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawn, spawnSync } = require('child_process');
-const { tmpDir } = require('./helpers');
+const { tmpDir, gitRepo } = require('./helpers');
 
 const BIN = path.join(__dirname, '..', 'bin', 'transcript-index');
 
@@ -428,6 +428,100 @@ test('--watch --run armed before the transcript exists follows lines appended ac
   assert.equal(out.split('CLAIM second').length, 2, out);
   assert.equal(out.split('DRIFT').length, 2, out);
   assert.ok(!out.includes('/wt/lib/b.js'), out);
+});
+
+// A worker whose claimed task 3 (files: lib/a.js) has a real git repo as its worktree.
+// lines() builds transcript lines; add() appends them to the transcript.
+function gitWorker(t) {
+  const repo = gitRepo(t);
+  const dir = tmpDir(t, 'transcript-index-git');
+  const run = path.join(dir, 'img.run');
+  fs.mkdirSync(path.join(run, 'claimed'), { recursive: true });
+  fs.writeFileSync(path.join(run, 'claimed', '0001-t3-a1.json'), JSON.stringify({ task: 3, title: 'Parse it', files: ['lib/a.js'], worktree: repo }));
+  const file = path.join(dir, 'agent-a1.jsonl');
+  fs.writeFileSync(file, '');
+  const rec = (o) => JSON.stringify({ agentId: 'a1', isSidechain: true, sessionId: 's1', timestamp: '2026-11-08T14:02:00.000Z', ...o });
+  const asst = (content) => rec({ type: 'assistant', message: { role: 'assistant', content } });
+  const res = (id, content) => rec({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content }] } });
+  const use = (id, name, input) => ({ type: 'tool_use', id, name, input });
+  const lines = {
+    claim: () => [asst([use('c1', 'Bash', { command: `/c/bin/orch-claim '${run}' work` })]), res('c1', `CLAIMED 0001-t3-a1.json\nYour worktree is ${repo}`)],
+    bash: (id) => [asst([use(id, 'Bash', { command: "python3 - <<'E'\nopen('lib/c.js','w').write('c')\nE" })]), res(id, '')],
+    edit: (id, p) => [asst([use(id, 'Edit', { file_path: p })]), res(id, 'ok')],
+  };
+  const add = (l) => fs.appendFileSync(file, l.join('\n') + '\n');
+  return { repo, run, file, lines, add };
+}
+
+// Starts a watch on the gitWorker and waits for its CLAIMED line, which comes after the git base is taken.
+async function watchClaimed(t, w, ...args) {
+  const watch = start([w.file, '--watch', '--run', w.run, ...args]);
+  t.after(() => watch.child.kill());
+  w.add(w.lines.claim());
+  assert.ok(await until(() => watch.stdout().includes('CLAIMED 0001-t3-a1.json task 3: Parse it\n'), 8_000), watch.stdout());
+  return watch;
+}
+
+test('--watch --run reports DRIFT for a file a Bash command changed in the claimed worktree', async (t) => {
+  const w = gitWorker(t);
+  const watch = await watchClaimed(t, w);
+  fs.writeFileSync(path.join(w.repo, 'lib/a.js'), 'changed');
+  fs.writeFileSync(path.join(w.repo, 'lib/c.js'), 'c');
+  w.add(w.lines.bash('b1'));
+  const drift = `DRIFT edit outside task files: ${path.join(w.repo, 'lib/c.js')}\n`;
+  assert.ok(await until(() => watch.stdout().includes(drift), 8_000), watch.stdout());
+  w.add([HANDBACK]);
+  await watch.exited;
+  const out = watch.stdout();
+  assert.equal(out.split('DRIFT').length, 2, out);
+  assert.ok(!out.includes('lib/a.js'), out);
+});
+
+test('--watch --run reports a file once when both an Edit step and git show it', async (t) => {
+  const w = gitWorker(t);
+  const watch = await watchClaimed(t, w);
+  const c = path.join(w.repo, 'lib/c.js');
+  fs.writeFileSync(c, 'c');
+  w.add(w.lines.edit('e1', c));
+  w.add(w.lines.bash('b1'));
+  w.add([HANDBACK]);
+  await watch.exited;
+  const out = watch.stdout();
+  assert.equal(out.split(`DRIFT edit outside task files: ${c}\n`).length, 2, out);
+  assert.equal(out.split('DRIFT').length, 2, out);
+});
+
+test('--watch --run keeps running to DONE when the worktree is removed', async (t) => {
+  const w = gitWorker(t);
+  const watch = await watchClaimed(t, w);
+  fs.rmSync(w.repo, { recursive: true, force: true });
+  w.add(w.lines.bash('b1'));
+  w.add([HANDBACK]);
+  const r = await watch.exited;
+  assert.equal(r.status, 0);
+  assert.ok(!r.stdout().includes('DRIFT'), r.stdout());
+  assert.ok(r.stdout().endsWith('DONE Report: done\n'), r.stdout());
+});
+
+test('a re-armed --watch --run does not report changes already in the worktree when it started', async (t) => {
+  const w = gitWorker(t);
+  // The last watch saw lib/c.js change; it is still uncommitted when the new watch starts.
+  fs.writeFileSync(path.join(w.repo, 'lib/c.js'), 'c');
+  w.add([...w.lines.claim(), ...w.lines.bash('b1')]);
+  const watch = start([w.file, '--watch', '--run', w.run, '--since-line', '4']);
+  t.after(() => watch.child.kill());
+  await new Promise((r) => setTimeout(r, 2_500));
+  w.add(w.lines.bash('b2'));
+  w.add([HANDBACK]);
+  const r = await watch.exited;
+  assert.ok(!r.stdout().includes('DRIFT'), r.stdout());
+});
+
+test('--watch with two transcript paths says to separate --files entries with commas', (t) => {
+  const { file } = claimWorker(t);
+  const r = watchRun(file, '--files', '/a.js', '/b.js');
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /separate --files entries with commas/);
 });
 
 test('a re-armed --watch --run --since-line past the claim does not repeat CLAIM or CLAIMED', (t) => {
