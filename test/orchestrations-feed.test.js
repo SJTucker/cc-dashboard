@@ -286,6 +286,36 @@ test('a Monitor whose description names no task reads Watching workers', () => {
   assert.equal(feedOf(s).feed[0].text, 'Watching workers');
 });
 
+// A parsed orchestration whose agents are given as discover.js resolves them, so these
+// tests do not depend on claim parsing.
+const claimAgents = (agents) => (s) => ({ ...parseOrchestrator(s.lines), agents });
+const monitorFor = (id, description = 'Task 1 worker') => ({ description, command: `/c/bin/transcript-index /p/s/subagents/agent-${id}.jsonl --watch --run /p/x.run` });
+const claimWorker = (agentId, task, line = 1) => ({ agentId, role: 'worker', claimKind: 'work', task, files: [], line, description: '' });
+
+test('a Monitor on a claim worker names the task it claimed, not the description', () => {
+  const s = orchestration().use('Monitor', monitorFor('w1'));
+  const parsed = claimAgents([claimWorker('w1', 2)])(s);
+  assert.equal(actionFeed(s.lines, parsed)[0].text, 'Watching Task 2');
+});
+
+test('a Monitor on a claim worker that has not claimed reads Watching a worker', () => {
+  const s = orchestration().use('Monitor', monitorFor('w1'));
+  const parsed = claimAgents([claimWorker('w1', null)])(s);
+  assert.equal(actionFeed(s.lines, parsed)[0].text, 'Watching a worker');
+});
+
+test('a Monitor matches the agent by its whole transcript file name', () => {
+  const s = orchestration().use('Monitor', monitorFor('a12'));
+  const parsed = claimAgents([claimWorker('a1', 1, 1), claimWorker('a12', 3, 2)])(s);
+  assert.equal(actionFeed(s.lines, parsed)[0].text, 'Watching Task 3');
+});
+
+test('nowLine names the claimed task for the latest Monitor', () => {
+  const s = orchestration().use('Monitor', monitorFor('w1'));
+  const parsed = claimAgents([claimWorker('w1', 2)])(s);
+  assert.equal(nowLine(parsed, stepsOf(s.lines, 1, s.lines.length), null, true, s.lines).text, 'Watching Task 2');
+});
+
 test('a SendMessage to an agent that is not in the orchestration is left out of the feed', () => {
   const s = orchestration().use('SendMessage', { to: 'unknown', summary: 'hi', message: 'x' });
   const { feed } = feedOf(s);

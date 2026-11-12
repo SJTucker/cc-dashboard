@@ -599,6 +599,15 @@ test('the action feed names the claimed task for a started worker', (t) => {
   assert.ok(d.feed.some((f) => f.text.includes('Task 2')), JSON.stringify(d.feed.map((f) => f.text)));
 });
 
+test('the feed names the claimed task for a watch whose description has another number', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 2, files: ['lib/b.js'], steps: working('lib/b.js'), monitorDescription: 'Task 1 worker' }] });
+  const texts = detailOf(config, o.sessionId).feed.map((f) => f.text);
+  assert.ok(texts.includes('Watching Task 2'), JSON.stringify(texts));
+  assert.ok(!texts.includes('Watching Task 1'), JSON.stringify(texts));
+});
+
 test('planPath comes from the claimed task when the transcript names none', (t) => {
   const config = testConfig(t);
   install(config);

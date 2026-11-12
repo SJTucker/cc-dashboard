@@ -128,7 +128,7 @@ function writeOrchestration(configDir, opts = {}) {
     lines.push(resultOf(parent, `toolu_wt${n}`));
     lines.push(assistantOf(parent, [use('Agent', { description, subagent_type: 'general-purpose', model: 'sonnet', prompt: workerPrompt }, `toolu_agent${n}`)]));
     lines.push(resultOf(parent, `toolu_agent${n}`, { toolUseResult: { isAsync: true, status: 'async_launched', agentId, description, resolvedModel: 'claude-sonnet-5-5', prompt: workerPrompt } }));
-    lines.push(assistantOf(parent, [use('Monitor', { command: `${CLONE}/bin/transcript-index ${workerFile} --watch ${claimed ? `--run ${runDir}` : `--files ${files.join(',')}`} --budget 200000 --board ${boardPath}`, description }, `toolu_mon${n}`)]));
+    lines.push(assistantOf(parent, [use('Monitor', { command: `${CLONE}/bin/transcript-index ${workerFile} --watch ${claimed ? `--run ${runDir}` : `--files ${files.join(',')}`} --budget 200000 --board ${boardPath}`, description: w.monitorDescription ?? description }, `toolu_mon${n}`)]));
     lines.push(resultOf(parent, `toolu_mon${n}`));
 
     // The worker's own transcript. Each assistant record carries usage, with the
