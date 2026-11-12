@@ -1602,13 +1602,13 @@ test('GET /api/settings returns the defaults', async (t) => {
   assert.deepStrictEqual(await res.json(), require('../lib/settings').DEFAULT_SETTINGS);
 });
 
-test('POST /api/settings saves handoff transcript', async (t) => {
+test('POST /api/settings saves handoff image', async (t) => {
   const { url } = await startServer(t);
-  const res = await postSettings(url, { handoff: 'transcript' });
+  const res = await postSettings(url, { handoff: 'image' });
   assert.strictEqual(res.status, 200);
-  assert.strictEqual((await res.json()).handoff, 'transcript');
+  assert.strictEqual((await res.json()).handoff, 'image');
   const after = await (await fetch(`${url}/api/settings`)).json();
-  assert.deepStrictEqual(after, { ...require('../lib/settings').DEFAULT_SETTINGS, handoff: 'transcript' });
+  assert.deepStrictEqual(after, { ...require('../lib/settings').DEFAULT_SETTINGS, handoff: 'image' });
 });
 
 test('POST /api/settings rejects handoff fork with 400', async (t) => {

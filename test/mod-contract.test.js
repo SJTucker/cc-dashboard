@@ -134,6 +134,8 @@ test('mod and server parse settings.json alike', (t) => {
     ['[]', defaults],
     ['{"handoff":"off","activity":false}', { ...defaults, handoff: 'off', activity: false }],
     ['{"handoff":7}', defaults],
+    ['{"handoff":"transcript"}', { ...defaults, handoff: 'image' }],
+    ['{"handoff":"image"}', { ...defaults, handoff: 'image' }],
   ];
   for (const [text, expected] of fixtures) {
     const cfg = tmpDir(t, 'mod-contract');

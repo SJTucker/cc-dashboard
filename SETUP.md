@@ -85,18 +85,40 @@ of a session with at least 50,000 tokens of context expires. It has three modes:
   ready · /clear to resume`. After `/clear`, the mod fills the new session's input box
   with `Read <path>, check Preconditions, then continue from "Next steps".` A path with
   a character outside `[A-Za-z0-9_./~-]` is single-quoted. If the fork or the file write
-  fails, the mod falls back to the `transcript` behaviour. When the 1-hour cache has
+  fails, the mod falls back to the transcript prompt (below). When the 1-hour cache has
   already expired at the moment the timer fires, as after the machine slept, the mod
-  makes no fork and uses the `transcript` behaviour. The files
+  makes no fork and uses the transcript prompt, with the `cache expired` status. The files
   show as untracked in `git status` unless the repo ignores `.claude/handoffs/`.
-- `transcript`: the status line shows `cache expires soon · /clear to resume from the
-  transcript`. After `/clear`, the mod fills the input box with a prompt to read the old
-  session's transcript. The mod writes no file for this.
+- `image`: the mod forks the session's model to write a context image to
+  `<worktree root>/.claude/context-images/<date>-<time>-<branch>.md`, or to
+  `<session folder>/.claude/context-images/` outside git. The image follows
+  `skills/orchestrate/image-template.md`: your own prompts quoted with their transcript
+  line numbers, the files to read, decisions, dead ends, what is done and in progress,
+  and next steps. The fork also receives the session's transcript index when one
+  exists. The status line shows `cache expires soon · /clear to resume from the context
+  image`. When the cache expires, it changes to `cache expired · /clear to resume from the
+  context image`. After `/clear`, the mod fills the input box with `Read <path> in full,
+  then every file it lists under "Read before starting". Continue from "Next steps".` If
+  the fork or the file write fails, or the cache had already expired when the timer fired,
+  the mod uses the transcript prompt. A saved `transcript` value, the name of an earlier
+  version's mode, reads as `image`. The files show as untracked in `git status` unless the
+  repo ignores `.claude/context-images/`.
 - `off`: no handoff.
 
-`/transcript-handoff` prints the transcript prompt with the `cd ... && claude` command
-for the session's folder. Claude Code's own compaction (`/compact`, threshold and idle)
-is unchanged, because Claude Code does not pass compaction to installed mods.
+The transcript prompt fills the input box with a prompt to read the old session's
+transcript and its index. The status line shows `cache expires soon · /clear to resume
+from the transcript`, and `cache expired · /clear to resume from the transcript` after the
+cache expires. The mod writes no file for it and makes no model call.
+
+`/context-image-handoff` writes a context image of the current session in the
+background, whatever the `handoff` setting says, and without the 1-hour cache or
+50,000-token checks. When the image is written, the status line shows `context image
+ready · /clear to resume`, and the prompt that reads it is queued in
+`<cfg>/cc-dashboard/reset-prompt/<session id>.txt`, so the next `/clear` fills it. If the
+fork or the write fails, the status line shows `context image failed · see the
+cc-dashboard log` and nothing is queued. While a context image or handoff is being
+written, the command starts nothing. Claude Code's own compaction (`/compact`, threshold
+and idle) is unchanged, because Claude Code does not pass compaction to installed mods.
 
 The mod reads `<cfg>/cc-dashboard/settings.json` at the moment each behaviour would
 run, so a change applies at the next event. A setting that is off stops the work
@@ -104,7 +126,7 @@ behind it, including file reads, scripts and model calls:
 
 - `handoff` set to `off`: no handoff timer, no `bin/cache-state` run, no status line
   offer and no prefill after `/clear`. A reset line from the orchestrate skill still
-  fills. `/transcript-handoff` still works.
+  fills. `/context-image-handoff` still works.
 - `transcriptIndex` false: no `bin/transcript-index` run.
 - `reviews` false: no `bin/review-session` run and no Haiku review call. A review
   already claimed stays pending and is retried an hour later.
@@ -294,15 +316,16 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
 | `<cfg>/cc-dashboard/cache/` | `CLAUDE_CONFIG_DIR` | `bin/cache-line`, one `<session id>.json` per session holding the cache TTL, its expiry and when that expiry was first seen. `bin/cache-line` deletes files older than a day. |
 | `<cfg>/cc-dashboard/transcript-index/` | `CLAUDE_CONFIG_DIR` | `bin/transcript-index`, run by the mod one second after each main-thread turn of an interactive session. One `<session id>.md` per session: the session's turns with the transcript lines each covers, the files edited and read, the commands run and the subagents launched. A resumed session reads it through the resume prompt. Nothing deletes these files. |
-| `<cfg>/cc-dashboard/reset-prompt/` | `CLAUDE_CONFIG_DIR` | the orchestrate skill writes one `<session id>.txt` holding the reset line it offers. The mod reads it when that session ends. A `/clear` fills the next session's input box with the line, unless the file is over 24 hours old. The mod then empties the file, on any end, because the mod engine has no delete. The server also reads it, for the Orchestration tab's reset phase. |
+| `<cfg>/cc-dashboard/reset-prompt/` | `CLAUDE_CONFIG_DIR` | the orchestrate skill writes one `<session id>.txt` holding the reset line it offers, and the mod writes one for `/context-image-handoff`. The mod reads it when that session ends. A `/clear` fills the next session's input box with the line, unless the file is over 24 hours old. The mod then empties the file, on any end, because the mod engine has no delete. The server also reads it, for the Orchestration tab's reset phase. |
 | `<cfg>/cc-dashboard/steer/` | `CLAUDE_CONFIG_DIR` | the server writes one `<session id>/<request id>.json` per steer sent from the Orchestration tab, into the folder of the orchestrator's live session. The mod in that session lists the folder every 2 seconds, sends each request's text to the worker with `$.session.send`, adds a note row to the orchestrator's transcript, and writes `<request id>.result.json` beside the request (`delivered`, and a `reason` when it is false). It does this only for an interactive session that started while `<cfg>/skills/orchestrate/SKILL.md` existed. Without that file the mod never lists the folder. The server reads both for the worker card's steer state. While the Orchestration tab polls, at most once every 10 minutes, the server walks every `<session id>/` folder here whose name is a valid session id, even when that session is no longer listed. In each it deletes request files, result files and leftover temp files (`<request id>.json.<pid>`) older than 24 hours, then removes the folder once it is empty. Each poll of one orchestration also deletes the expired files in that orchestration's own folders. It never follows a symlink and never touches a name that is not one of those file names. Without the orchestrate skill installed it does none of this. |
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod. The server deletes files older than a day when the page shows the Today range. |
 | `<cfg>/cc-dashboard/agent-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per subagent. Each holds the agent id and, for each model request the subagent made, its time, model, turn id, step index and four token counts. The server reads them into `transcripts.db` and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/headless-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<session id>.json` per headless session (`claude -p` with no transcript). Each holds the session id, its working folder, the cost Claude Code last reported and, for each model request, its time, model, subagent id when there is one, turn id, step index and four token counts. The server reads them into `transcripts.db` as call rows and deletes each file a day after it was last written. |
 | `<repo root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, in `document` handoff mode, 7 minutes before a 1-hour prompt cache expires. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
+| `<repo root>/.claude/context-images/` of each session's project, or the session's folder outside git | none | the mod, in `image` handoff mode 7 minutes before a 1-hour prompt cache expires, and for `/context-image-handoff`. Each file holds quotes from a whole conversation, so add `.claude/context-images/` to that repo's `.gitignore`. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
 | `<cfg>/cc-dashboard/setup/` | `CLAUDE_CONFIG_DIR` | the mod |
-| `<cfg>/cc-dashboard/settings.json` | `CLAUDE_CONFIG_DIR` | The server writes it from the Mod tab and keeps keys it does not know. Keys: `handoff` (`document`, `transcript` or `off`, default `document`), `transcriptIndex`, `reviews`, `setupMarkers`, `setupLabels`, `activity` and `limitBand` (each on unless set to `false`). `bin/review-session` and the mod read it. |
+| `<cfg>/cc-dashboard/settings.json` | `CLAUDE_CONFIG_DIR` | The server writes it from the Mod tab and keeps keys it does not know. Keys: `handoff` (`document`, `image` or `off`, default `document`; a saved `transcript` reads as `image`), `transcriptIndex`, `reviews`, `setupMarkers`, `setupLabels`, `activity` and `limitBand` (each on unless set to `false`). `bin/review-session` and the mod read it. |
 | `<cfg>/cc-dashboard/updates.json` | `CLAUDE_CONFIG_DIR` | `bin/judge-updates` |
 | `<cfg>/cc-dashboard/server.pid`, `<cfg>/cc-dashboard/server.log` | `CLAUDE_CONFIG_DIR` | `bin/server`. `bin/server stop` removes the pid file. Each `bin/server start` empties the log. |
 | `<cfg>/cc-dashboard/limit-warnings.json` | `CLAUDE_CONFIG_DIR` | the mod. Holds the level (75 or 90) each plan window's band was last dismissed at, shared by every running session. |
@@ -387,15 +410,15 @@ of them.
     with `@path`, rules, skills, agents, and a project's `CLAUDE.md` and
     `CLAUDE.local.md`. Changes to settings files, hook scripts, the statusline script
     and rtk's config are labelled on your machine and not sent.
-- **In `document` handoff mode the mod forks the session's own model** once per idle
-  gap, to write a handoff document. When the 1-hour cache has already expired at the
-  moment the timer fires, as after the machine slept, the mod makes no fork and uses
-  the `transcript` behaviour. The fork reads the whole conversation from the
-  prompt cache and also receives the output of `git rev-parse`, `git branch`, `git log`,
+- **In `document` and `image` handoff modes, and for `/context-image-handoff`, the mod
+  forks the session's own model** once per idle gap or command run, to write a handoff
+  document or a context image. When the 1-hour cache has already expired at the moment the
+  timer fires, as after the machine slept, the timer makes no fork and uses the transcript
+  prompt. The fork reads the whole conversation from the prompt cache and also receives the output of `git rev-parse`, `git branch`, `git log`,
   `git worktree list`, `git status`, `git diff --stat` and `git stash list` for the
-  session's folder, and the current date. It writes no transcript line, so the
-  dashboard's totals leave out its cost. The `transcript` and `off` modes make no model
-  call.
+  session's folder, and the current date. A context image fork also receives the
+  session's transcript index. It writes no transcript line, so the dashboard's totals
+  leave out its cost. The `off` mode makes no model call.
 - **Handoff timing.** After each main-thread turn in an interactive session with at
   least 50,000 tokens of context, the mod runs `bin/cache-state`, which reads the
   session's transcript and the expiry `bin/cache-line` saved. For a 1-hour cache, the

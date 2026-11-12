@@ -279,6 +279,21 @@ test('names the resumed-from transcript and its index', () => {
   assert.ok(renderIndex(resumedIdx, '/p/s2.jsonl').includes("Resumed from: '/p/old.jsonl'\n"));
 });
 
+test('names the context image a session resumed from, and keeps the transcript match separate', () => {
+  const image = 'Read /r/.claude/context-images/2026-11-10-120000-main.md in full, then every file it lists under "Read before starting". Continue from "Next steps".';
+  const idx = buildIndex([typed(image)]);
+  const md = renderIndex(idx, '/p/s2.jsonl', '/c/idx');
+  assert.ok(md.includes('Resumed from context image: /r/.claude/context-images/2026-11-10-120000-main.md\n'));
+  assert.ok(!md.includes('Resumed from: '));
+  const quoted = buildIndex([typed(image.replace('/r/.claude', "'/my r/.claude").replace('main.md in', "main.md' in"))]);
+  assert.equal(quoted.facts.resumedFromImage, '/my r/.claude/context-images/2026-11-10-120000-main.md');
+  const transcript = buildIndex([typed('Read /p/old.jsonl, the transcript of an earlier Claude Code session, to find what it was working on.')]);
+  assert.equal(transcript.facts.resumedFromImage, null);
+  assert.equal(transcript.facts.resumedFrom, '/p/old.jsonl');
+  assert.equal(idx.facts.resumedFrom, null);
+  assert.equal(buildIndex([typed('Read /r/notes.md in full')]).facts.resumedFromImage, null);
+});
+
 test('omits empty rows in a turn', () => {
   const onlyTextTurnMd = renderIndex(buildIndex([typed('hi'), assistant([text('Hello.')])]), '/p/s1.jsonl');
   for (const row of ['Agents:', 'Edited:', 'Read:', 'Commands:', 'Skills:', 'Tool errors:']) {

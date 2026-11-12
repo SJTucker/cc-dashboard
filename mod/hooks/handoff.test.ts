@@ -1,27 +1,16 @@
 import { test, expect } from 'claude-code/testing'
 import {
-  REPO_STEPS, endFill, branchSlug, documentResumePrompt, handoffDocument, handoffKind, handoffText, handoffWaitMs, hourCacheExpiry, indexPath, planHandoff, quotePath, resumePrompt,
+  REPO_STEPS, endFill, branchSlug, documentResumePrompt, handoffDocument, handoffKind, handoffWaitMs, hourCacheExpiry, imageDocument, imageResumePrompt, indexPath, planHandoff, planImage, quotePath, resumePrompt,
 } from './handoff'
 import type { StepOutput } from './handoff'
 
 const PATH = '/home/u/.claude/projects/-work-demo/s1.jsonl'
 
-test('resumePrompt names the transcript and has no /transcript-handoff tip', async () => {
+test('resumePrompt names the transcript and has no command tip', async () => {
   const text = resumePrompt(PATH)
   expect(text).toContain(`Read ${PATH}, the transcript of an earlier Claude Code session`)
   expect(text).toContain('- The end shows where it stopped; the first user messages show the goal.')
-  expect(text).not.toContain('/transcript-handoff')
-})
-
-test('handoffText starts a session in cwd, then gives the resume prompt and the /transcript-handoff tip', async () => {
-  expect(handoffText('/work/demo', PATH)).toBe(
-    `cd /work/demo && claude\n\n${resumePrompt(PATH)}\n- The last lines are the /transcript-handoff command that produced this prompt, so skip them.`,
-  )
-})
-
-test('handoffText single-quotes a cwd with a space or a quote', async () => {
-  expect(handoffText('/work/my demo', PATH).startsWith("cd '/work/my demo' && claude\n")).toBe(true)
-  expect(handoffText("/work/it's", PATH).startsWith("cd '/work/it'\\''s' && claude\n")).toBe(true)
+  expect(text).not.toContain('-handoff')
 })
 
 test('hourCacheExpiry gives the expiry of a 1h cache and null for anything else', async () => {
@@ -53,10 +42,6 @@ test('resumePrompt with an index tells the session to start with it', async () =
 test('resumePrompt with no index is unchanged', async () => {
   expect(resumePrompt(PATH, undefined)).toBe(resumePrompt(PATH))
   expect(resumePrompt(PATH)).not.toContain('index')
-})
-
-test('handoffText passes the index to the resume prompt', async () => {
-  expect(handoffText('/work/demo', PATH, INDEX)).toContain(resumePrompt(PATH, INDEX))
 })
 
 const ok = (label: string, text: string): StepOutput => ({ label, ok: true, text })
@@ -171,7 +156,8 @@ test('handoffKind falls back to the transcript handoff once the cache has expire
   expect(handoffKind('document', 1000, 999)).toBe('document')
   expect(handoffKind('document', 1000, 1000)).toBe('transcript')
   expect(handoffKind('document', 1000, 2000)).toBe('transcript')
-  expect(handoffKind('transcript', 1000, 999)).toBe('transcript')
+  expect(handoffKind('image', 1000, 999)).toBe('image')
+  expect(handoffKind('image', 1000, 1000)).toBe('transcript')
 })
 
 test('quotePath leaves a plain path alone and single-quotes any other', async () => {
@@ -193,4 +179,62 @@ test('endFill uses the reset entry, else the stored one when handoff is on, and 
   expect(endFill('clear', undefined, 's', false)).toBeUndefined()
   expect(endFill('clear', undefined, 's', true)).toBe('s')
   expect(endFill('exit', 'r', 's', true)).toBeUndefined()
+})
+
+const TRANSCRIPT = '/home/u/.claude/projects/-work-demo/s1.jsonl'
+const IMAGE_INDEX_TEXT = '# Index\n\n## Turn 1 (lines 1-9)\nfix the thing'
+
+test('planImage puts the file under .claude/context-images with the timestamp and slug', async () => {
+  const plan = planImage(repo(), '/work/demo/sub', TRANSCRIPT, INDEX, IMAGE_INDEX_TEXT)
+  expect(plan?.path).toBe('/work/demo/.claude/context-images/2026-10-12-154500-feat-handoff-x.md')
+})
+
+test('planImage falls back to cwd outside git and gives null without a timestamp', async () => {
+  const notGit = 'fatal: not a git repository'
+  expect(planImage(repo([failed('Worktree root', notGit), failed('Branch', notGit)]), '/work/plain/', undefined, undefined, undefined)?.path).toBe(
+    '/work/plain/.claude/context-images/2026-10-12-154500-no-branch.md',
+  )
+  expect(planImage(repo([failed('Timestamp', 'x')]), '/w', undefined, undefined, undefined)).toBe(null)
+})
+
+test('the image prompt asks for the document with the sections and no worker sections', async () => {
+  const { prompt } = planImage(repo([failed('Stashes', 'fatal: bad stash')]), '/w', TRANSCRIPT, INDEX, IMAGE_INSTRUCTIONS_PROBE) ?? { prompt: '' }
+  expect(prompt).toContain('starting with the line "# Context image: <the task, in at most 6 words>"')
+  expect(prompt).toContain('Write no preamble and no code fence around the reply.')
+  expect(prompt).toContain('under 4,000 words')
+  for (const h of ['Sources', 'Goal and principles', 'Read before starting', 'Decisions', 'Dead ends', 'Orientation', 'Environment', 'Done', 'In progress', 'Next steps', 'Left out', 'Lookup']) {
+    expect(prompt).toContain(`## ${h}\n`)
+  }
+  for (const h of ['Worker protocol', 'Board', 'Updates']) expect(prompt).not.toContain(`## ${h}`)
+  expect(prompt).toContain("sed -n 'A,Bp' '<transcript path>' | cut -c1-400")
+  expect(prompt).toContain(`grep -n '"uuid":"<uuid>"' '<transcript path>'`)
+  expect(prompt).toContain('(failed) fatal: bad stash')
+  for (const step of REPO_STEPS) expect(prompt).toContain(`### ${step.label}`)
+})
+
+const IMAGE_INSTRUCTIONS_PROBE = IMAGE_INDEX_TEXT
+
+test('the image prompt ends with the paths and the index text, or says there is none', async () => {
+  const withIndex = planImage(repo(), '/w', TRANSCRIPT, INDEX, IMAGE_INDEX_TEXT)?.prompt ?? ''
+  expect(withIndex).toContain(`Transcript path: ${TRANSCRIPT}`)
+  expect(withIndex).toContain(`Transcript index path: ${INDEX}`)
+  expect(withIndex.endsWith(IMAGE_INDEX_TEXT)).toBe(true)
+  const none = planImage(repo(), '/w', undefined, undefined, undefined)?.prompt ?? ''
+  expect(none).toContain('Transcript path: (not found)')
+  expect(none).toContain('Transcript index path: (no index exists)')
+  expect(none).toContain('No transcript index exists for this session.')
+})
+
+test('imageDocument drops a preamble before the first # Context image: line', async () => {
+  expect(imageDocument('Here it is. # Context image: demo\n\nbody')).toBe('# Context image: demo\n\nbody\n')
+  expect(imageDocument('Notes\n## Context image: sub\n# Context image: real\nbody')).toBe('# Context image: real\nbody\n')
+  expect(imageDocument('Some document\n')).toBe('Some document\n')
+  expect(imageDocument('  \n')).toBe(null)
+})
+
+test('imageResumePrompt names the file and the sections, and quotes a path with a space', async () => {
+  expect(imageResumePrompt('/work/demo/.claude/context-images/x.md')).toBe(
+    'Read /work/demo/.claude/context-images/x.md in full, then every file it lists under "Read before starting". Continue from "Next steps".',
+  )
+  expect(imageResumePrompt('/my repo/x.md').startsWith("Read '/my repo/x.md' in full")).toBe(true)
 })

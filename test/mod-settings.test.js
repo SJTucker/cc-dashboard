@@ -34,9 +34,9 @@ test('renderModSettings draws one row per setting in order', async () => {
 test('handoff row checks the saved choice', async () => {
   const { renderModSettings } = await load();
   const { container } = setup();
-  renderModSettings(container, { ...ALL, handoff: 'transcript' });
+  renderModSettings(container, { ...ALL, handoff: 'image' });
   const radios = find(container, (n) => n.attributes.type === 'radio' && n.attributes.name === 'modSetting-handoff');
-  assert.deepStrictEqual(radios.map((r) => r.attributes.value), ['document', 'transcript', 'off']);
+  assert.deepStrictEqual(radios.map((r) => r.attributes.value), ['document', 'image', 'off']);
   assert.deepStrictEqual(radios.map((r) => r.checked), [false, true, false]);
 });
 
@@ -64,7 +64,7 @@ test('each row has an info popover with the Design copy', async () => {
   }
   const handoff = find(container, (n) => n.attributes.id === 'modInfo-handoff')[0].textContent;
   assert.match(handoff, /one model call per idle gap/);
-  assert.match(handoff, /Transcript and index/);
+  assert.match(handoff, /Context image/);
 });
 
 test('each row has an Affects line', async () => {

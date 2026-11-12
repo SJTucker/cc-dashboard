@@ -47,7 +47,8 @@ test('readSettings gives every default for a file that is not a JSON object', (t
 test('validSettingValue accepts only the spec values', () => {
   assert.ok(validSettingValue('reviews', false));
   assert.ok(!validSettingValue('reviews', 'no'));
-  assert.ok(validSettingValue('handoff', 'transcript'));
+  assert.ok(validSettingValue('handoff', 'image'));
+  assert.ok(!validSettingValue('handoff', 'transcript'));
   assert.ok(!validSettingValue('handoff', 'fork'));
   assert.ok(!validSettingValue('nope', true));
 });

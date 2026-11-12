@@ -10,7 +10,7 @@ export const MOD_SETTINGS = [
   {
     key: 'handoff',
     label: 'Handoff',
-    affects: 'No panel. Live sessions shows a ↪ title only for sessions resumed from a handoff document.',
+    affects: 'No panel. Live sessions shows a ↪ title only for sessions resumed from a handoff document or a context image.',
     info: 'What the mod does when the prompt cache is about to expire.',
     choices: [
       {
@@ -19,14 +19,14 @@ export const MOD_SETTINGS = [
         info: 'About 7 minutes before a 1-hour prompt cache expires, a fork of the conversation writes a handoff summary to .claude/handoffs/ in the repo. After /clear, the input is prefilled to read it. This costs one model call per idle gap, read from the cache. The summary is short and easy to read, but it leaves out anything the fork did not write down.',
       },
       {
-        value: 'transcript',
-        label: 'Transcript and index',
-        info: 'At the same moment, the mod offers a resume prompt and makes no model call. After /clear, the new session reads the transcript index, then the parts of the old transcript it needs. Nothing is lost, but the new session spends tokens reading the transcript.',
+        value: 'image',
+        label: 'Context image',
+        info: 'At the same moment, a forked model call writes a context image into .claude/context-images/ in the repo: your own words quoted with transcript line numbers, the files to read, decisions and next steps. After /clear, the input is prefilled to read it. This costs one model call per idle gap.',
       },
       {
         value: 'off',
         label: 'Off',
-        info: 'No timer, no status line offer and no prefill after /clear. /transcript-handoff still prints a resume prompt when you run it.',
+        info: 'No timer, no status line offer and no prefill after /clear. /context-image-handoff still writes a context image and queues it for the next /clear when you run it.',
       },
     ],
   },
@@ -34,7 +34,7 @@ export const MOD_SETTINGS = [
     key: 'transcriptIndex',
     label: 'Transcript index',
     affects: 'No panel. The orchestrate skill needs it.',
-    info: 'Rewrites transcript-index/<session id>.md after every turn, with no model call. The orchestrate skill needs it, and the transcript handoff reads it when it exists.',
+    info: 'Rewrites transcript-index/<session id>.md after every turn, with no model call. The orchestrate skill needs it, and the context image handoff reads it when it exists.',
   },
   {
     key: 'reviews',
