@@ -61,7 +61,8 @@ test('changedSince does not rewrite the index', (t) => {
   // Same content, new timestamp: a git command that refreshes the index would rewrite it.
   fs.writeFileSync(path.join(dir, 'lib/a.js'), 'a');
   changedSince(dir, head);
-  assert.equal(fs.statSync(index).mtimeMs, old.getTime());
+  // A rewrite would move the mtime about 60 s forward; float rounding moves it under 1 ms.
+  assert.ok(Math.abs(fs.statSync(index).mtimeMs - old.getTime()) < 1000, `index rewritten: ${fs.statSync(index).mtime.toISOString()}`);
 });
 
 test('changedSince returns null for a folder inside a repo that is not itself a worktree', (t) => {
