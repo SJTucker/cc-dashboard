@@ -201,8 +201,10 @@ For each worker, its transcript is
   whole folder: the scratchpad folder is this session's, so a worker's scratch
   files are not reported as drift.
 - `timeout_ms`: 1800000.
-- `description`: `worker <agentId>`. The task comes from the agent's `CLAIMED`
-  line (section 8), and the dashboard feed reads it from the claimed file.
+- `description`: `worker <agentId>`. You learn the worker's task from its `CLAIMED`
+  line (section 8). The dashboard feed finds the worker from `agent-<agentId>.jsonl`
+  in `command` and shows the task that worker claimed, so keep the transcript path
+  literal in the command.
 
 The watch waits for a transcript that does not exist yet, so start it right
 after the Agent call. It prints one line per event and exits after `DONE`,
