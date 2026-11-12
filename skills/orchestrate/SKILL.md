@@ -20,6 +20,8 @@ Paths used below:
   folder that holds it.
 - `<image>`: `<project>/docs/superpowers/images/YYYY-MM-DD-<topic>.md`, untracked.
 - `<board>`: `<image>` with `.md` replaced by `.board.jsonl`.
+- `<run>`: `<image>` with `.md` replaced by `.run`. The claim queue lives there,
+  untracked, like the image.
 - `<feedback>`: `<image>` with `.md` replaced by `.feedback.md`.
 - `<clone>`: the cc-dashboard clone that holds this skill. Claude Code prints
   "Base directory for this skill: <dir>" when it loads the skill, and `<dir>` may be
@@ -28,6 +30,7 @@ Paths used below:
   below.
 - `TI`: `<clone>/bin/transcript-index`.
 - `POST`: `<clone>/bin/board-post`.
+- `CLAIM`: `<clone>/bin/orch-claim`.
 
 Never read a worker transcript raw: one line can hold a megabyte. Use the index
 (`TI <path>`), `TI <path> --steps <n>`, or `sed -n 'A,Bp' <path> | cut -c1-400` on
@@ -127,8 +130,8 @@ From the plan's Interfaces blocks and file lists, group the tasks into waves:
 - At most 3 tasks per wave. Split a larger wave.
 
 A task step that needs the user (a decision, a manual check) is not a worker's.
-Do that step with the user before the task's wave, and put the answer in the
-worker's prompt or the image's "Updates".
+Do that step with the user before the task's wave, and put the answer in that
+task's `notes`, or in the image's "Updates" when it affects several tasks.
 
 Show the user the waves in one short list before dispatching. Create the plan
 branch if it does not exist, with the name and base the plan's Global
@@ -138,7 +141,27 @@ CLAUDE.md names for worktrees, else local `main`:
 
 ## 6. Dispatch a wave
 
-For each task in the wave:
+Every worker of a run gets the same first message, and its task arrives after its
+shared reading through a claim queue. Claude Code caches a request only from an exact
+match at its start, so identical first messages let a worker read the image and the
+"Read before starting" files from the cache entries the previous worker wrote. A
+`SendMessage` would land in the middle of that reading, so it does not work here.
+
+Build the worker message once per session from this template, filling in `<image>`,
+`<CLAIM>`, `<run>`, `<POST>` and `<board>` with absolute paths (a worker has no
+`<clone>`). Reuse it byte for byte for every worker of the run, including relaunches:
+
+```
+Read <image> in full, then every file it lists under "Read before starting", in that order. Then run <CLAIM> <run> work and do the task it prints. Run every command in the worktree it names and touch no other checkout.
+If you find something that affects work beyond your task (a fact that contradicts the image or plan, a problem in shared code, a name or interface other tasks depend on), post it and keep going: <POST> <board> --from "Task <N>" --title "<one line>" --body "<details>", with <N> your task's number. If it blocks your task, stop and report instead.
+If the image or the plan contradicts the code, stop and report the contradiction instead of guessing.
+Commit on your branch with no attribution trailer. End your report with: files changed; the task's test command and its real output, failing before your change and passing after, pasted verbatim; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
+```
+
+Keep the message under 1,600 characters, not counting the absolute paths in it. Never
+drop one of its lines to fit.
+
+For each task in the wave, in this order:
 
 1. Create its worktree:
    `wt switch --create <plan branch>-t<N> --base <plan branch> --no-cd`. Print its
@@ -146,21 +169,24 @@ For each task in the wave:
    `wt list --format json | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>{for(const w of JSON.parse(s).items)if(w.branch===process.argv[1])console.log(w.worktree.path)})' <plan branch>-t<N>`.
    Never use the Agent tool's `isolation` option: it skips the `wt` hooks that
    give a worktree its ports and database.
-2. Start a worker with the Agent tool: `subagent_type: "general-purpose"`,
-   `model: "sonnet"`, `run_in_background: true`, and this prompt, filled in.
-   A worker has no `<clone>`, so fill in `<POST>` with the absolute path of `POST`.
-   Keep the prompt under 1,600 characters, not counting the absolute paths in it. Never
-   drop one of its lines to fit. Everything else comes from the image.
+2. Add its task to the queue. The JSON carries `task`, `title`, `plan`, `worktree`,
+   `branch`, `files`, `doneWhen` (one narrow check, as a command and its expected
+   result), `sections` (the image sections that matter most) and, when needed,
+   `notes`:
 
-```
-Your worktree is <path>; run every command there and touch no other checkout. Read <image> in full, then every file it lists under "Read before starting". Then do Task <N> of <plan path>, "<task title>".
-Files this task touches: <list>.
-Done when: <one narrow check, as a command and its expected result>.
-Image sections that matter most here: <names>.
-If you find something that affects work beyond this task (a fact that contradicts the image or plan, a problem in shared code, a name or interface other tasks depend on), post it and keep going: <POST> <board> --from "Task <N>" --title "<one line>" --body "<details>". If it blocks this task, stop and report instead.
-If the image or the plan contradicts the code, stop and report the contradiction instead of guessing.
-Commit on your branch with no attribution trailer. End your report with: files changed; the task's test command and its real output, failing before your change and passing after, pasted verbatim; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
-```
+   ```bash
+   <CLAIM> <run> --add work <<'EOF'
+   {"task": 1, "title": "...", "plan": "<plan path>", "worktree": "<path>", "branch": "<branch>", "files": ["..."], "doneWhen": "...", "sections": ["..."]}
+   EOF
+   ```
+3. Start the worker with the Agent tool: `subagent_type: "general-purpose"`,
+   `model: "sonnet"`, `run_in_background: true`, `description: "orchestrate worker"`
+   (the same for every worker), and the fixed message as the prompt.
+
+Send one `Agent` call per message. After each `Agent` call, the next message arms
+that agent's watch (section 7), then adds the next task and starts the next agent.
+Agents started in the same message cannot read each other's cache, because the
+second agent's request is sent before the first one's entries exist.
 
 ## 7. Watch
 
@@ -168,13 +194,18 @@ For each worker, its transcript is
 `<project dir>/$CLAUDE_CODE_SESSION_ID/subagents/agent-<agentId>.jsonl`, with
 `agentId` from the Agent result. Start one Monitor tool watch per worker:
 
-- `command`: `TI <worker transcript> --watch --files <task files, comma separated> --budget 200000`,
+- `command`: `TI <worker transcript> --watch --run <run> --files <scratchpad folder>/ --budget 200000`,
   plus `--board <board>` on exactly one watch per wave, so each post wakes you
-  once. A `--files` entry ending in `/` covers a whole folder: add this
-  session's scratchpad folder, so a worker's scratch files are not reported as
-  drift.
+  once. `--run` reads the worker's task files from its claim, so the watch can be
+  armed before the worker has claimed. A `--files` entry ending in `/` covers a
+  whole folder: the scratchpad folder is this session's, so a worker's scratch
+  files are not reported as drift.
 - `timeout_ms`: 1800000.
-- `description`: `Task <N> worker`.
+- `description`: `Task <N> worker`, with `<N>` the number of the task you added just
+  before starting that agent. The label is only a name for the watch, because the
+  first agent to run `orch-claim` takes the oldest task, which may not be that one.
+  The dashboard feed reads `Task <N>` from it, so keep the form. Take the real task
+  from the agent's `CLAIMED` line (section 8).
 
 The watch waits for a transcript that does not exist yet, so start it right
 after the Agent call. It prints one line per event and exits after `DONE`,
@@ -198,16 +229,32 @@ Run `TI <worker transcript> --steps 20` and decide:
 - `BUDGET context <n> tokens, over 200000`: steer the worker to finish its
   current step, commit, and report. Then split the rest of its task into a new
   task for a later wave.
+- `CLAIMED <file> task <N>: <title>`: informational, no steer. It says which task
+  this agent took. Note the pairing of agent, `<file>` and `<N>`. Section 11 and
+  section 13 take the task from the claimed file `<run>/claimed/<file>`, not from
+  dispatch order.
+- `CLAIM second claim <file2> after <file1>`: the worker took a second task.
+  Steer it back to its first task, then return the second with
+  `CLAIM <run> --release <file2>`.
 - `QUIET no new lines for 5 min`: look. Steer only if the steps show the worker
   is lost.
 - `DONE <report>`: go to Review and merge. In `--steps`, the worker's final
   report is the `REPORT` step.
 - `KILLED <text>`: the worker was stopped, by you, the user or Claude Code, and
-  `<text>` is its last action. Check `--steps`, then relaunch it or resume it
-  with SendMessage and re-arm the watch.
+  `<text>` is its last action. Check whether it claimed: its watch printed
+  `CLAIMED`, or `TI <transcript> --steps` shows an `orch-claim` result. If it did
+  not claim, start a new worker with the fixed message and add no task, because the
+  task is still pending. If it claimed, add that task again with `"attempt"` one
+  higher, then start a new worker. Or resume the worker with SendMessage and
+  re-arm the watch.
 - `FAILED <error>`: an API error ended the worker. If it is a limit, tell the
   user. Otherwise resume it with SendMessage and re-arm the watch.
 - `POST <from>: <title>`: go to section 9.
+
+Before ending a wave, run `CLAIM <run> --status`. Release each file listed under
+"claimed, no time" with `CLAIM <run> --release <file>`. Then run `CLAIM <run> --status`
+again and start one worker with the fixed message per pending file. A relaunch of a claimed task adds a
+new work task with `"attempt"` one higher.
 
 A worker that is killed or fails ends its own watch with `KILLED` or `FAILED`,
 so there is no watch to stop with TaskStop.
@@ -237,7 +284,9 @@ task owns that the plan treats as done. Ask the user before anything changes
 that file. If they want it fixed:
 
 1. Start one worker in the plan branch's worktree to fix it test-first and
-   commit, with a watch and a review like any task. Do not fix it yourself. Your
+   commit, with a watch and a review like any task. Its task file has
+   `"task": 0`, the plan branch's worktree, the fix in `notes`, and `files` naming
+   the files the fix touches. Do not fix it yourself. Your
    context stays on coordination, and a worker's fix leaves a transcript the
    reviewer can check.
 2. Add the fix commit to "Updates".
@@ -260,20 +309,34 @@ contradicts it. If it affects later waves, add it to "Updates".
 
 ## 11. Review and merge
 
-When a worker reports, start a reviewer worker: `general-purpose`, `model:
-"sonnet"`, `run_in_background: true`, in the same worktree. Its prompt gives the
-worktree path, `<image>`, the task (plan path, number and title), and the
-implementer's transcript path. It tells the reviewer to:
+When a worker reports, start a reviewer worker the same way: add a review task
+with `CLAIM <run> --add review`, then start the reviewer. Take the task from the
+reporting agent's claimed file `<run>/claimed/<file>`, the one its `CLAIMED` line
+names. Dispatch order does not say which task the agent did. The task carries that
+file's fields (`task`, `title`, `plan`, `worktree`, `branch`, `files`,
+`doneWhen`, `sections`) and `implementer: { agentId, transcript }`, with
+`transcript` the transcript path of the agent that claimed the work task. A
+reviewer's task is likewise the one in the claimed file its own `CLAIMED` line
+names.
 
-- check the diff against the task and the image,
-- check how the work was done, reading the implementer's work only through
-  `TI <transcript>` and `TI <transcript> --steps 60 --full`. A step it doubts
-  can be read with `sed -n '<line>p' <transcript> | cut -c1-2000`. Never read
-  the transcript file whole,
-- report pass, or each problem with file, line and why.
+Build the reviewer message once per session, with the same absolute paths as the
+worker message, plus `<TI>` filled in with the absolute path of `TI`. Reuse it byte
+for byte:
+
+```
+Read <image> in full. Then run <CLAIM> <run> review and review the task it prints. Run every command in the worktree it names and touch no other checkout.
+Check the diff against the task and the image.
+Check how the work was done, reading the implementer's work only through `<TI> <transcript>` and `<TI> <transcript> --steps 60 --full`, with <transcript> the implementer transcript the task names. A step you doubt can be read with `sed -n '<line>p' <transcript> | cut -c1-2000`. Never read the transcript file whole.
+Report pass, or each problem with file, line and why.
+```
+
+Every reviewer's Agent call uses `general-purpose`, `model: "sonnet"`,
+`run_in_background: true` and `description: "orchestrate reviewer"`. Start reviewers
+one per message, like workers. A relaunched implementer gets a new work task with
+the next `attempt` and the review findings in `notes`.
 
 Read the whole review. When it fails, steer or relaunch the implementer with the
-findings. When it passes, merge the worker's branch into the plan branch. Check
+findings. When it passes, merge the worker's branch into the plan branch. With `<N>` the task in the claimed file of the worker being merged, check
 `git merge-base --is-ancestor <plan branch>-t<N> <plan branch>`, then run
 `wt remove -D <plan branch>-t<N>`. Without `-D`, `wt` keeps the branch, because
 it checks merges against the default branch, not the plan branch.
@@ -288,7 +351,7 @@ need: new names, moved files, board posts. Then dispatch the next wave.
 
 ## 13. Feedback
 
-For each worker, append one entry to `<feedback>`:
+For each worker, append one entry to `<feedback>`, with `<N>` and `<title>` from its claimed file:
 
 ```
 ## Task <N>: <title> (<date>)
@@ -302,4 +365,4 @@ The user reviews these across sessions before redesigning the image.
 ## 14. Finish
 
 After the last wave, use superpowers:finishing-a-development-branch on the plan
-branch.
+branch. The run folder stays beside the image, untracked, like the board.

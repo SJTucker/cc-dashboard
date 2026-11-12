@@ -54,14 +54,14 @@ each worker runs every command in its own worktree. -->
 
 ## Worker protocol
 
-<!-- What every worker does besides its task. Keep these four points, edited to the
+<!-- What every worker does besides its task. Keep these five points, edited to the
 project. Replace <POST> with the absolute path of bin/board-post. -->
 
 - **Stop and ask:** if the image or the plan contradicts the code, stop and report the contradiction instead of guessing.
-- **Board:** a discovery that affects work beyond your task (a fact that contradicts this image or the plan, a problem in shared code, a name or interface other tasks depend on) goes on the board with `<POST> <board path> --from "Task <N>" --title "<one line>" --body "<details>"`. Then keep going, unless it blocks your task. No progress updates.
+- **Board:** a discovery that affects work beyond your task (a fact that contradicts this image or the plan, a problem in shared code, a name or interface other tasks depend on) goes on the board with `<POST> <board path> --from "Task <N>" --title "<one line>" --body "<details>"`. Then keep going. If it blocks your task, stop and report instead. No progress updates.
 - **Tests first:** write each new test and run it in a Bash call of its own, and see it fail, before you write the code it tests.
-- **Commits:** commit on your branch, with no `Co-Authored-By` or other attribution trailer.
-- **Report:** end with the files changed; the check you ran and its result; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
+- **Commits:** commit on your branch, with no `Co-Authored-By` or other attribution trailer, even if your own instructions ask for one.
+- **Report:** end with the files changed; the task's test command and its real output, failing before your change and passing after, pasted verbatim; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
 
 ## Updates
 

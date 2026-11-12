@@ -19,6 +19,13 @@
 //     tokens    the context size of the worker's last assistant record, default grows with steps.
 //     merged    true adds a parent Bash `git merge <topic>-t<N>`.
 //     steer     a string adds a parent SendMessage to the worker with that message.
+//   claims      true: workers get the fixed first message (description `orchestrate worker`) and
+//               their task through the claim queue. The run folder <image>.run/claimed/ holds one task
+//               file per claim, and each worker transcript has the image Read, the orch-claim Bash call
+//               and its CLAIMED result. Per worker: `claim: false` leaves it unclaimed, `claims: 2` adds a
+//               second claim (task number + 10).
+//   reviewers   with claims: [{ task, finished, report }] reviewers started after the workers, each with
+//               the fixed reviewer message and a claimed review task for that task number.
 //   board       [{ t, from, title, body }] written to the board file, one JSON line each
 //   clearedFrom session id written to the snapshot's clearedFrom
 //   resetLine   true (or a string) makes the transcript's first user prompt the reset line
@@ -84,6 +91,21 @@ function writeOrchestration(configDir, opts = {}) {
   lines.push(assistantOf(parent, [use('Bash', { command: `cd ${project} && wt switch --create ${topic} --base main --no-cd` }, 'toolu_wt0')]));
   lines.push(resultOf(parent, 'toolu_wt0'));
 
+  const runDir = imagePath.replace(/\.md$/, '.run');
+  const claimed = opts.claims === true;
+  const claimFiles = [];
+  let seq = 0;
+  const claimTask = (kind, n, title, files, doneWhen, extra = {}) => {
+    const file = `${String(++seq).padStart(4, '0')}-t${n}-a1.json`;
+    claimFiles.push({ file: path.join(runDir, 'claimed', file), task: { kind, task: n, title, plan: planPath, worktree: path.join(project, '.worktrees', `${topic}-t${n}`), branch: `${topic}-t${n}`, files, doneWhen, sections: [], attempt: 1, claimedAt: new Date().toISOString(), ...extra } });
+    return file;
+  };
+  const firstMessage = (kind) => `Read ${imagePath} in full, then every file it lists under "Read before starting", in that order. Then run ${CLONE}/bin/orch-claim ${runDir} ${kind} and ${kind === 'review' ? 'review' : 'do'} the task it prints.\n`;
+  // The tool records of one orch-claim call and its CLAIMED result, in a sidechain.
+  const claimRecords = (side, id, kind, file) => [
+    assistantOf(side, [use('Bash', { command: `${CLONE}/bin/orch-claim ${runDir} ${kind}` }, id)]),
+    side({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: `CLAIMED ${file}\nDo the task.`, is_error: false }] } }),
+  ];
   const workerIds = [];
   const workerFiles = [];
   workers.forEach((w, i) => {
@@ -93,8 +115,8 @@ function writeOrchestration(configDir, opts = {}) {
     const agentId = 'a' + crypto.createHash('sha1').update(`${sessionId}:${n}`).digest('hex').slice(0, 16);
     workerIds.push(agentId);
     const worktree = path.join(project, '.worktrees', `${topic}-t${n}`);
-    const description = `Task ${n} worker`;
-    const workerPrompt = [
+    const description = claimed ? 'orchestrate worker' : `Task ${n} worker`;
+    const workerPrompt = claimed ? firstMessage('work') : [
       `Your worktree is ${worktree}; work only there on branch ${topic}-t${n}.`,
       `Read ${imagePath} in full, then do Task ${n} of ${planPath}, "${title}".`,
       `Files this task touches: ${files.join(', ')}.`,
@@ -106,13 +128,22 @@ function writeOrchestration(configDir, opts = {}) {
     lines.push(resultOf(parent, `toolu_wt${n}`));
     lines.push(assistantOf(parent, [use('Agent', { description, subagent_type: 'general-purpose', model: 'sonnet', prompt: workerPrompt }, `toolu_agent${n}`)]));
     lines.push(resultOf(parent, `toolu_agent${n}`, { toolUseResult: { isAsync: true, status: 'async_launched', agentId, description, resolvedModel: 'claude-sonnet-5-5', prompt: workerPrompt } }));
-    lines.push(assistantOf(parent, [use('Monitor', { command: `${CLONE}/bin/transcript-index ${workerFile} --watch --files ${files.join(',')} --budget 200000 --board ${boardPath}`, description }, `toolu_mon${n}`)]));
+    lines.push(assistantOf(parent, [use('Monitor', { command: `${CLONE}/bin/transcript-index ${workerFile} --watch ${claimed ? `--run ${runDir}` : `--files ${files.join(',')}`} --budget 200000 --board ${boardPath}`, description }, `toolu_mon${n}`)]));
     lines.push(resultOf(parent, `toolu_mon${n}`));
 
     // The worker's own transcript. Each assistant record carries usage, with the
     // context growing by 2000 tokens a step.
     const side = sidechain(agentId);
     const wl = [side({ type: 'user', uuid: `w${n}-u0`, message: { role: 'user', content: workerPrompt } })];
+    if (claimed) {
+      wl.push(assistantOf(side, [use('Read', { file_path: imagePath }, `w${n}-img`)]));
+      wl.push(resultOf(side, `w${n}-img`));
+      if (w.claim !== false) {
+        for (const [k, num] of (w.claims === 2 ? [n, n + 10] : [n]).entries()) {
+          wl.push(...claimRecords(side, `w${n}-claim${k}`, 'work', claimTask('work', num, k === 0 ? title : `Task ${num}`, k === 0 ? files : ['lib/other.js'], w.doneWhen ?? 'the tests for this task pass')));
+        }
+      }
+    }
     const steps = w.steps ?? [];
     const usageAt = (k) => ({ input_tokens: 10, output_tokens: 100, cache_creation_input_tokens: 500, cache_read_input_tokens: 20000 + 2000 * k });
     steps.forEach((s, k) => {
@@ -142,6 +173,22 @@ function writeOrchestration(configDir, opts = {}) {
     }
   });
 
+  const reviewerIds = [];
+  for (const rv of claimed ? opts.reviewers ?? [] : []) {
+    const agentId = 'r' + crypto.createHash('sha1').update(`${sessionId}:review:${rv.task}`).digest('hex').slice(0, 16);
+    reviewerIds.push(agentId);
+    const description = 'orchestrate reviewer';
+    const reviewPrompt = firstMessage('review');
+    const reviewFile = path.join(subagents, `agent-${agentId}.jsonl`);
+    lines.push(assistantOf(parent, [use('Agent', { description, subagent_type: 'general-purpose', model: 'sonnet', prompt: reviewPrompt }, `toolu_rev${rv.task}`)]));
+    lines.push(resultOf(parent, `toolu_rev${rv.task}`, { toolUseResult: { isAsync: true, status: 'async_launched', agentId, description, resolvedModel: 'claude-sonnet-5-5', prompt: reviewPrompt } }));
+    const side = sidechain(agentId);
+    const rl = [side({ type: 'user', uuid: `r${rv.task}-u0`, message: { role: 'user', content: reviewPrompt } })];
+    rl.push(...claimRecords(side, `r${rv.task}-claim`, 'review', claimTask('review', rv.task, `Review Task ${rv.task}`, ['lib/x.js'], 'the review is done')));
+    if (rv.finished) rl.push(assistantOf(side, [{ type: 'text', text: rv.report ?? 'PASS: no findings.' }], { input_tokens: 10, output_tokens: 100, cache_creation_input_tokens: 500, cache_read_input_tokens: 20000 }));
+    workerFiles.push({ file: reviewFile, lines: rl, meta: { agentType: 'general-purpose', description, toolUseId: `toolu_rev${rv.task}`, spawnDepth: 1, requestShape: 'agent', model: 'claude-sonnet-5-5', ...(rv.finished ? { finished: true } : {}) } });
+  }
+
   const base = Date.now() - (live ? 0 : 30 * 60 * 1000) - count * STEP_MS;
   const clock = base + count * STEP_MS;
   const timed = (text) => text.replace(/"@@(\d+)@@"/g, (_, n) => JSON.stringify(new Date(base + Number(n) * STEP_MS).toISOString()));
@@ -149,6 +196,7 @@ function writeOrchestration(configDir, opts = {}) {
   writeFile(imagePath, `# Context image: ${topic}\n\nPlan: ${planPath}\n`);
   writeFile(planPath, `# Plan: ${topic}\n`);
   writeFile(boardPath, (opts.board ?? []).map((p) => JSON.stringify(p)).join('\n') + (opts.board?.length ? '\n' : ''));
+  for (const c of claimFiles) writeFile(c.file, JSON.stringify(c.task, null, 2) + '\n');
   writeFile(transcript, timed(lines.join('\n') + '\n'));
   for (const wf of workerFiles) {
     writeFile(wf.file, timed(wf.lines.join('\n') + '\n'));
@@ -175,7 +223,7 @@ function writeOrchestration(configDir, opts = {}) {
   fs.utimesSync(transcript, mtime, mtime);
   for (const wf of workerFiles) fs.utimesSync(wf.file, mtime, mtime);
 
-  return { sessionId, transcript, imagePath, boardPath, workerIds };
+  return { sessionId, transcript, imagePath, boardPath, workerIds, reviewerIds, runDir };
 }
 
 // A demo for browser checks: one live orchestration mid-wave with a finished worker,

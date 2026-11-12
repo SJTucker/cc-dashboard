@@ -141,8 +141,8 @@ cleared or ended marks.
 ## Install the orchestrate skill
 
 `skills/orchestrate/` is a Claude Code skill that runs an approved plan with
-background workers, each in its own `wt` worktree. It calls `bin/transcript-index`
-and `bin/board-post` from this clone. Link it from the clone:
+background workers, each in its own `wt` worktree. It calls `bin/transcript-index`,
+`bin/board-post` and `bin/orch-claim` from this clone. Link it from the clone:
 
 ```bash
 ln -s "$PWD/skills/orchestrate" ~/.claude/skills/orchestrate
@@ -313,6 +313,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | The git repos where a session ran `git commit` through Bash | none | git. The server and `bin/skill-cost` run `git rev-parse --show-toplevel`, `git log --numstat` (on `HEAD`, then `--all` when HEAD has nothing in the window), `git log -g HEAD`, `git diff --numstat`, `git patch-id` and `git check-attr` (which reads `.gitattributes` for `linguist-generated` and `linguist-vendored`) there, read-only, to count the lines of the commits made during each call. When the folder is gone, it falls back to the repo the folder name encodes. |
 | `<cfg>/projects/**/subagents/agent-<id>.meta.json` | `CLAUDE_CONFIG_DIR` | Claude Code. `bin/transcript-index --steps` and `--watch` read the one beside the worker transcript they are given, for the agent's description, type, model and finished flag. |
 | A board file, at the path its first argument names. The orchestrate skill puts it beside its context image, at `<project>/docs/superpowers/images/<name>.board.jsonl`. | none | `bin/board-post` appends one JSON line per post. The server reads it for the Orchestration tab's board and appends a post from "You" when you post there, only to an absolute path ending in `.board.jsonl`. `bin/transcript-index --watch --board` reads it. |
+| A run folder beside the context image, at `<project>/docs/superpowers/images/<name>.run/`, holding `pending/work/`, `pending/review/` and `claimed/` task files. | none | `bin/orch-claim` adds, claims and releases task files. `bin/transcript-index --watch --run` and the server read claimed task files, the server only under `<run>/claimed/` with names matching `NNNN-tN-aN.json`. |
 | `<cfg>/skills/orchestrate/SKILL.md` | `CLAUDE_CONFIG_DIR` | `bin/setup` (through the `skills/orchestrate` link). The server checks that it is readable to show the Orchestration tab. |
 | `<cfg>/projects/**/<session id>/subagents/agent-<id>.jsonl` and `.meta.json` | `CLAUDE_CONFIG_DIR` | Claude Code. The server reads each worker's transcript and meta file for the Orchestration tab. |
 | rtk's `history.db` | `RTK_DB` | rtk |
