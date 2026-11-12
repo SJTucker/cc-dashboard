@@ -350,6 +350,18 @@ test('watchEvents reports an edit outside the task files once', () => {
   assert.deepEqual(watchEvents(linesWithEdit('/r/other.ts'), null, NO_LIMITS).events, [], 'no file list, no drift');
 });
 
+test('watchEvents reports changed worktree paths outside the task files once', () => {
+  const opts = { files: ['lib/a.js'], budget: null, changed: ['/wt/lib/a.js', '/wt/lib/b.js', '/wt/lib/c.js'] };
+  let r = watchEvents(linesWithEdit('/wt/lib/b.js'), null, opts);
+  assert.deepEqual(r.events, ['DRIFT edit outside task files: /wt/lib/b.js', 'DRIFT edit outside task files: /wt/lib/c.js']);
+  r = watchEvents(linesWithEdit('/wt/lib/b.js', 2), r.seen, { ...opts, changed: ['/wt/lib/c.js', '/wt/lib/d.js'] });
+  assert.deepEqual(r.events, ['DRIFT edit outside task files: /wt/lib/d.js']);
+});
+
+test('watchEvents ignores changed paths when there is no file list', () => {
+  assert.deepEqual(watchEvents(linesWithEdit('/wt/lib/a.js'), null, { files: null, budget: null, changed: ['/wt/lib/b.js'] }).events, []);
+});
+
 test('watchEvents matches a task file given relative to the worktree', () => {
   assert.deepEqual(watchEvents(linesWithEdit('/wt/lib/a.js'), null, { files: ['lib/a.js'], budget: null }).events, []);
   assert.deepEqual(watchEvents(linesWithEdit('/wt/xlib/a.js'), null, { files: ['lib/a.js'], budget: null }).events, ['DRIFT edit outside task files: /wt/xlib/a.js']);
