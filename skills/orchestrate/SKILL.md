@@ -201,11 +201,10 @@ For each worker, its transcript is
   whole folder: the scratchpad folder is this session's, so a worker's scratch
   files are not reported as drift.
 - `timeout_ms`: 1800000.
-- `description`: `Task <N> worker`, with `<N>` the number of the task you added just
-  before starting that agent. The label is only a name for the watch, because the
-  first agent to run `orch-claim` takes the oldest task, which may not be that one.
-  The dashboard feed reads `Task <N>` from it, so keep the form. Take the real task
-  from the agent's `CLAIMED` line (section 8).
+- `description`: `worker <agentId>`. You learn the worker's task from its `CLAIMED`
+  line (section 8). The dashboard feed finds the worker from `agent-<agentId>.jsonl`
+  in `command` and shows the task that worker claimed, so keep the transcript path
+  literal in the command.
 
 The watch waits for a transcript that does not exist yet, so start it right
 after the Agent call. It prints one line per event and exits after `DONE`,
