@@ -170,6 +170,11 @@ async function watch(file, opts) {
   let lineCount = -1;
   let grewAt = Date.now();
   let quietSent = false;
+  let claims = [];
+  let claimLines = -1;
+  let taskFile = null;
+  let task = null;
+  let told = false;
   for (;;) {
     if (opts.board !== null) {
       const b = boardEvents(readText(opts.board), boardSeen);
@@ -184,12 +189,25 @@ async function watch(file, opts) {
         quietSent = false;
       }
       let files = opts.files;
-      let claims = [];
       if (opts.run !== null) {
-        claims = claimsInTranscript(lines);
+        // Claims are found again only when a line was added, and the claimed file is read
+        // again only when the first claim changed or the last read failed.
+        if (claimLines !== lines.length) {
+          claimLines = lines.length;
+          claims = claimsInTranscript(lines);
+        }
+        const first = claims[0] ?? null;
+        if (first && (first.file !== taskFile || task === null)) {
+          taskFile = first.file;
+          task = readClaimed(opts.run, first.file);
+        }
         // Until the first claim resolves to a task there is no file list, so no DRIFT.
-        const task = claims.length > 0 ? readClaimed(opts.run, claims[0].file) : null;
         files = task ? [...task.files, ...(opts.files ?? [])] : null;
+        // Tell the orchestrator once which task this agent took. A re-armed watch has already reported a claim at or before its start line.
+        if (task && !told) {
+          told = true;
+          if (first.line > opts.sinceLine) process.stdout.write(`CLAIMED ${first.file} task ${task.task}: ${task.title ?? ''}\n`);
+        }
       }
       const r = watchEvents(lines, seen, { files, claims, driftAfterLine: claims[0]?.line ?? 0, budget: opts.budget, sinceLine: opts.sinceLine, finished: readMeta(file)?.finished === true });
       seen = r.seen;

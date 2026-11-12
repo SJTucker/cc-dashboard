@@ -379,3 +379,20 @@ test('--watch --run rejects a run folder that is not absolute, ends in .run and 
   const { file } = claimWorker(t);
   for (const bad of ['rel/img.run', '/a/img', '/a/../a/img.run']) assert.equal(watchRun(file, '--run', bad).status, 1, bad);
 });
+
+test('--watch --run prints CLAIMED <file> task <N>: <title> once, and not again after the claim line on a re-armed watch', (t) => {
+  const { file, run } = claimWorker(t, { task: { task: 3, title: 'Parse it', files: ['lib/a.js'] }, extra: [{ id: 'c2', file: '0002-t4-a1.json' }] });
+  const r = watchRun(file, '--run', run);
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.split('CLAIMED 0001-t3-a1.json task 3: Parse it\n').length, 2, r.stdout);
+  assert.equal(r.stdout.split('CLAIMED').length, 2, r.stdout);
+  const again = watchRun(file, '--run', run, '--since-line', '4');
+  assert.equal(again.status, 0, again.stderr);
+  assert.ok(!again.stdout.includes('CLAIMED'), again.stdout);
+});
+
+test('--watch --run does not print CLAIMED when the claimed file cannot be read', (t) => {
+  const { file, run } = claimWorker(t, { task: null });
+  const r = watchRun(file, '--run', run);
+  assert.ok(!r.stdout.includes('CLAIMED'), r.stdout);
+});
