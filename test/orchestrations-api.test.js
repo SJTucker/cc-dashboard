@@ -608,6 +608,18 @@ test('the feed names the claimed task for a watch whose description has another 
   assert.ok(!texts.includes('Watching Task 1'), JSON.stringify(texts));
 });
 
+test('the feed names the claimed task for a watch re-armed after a reset', (t) => {
+  const config = testConfig(t);
+  install(config);
+  const a = writeOrchestration(config.configDir, { sessionId: 'sess-a', live: false, claims: true, workers: [{ task: 2, files: ['lib/b.js'], steps: working('lib/b.js'), monitorDescription: 'Task 1 worker' }] });
+  const b = writeOrchestration(config.configDir, { sessionId: 'sess-b', clearedFrom: 'sess-a', resetLine: true, live: true, workers: [] });
+  const workerFile = path.join(path.dirname(a.transcript), 'sess-a', 'subagents', `agent-${a.workerIds[0]}.jsonl`);
+  const rearm = { type: 'assistant', sessionId: 'sess-b', timestamp: new Date().toISOString(), message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_rearm', name: 'Monitor', input: { description: 'Task 1 worker', command: `/c/bin/transcript-index ${workerFile} --watch --run ${a.runDir} --since-line 9` } }] } };
+  fs.appendFileSync(b.transcript, JSON.stringify(rearm) + '\n');
+  const d = createOrchestrations(config.configDir).detail('sess-a');
+  assert.equal(d.feed[0].text, 'Watching Task 2', JSON.stringify(d.feed.map((f) => f.text)));
+});
+
 test('planPath comes from the claimed task when the transcript names none', (t) => {
   const config = testConfig(t);
   install(config);

@@ -310,6 +310,25 @@ test('a Monitor matches the agent by its whole transcript file name', () => {
   assert.equal(actionFeed(s.lines, parsed)[0].text, 'Watching Task 3');
 });
 
+test('a Monitor whose command names two agents falls back to the description', () => {
+  const command = '/c/bin/transcript-index /p/s/subagents/agent-a1.jsonl /p/s/subagents/agent-a2.jsonl --watch';
+  const s = orchestration().use('Monitor', { description: 'watch the workers', command });
+  const parsed = claimAgents([claimWorker('a1', 1, 1), claimWorker('a2', 2, 2)])(s);
+  assert.equal(actionFeed(s.lines, parsed)[0].text, 'Watching workers');
+});
+
+test('a Monitor on a claim reviewer that has not claimed reads Watching a reviewer', () => {
+  const s = orchestration().use('Monitor', monitorFor('r1'));
+  const parsed = claimAgents([{ ...claimWorker('r1', null), role: 'reviewer', claimKind: 'review' }])(s);
+  assert.equal(actionFeed(s.lines, parsed)[0].text, 'Watching a reviewer');
+});
+
+test('a Monitor on an agent with no task and no claim falls back to the description', () => {
+  const s = orchestration().use('Monitor', monitorFor('w1', 'Task 1 worker'));
+  const parsed = claimAgents([{ ...claimWorker('w1', null), claimKind: null }])(s);
+  assert.equal(actionFeed(s.lines, parsed)[0].text, 'Watching Task 1');
+});
+
 test('nowLine names the claimed task for the latest Monitor', () => {
   const s = orchestration().use('Monitor', monitorFor('w1'));
   const parsed = claimAgents([claimWorker('w1', 2)])(s);
