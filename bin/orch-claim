@@ -29,7 +29,10 @@ function checkTask(task, kind) {
     if (typeof task[key] !== 'string' || !task[key]) throw new Error(`task.${key} is required`);
   }
   if (!Number.isInteger(task.task) || task.task < 0) throw new Error('task.task must be an integer >= 0');
-  if (!Array.isArray(task.files) || !task.files.every((f) => typeof f === 'string')) throw new Error('task.files must be an array of strings');
+  // An empty list would make every edit of the worker DRIFT, so the task must name its files.
+  if (!Array.isArray(task.files) || task.files.length === 0 || !task.files.every((f) => typeof f === 'string')) throw new Error('task.files must be a non-empty array of strings');
+  // The attempt goes into the file name, which must match TASK_FILE.
+  if (task.attempt !== undefined && (!Number.isInteger(task.attempt) || task.attempt < 1)) throw new Error('task.attempt must be an integer >= 1');
   if (kind === 'review' && typeof task.implementer?.transcript !== 'string') throw new Error('a review task needs implementer.transcript');
 }
 

@@ -127,3 +127,21 @@ test('bad usage exits 1 with orch-claim: on stderr', (t) => {
     assert.match(r.stderr, /^orch-claim: /, args.join(' '));
   }
 });
+
+test('--add refuses an attempt that is not an integer >= 1 and leaves the queue empty', (t) => {
+  const run = runIn(t);
+  for (const attempt of ['two', 0, -1, 1.5, null]) {
+    const r = claim([run, '--add', 'work'], input(1, { attempt }));
+    assert.equal(r.status, 1, String(attempt));
+    assert.match(r.stderr, /^orch-claim: task\.attempt/, String(attempt));
+  }
+  assert.equal(fs.existsSync(path.join(run, 'pending', 'work')), false);
+  assert.equal(claim([run, '--add', 'work'], input(1, { attempt: 2 })).stdout, '0001-t1-a2.json\n');
+});
+
+test('--add refuses an empty files list', (t) => {
+  const run = runIn(t);
+  const r = claim([run, '--add', 'work'], input(0, { files: [] }));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^orch-claim: task\.files must be a non-empty array/);
+});
