@@ -38,6 +38,10 @@ type World = {
   verdict: 'allow' | 'ask' | 'deny'
   // Makes tool.call throw once its toolMs has passed.
   toolFails: boolean
+  // The text tool.call answers with.
+  toolText: string
+  // The file_path of each Edit the tool.call mock ran.
+  editsRun: string[]
   // Makes fs.write reject.
   writeFails: boolean
   // What the bottom of turn.step streams and returns.
@@ -168,6 +172,8 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     toolMs: 0,
     verdict: 'allow',
     toolFails: false,
+    toolText: 'ok',
+    editsRun: [],
     writeFails: false,
     stepChunks: STEP_CHUNKS,
     stepResult: STEP_RESULT,
@@ -417,10 +423,11 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     for (const chunk of state.stepChunks) yield chunk as never
     return { ...(state.stepResult as object), turnId: e.turnId, index: e.index } as never
   })
-  on('tool.call', async () => {
+  on('tool.call', async (_$, e) => {
+    if (e.tool === 'Edit') state.editsRun.push((e as unknown as { file_path: string }).file_path)
     if (state.toolMs > 0) await clock.sleep(state.toolMs)
     if (state.toolFails) throw new Error('tool failed')
-    return { result: 'ok', text: 'ok' }
+    return { result: 'ok', text: state.toolText }
   })
   on('tool.check', () => ({ decision: state.verdict }))
   on('agent.spawn', () => ({ model: 'claude-haiku-4-5', agentId: 'a1' }))
@@ -1807,6 +1814,77 @@ test('a tool.call from a subagent leaves the recorded tool alone', async ($, on)
   expect(writeLog.length).toBe(1)
   await clock.advance(1000)
   await Promise.all([main, sub])
+})
+
+const CLAIM_CALL = { tool: 'Bash', command: '/c/bin/orch-claim /r/x.run work', agentId: 'a1' } as never
+const claimText = (tree: string) => `CLAIMED 0001-t1-a1.json\nYour worktree is ${tree}; run every command there and touch no other checkout.\nTask 1 of /p.md, "x".`
+const editCall = (path: string, agentId?: string) => ({ tool: 'Edit', file_path: path, ...(agentId ? { agentId } : {}) }) as never
+
+test("a worker's edit outside its claimed worktree is refused", async ($, on) => {
+  const { state } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  const answer = (await $.tool.call(editCall('/code/app/x.js', 'a1'))) as { deny?: string }
+  expect(answer.deny).toContain('/code/app.t1')
+})
+
+test("a worker's edit inside its claimed worktree runs", async ($, on) => {
+  const { state } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  const answer = (await $.tool.call(editCall('/code/app.t1/x.js', 'a1'))) as { deny?: string, text?: string }
+  expect(answer.deny).toBe(undefined)
+  expect(answer.text).toBe('ok')
+})
+
+test('a subagent with no claim edits anywhere', async ($, on) => {
+  world(on)
+  const answer = (await $.tool.call(editCall('/code/app/x.js', 'a2'))) as { deny?: string }
+  expect(answer.deny).toBe(undefined)
+})
+
+test("the guard keeps a worker's first claim", async ($, on) => {
+  const { state } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = claimText('/code/app.t2')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  const answer = (await $.tool.call(editCall('/code/app.t2/x.js', 'a1'))) as { deny?: string }
+  expect(answer.deny).toContain('/code/app.t1')
+})
+
+test('a refused edit never reaches the tool', async ($, on) => {
+  const { state } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  const answer = (await $.tool.call(editCall('/code/app/x.js', 'a1'))) as { deny?: string }
+  expect(answer.deny).toContain('/code/app.t1')
+  expect(state.editsRun).toEqual([])
+})
+
+test("a finished subagent's claim is forgotten", async ($, on) => {
+  const { state, clock } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await clock.settle()
+  const answer = (await $.tool.call(editCall('/code/app/x.js', 'a1'))) as { deny?: string }
+  expect(answer.deny).toBe(undefined)
+  expect(state.editsRun).toEqual(['/code/app/x.js'])
+})
+
+test('the main loop is never refused', async ($, on) => {
+  const { state } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  const answer = (await $.tool.call(editCall('/code/app/x.js'))) as { deny?: string }
+  expect(answer.deny).toBe(undefined)
 })
 
 test('the tool detail is the command, the file name, or empty', async ($, on) => {
