@@ -132,6 +132,12 @@ From the plan's Interfaces blocks and file lists:
 - Record, for each task, the tasks it consumes from and its files.
 - At most 3 implementer workers run at once. Reviewers do not count toward the 3.
 - Two running tasks never share a file.
+- A task B that consumes from task A only through a signature is **stub-ready**
+  on A when B's plan test can replace A with a fake of A's Interfaces block, so
+  that test does not depend on A's behaviour. A stub that throws `not implemented`
+  would fail any test that calls it, so a task whose plan test needs A's real
+  behaviour is not stub-ready. It waits for A to merge.
+- Mark each stub-ready pair in the dependency list.
 
 A task step that needs the user (a decision, a manual check) is not a worker's.
 Do that step with the user before the task is dispatched, and put the answer in
@@ -142,6 +148,24 @@ plan branch if it does not exist, with the name and base the plan's Global
 Constraints give. When the plan names no base, use the base the project's
 CLAUDE.md names for worktrees, else local `main`:
 `wt switch --create <plan branch> --base <base> --no-cd`.
+
+**Stub an interface.** Before dispatching a stub-ready task B on a producing
+task A:
+
+1. Start one `"task": 0` worker in the plan branch's worktree. From section 9
+   it reuses only the `"task": 0` task-file shape and the plan branch's
+   worktree. It needs no user question first, and its `doneWhen` check replaces
+   section 9's test-first step. Its `notes` carry A's Interfaces block, and its
+   `files` names the stub module path from that block. Its `doneWhen` is that the
+   module loads and each function throws `not implemented: <name>`. The worker
+   commits the stub to the plan branch, and it gets a watch and a review like any
+   task.
+   While it runs, it counts toward section 5's limit of 3 implementers, and it
+   shares no file with a running task.
+2. B is ready once the stub's review passes and the stub commit is on the plan
+   branch. Then dispatch A and B together, within the limits above. A replaces the
+   stub in its own worktree.
+3. Add the stub commit to "Updates".
 
 ## 6. Dispatch ready tasks
 
@@ -368,6 +392,10 @@ it checks merges against the default branch, not the plan branch.
 
 A merge conflict that is trivial, you resolve. Otherwise abort the merge, and
 re-add the later task, which is ready again once the merge lands.
+
+When the second task of a stub-ready pair merges, run B's `doneWhen` command in
+the plan branch's worktree. If it fails, treat the output like a failed review of
+B: relaunch B with the output in `notes`.
 
 ## 12. After each merge
 
