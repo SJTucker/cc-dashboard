@@ -119,13 +119,15 @@ Before scheduling, revise the plan so every task includes:
 2. A concrete test that fails before the task's change and passes after it.
 3. A requirement that the worker's report pastes the real test output.
 
-Flag any task whose prescribed fix you cannot prove closes the bug. Show the
-flagged tasks to the user with the dependency list, and do not dispatch them until
-the user rules on each.
-
 A task is **ready** when every task it consumes from has merged into the plan
 branch. A task is **running** from its worker's dispatch until its branch merges
-or the task is dropped.
+or the task is dropped. A task is **waiting** from the moment a question about it
+goes to the user until the user answers. A task that consumes from a waiting task
+is waiting too. A waiting task is not ready.
+
+Flag any task whose prescribed fix you cannot prove closes the bug. Show the
+flagged tasks to the user with the dependency list. A flagged task is waiting
+until the user rules on it, and the other tasks are dispatched as usual.
 
 From the plan's Interfaces blocks and file lists:
 
@@ -142,6 +144,23 @@ From the plan's Interfaces blocks and file lists:
 A task step that needs the user (a decision, a manual check) is not a worker's.
 Do that step with the user before the task is dispatched, and put the answer in
 that task's `notes`, or in the image's "Updates" when it affects several tasks.
+
+**Ask the user.** Once a worker is running:
+
+1. Ask the user in a plain message at the end of your turn, not with
+   `AskUserQuestion`. A question dialog holds your turn until the user answers,
+   so watch events, worker reports and newly ready tasks queue behind it. A plain
+   message ends your turn, and the events still wake you.
+2. The task a question concerns is waiting, as defined above. Every task that is
+   not waiting keeps going under sections 5 and 6: dispatch, review and merge as usual.
+3. Until the user answers, end each message to the user with the open questions,
+   one line each, naming the task.
+4. When the answer arrives, put it in the task's `notes`, or in "Updates" when it
+   affects several tasks. The task is no longer waiting, and it is ready again
+   once its dependencies have merged.
+
+`AskUserQuestion` stays fine before the first dispatch (sections 4 and 5) and in
+section 14, when no worker runs.
 
 Show the user the dependency list in one short list before dispatching. Create the
 plan branch if it does not exist, with the name and base the plan's Global
@@ -301,9 +320,10 @@ Run `TI <worker transcript> --steps 20` and decide:
      from the committed part. Merge the committed part after its review.
   2. Dispatch the new tasks as they become ready (section 6).
   3. Bring the task to the user only when a split task comes back with the same
-     verdict.
+     verdict. Mark that task waiting and ask, as "Ask the user" says.
 
-  A report that names a contradiction stays as before: bring it to the user.
+  A report that names a contradiction stays as before: mark the task waiting and
+  ask the user, as "Ask the user" says.
 - `KILLED <text>`: the worker was stopped, by you, the user or Claude Code, and
   `<text>` is its last action. Check whether it claimed: its watch printed
   `CLAIMED`, or `TI <transcript> --steps` shows an `orch-claim` result. If it did
@@ -336,16 +356,19 @@ step is cut to one short line; `--steps <n> --full` prints each step whole.
 Read the post's full entry in `<board>` (the last lines of the file). Then:
 
 - A post from "You" is the user's own words. Act on it as you would a user
-  message: steer the worker it concerns, update the image, or stop and bring it
-  back to the user.
+  message: steer the worker it concerns, update the image, or mark the tasks the
+  post concerns as waiting and ask, as "Ask the user" says.
 - Steer each running worker the post affects.
 - Add it to the image's "Updates" section, so later tasks start with it.
-- If it changes the plan itself, stop dispatching new tasks and bring it to the
-  user.
+- If it changes the plan itself, mark each task the change touches as waiting and
+  ask the user. When you cannot tell which tasks it touches, treat every task not
+  yet dispatched as waiting.
 
 A post or a stopped worker's report can show a bug in shared code: a file no
 task owns that the plan treats as done. Ask the user before anything changes
-that file. If they want it fixed:
+that file. While the user decides whether the file gets fixed, the task whose
+worker found the bug is waiting, and so is each task whose `files` include the
+file. Others keep going. If they want it fixed:
 
 1. Start one worker in the plan branch's worktree to fix it test-first and
    commit, with a watch and a review like any task. Its task file has
