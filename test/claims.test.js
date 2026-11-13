@@ -158,6 +158,17 @@ test('claimsInTranscript finds each orch-claim Bash result that starts with CLAI
   assert.deepEqual(claimsInTranscript(lines), [{ file: '0001-t3-a1.json', line: 2 }, { file: '0003-t4-a1.json', line: 10 }]);
 });
 
+test('claimsInTranscript ignores an api-request-blob record that repeats a claim result', () => {
+  const use = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'u1', name: 'Bash', input: { command: '/c/bin/orch-claim /p/img.run work' } }] } });
+  const result = { type: 'tool_result', tool_use_id: 'u1', content: 'CLAIMED 0003-t2-a1.json\nYour worktree is /wt' };
+  const lines = [
+    use,
+    JSON.stringify({ type: 'user', message: { content: [result] } }),
+    JSON.stringify({ type: 'api-request-blob', hash: 'h', message: { role: 'user', content: [result] } }),
+  ];
+  assert.deepEqual(claimsInTranscript(lines), [{ file: '0003-t2-a1.json', line: 2 }]);
+});
+
 test('claimsInTranscript finds CLAIMED at the start of any line and ignores non-task names', () => {
   const use = (id, command) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name: 'Bash', input: { command } }] } });
   const res = (id, content) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content }] } });
