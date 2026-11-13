@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const { claimsInTranscript } = require('../lib/orchestrations/claims');
 const { buildIndex, stepsOf, renderIndex, recentSteps, contextTokens, watchEvents, bashReadPaths, filesRead } = require('../lib/transcript-index');
 
 // Fixture lines in the shapes Claude Code writes. Each helper returns one JSON line.
@@ -748,6 +749,21 @@ test('watchEvents reports CLAIM once for a second claim', () => {
   const r = watchEvents(workerLines(), null, { ...NO_LIMITS, claims });
   assert.deepEqual(r.events.filter((e) => e.startsWith('CLAIM')), ['CLAIM second claim 0002-t4-a1.json after 0001-t3-a1.json']);
   assert.deepEqual(watchEvents(workerLines(), r.seen, { ...NO_LIMITS, claims }).events.filter((e) => e.startsWith('CLAIM')), []);
+});
+
+test('watchEvents reports one CLAIMED and no CLAIM when an api-request-blob record repeats the claim result', () => {
+  const side = (rec) => JSON.stringify({ agentId: 'a1', ...rec });
+  const result = { type: 'tool_result', tool_use_id: 'c1', content: 'CLAIMED 0003-t2-a1.json\nYour worktree is /wt' };
+  const lines = [
+    side({ type: 'user', message: { role: 'user', content: 'Task' } }),
+    side({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 'c1', name: 'Bash', input: { command: '/c/bin/orch-claim /p/img.run work' } }] } }),
+    side({ type: 'user', message: { content: [result] } }),
+    side({ type: 'api-request-blob', hash: 'h', message: { role: 'user', content: [result] } }),
+  ];
+  const claims = claimsInTranscript(lines);
+  const events = watchEvents(lines, null, { ...NO_LIMITS, claims }).events;
+  assert.equal(events.filter((e) => e.startsWith('CLAIM second')).length, 0);
+  assert.equal(claims.length, 1);
 });
 
 test('watchEvents with sinceLine past the second claim does not repeat CLAIM', () => {

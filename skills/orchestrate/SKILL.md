@@ -1,6 +1,6 @@
 ---
 name: orchestrate
-description: Use when the user asks to orchestrate an approved implementation plan with workers started from a context image, in place of subagent-driven-development. The main thread writes the image, offers a context reset, then runs Sonnet workers in parallel waves, each in its own wt worktree, watches and steers them, and collects their feedback on the image.
+description: Use when the user asks to orchestrate an approved implementation plan with workers started from a context image, in place of subagent-driven-development. The main thread writes the image, offers a context reset, then runs Sonnet workers as their dependencies merge, at most 3 at a time, each in its own wt worktree, watches and steers them, and collects their feedback on the image.
 ---
 
 # Orchestrate
@@ -61,7 +61,7 @@ and your memory of a long session does not.
 
 Copy `image-template.md` from this skill's folder to `<image>` and fill every
 section. Remove the HTML comments once a section is filled. A section with
-nothing to say gets "None." "Updates" stays empty until a wave changes
+nothing to say gets "None." "Updates" stays empty until a merge changes
 something.
 
 - Quoted messages go in verbatim, each with its transcript line number. A
@@ -97,21 +97,21 @@ Before the final message, queue the reset line for the mod to fill. Run this wit
 
 ```bash
 mkdir -p <cfg>/cc-dashboard/reset-prompt && cat > <cfg>/cc-dashboard/reset-prompt/$CLAUDE_CODE_SESSION_ID.txt <<'EOF'
-Read <image>. You are the orchestrator for <plan path>. Continue at "Plan the waves" in the orchestrate skill.
+Read <image>. You are the orchestrator for <plan path>. Continue at "Plan the schedule" in the orchestrate skill.
 EOF
 ```
 
 End the message with the line to send after `/clear`, in a code block of its
 own. Nothing comes after it, so it is the last thing the user sees:
 
-    Read <image>. You are the orchestrator for <plan path>. Continue at "Plan the waves" in the orchestrate skill.
+    Read <image>. You are the orchestrator for <plan path>. Continue at "Plan the schedule" in the orchestrate skill.
 
 After a reset you have a new session id, so `<index>` and `<transcript>` now
 point at the new session. The image's Sources keep the old ones.
 
-## 5. Plan the waves
+## 5. Plan the schedule
 
-Before grouping, revise the plan so every task includes:
+Before scheduling, revise the plan so every task includes:
 
 1. The exact test command, and which suite it runs. Check that by reading the
    command's target (the package.json script, the Makefile target), not by
@@ -119,27 +119,79 @@ Before grouping, revise the plan so every task includes:
 2. A concrete test that fails before the task's change and passes after it.
 3. A requirement that the worker's report pastes the real test output.
 
+A task is **ready** when every task it consumes from has merged into the plan
+branch. A task is **running** from its worker's dispatch until its branch merges
+or the task is dropped. A task is **waiting** from the moment a question about it
+goes to the user until the user answers. A task that consumes from a waiting task
+is waiting too. A waiting task is not ready.
+
 Flag any task whose prescribed fix you cannot prove closes the bug. Show the
-flagged tasks to the user with the waves, and do not dispatch them until the
-user rules on each.
+flagged tasks to the user with the dependency list. A flagged task is waiting
+until the user rules on it, and the other tasks are dispatched as usual.
 
-From the plan's Interfaces blocks and file lists, group the tasks into waves:
+From the plan's Interfaces blocks and file lists:
 
-- A task joins the earliest wave after every task it consumes from.
-- Two tasks that share a file never share a wave.
-- At most 3 tasks per wave. Split a larger wave.
+- Record, for each task, the tasks it consumes from and its files.
+- At most 3 implementer workers run at once. Reviewers do not count toward the 3.
+- Two running tasks never share a file.
+- A task B that consumes from task A only through a signature is **stub-ready**
+  on A when B's plan test can replace A with a fake of A's Interfaces block, so
+  that test does not depend on A's behaviour. A stub that throws `not implemented`
+  would fail any test that calls it, so a task whose plan test needs A's real
+  behaviour is not stub-ready. It waits for A to merge.
+- Mark each stub-ready pair in the dependency list.
 
 A task step that needs the user (a decision, a manual check) is not a worker's.
-Do that step with the user before the task's wave, and put the answer in that
-task's `notes`, or in the image's "Updates" when it affects several tasks.
+Do that step with the user before the task is dispatched, and put the answer in
+that task's `notes`, or in the image's "Updates" when it affects several tasks.
 
-Show the user the waves in one short list before dispatching. Create the plan
-branch if it does not exist, with the name and base the plan's Global
+**Ask the user.** Once a worker is running:
+
+1. Ask the user in a plain message at the end of your turn, not with
+   `AskUserQuestion`. A question dialog holds your turn until the user answers,
+   so watch events, worker reports and newly ready tasks queue behind it. A plain
+   message ends your turn, and the events still wake you.
+2. The task a question concerns is waiting, as defined above. Every task that is
+   not waiting keeps going under sections 5 and 6: dispatch, review and merge as usual.
+3. Until the user answers, end each message to the user with the open questions,
+   one line each, naming the task.
+4. When the answer arrives, put it in the task's `notes`, or in "Updates" when it
+   affects several tasks. The task is no longer waiting, and it is ready again
+   once its dependencies have merged.
+
+`AskUserQuestion` stays fine before the first dispatch (sections 4 and 5) and in
+section 14, when no worker runs.
+
+Show the user the dependency list in one short list before dispatching. Create the
+plan branch if it does not exist, with the name and base the plan's Global
 Constraints give. When the plan names no base, use the base the project's
 CLAUDE.md names for worktrees, else local `main`:
 `wt switch --create <plan branch> --base <base> --no-cd`.
 
-## 6. Dispatch a wave
+**Stub an interface.** Before dispatching a stub-ready task B on a producing
+task A:
+
+1. Start one `"task": 0` worker in the plan branch's worktree. From section 9
+   it reuses only the `"task": 0` task-file shape and the plan branch's
+   worktree. It needs no user question first, and its `doneWhen` check replaces
+   section 9's test-first step. Its `notes` carry A's Interfaces block, and its
+   `files` names the stub module path from that block. Its `doneWhen` is that the
+   module loads and each function throws `not implemented: <name>`. The worker
+   commits the stub to the plan branch, and it gets a watch and a review like any
+   task.
+   While it runs, it counts toward section 5's limit of 3 implementers, and it
+   shares no file with a running task.
+2. B is ready once the stub's review passes and the stub commit is on the plan
+   branch. Then dispatch A and B together, within the limits above. A replaces the
+   stub in its own worktree.
+3. Add the stub commit to "Updates".
+
+## 6. Dispatch ready tasks
+
+Dispatch every ready task that fits under the limits in section 5, lowest task
+number first. Create a task's worktree only when the task is ready, because it must
+branch from the plan branch after its dependencies merge. The per-task steps below
+(worktree, `--add work`, Agent call, one Agent call per message) apply to each.
 
 Every worker of a run gets the same first message, and its task arrives after its
 shared reading through a claim queue. Claude Code caches a request only from an exact
@@ -161,6 +213,7 @@ Build the worker message once per session from this template, filling in `<image
 ```
 Read <image> in full, then every file it lists under "Read before starting", in that order. Then run <CLAIM> <run> work and do the task it prints. Run every command in the worktree it names and touch no other checkout.
 If you find something that affects work beyond your task (a fact that contradicts the image or plan, a problem in shared code, a name or interface other tasks depend on), post it and keep going: <POST> <board> --from "Task <N>" --title "<one line>" --body "<details>", with <N> your task's number. If it blocks your task, stop and report instead.
+A task that looks too large or too hard does not block it: finish the part you can, commit it, and end your report with how you would split the rest.
 If the image or the plan contradicts the code, stop and report the contradiction instead of guessing.
 Commit on your branch with no attribution trailer. End your report with: files changed; the task's test command and its real output, failing before your change and passing after, pasted verbatim; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
 ```
@@ -168,7 +221,7 @@ Commit on your branch with no attribution trailer. End your report with: files c
 Keep the message under 1,600 characters, not counting the absolute paths in it. Never
 drop one of its lines to fit.
 
-For each task in the wave, in this order:
+For each ready task, in this order:
 
 1. Create its worktree:
    `wt switch --create <plan branch>-t<N> --base <plan branch> --no-cd`. Print its
@@ -202,8 +255,10 @@ For each worker, its transcript is
 `agentId` from the Agent result. Start one Monitor tool watch per worker:
 
 - `command`: `TI <worker transcript> --watch --run <run> --files <scratchpad folder>/ --budget 200000`,
-  plus `--board <board>` on exactly one watch per wave, so each post wakes you
-  once. `--run` reads the worker's task files from its claim, so the watch can be
+  plus `--board <board>` on exactly one armed watch, so each post wakes you
+  once. When that watch exits, put `--board` on the next watch you arm. A watch
+  counts board posts from its start, so first read the board entries added since
+  the last `POST` you handled. `--run` reads the worker's task files from its claim, so the watch can be
   armed before the worker has claimed. `--run` also reports files changed in the
   claimed worktree, found with git, so a worker that edits through Bash (`sed -i`,
   a heredoc) raises DRIFT too. A `--files` entry ending in `/` covers a
@@ -238,11 +293,17 @@ Run `TI <worker transcript> --steps 20` and decide:
     scratchpad, or revert the edit.
   - A DRIFT from a Bash edit shows in the steps as the Bash command that wrote
     the file.
+  - A DRIFT whose step shows the result `This worker claimed the worktree` was
+    refused by the mod, and nothing needs reverting. Steer only if the worker
+    keeps retrying the same path.
 - `STUCK <tool> <text> failed 3 times in a row`: steer with the fix, or tell the
-  worker to stop and report if you do not know it.
+  worker to stop and report if you do not know it. When the steps show the worker
+  failing because the step is too large, rather than on a fixable error, steer it
+  to commit what passes and report with a split. The `DONE` rule below then
+  applies.
 - `BUDGET context <n> tokens, over 200000`: steer the worker to finish its
   current step, commit, and report. Then split the rest of its task into a new
-  task for a later wave.
+  task, dispatched once it is ready.
 - `CLAIMED <file> task <N>: <title>`: informational, no steer. It says which task
   this agent took. Note the pairing of agent, `<file>` and `<N>`. Section 11 and
   section 13 take the task from the claimed file `<run>/claimed/<file>`, not from
@@ -253,7 +314,16 @@ Run `TI <worker transcript> --steps 20` and decide:
 - `QUIET no new lines for 5 min`: look. Steer only if the steps show the worker
   is lost.
 - `DONE <report>`: go to Review and merge. In `--steps`, the worker's final
-  report is the `REPORT` step.
+  report is the `REPORT` step. When the report says the task is too large, too
+  hard or out of budget, and names no contradiction with the image or the plan:
+  1. Turn the worker's suggested split into new tasks. Each new task consumes
+     from the committed part. Merge the committed part after its review.
+  2. Dispatch the new tasks as they become ready (section 6).
+  3. Bring the task to the user only when a split task comes back with the same
+     verdict. Mark that task waiting and ask, as "Ask the user" says.
+
+  A report that names a contradiction stays as before: mark the task waiting and
+  ask the user, as "Ask the user" says.
 - `KILLED <text>`: the worker was stopped, by you, the user or Claude Code, and
   `<text>` is its last action. Check whether it claimed: its watch printed
   `CLAIMED`, or `TI <transcript> --steps` shows an `orch-claim` result. If it did
@@ -265,7 +335,7 @@ Run `TI <worker transcript> --steps 20` and decide:
   user. Otherwise resume it with SendMessage and re-arm the watch.
 - `POST <from>: <title>`: go to section 9.
 
-Before ending a wave, run `CLAIM <run> --status`. Release each file listed under
+After each merge, run `CLAIM <run> --status`. Release each file listed under
 "claimed, no time" with `CLAIM <run> --release <file>`. Then run `CLAIM <run> --status`
 again and start one worker with the fixed message per pending file. A relaunch of a claimed task adds a
 new work task with `"attempt"` one higher.
@@ -286,16 +356,19 @@ step is cut to one short line; `--steps <n> --full` prints each step whole.
 Read the post's full entry in `<board>` (the last lines of the file). Then:
 
 - A post from "You" is the user's own words. Act on it as you would a user
-  message: steer the worker it concerns, update the image, or stop and bring it
-  back to the user.
+  message: steer the worker it concerns, update the image, or mark the tasks the
+  post concerns as waiting and ask, as "Ask the user" says.
 - Steer each running worker the post affects.
-- Add it to the image's "Updates" section, so later waves start with it.
-- If it changes the plan itself, stop dispatching new waves and bring it to the
-  user.
+- Add it to the image's "Updates" section, so later tasks start with it.
+- If it changes the plan itself, mark each task the change touches as waiting and
+  ask the user. When you cannot tell which tasks it touches, treat every task not
+  yet dispatched as waiting.
 
 A post or a stopped worker's report can show a bug in shared code: a file no
 task owns that the plan treats as done. Ask the user before anything changes
-that file. If they want it fixed:
+that file. While the user decides whether the file gets fixed, the task whose
+worker found the bug is waiting, and so is each task whose `files` include the
+file. Others keep going. If they want it fixed:
 
 1. Start one worker in the plan branch's worktree to fix it test-first and
    commit, with a watch and a review like any task. Its task file has
@@ -319,7 +392,7 @@ or board post it rests on.
 
 A user row `You steered Task <N> from the dashboard: <text>` is a steer the user
 already delivered to the worker from the dashboard. Do not send a steer that
-contradicts it. If it affects later waves, add it to "Updates".
+contradicts it. If it affects later tasks, add it to "Updates".
 
 ## 11. Review and merge
 
@@ -356,12 +429,17 @@ findings. When it passes, merge the worker's branch into the plan branch. With `
 it checks merges against the default branch, not the plan branch.
 
 A merge conflict that is trivial, you resolve. Otherwise abort the merge, and
-rerun the later task on the merged plan branch.
+re-add the later task, which is ready again once the merge lands.
 
-## 12. Between waves
+When the second task of a stub-ready pair merges, run B's `doneWhen` command in
+the plan branch's worktree. If it fails, treat the output like a failed review of
+B: relaunch B with the output in `notes`.
 
-Add to the image's "Updates" section what the wave changed that later tasks
-need: new names, moved files, board posts. Then dispatch the next wave.
+## 12. After each merge
+
+Add to the image's "Updates" section what the merge changed that later tasks
+need: new names, moved files, board posts. Then dispatch every task that is now
+ready (section 6).
 
 ## 13. Feedback
 
@@ -378,5 +456,5 @@ The user reviews these across sessions before redesigning the image.
 
 ## 14. Finish
 
-After the last wave, use superpowers:finishing-a-development-branch on the plan
+After the last task merges, use superpowers:finishing-a-development-branch on the plan
 branch. The run folder stays beside the image, untracked, like the board.
