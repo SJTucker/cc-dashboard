@@ -14,6 +14,7 @@ import type { AgentStep, HeadlessStep } from './steps'
 import { REPO_STEPS, documentResumePrompt, endFill, handoffDocument, handoffKind, handoffWaitMs, hourCacheExpiry, imageDocument, imageResumePrompt, indexPath, planHandoff, planImage, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 import { relayOnce } from './steer'
+import { claimedWorktree, guardReason, outsideWrite } from './guard'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
@@ -593,10 +594,15 @@ function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
   stepWrites.set(agentId, appendChain(stepWrites.get(agentId), () => recordStep($, agentId, step), (err) => logOnce($, `agent usage failed (${errorName(err)})`)))
 }
 
+// The worktree each subagent claimed with orch-claim, by agentId. A reload starts
+// the map empty, so a reload turns the guard off for workers already running.
+const claimedWorktrees = new Map<string, string>()
+
 // Drops the agent's steps and its write chain once its last queued write settles.
 // A step queued before the chain settles replaces the chain, so this waits again on
 // the new one. A step queued after the entries are gone starts a new list from the file.
 function forgetAgentSteps(agentId: string) {
+  claimedWorktrees.delete(agentId)
   const chain = stepWrites.get(agentId)
   if (!chain) return
   chain.finally(() => {
@@ -1892,8 +1898,20 @@ export const register: Register = (on) => {
     // A subagent's call that returns or throws rewrites the file, so subagents and
     // updatedAt stay current while the main loop waits.
     if (e.agentId) {
+      const agentId = e.agentId
+      const args = e as unknown as Record<string, unknown>
+      const tree = claimedWorktrees.get(agentId)
+      if (tree) {
+        const path = outsideWrite(e.tool, args, tree)
+        if (path) return { deny: guardReason(path, tree) }
+      }
       try {
-        return await next(e)
+        const result = await next(e)
+        if (!tree && e.tool === 'Bash' && 'text' in result && typeof result.text === 'string') {
+          const found = claimedWorktree(typeof args.command === 'string' ? args.command : '', result.text)
+          if (found) claimedWorktrees.set(agentId, found)
+        }
+        return result
       } finally {
         await track($, () => {}, false)
       }
