@@ -40,6 +40,8 @@ type World = {
   toolFails: boolean
   // The text tool.call answers with.
   toolText: string
+  // The file_path of each Edit the tool.call mock ran.
+  editsRun: string[]
   // Makes fs.write reject.
   writeFails: boolean
   // What the bottom of turn.step streams and returns.
@@ -171,6 +173,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     verdict: 'allow',
     toolFails: false,
     toolText: 'ok',
+    editsRun: [],
     writeFails: false,
     stepChunks: STEP_CHUNKS,
     stepResult: STEP_RESULT,
@@ -420,7 +423,8 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
     for (const chunk of state.stepChunks) yield chunk as never
     return { ...(state.stepResult as object), turnId: e.turnId, index: e.index } as never
   })
-  on('tool.call', async () => {
+  on('tool.call', async (_$, e) => {
+    if (e.tool === 'Edit') state.editsRun.push((e as unknown as { file_path: string }).file_path)
     if (state.toolMs > 0) await clock.sleep(state.toolMs)
     if (state.toolFails) throw new Error('tool failed')
     return { result: 'ok', text: state.toolText }
@@ -1850,6 +1854,28 @@ test("the guard keeps a worker's first claim", async ($, on) => {
   state.toolText = 'ok'
   const answer = (await $.tool.call(editCall('/code/app.t2/x.js', 'a1'))) as { deny?: string }
   expect(answer.deny).toContain('/code/app.t1')
+})
+
+test('a refused edit never reaches the tool', async ($, on) => {
+  const { state } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  const answer = (await $.tool.call(editCall('/code/app/x.js', 'a1'))) as { deny?: string }
+  expect(answer.deny).toContain('/code/app.t1')
+  expect(state.editsRun).toEqual([])
+})
+
+test("a finished subagent's claim is forgotten", async ($, on) => {
+  const { state, clock } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await clock.settle()
+  const answer = (await $.tool.call(editCall('/code/app/x.js', 'a1'))) as { deny?: string }
+  expect(answer.deny).toBe(undefined)
+  expect(state.editsRun).toEqual(['/code/app/x.js'])
 })
 
 test('the main loop is never refused', async ($, on) => {
