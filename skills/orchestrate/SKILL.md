@@ -194,6 +194,7 @@ Build the worker message once per session from this template, filling in `<image
 ```
 Read <image> in full, then every file it lists under "Read before starting", in that order. Then run <CLAIM> <run> work and do the task it prints. Run every command in the worktree it names and touch no other checkout.
 If you find something that affects work beyond your task (a fact that contradicts the image or plan, a problem in shared code, a name or interface other tasks depend on), post it and keep going: <POST> <board> --from "Task <N>" --title "<one line>" --body "<details>", with <N> your task's number. If it blocks your task, stop and report instead.
+A task that looks too large or too hard does not block it: finish the part you can, commit it, and end your report with how you would split the rest.
 If the image or the plan contradicts the code, stop and report the contradiction instead of guessing.
 Commit on your branch with no attribution trailer. End your report with: files changed; the task's test command and its real output, failing before your change and passing after, pasted verbatim; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
 ```
@@ -273,8 +274,14 @@ Run `TI <worker transcript> --steps 20` and decide:
     scratchpad, or revert the edit.
   - A DRIFT from a Bash edit shows in the steps as the Bash command that wrote
     the file.
+  - A DRIFT whose step shows the result `This worker claimed the worktree` was
+    refused by the mod, and nothing needs reverting. Steer only if the worker
+    keeps retrying the same path.
 - `STUCK <tool> <text> failed 3 times in a row`: steer with the fix, or tell the
-  worker to stop and report if you do not know it.
+  worker to stop and report if you do not know it. When the steps show the worker
+  failing because the step is too large, rather than on a fixable error, steer it
+  to commit what passes and report with a split. The `DONE` rule below then
+  applies.
 - `BUDGET context <n> tokens, over 200000`: steer the worker to finish its
   current step, commit, and report. Then split the rest of its task into a new
   task, dispatched once it is ready.
@@ -288,7 +295,15 @@ Run `TI <worker transcript> --steps 20` and decide:
 - `QUIET no new lines for 5 min`: look. Steer only if the steps show the worker
   is lost.
 - `DONE <report>`: go to Review and merge. In `--steps`, the worker's final
-  report is the `REPORT` step.
+  report is the `REPORT` step. When the report says the task is too large, too
+  hard or out of budget, and names no contradiction with the image or the plan:
+  1. Turn the worker's suggested split into new tasks. Each new task consumes
+     from the committed part. Merge the committed part after its review.
+  2. Dispatch the new tasks as they become ready (section 6).
+  3. Bring the task to the user only when a split task comes back with the same
+     verdict.
+
+  A report that names a contradiction stays as before: bring it to the user.
 - `KILLED <text>`: the worker was stopped, by you, the user or Claude Code, and
   `<text>` is its last action. Check whether it claimed: its watch printed
   `CLAIMED`, or `TI <transcript> --steps` shows an `orch-claim` result. If it did
