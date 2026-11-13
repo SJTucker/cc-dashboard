@@ -152,12 +152,19 @@ CLAUDE.md names for worktrees, else local `main`:
 **Stub an interface.** Before dispatching a stub-ready task B on a producing
 task A:
 
-1. Start one `"task": 0` worker in the plan branch's worktree, as section 9
-   describes. Its `notes` carry A's Interfaces block. Its `doneWhen` is that the
+1. Start one `"task": 0` worker in the plan branch's worktree. From section 9
+   it reuses only the `"task": 0` task-file shape and the plan branch's
+   worktree. It needs no user question first, and its `doneWhen` check replaces
+   section 9's test-first step. Its `notes` carry A's Interfaces block, and its
+   `files` names the stub module path from that block. Its `doneWhen` is that the
    module loads and each function throws `not implemented: <name>`. The worker
-   commits the stub to the plan branch.
-2. Treat B as ready once the stub commit lands, and dispatch A and B together,
-   within the limits above. A replaces the stub in its own worktree.
+   commits the stub to the plan branch, and it gets a watch and a review like any
+   task.
+   While it runs, it counts toward section 5's limit of 3 implementers, and it
+   shares no file with a running task.
+2. B is ready once the stub's review passes and the stub commit is on the plan
+   branch. Then dispatch A and B together, within the limits above. A replaces the
+   stub in its own worktree.
 3. Add the stub commit to "Updates".
 
 ## 6. Dispatch ready tasks
