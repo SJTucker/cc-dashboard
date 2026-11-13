@@ -66,8 +66,8 @@ project. Replace <POST> with the absolute path of bin/board-post. -->
 ## Updates
 
 <!-- Facts that changed after this image was written: board posts and what earlier
-waves changed that later tasks need (new names, moved files). The orchestrator adds
-to this between waves. Starts empty. -->
+merges changed that later tasks need (new names, moved files). The orchestrator adds
+to this after each merge. Starts empty. -->
 
 ## Left out
 
