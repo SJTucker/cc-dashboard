@@ -43,3 +43,8 @@ test('the skill checks the plan branch after each merge', () => {
 test('the skill says a run needs auto mode', () => {
   assert.ok(text.includes('auto mode'));
 });
+
+test('the skill squashes a task branch against its merge-base', () => {
+  assert.ok(section(11).includes('git reset --soft $(git merge-base <plan branch>-t<N> <plan branch>)'));
+  assert.doesNotMatch(text, /reset --soft\s+<plan branch>/);
+});

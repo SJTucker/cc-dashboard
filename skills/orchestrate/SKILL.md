@@ -432,7 +432,13 @@ one per message, like workers. A relaunched implementer gets a new work task wit
 the next `attempt` and the review findings in `notes`.
 
 Read the whole review. When it fails, steer or relaunch the implementer with the
-findings. When it passes, merge the worker's branch into the plan branch. With `<N>` the task in the claimed file of the worker being merged, check
+findings. If you ask an implementer to squash its commits, have it run
+`git reset --soft $(git merge-base <plan branch>-t<N> <plan branch>)` and commit
+once. Never reset to `<plan branch>` itself: it gains other tasks' merges after the
+task branches, and a soft reset to it stages their work as reverted.
+
+When the review passes, merge the worker's branch into the plan branch. With `<N>`
+the task in the claimed file of the worker being merged, check
 `git merge-base --is-ancestor <plan branch>-t<N> <plan branch>`, then run
 `wt remove -D <plan branch>-t<N>`. Without `-D`, `wt` keeps the branch, because
 it checks merges against the default branch, not the plan branch.
