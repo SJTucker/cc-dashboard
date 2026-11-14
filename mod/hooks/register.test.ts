@@ -1878,6 +1878,64 @@ test("a finished subagent's claim is forgotten", async ($, on) => {
   expect(state.editsRun).toEqual(['/code/app/x.js'])
 })
 
+const CLAIM_FILE = '/home/u/.claude/cc-dashboard/claims/a1.json'
+const CLAIM_JSON = JSON.stringify({ worktree: '/code/app.t1', run: '/r/x.run', file: '0001-t1-a1.json' })
+
+test('a claim writes the claim file', async ($, on) => {
+  const { state, writes } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  expect(JSON.parse(writes[CLAIM_FILE] ?? 'null')).toEqual({ worktree: '/code/app.t1', run: '/r/x.run', file: '0001-t1-a1.json' })
+})
+
+test('a refused edit runs orch-event denied', async ($, on) => {
+  const { state, ran, clock } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  await $.tool.call(editCall('/code/app/x.js', 'a1'))
+  await clock.settle()
+  const call = ran.find((r) => r.argv[0]?.endsWith('/orch-event'))
+  expect(call?.argv.slice(1)).toEqual(['/r/x.run', 'denied', '--agent', 'a1', '--file', '0001-t1-a1.json', '--text', '/code/app/x.js'])
+})
+
+test('the guard refuses after a reload from the claim file', async ($, on) => {
+  const { state } = world(on)
+  state.files[CLAIM_FILE] = CLAIM_JSON
+  const answer = (await $.tool.call(editCall('/code/app/x.js', 'a1'))) as { deny?: string }
+  expect(answer.deny).toContain('/code/app.t1')
+})
+
+test('a failed orch-event run never blocks the guard', async ($, on) => {
+  const { state, clock } = world(on, {}, 0, true)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  const denied = (await $.tool.call(editCall('/code/app/x.js', 'a1'))) as { deny?: string }
+  await clock.settle()
+  expect(denied.deny).toContain('/code/app.t1')
+  const inside = (await $.tool.call(editCall('/code/app.t1/x.js', 'a1'))) as { deny?: string, text?: string }
+  expect(inside.text).toBe('ok')
+})
+
+test('an agent with no claim file reads it once', async ($, on) => {
+  const { readLog } = world(on)
+  await $.tool.call(editCall('/code/app/x.js', 'a2'))
+  await $.tool.call(editCall('/code/app/y.js', 'a2'))
+  expect(readLog.filter((p) => p.endsWith('/claims/a2.json'))).toHaveLength(1)
+})
+
+test('an ending agent with a claim empties its claim file, and one without writes nothing', async ($, on) => {
+  const { state, writes, clock } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await $.turn.complete(turnEnd({ agentId: 'a2' }))
+  await clock.settle()
+  expect(writes[CLAIM_FILE]).toBe('')
+  expect(Object.keys(writes).filter((p) => p.endsWith('/claims/a2.json'))).toEqual([])
+})
+
 test('the main loop is never refused', async ($, on) => {
   const { state } = world(on)
   state.toolText = claimText('/code/app.t1')

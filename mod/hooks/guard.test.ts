@@ -3,9 +3,10 @@ import { claimedWorktree, guardReason, outsideWrite } from './guard'
 
 const CLAIM_TEXT = 'CLAIMED 0001-t1-a1.json\nYour worktree is /code/app.t1; run every command there and touch no other checkout.\nTask 1 of /p.md, "x".'
 
-test('claimedWorktree reads the worktree from an orch-claim result', async () => {
-  expect(claimedWorktree('/c/bin/orch-claim /r/x.run work', CLAIM_TEXT)).toBe('/code/app.t1')
-  expect(claimedWorktree("/c/bin/orch-claim '/r/x.run' review", CLAIM_TEXT)).toBe('/code/app.t1')
+test('claimedWorktree returns the worktree, run folder and task file', async () => {
+  expect(claimedWorktree('/c/bin/orch-claim /r/x.run work', CLAIM_TEXT)).toEqual({ worktree: '/code/app.t1', run: '/r/x.run', file: '0001-t1-a1.json' })
+  expect(claimedWorktree("/c/bin/orch-claim '/r/x.run' review", CLAIM_TEXT)).toEqual({ worktree: '/code/app.t1', run: '/r/x.run', file: '0001-t1-a1.json' })
+  expect(claimedWorktree('/c/bin/orch-claim "/r/x.run" work', CLAIM_TEXT)?.run).toBe('/r/x.run')
 })
 
 test('claimedWorktree ignores other commands and results without a claim', async () => {
