@@ -276,7 +276,8 @@ For each ready task, in this order:
    give a worktree its ports and database.
 2. Add its task to the queue. The JSON carries `task`, `title`, `plan`, `worktree`,
    `branch`, `files`, `doneWhen` (one narrow check, as a command and its expected
-   result, copied from the task's `**Done when:**` line when it has one), `sections` (the image sections that matter most), `reviewer` (copied
+   result, copied from the task's `**Done when:**` line when it has one),
+   `sections` (the image sections that matter most), `reviewer` (copied
    from the task's `**Reviewer:**` line) and, when needed, `notes`:
 
    ```bash
