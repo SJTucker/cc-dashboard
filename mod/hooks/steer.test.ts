@@ -11,14 +11,16 @@ test('pendingRequests never takes the server temp file name', async () => {
 })
 
 test('steerNote names the task', async () => {
-  expect(steerNote(5, 'Use resolveRoot')).toBe('You steered Task 5 from the dashboard: Use resolveRoot')
-  expect(steerNote(null, 'Stop')).toBe('You steered a worker from the dashboard: Stop')
+  expect(steerNote(5, null, 'Use resolveRoot')).toBe('You steered Task 5 from the dashboard: Use resolveRoot')
+  expect(steerNote(5, 'Fix the regex', 'Use resolveRoot')).toBe('You steered Task 5 (Fix the regex) from the dashboard: Use resolveRoot')
+  expect(steerNote(null, 'ignored', 'Stop')).toBe('You steered a worker from the dashboard: Stop')
+  expect(steerNote(null, null, 'Stop')).toBe('You steered a worker from the dashboard: Stop')
 })
 
 // lib/orchestrations/parse.js STEER_NOTE reads both forms back.
 test('steerNote writes the exact strings the server parses', async () => {
-  expect(steerNote(12, 'a\nb')).toBe('You steered Task 12 from the dashboard: a\nb')
-  expect(steerNote(null, 'Stop now')).toBe('You steered a worker from the dashboard: Stop now')
+  expect(steerNote(12, null, 'a\nb')).toBe('You steered Task 12 from the dashboard: a\nb')
+  expect(steerNote(null, null, 'Stop now')).toBe('You steered a worker from the dashboard: Stop now')
 })
 
 const DIR = '/cfg/cc-dashboard/steer/s1'
@@ -62,6 +64,13 @@ test('relay sends, appends the note, and writes a delivered result', async () =>
     'append You steered Task 5 from the dashboard: Use resolveRoot',
     'write b.result.json {"id":"b","delivered":true,"at":99}',
   ])
+})
+
+test('relay writes the title into the note when the request has one', async () => {
+  const titled = JSON.stringify({ id: 'b', agentId: 'a1', task: 5, title: 'Fix the regex', text: 'Use resolveRoot', at: 1 })
+  const { io, calls } = fake({ [`${DIR}/b.json`]: titled }, async () => ({ isDelivered: true }))
+  await relayOnce(io, DIR, new Set())
+  expect(calls[1]).toBe('append You steered Task 5 (Fix the regex) from the dashboard: Use resolveRoot')
 })
 
 test('a pass makes no send after io.ended turns true, and leaves that request unanswered', async () => {

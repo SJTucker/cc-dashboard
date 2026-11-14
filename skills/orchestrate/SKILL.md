@@ -38,6 +38,8 @@ Never read a worker transcript raw: one line can hold a megabyte. Use the index
 (`TI <path>`), `TI <path> --steps <n>`, or `sed -n 'A,Bp' <path> | cut -c1-400` on
 line ranges the index or `--steps` names.
 
+When a message to the user names a task, write `Task <N> (<title>)`, never the bare number.
+
 ## 1. When to use
 
 Only when the user asks for it. Otherwise superpowers' own execution skills
@@ -237,7 +239,7 @@ Build the worker message once per session from this template, filling in `<image
 
 ```
 Read <image> in full, then every file it lists under "Read before starting", in that order. Then run <CLAIM> <run> work and do the task it prints. Run every command in the worktree it names and touch no other checkout.
-If you find something that affects work beyond your task (a fact that contradicts the image or plan, a problem in shared code, a name or interface other tasks depend on), post it and keep going: <POST> <board> --from "Task <N>" --title "<one line>" --body "<details>", with <N> your task's number. If it blocks your task, stop and report instead.
+If you find something that affects work beyond your task (a fact that contradicts the image or plan, a problem in shared code, a name or interface other tasks depend on), post it and keep going: <POST> <board> --from "Task <N> (<title>)" --title "<one line>" --body "<details>", with <N> and <title> from the task orch-claim printed. If it blocks your task, stop and report instead.
 A task that looks too large or too hard does not block it: finish the part you can, commit it, and end your report with how you would split the rest.
 If the image or the plan contradicts the code, stop and report the contradiction instead of guessing.
 Commit on your branch with no attribution trailer. End your report with: files changed; the task's test command and its real output, failing before your change and passing after, pasted verbatim; anything you were unsure of; if you stopped before finishing, what you tried; which parts of your starting context you used, and what you needed that was not there.
@@ -264,6 +266,9 @@ For each ready task, in this order:
    {"task": 1, "title": "...", "plan": "<plan path>", "worktree": "<path>", "branch": "<branch>", "files": ["..."], "doneWhen": "...", "sections": ["..."]}
    EOF
    ```
+
+   A `title` must not contain `"`, a backtick, `$`, `\` or a newline. Reword a plan
+   title that does.
 3. Start the worker with the Agent tool: `subagent_type: "orch-worker"`,
    `model: "sonnet"`, `run_in_background: true`, `description: "orchestrate worker"`
    (the same for every worker), and the fixed message as the prompt.
@@ -295,10 +300,13 @@ For each worker, its transcript is
   ending in `/` covers a whole folder: the scratchpad folder is this session's, so
   a worker's scratch files are not reported as drift.
 - `timeout_ms`: 1800000.
-- `description`: `worker <agentId>`. You learn the worker's task from its `CLAIMED`
-  line (section 8). The dashboard feed finds the worker from `agent-<agentId>.jsonl`
-  in `command` and shows the task that worker claimed, so keep the transcript path
-  literal in the command.
+- `description`: `worker <agentId> Task <N> (<title>)`, with the title cut to 60
+  characters. For the first watch of an agent, `<N>` and `<title>` come from the
+  task added just before that agent's Agent call. A re-armed watch uses the
+  agent's `CLAIMED` line (section 8). If the agent claimed a different task than
+  the one queued for it, the next re-arm corrects the description. The dashboard
+  feed finds the worker from `agent-<agentId>.jsonl` in `command` and shows the
+  task that worker claimed, so keep the transcript path literal in the command.
 
 The watch waits for a transcript that does not exist yet, so start it right
 after the Agent call. It prints one line per event and exits after `DONE`,
@@ -420,13 +428,14 @@ file. Others keep going. If they want it fixed:
 SendMessage to the worker with one concrete correction, and the image section
 or board post it rests on.
 
-A user row `You steered Task <N> from the dashboard: <text>` is a steer the user
+A user row `You steered Task <N> (<title>) from the dashboard: <text>` (older rows
+read `You steered Task <N> from the dashboard: <text>`) is a steer the user
 already delivered to the worker from the dashboard. Do not send a steer that
 contradicts it. If it affects later tasks, add it to "Updates".
 
 After each SendMessage steer, run
 `EVENT <run> steer --task <N> --agent <id> --text "<first 200 characters>"`.
-For a `You steered Task <N> from the dashboard` row, run
+For a `You steered Task <N> … from the dashboard` row, with or without a title, run
 `EVENT <run> steer --task <N> --text "dashboard: <first 200 characters>"`.
 
 ## 11. Review and merge

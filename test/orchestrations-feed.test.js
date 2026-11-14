@@ -65,15 +65,15 @@ test('maps orchestrator steps to plain actions, newest first', () => {
   const { feed } = feedOf(orchestration());
   assert.deepEqual(
     feed.map((a) => a.text),
-    ['Merged Task 1', 'Steered Task 1', 'Watching Task 1', 'Started Task 1 worker', 'Created worktree demo', 'Wrote the context image', 'Loaded orchestrate', 'You: Orchestrate the demo plan please'],
+    ['Merged Task 1 (Title 1)', 'Steered Task 1 (Title 1)', 'Watching Task 1', 'Started Task 1 (Title 1) worker', 'Created worktree demo', 'Wrote the context image', 'Loaded orchestrate', 'You: Orchestrate the demo plan please'],
   );
   const byText = Object.fromEntries(feed.map((a) => [a.text, a]));
-  assert.equal(byText['Started Task 1 worker'].glyph, '▸');
-  assert.equal(byText['Started Task 1 worker'].detail, 'lib/a.js, lib/b.js');
-  assert.equal(byText['Steered Task 1'].detail, 'use the helper');
-  assert.equal(byText['Merged Task 1'].glyph, '✓');
-  assert.equal(byText['Merged Task 1'].at, iso(10));
-  assert.equal(byText['Merged Task 1'].line, 11);
+  assert.equal(byText['Started Task 1 (Title 1) worker'].glyph, '▸');
+  assert.equal(byText['Started Task 1 (Title 1) worker'].detail, 'lib/a.js, lib/b.js');
+  assert.equal(byText['Steered Task 1 (Title 1)'].detail, 'use the helper');
+  assert.equal(byText['Merged Task 1 (Title 1)'].glyph, '✓');
+  assert.equal(byText['Merged Task 1 (Title 1)'].at, iso(10));
+  assert.equal(byText['Merged Task 1 (Title 1)'].line, 11);
 });
 
 test('leaves out reads and greps', () => {
@@ -104,7 +104,7 @@ test('a reviewer is Started review of Task N', () => {
   s.use('Agent', { description: 'Review Task 1', prompt: 'review Task 1' }, 'rv');
   s.agentResult('rv', 'r1', 'review Task 1');
   const { feed } = feedOf(s);
-  assert.equal(feed[0].text, 'Started review of Task 1');
+  assert.equal(feed[0].text, 'Started review of Task 1 (Title 1)');
   assert.equal(feed[0].glyph, '◐');
 });
 
@@ -130,7 +130,7 @@ test('checking a worker with transcript-index, and later image writes', () => {
   s.use('Bash', { command: 'node bin/transcript-index a1 --steps' });
   s.use('Edit', { file_path: IMAGE, old_string: 'a', new_string: 'b' });
   const { feed } = feedOf(s);
-  assert.deepEqual(feed.slice(0, 2).map((a) => a.text), ['Updated the image', "Checked Task 1's steps"]);
+  assert.deepEqual(feed.slice(0, 2).map((a) => a.text), ['Updated the image', "Checked Task 1 (Title 1)'s steps"]);
 });
 
 const stepsFor = (s) => stepsOf(s.lines, 1, s.lines.length);
@@ -150,14 +150,14 @@ test('working activity describes the latest tool step', () => {
   const parsed = parseOrchestrator(s.lines);
   const now = nowLine(parsed, stepsFor(s), { state: 'working', tool: null, since: T0 }, true);
   assert.equal(now.state, 'working');
-  assert.equal(now.text, 'Merged Task 1');
+  assert.equal(now.text, 'Merged Task 1 (Title 1)');
 });
 
 test('a latest SendMessage step reads Steered Task N with the summary', () => {
   const s = orchestration().use('SendMessage', { to: 'a1', summary: 'rebase first', message: 'long' });
   const parsed = parseOrchestrator(s.lines);
   const now = nowLine(parsed, stepsFor(s), { state: 'working', tool: null, since: T0 }, true);
-  assert.equal(now.text, 'Steered Task 1');
+  assert.equal(now.text, 'Steered Task 1 (Title 1)');
   assert.equal(now.detail, 'rebase first');
 });
 
@@ -172,7 +172,7 @@ test('working with a latest step that has no mapping says Working', () => {
 test('with activity off, a live session uses the latest step', () => {
   const s = orchestration();
   const parsed = parseOrchestrator(s.lines);
-  assert.equal(nowLine(parsed, stepsFor(s), null, true).text, 'Merged Task 1');
+  assert.equal(nowLine(parsed, stepsFor(s), null, true).text, 'Merged Task 1 (Title 1)');
   s.text('All merged. Over to you.');
   const waiting = nowLine(parseOrchestrator(s.lines), stepsFor(s), null, true);
   assert.equal(waiting.text, 'Waiting for you');
@@ -198,7 +198,7 @@ test('nowLine reads the raw Monitor input, so the description wins over the comm
   const s = orchestration();
   const parsed = parseOrchestrator(s.lines);
   const steps = stepsFor(s);
-  assert.equal(nowLine(parsed, steps, { state: 'working', tool: null, since: T0 }, true).text, 'Merged Task 1');
+  assert.equal(nowLine(parsed, steps, { state: 'working', tool: null, since: T0 }, true).text, 'Merged Task 1 (Title 1)');
   s.use('Monitor', { description: 'watch Task 2 progress', command: 'tail -f board' });
   const again = parseOrchestrator(s.lines);
   assert.equal(nowLine(again, stepsFor(s), null, true, s.lines).text, 'Watching Task 2');
@@ -353,7 +353,7 @@ test('every dashboard steer note is a feed entry, with a task label or "a worker
   assert.deepEqual(feed.slice(0, 3).map((a) => [a.text, a.detail]), [
     ['You steered Task 9', 'no worker for this'],
     ['You steered a worker', 'look again'],
-    ['You steered Task 1', 'rebase'],
+    ['You steered Task 1 (Title 1)', 'rebase'],
   ]);
   assert.equal(feed[0].glyph, '↗');
 });
@@ -366,4 +366,85 @@ test('a line whose parsed merges name the same task twice names the task once', 
   parsed.merges.push({ ...last });
   assert.equal(parsed.merges.filter((m) => m.line === last.line).length, 2);
   assert.equal(actionFeed(s.lines, parsed)[0].text, `Merged Task ${last.task}`);
+});
+
+// Task titles in labels.
+const startWorker = (s, n, prompt = workerPrompt(n)) => {
+  s.use('Agent', { description: `Task ${n} worker`, prompt }, `agT${n}${s.lines.length}`);
+  s.agentResult(`agT${n}${s.lines.length - 1}`, `a${n}${s.lines.length}`, prompt);
+  return s;
+};
+
+test('a worker start reads Started Task N (<title>) worker', () => {
+  const { feed } = feedOf(orchestration());
+  assert.ok(feed.some((a) => a.text === 'Started Task 1 (Title 1) worker'));
+});
+
+test('a merge of one task reads Merged Task N (<title>)', () => {
+  const { feed } = feedOf(orchestration());
+  assert.equal(feed[0].text, 'Merged Task 1 (Title 1)');
+});
+
+test('several merges read Merged Tasks 1 (<a>), 2 (<b>)', () => {
+  const s = new Script().prompt('go').use('Skill', { skill: 'orchestrate' });
+  s.use('Bash', { command: 'wt switch --create demo --base main --no-cd' });
+  startWorker(s, 1);
+  startWorker(s, 2);
+  s.use('Bash', { command: 'git merge demo-t1 && git merge demo-t2' });
+  const { feed } = feedOf(s);
+  assert.equal(feed[0].text, 'Merged Tasks 1 (Title 1), 2 (Title 2)');
+});
+
+test('a SendMessage reads Steered Task N (<title>)', () => {
+  const { feed } = feedOf(orchestration());
+  assert.ok(feed.some((a) => a.text === 'Steered Task 1 (Title 1)'));
+});
+
+test('a dashboard note reads You steered Task N (<title>)', () => {
+  const s = orchestration();
+  metaNote(s, 'You steered Task 1 from the dashboard: rebase');
+  const { feed } = feedOf(s);
+  assert.equal(feed[0].text, 'You steered Task 1 (Title 1)');
+});
+
+test('a watch reads Watching Task N (<title>)', () => {
+  const s = new Script().prompt('go').use('Skill', { skill: 'orchestrate' });
+  startWorker(s, 1);
+  const agentId = parseOrchestrator(s.lines).agents[0].agentId;
+  s.use('Monitor', { description: 'watch', command: `tail -f /t/agent-${agentId}.jsonl` });
+  const { feed } = feedOf(s);
+  assert.equal(feed[0].text, 'Watching Task 1 (Title 1)');
+});
+
+test('a task whose agent is only in watchAgents still gets its title', () => {
+  const s = orchestration();
+  const parsed = parseOrchestrator(s.lines);
+  const feed = actionFeed(s.lines, { ...parsed, agents: [], watchAgents: parsed.agents });
+  assert.equal(feed[0].text, 'Merged Task 1 (Title 1)');
+});
+
+test('a task with no known title reads Task N', () => {
+  const s = orchestration();
+  const parsed = parseOrchestrator(s.lines);
+  const agents = parsed.agents.map((a) => ({ ...a, title: null }));
+  const feed = actionFeed(s.lines, { ...parsed, agents, watchAgents: agents });
+  assert.equal(feed[0].text, 'Merged Task 1');
+});
+
+test('two task-0 workers with different titles: a note for Task 0 carries the later worker title', () => {
+  const s = new Script().prompt('go').use('Skill', { skill: 'orchestrate' });
+  startWorker(s, 0, workerPrompt(0).replace('Title 0', 'Stub A'));
+  startWorker(s, 0, workerPrompt(0).replace('Title 0', 'Fix B'));
+  metaNote(s, 'You steered Task 0 from the dashboard: go');
+  const { feed } = feedOf(s);
+  assert.equal(feed[0].text, 'You steered Task 0 (Fix B)');
+});
+
+test('a note that carries a title keeps it over the latest worker title', () => {
+  const s = new Script().prompt('go').use('Skill', { skill: 'orchestrate' });
+  startWorker(s, 0, workerPrompt(0).replace('Title 0', 'Stub A'));
+  startWorker(s, 0, workerPrompt(0).replace('Title 0', 'Fix B'));
+  metaNote(s, 'You steered Task 0 (Stub A) from the dashboard: go');
+  const { feed } = feedOf(s);
+  assert.equal(feed[0].text, 'You steered Task 0 (Stub A)');
 });

@@ -28,6 +28,9 @@ function checkTask(task, kind) {
   for (const key of ['worktree', 'title', 'plan', 'doneWhen']) {
     if (typeof task[key] !== 'string' || !task[key]) throw new Error(`task.${key} is required`);
   }
+  // Workers put the title in the double-quoted --from argument of board-post, so those characters would end the
+  // string or run code. The CLAIMED watch line is one line, so a newline would split it.
+  if (/["`$\\\n\r]/.test(task.title)) throw new Error('task.title must not contain ", `, $, \\ or a newline');
   if (!Number.isInteger(task.task) || task.task < 0) throw new Error('task.task must be an integer >= 0');
   // An empty list would make every edit of the worker DRIFT, so the task must name its files.
   if (!Array.isArray(task.files) || task.files.length === 0 || !task.files.every((f) => typeof f === 'string')) throw new Error('task.files must be a non-empty array of strings');

@@ -178,3 +178,43 @@ test('orch-report with a missing image exits 1', (t) => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /^orch-report: /);
 });
+
+test('addTask writes the task title into the added event', (t) => {
+  const run = path.join(tmpDir(t, 'report-add'), 'img.run');
+  fs.mkdirSync(run, { recursive: true });
+  require('../lib/orchestrations/claims').addTask(run, 'work', {
+    task: 3, title: 'Fix the regex', plan: 'p.md', worktree: '/w', doneWhen: 'x', files: ['a.js'],
+  });
+  const lines = fs.readFileSync(path.join(run, 'events.jsonl'), 'utf8').trim().split('\n');
+  const last = JSON.parse(lines[lines.length - 1]);
+  assert.equal(last.kind, 'added');
+  assert.equal(last.title, 'Fix the regex');
+});
+
+test('a task row carries the title of its added events', () => {
+  const r = build([
+    ev(0, 'added', { file: '0001-t2-a1.json', task: 2, title: 'Fix the regex', attempt: 1, queue: 'work' }),
+    ev(5, 'added', { file: '0002-t2-a1.json', task: 2, title: 'Fix the regex', attempt: 1, queue: 'review' }),
+  ]);
+  assert.equal(task(r, 2).title, 'Fix the regex');
+});
+
+test('a task whose added events disagree on the title gets no title', () => {
+  const r = build([
+    ev(0, 'added', { file: '0001-t0-a1.json', task: 0, title: 'Stub A', attempt: 1, queue: 'work' }),
+    ev(1, 'added', { file: '0002-t0-a1.json', task: 0, title: 'Fix B', attempt: 1, queue: 'work' }),
+  ]);
+  assert.strictEqual(task(r, 0).title, null);
+});
+
+test('a run logged before titles gets no title', () => {
+  const r = build([ev(0, 'added', { file: '0001-t2-a1.json', task: 2, attempt: 1, queue: 'work' })]);
+  assert.strictEqual(task(r, 2).title, null);
+});
+
+test('renderReport labels a titled task Task N (<title>)', () => {
+  const titled = renderReport(build([ev(0, 'added', { file: '0001-t2-a1.json', task: 2, title: 'Fix the regex', attempt: 1, queue: 'work' })]));
+  assert.match(titled, /Task 2 \(Fix the regex\)/);
+  const bare = renderReport(build([ev(0, 'added', { file: '0001-t2-a1.json', task: 2, attempt: 1, queue: 'work' })]));
+  assert.match(bare, /Task 2(?! \()/);
+});
