@@ -16,7 +16,10 @@ Other work can merge into `main` while the session runs. Create the plan branch'
 
 1. Run `git fetch origin`.
 2. Pick the base: the base the project's `CLAUDE.md` names for worktrees, else local `main`. Never pull into or reset local `main`, because another session may be working in the main checkout.
-3. Run `wt switch --create <plan branch> --base <base> --no-cd`, then read the worktree path from `wt list --format json`. The plan branch name is the topic slug.
+3. Check whether the plan branch exists (a dropped or resumed grill leaves it behind, and `wt switch --create` fails with `Branch ... already exists`):
+   - When the branch has a worktree, reuse it, taking the path from `wt list --format json`.
+   - When the branch exists with no worktree, run `wt switch <plan branch> --no-cd` without `--create`, then read the path from `wt list --format json`.
+   - Otherwise run `wt switch --create <plan branch> --base <base> --no-cd`, then read the worktree path from `wt list --format json`. The plan branch name is the topic slug.
 
 During the session:
 
@@ -85,6 +88,8 @@ In chat, format a round like so:
 2. **Answers arrive.** Submit round sends a comment to Claude, and this session wakes with an `artifact-auto-react` task notification naming a thread. Read that thread with `ArtifactComments` `read`. An automatic reply may already be in the thread; ignore it. The owner may answer in the terminal instead, and those answers count the same.
 3. **Next round.** Edit the same file and publish it to the same path, which keeps the URL. Leave out `capabilities` and `icon`. Then resolve the thread.
 4. **Done.** When the frontier is empty, publish with `"questions": []` and `"calls": []`, and ask in chat whether you have reached a shared understanding.
+
+Inside `grill-data`, write every `<` as the JSON escape `\u003c` (`JSON.parse` turns it back into `<`), so a string containing `</script>` cannot end the block.
 
 `grill-data` holds:
 

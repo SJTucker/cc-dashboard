@@ -59,3 +59,22 @@ test('the skill commits the glossary and ADRs on the plan branch', () => {
   }
   assert.ok(!text.includes('before starting orchestrate'));
 });
+
+test('the skill reuses an existing plan branch', () => {
+  const start = text.indexOf('## 1. Start in');
+  const sec = text.slice(start, text.indexOf('## 2.'));
+  assert.ok(sec.includes('wt switch <plan branch> --no-cd'), 'no switch without --create');
+  assert.ok(sec.includes('already exists'), 'does not name the existing-branch case');
+  assert.ok(sec.includes('wt list --format json'));
+});
+
+test('the skill escapes < inside grill-data', () => {
+  assert.ok(text.includes('\\u003c'), 'no \\u003c rule');
+});
+
+test('SETUP.md lists git fetch origin for both planning skills', () => {
+  const setup = fs.readFileSync(path.join(__dirname, '..', 'SETUP.md'), 'utf8');
+  const net = setup.slice(setup.indexOf('Network and model use'));
+  assert.ok(net.includes('git fetch origin'), 'no git fetch origin');
+  assert.ok(/\*\*The `orch-plan` skill\*\*/.test(net), 'no orch-plan bullet');
+});

@@ -89,6 +89,13 @@ test('the skill handles specs without the orch-grill sections', () => {
 
 test('the skill sets no line-count limit', () => {
   assert.ok(!text.includes('4,000'));
+  assert.ok(text.includes('No line-count limit applies to a task'));
+});
+
+test("step 2 of the worktree section reads the path from wt list", () => {
+  const line = text.split('\n').find((l) => l.startsWith('2. When that branch has a worktree'));
+  assert.ok(line, 'step 2 not found');
+  assert.ok(line.includes('wt list --format json'));
 });
 
 test("the skill starts in the plan branch's worktree", () => {

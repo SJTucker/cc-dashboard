@@ -58,6 +58,7 @@ textarea::placeholder { color: var(--faint) }
 #status { margin: 0; font-size: 14px; line-height: 1.5; color: var(--fg-2) }
 #status.err { color: var(--err) }
 #status.ok { color: var(--pick-line); font-weight: 600 }
+#fallback[hidden] { display: none }
 #fallback { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px }
 #fallback textarea { font: 13px/1.5 var(--mono) }
 .empty { padding: 28px 20px; font-size: 15px; color: var(--fg-2) }
@@ -167,7 +168,7 @@ const answerLine = (q) => {
   if (!isAnswered(q)) return q.id + ' unanswered';
   if (a.mode === 'accept') return q.id + ' accept';
   if (a.mode === 'other') return q.id + ' other: ' + q.options[a.pick];
-  return q.id + ' own: ' + a.text.trim();
+  return q.id + ' own: ' + a.text.trim().replace(/\s+/g, ' ');
 };
 
 const overruleLines = () => calls
@@ -285,7 +286,7 @@ function renderCalls() {
 
 function updateHeader() {
   const done = data.questions.filter(isAnswered).length;
-  document.querySelectorAll('.count').forEach((n) => { n.textContent = done + ' of ' + data.questions.length + ' answered'; });
+  document.querySelectorAll('.count').forEach((n) => { n.textContent = data.questions.length || !calls.length ? done + ' of ' + data.questions.length + ' answered' : ''; });
 }
 
 function render() {
@@ -293,7 +294,9 @@ function render() {
   const sheet = document.getElementById('sheet');
   sheet.querySelectorAll('.q, .empty').forEach((n) => n.remove());
   if (!data.questions.length) {
-    sheet.append(el('div', 'empty', 'No open questions. Claude will ask in the terminal whether you have reached a shared understanding.'));
+    sheet.append(el('div', 'empty', calls.length
+      ? "No open questions. Review Claude's calls below, then submit."
+      : 'No open questions. Claude will ask in the terminal whether you have reached a shared understanding.'));
   }
   for (const q of data.questions) sheet.append(renderQuestion(q));
   updateHeader();

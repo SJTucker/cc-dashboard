@@ -433,7 +433,10 @@ of them.
 - **The `orch-grill` skill** publishes each question round as a private claude.ai
   artifact and reads the answers from its comments. The round page loads its
   stylesheet from `fonts.googleapis.com`, which fetches the font files from
-  `fonts.gstatic.com`, in the viewer's browser.
+  `fonts.gstatic.com`, in the viewer's browser. It also runs `git fetch origin` in the
+  project when it creates the plan branch's worktree.
+- **The `orch-plan` skill** runs `git fetch origin` in the project when it creates the
+  plan branch's worktree.
 - **The mod** fetches `CHANGELOG.md` from `raw.githubusercontent.com/anthropics/claude-code`
   in an interactive session when the running Claude Code version has no verdict, or
   when you run `/backfill-updates`.

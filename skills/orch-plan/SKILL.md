@@ -20,7 +20,7 @@ The owner starts the next steps. This skill does not start `/plan-review` or `or
 Other work can merge into `main` while a plan is being written. The plan describes the commit its workers branch from, so read code from the plan branch's own worktree.
 
 1. Read the spec's `**Plan branch:**` line: ``**Plan branch:** `<branch>`, worktree `<absolute path>` ``. An `orch-grill` spec has it.
-2. When that branch has a worktree, reuse it.
+2. When that branch has a worktree, reuse it, taking the path from `wt list --format json` and not from the spec's line, which can be stale.
 3. When the branch exists with no worktree, run `wt switch <plan branch> --no-cd` without `--create`, then read its path from `wt list --format json`.
 4. When the spec names no branch, or names one that does not exist, create it:
    - `git fetch origin`.
