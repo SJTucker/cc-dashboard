@@ -32,12 +32,13 @@ Then open **http://localhost:3600**.
 
 `bin/setup` checks for Node 22.13 or later, `npm` and `claude` on your PATH, and
 stops before changing anything if one is missing. Then it runs `npm install`,
-links `mod/` to `~/.claude/skills/cc-dashboard` and `skills/orchestrate/` to
-`~/.claude/skills/orchestrate`, and runs `claude plugin validate` on the mod.
-`bin/setup` reads `CLAUDE_CONFIG_DIR` from the shell that runs it, so set it there to
-the same value Claude Code uses. It is safe to run again. When a file, folder or link
-already sits at the link path, `bin/setup` stops, names the path and leaves it in
-place.
+links `mod/` to `~/.claude/skills/cc-dashboard`, `skills/orchestrate/` to
+`~/.claude/skills/orchestrate`, and `agents/orch-worker.md` and
+`agents/orch-reviewer.md` to `~/.claude/agents/`, and runs `claude plugin validate`
+on the mod. `bin/setup` reads `CLAUDE_CONFIG_DIR` from the shell that runs it, so set
+it there to the same value Claude Code uses. It is safe to run again. When a file,
+folder or link already sits at the link path, `bin/setup` stops, names the path and
+leaves it in place.
 
 `bin/setup` does not start the server or edit `settings.json`. The sections below
 give the same steps by hand.
@@ -168,16 +169,21 @@ background workers, each in its own `wt` worktree. It calls `bin/transcript-inde
 
 ```bash
 ln -s "$PWD/skills/orchestrate" ~/.claude/skills/orchestrate
+mkdir -p ~/.claude/agents
+ln -s "$PWD/agents/orch-worker.md" ~/.claude/agents/orch-worker.md
+ln -s "$PWD/agents/orch-reviewer.md" ~/.claude/agents/orch-reviewer.md
 ```
 
-`bin/setup` runs this line.
+`bin/setup` runs these lines. The skill starts its workers and reviewers as the
+`orch-worker` and `orch-reviewer` agent types, and a run cannot start without them.
 
 - **`skills/orchestrate/` must stay inside the clone.** The skill finds `bin/`
   through its own real path, two folders up. A copy of the folder elsewhere finds no
   scripts.
-- **Moving the clone breaks the link.** Remove `~/.claude/skills/orchestrate` and run
-  the `ln -s` line again from the new location, or run `bin/setup` again after
-  removing the link.
+- **Moving the clone breaks the links.** Remove `~/.claude/skills/orchestrate`,
+  `~/.claude/agents/orch-worker.md` and `~/.claude/agents/orch-reviewer.md` and run
+  the `ln -s` lines again from the new location, or run `bin/setup` again after
+  removing the links.
 - **It needs `wt`.** See Requirements.
 - **It needs the mod.** The skill reviews the planning session's messages from the
   transcript index in `<cfg>/cc-dashboard/transcript-index/`, which the mod writes
@@ -313,6 +319,8 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, run by the mod |
 | `<cfg>/skills/cc-dashboard` (a symlink to the clone's `mod/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/skills/orchestrate` (a symlink to the clone's `skills/orchestrate/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
+| `<cfg>/agents/orch-worker.md` (a symlink to the clone's `agents/orch-worker.md`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
+| `<cfg>/agents/orch-reviewer.md` (a symlink to the clone's `agents/orch-reviewer.md`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
 | `<cfg>/cc-dashboard/cache/` | `CLAUDE_CONFIG_DIR` | `bin/cache-line`, one `<session id>.json` per session holding the cache TTL, its expiry and when that expiry was first seen. `bin/cache-line` deletes files older than a day. |
 | `<cfg>/cc-dashboard/transcript-index/` | `CLAUDE_CONFIG_DIR` | `bin/transcript-index`, run by the mod one second after each main-thread turn of an interactive session. One `<session id>.md` per session: the session's turns with the transcript lines each covers, the files edited and read, the commands run and the subagents launched. A resumed session reads it through the resume prompt. Nothing deletes these files. |
