@@ -33,7 +33,7 @@ function checkTask(task, kind) {
   if (!Array.isArray(task.files) || task.files.length === 0 || !task.files.every((f) => typeof f === 'string')) throw new Error('task.files must be a non-empty array of strings');
   // The attempt goes into the file name, which must match TASK_FILE.
   if (task.attempt !== undefined && (!Number.isInteger(task.attempt) || task.attempt < 1)) throw new Error('task.attempt must be an integer >= 1');
-  if (kind === 'review' && typeof task.implementer?.transcript !== 'string') throw new Error('a review task needs implementer.transcript');
+  if (kind === 'review' && (typeof task.implementer?.transcript !== 'string' || !task.implementer.transcript)) throw new Error('a review task needs implementer.transcript');
 }
 
 function main() {

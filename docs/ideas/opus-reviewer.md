@@ -15,7 +15,8 @@ the reviewer's final report, which is the same size whichever model writes it.
 ## What exists
 
 - Reviewers start as their own subagents (`skills/orchestrate/SKILL.md` section 11), on
-  Sonnet, and read the implementer's transcript through `transcript-index`.
+  the model the task's `reviewer` mark names, Sonnet when it has none, and read the
+  implementer's transcript through `transcript-index`.
 - Once the `orch-reviewer` agent type exists (spec
   `docs/superpowers/specs/2026-11-13-orch-agent-types-design.md`), the model is one field.
 
@@ -41,10 +42,16 @@ side by side on the same claim, about $0.40 extra per task, and compare the find
 Both checks are done (the search and the replay below). What remains is the live
 side-by-side run, at about $0.61 extra per task for the Opus reviewer.
 
+Routing by a per-task mark and a 300-line check shipped on 2026-11-14, ahead of the
+live run. The live run now records each task's `reviewer` mark and code diff size next
+to what each model found, to check the rule.
+
 ## Search, 2026-11-14
 
 A search of 32 reviewed tasks across five runs found 3 confirmed misses and 2 probable
-ones, all by Sonnet reviewers. None broke a path the owner uses.
+ones, all by Sonnet reviewers. None broke a path the owner uses. 3 of the 5 misses were
+first reported by a Fable whole-branch review after merging: review-fixes-mod's
+`SETUP.md` gap and `readyHandoff` guard, and orch-shared-cache's attempt check.
 
 ## Replay, 2026-11-14
 
@@ -106,5 +113,5 @@ Per review. "Real" counts findings outside the answer key that held at the tip.
 - B1 needs knowledge the repo did not hold at the tip. No reviewer of either model caught it.
 
 **Verdict: run the live side-by-side run.** Opus caught B2 in 3 of 3 runs and Sonnet in
-0 of 3, with no false findings on the controls for either. Switching is decided after
-that run.
+0 of 3, with no false findings on the controls for either. Routing shipped before that
+run, as "Next step" says.

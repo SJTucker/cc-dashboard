@@ -18,7 +18,7 @@ function section(n) {
 test('the skill starts implementers and reviewers as the agent types', () => {
   assert.ok(text.includes('subagent_type: "orch-worker"'));
   assert.ok(text.includes('orch-reviewer'));
-  assert.ok(!text.includes('general-purpose'));
+  for (const n of [6, 11]) assert.ok(!section(n).includes('general-purpose'));
 });
 
 test('the worker message stays under 1,600 characters', () => {
@@ -63,4 +63,29 @@ test('the skill squashes a task branch against its merge-base', () => {
   assert.ok(section(11).includes('git reset --soft $(git merge-base <plan branch>-t<N> <plan branch>)'));
   assert.doesNotMatch(text, /reset --soft\s+<plan branch>/);
   assert.doesNotMatch(text, /merge-base\s+HEAD/);
+});
+
+test('the plan gives each task a reviewer model', () => {
+  const five = section(5).replace(/\s+/g, ' ');
+  for (const s of ['**Reviewer:**', 'opus', 'sonnet', '300']) assert.ok(five.includes(s), s);
+});
+
+test('the skill reviews a task on its reviewer model, Sonnet when unset', () => {
+  const eleven = section(11).replace(/\s+/g, ' ');
+  assert.ok(eleven.includes("the task's `reviewer`"));
+  assert.ok(eleven.includes('Sonnet when the task has none'));
+  assert.ok(!eleven.includes('`subagent_type: "orch-reviewer"`, `model: "sonnet"`'));
+});
+
+test('the skill raises a large code diff to an Opus reviewer', () => {
+  const eleven = section(11).replace(/\s+/g, ' ');
+  assert.ok(eleven.includes('300'));
+  assert.ok(eleven.includes("':(exclude)*.md'"));
+});
+
+test('the skill ends a run with a Fable review of the plan branch', () => {
+  const fourteen = section(14).replace(/\s+/g, ' ');
+  for (const s of ['pr-review', 'model: "fable"', 'subagent_type: "general-purpose"', '/code-review high', '"task": 0']) {
+    assert.ok(fourteen.includes(s), s);
+  }
 });
