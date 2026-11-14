@@ -10,6 +10,7 @@ const path = require('path');
 const SCRIPT = path.join(__dirname, '..', 'bin', 'setup');
 const MOD = fs.realpathSync(path.join(__dirname, '..', 'mod'));
 const SKILL = fs.realpathSync(path.join(__dirname, '..', 'skills', 'orchestrate'));
+const AGENTS = fs.realpathSync(path.join(__dirname, '..', 'agents'));
 
 // A fake HOME with stub node, npm and claude on PATH. Each stub appends its name
 // and arguments to calls.log, so a test can tell what ran. /usr/bin and /bin
@@ -38,12 +39,17 @@ const linkPath = (home, cfg = path.join(home, '.claude')) => path.join(cfg, 'ski
 
 const skillLinkPath = (home, cfg = path.join(home, '.claude')) => path.join(cfg, 'skills', 'orchestrate');
 
+const agentLinkPath = (home, name, cfg = path.join(home, '.claude')) => path.join(cfg, 'agents', `${name}.md`);
+
 test('a fresh run installs, links the mod and the skill and validates the mod', (t) => {
   const box = sandbox(t);
   const { code, out, calls } = run(box);
   assert.strictEqual(code, 0, out);
   assert.strictEqual(fs.readlinkSync(linkPath(box.home)), MOD);
   assert.strictEqual(fs.readlinkSync(skillLinkPath(box.home)), SKILL);
+  for (const name of ['orch-worker', 'orch-reviewer']) {
+    assert.strictEqual(fs.readlinkSync(agentLinkPath(box.home, name)), path.join(AGENTS, `${name}.md`));
+  }
   assert.match(calls, /^npm install$/m);
   assert.match(calls, new RegExp(`^claude plugin validate ${MOD}$`, 'm'));
   assert.match(out, /npm start/);
@@ -66,6 +72,7 @@ test('a fresh run leaves the rest of the config folder alone', (t) => {
     'settings.json': '{"theme":"dark"}\n',
     'skills/other/SKILL.md': '# other\n',
     'plugins/installed_plugins.json': '{"plugins":{}}\n',
+    'agents/Explore.md': '# explore\n',
   };
   for (const [rel, body] of Object.entries(seeded)) {
     fs.mkdirSync(path.dirname(path.join(cfg, rel)), { recursive: true });
@@ -74,8 +81,9 @@ test('a fresh run leaves the rest of the config folder alone', (t) => {
   const { code, out } = run(box);
   assert.strictEqual(code, 0, out);
   for (const [rel, body] of Object.entries(seeded)) assert.strictEqual(fs.readFileSync(path.join(cfg, rel), 'utf8'), body);
-  assert.deepStrictEqual(fs.readdirSync(cfg).sort(), ['plugins', 'settings.json', 'skills']);
+  assert.deepStrictEqual(fs.readdirSync(cfg).sort(), ['agents', 'plugins', 'settings.json', 'skills']);
   assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'skills')).sort(), ['cc-dashboard', 'orchestrate', 'other']);
+  assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'agents')).sort(), ['Explore.md', 'orch-reviewer.md', 'orch-worker.md']);
   assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'plugins')), ['installed_plugins.json']);
 });
 
@@ -88,8 +96,10 @@ test('a second run leaves the link alone', (t) => {
   run(box);
   const before = fs.lstatSync(linkPath(box.home)).ino;
   const skillBefore = fs.lstatSync(skillLinkPath(box.home)).ino;
+  const agentsBefore = ['orch-worker', 'orch-reviewer'].map((n) => fs.lstatSync(agentLinkPath(box.home, n)).ino);
   const { code, out } = run(box);
   assert.strictEqual(code, 0, out);
+  assert.deepStrictEqual(['orch-worker', 'orch-reviewer'].map((n) => fs.lstatSync(agentLinkPath(box.home, n)).ino), agentsBefore);
   assert.strictEqual(fs.lstatSync(linkPath(box.home)).ino, before);
   assert.strictEqual(fs.lstatSync(skillLinkPath(box.home)).ino, skillBefore);
   assert.match(out, /already points at/);
@@ -132,6 +142,48 @@ test('a skill link that points elsewhere stops the script before npm install and
   assert.match(out, /FAIL/);
   assert.ok(out.includes(other), out);
   assert.strictEqual(fs.readlinkSync(link), other);
+  assert.ok(!fs.existsSync(linkPath(box.home)), 'the mod link was created');
+  assert.doesNotMatch(calls, /npm install/);
+});
+
+test('a relative agent link that resolves to this clone passes', (t) => {
+  const box = sandbox(t);
+  const link = agentLinkPath(box.home, 'orch-worker');
+  const target = path.join(AGENTS, 'orch-worker.md');
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(path.relative(path.dirname(link), target), link);
+  const { code, out } = run(box);
+  assert.strictEqual(code, 0, out);
+  assert.match(out, /already points at/);
+  assert.strictEqual(fs.readlinkSync(link), path.relative(path.dirname(link), target));
+});
+
+test('an agent link that points elsewhere stops the script before npm install and changes nothing', (t) => {
+  const box = sandbox(t);
+  const link = agentLinkPath(box.home, 'orch-worker');
+  const other = path.join(box.home, 'other-agent.md');
+  fs.writeFileSync(other, '# other\n');
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.symlinkSync(other, link);
+  const { code, out, calls } = run(box);
+  assert.strictEqual(code, 1);
+  assert.match(out, /FAIL/);
+  assert.ok(out.includes(link), out);
+  assert.strictEqual(fs.readlinkSync(link), other);
+  assert.ok(!fs.existsSync(linkPath(box.home)), 'the mod link was created');
+  assert.doesNotMatch(calls, /npm install/);
+});
+
+test('a file at an agent link path stops the script and changes nothing', (t) => {
+  const box = sandbox(t);
+  const link = agentLinkPath(box.home, 'orch-worker');
+  fs.mkdirSync(path.dirname(link), { recursive: true });
+  fs.writeFileSync(link, '# mine\n');
+  const { code, out, calls } = run(box);
+  assert.strictEqual(code, 1);
+  assert.match(out, /is a file/);
+  assert.ok(out.includes(link), out);
+  assert.strictEqual(fs.readFileSync(link, 'utf8'), '# mine\n');
   assert.ok(!fs.existsSync(linkPath(box.home)), 'the mod link was created');
   assert.doesNotMatch(calls, /npm install/);
 });
@@ -194,6 +246,9 @@ test('an absolute CLAUDE_CONFIG_DIR puts the link there and leaves ~/.claude alo
   const { code, out } = run(box, { CLAUDE_CONFIG_DIR: cfg });
   assert.strictEqual(code, 0, out);
   assert.strictEqual(fs.readlinkSync(linkPath(box.home, cfg)), MOD);
+  for (const name of ['orch-worker', 'orch-reviewer']) {
+    assert.strictEqual(fs.readlinkSync(agentLinkPath(box.home, name, cfg)), path.join(AGENTS, `${name}.md`));
+  }
   assert.ok(!fs.existsSync(path.join(box.home, '.claude')), out);
 });
 
@@ -220,10 +275,13 @@ test('a clone path with a space links the right folder', (t) => {
   fs.mkdirSync(path.join(clone, 'bin'), { recursive: true });
   fs.mkdirSync(path.join(clone, 'mod'));
   fs.mkdirSync(path.join(clone, 'skills', 'orchestrate'), { recursive: true });
+  fs.mkdirSync(path.join(clone, 'agents'));
+  for (const name of ['orch-worker', 'orch-reviewer']) fs.writeFileSync(path.join(clone, 'agents', `${name}.md`), '---\n---\n');
   fs.copyFileSync(SCRIPT, path.join(clone, 'bin', 'setup'));
   const { code, out, calls } = run(box, {}, path.join(clone, 'bin', 'setup'));
   assert.strictEqual(code, 0, out);
   assert.strictEqual(fs.readlinkSync(linkPath(box.home)), path.join(clone, 'mod'));
   assert.strictEqual(fs.readlinkSync(skillLinkPath(box.home)), path.join(clone, 'skills', 'orchestrate'));
+  assert.strictEqual(fs.readlinkSync(agentLinkPath(box.home, 'orch-worker')), path.join(clone, 'agents', 'orch-worker.md'));
   assert.ok(calls.includes(`claude plugin validate ${path.join(clone, 'mod')}`), calls);
 });
