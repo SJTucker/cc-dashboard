@@ -34,11 +34,11 @@ Then open **http://localhost:3600**.
 stops before changing anything if one is missing. Then it runs `npm install`,
 links `mod/` to `~/.claude/skills/cc-dashboard`, `skills/orchestrate/` to
 `~/.claude/skills/orchestrate`, and `agents/orch-worker.md` and
-`agents/orch-reviewer.md` to `~/.claude/agents/`, and runs `claude plugin validate` on the mod.
-`bin/setup` reads `CLAUDE_CONFIG_DIR` from the shell that runs it, so set it there to
-the same value Claude Code uses. It is safe to run again. When a file, folder or link
-already sits at the link path, `bin/setup` stops, names the path and leaves it in
-place.
+`agents/orch-reviewer.md` to `~/.claude/agents/`, and runs `claude plugin validate`
+on the mod. `bin/setup` reads `CLAUDE_CONFIG_DIR` from the shell that runs it, so set
+it there to the same value Claude Code uses. It is safe to run again. When a file,
+folder or link already sits at the link path, `bin/setup` stops, names the path and
+leaves it in place.
 
 `bin/setup` does not start the server or edit `settings.json`. The sections below
 give the same steps by hand.
