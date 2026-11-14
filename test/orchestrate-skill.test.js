@@ -89,3 +89,23 @@ test('the skill ends a run with a Fable review of the plan branch', () => {
     assert.ok(fourteen.includes(s), s);
   }
 });
+
+test('the worker message signs board posts with the task title', () => {
+  const after = text.slice(text.indexOf('Build the worker message once per session'));
+  const message = after.match(/```\n([\s\S]*?)\n```/)[1];
+  assert.ok(message.includes('--from "Task <N> (<title>)"'));
+  assert.ok(message.includes('with <N> and <title> from the task orch-claim printed'));
+});
+
+test('the watch description names the task and its title', () => {
+  assert.ok(section(7).includes('`worker <agentId> Task <N> (<title>)`'));
+});
+
+test('the skill names tasks with their titles when reporting', () => {
+  const intro = text.slice(0, text.indexOf('\n## 1. ')).replace(/\s+/g, ' ');
+  assert.ok(intro.includes('When a message to the user names a task, write `Task <N> (<title>)`, never the bare number.'));
+});
+
+test('the steer row shows the title form', () => {
+  assert.ok(text.includes('`You steered Task <N> (<title>) from the dashboard: <text>`'));
+});

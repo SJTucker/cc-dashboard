@@ -153,3 +153,14 @@ test('--add refuses an empty files list', (t) => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /^orch-claim: task\.files must be a non-empty array/);
 });
+
+test('--add refuses a title with a shell-special character or a newline', (t) => {
+  const run = runIn(t);
+  for (const title of ['Fix "x"', 'Add `title`', 'Cost $5', 'Fix a\\b', 'Fix\nx']) {
+    const r = claim([run, '--add', 'work'], input(1, { title }));
+    assert.equal(r.status, 1, JSON.stringify(title));
+    assert.ok(r.stderr.includes('task.title must not contain ", `, $, \\ or a newline'), JSON.stringify(title));
+  }
+  assert.equal(fs.existsSync(path.join(run, 'pending', 'work')), false);
+  assert.equal(claim([run, '--add', 'work'], input(1, { title: 'Fix parse (old notes)' })).status, 0);
+});
