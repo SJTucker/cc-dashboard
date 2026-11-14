@@ -89,3 +89,48 @@ test('the skill ends a run with a Fable review of the plan branch', () => {
     assert.ok(fourteen.includes(s), s);
   }
 });
+
+test('the skill names every orch-plan field label', () => {
+  const plan = fs.readFileSync(path.join(__dirname, '..', 'skills', 'orch-plan', 'SKILL.md'), 'utf8');
+  const line = plan.split('\n').find((l) => l.startsWith('Field labels:'));
+  assert.ok(line, 'Field labels: line not found');
+  const labels = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
+  assert.strictEqual(labels.length, 7);
+  for (const label of labels) assert.ok(text.includes(label), label);
+});
+
+test('section 3 takes decisions from the spec and adds the glossary and ADRs', () => {
+  const three = section(3);
+  for (const s of ['Decisions', 'GLOSSARY.md', 'ADR']) assert.ok(three.includes(s), s);
+});
+
+test('section 3 keeps per-task reads out of the image', () => {
+  const three = section(3);
+  assert.ok(three.includes('**Reads:**'));
+  assert.ok(three.includes('Read before starting'));
+});
+
+test('section 5 checks the fields instead of rewriting them', () => {
+  const five = section(5);
+  for (const s of ['**Test command:**', '**Done when:**', '## Dependencies', '**User steps:**']) {
+    assert.ok(five.includes(s), s);
+  }
+});
+
+test('section 5 keeps the rewrite for plans without the fields', () => {
+  assert.ok(section(5).replace(/\s+/g, ' ').includes('revise the plan so every task includes'));
+});
+
+test('section 5 edits the plan only before the first dispatch', () => {
+  assert.ok(section(5).replace(/\s+/g, ' ').includes('Edit the plan only before the first dispatch'));
+});
+
+test('section 6 takes doneWhen from the Done when field', () => {
+  assert.ok(section(6).includes('**Done when:**'));
+});
+
+test('the image template names the glossary and the spec\'s decisions', () => {
+  const template = fs.readFileSync(path.join(__dirname, '..', 'skills', 'orchestrate', 'image-template.md'), 'utf8');
+  assert.ok(template.includes('GLOSSARY.md'));
+  assert.ok(template.includes('Decisions section'));
+});

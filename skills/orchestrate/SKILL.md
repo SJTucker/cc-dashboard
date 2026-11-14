@@ -74,9 +74,18 @@ something.
 - Each left-out message gets one line in "Left out": its line number, its first
   few words, and why it was left out. A left-out message is quoted nowhere else
   in the image. A decision or dead end it led to may refer to its line number.
-- "Read before starting" names the spec, the plan, the project's CLAUDE.md, and
-  the source files the work centers on with their immediate call paths (the
-  files that call them and that they call), as absolute paths in reading order.
+- When the spec has a Decisions section (an `orch-grill` spec does), the image's
+  "Decisions" refers to the spec by path and quotes only decisions the user made
+  after the spec was written.
+- "Read before starting" names the spec, the plan, the project's CLAUDE.md, the
+  `GLOSSARY.md` and ADRs the spec or plan names, and the source files the work
+  centers on with their immediate call paths (the files that call them and that
+  they call), as absolute paths in reading order. Give `GLOSSARY.md` and the ADRs
+  by their absolute paths in the plan branch's worktree when that branch exists,
+  else in the main checkout, because `orch-grill` commits them on the plan branch
+  only. A task's `**Reads:**` files stay in its plan task and never go in "Read
+  before starting", which holds only files every worker needs
+  (`docs/adr/0001-orchestrate-workers-share-one-prompt-prefix.md`).
 - "Lookup" carries `<index>` and `<transcript>` filled in.
 
 Run `wc -w <image>`. Over 4,000 words means cut, starting with anything a worker
@@ -113,7 +122,18 @@ point at the new session. The image's Sources keep the old ones.
 
 ## 5. Plan the schedule
 
-Before scheduling, revise the plan so every task includes:
+A plan from `orch-plan` already carries the labelled fields on every task:
+`**Test command:**`, `**Fails before, passes after:**`, `**Done when:**`,
+`**Report:**`, `**Reviewer:**`, `**Reads:**` and `**User steps:**`. For such a
+task, check each field instead of rewriting it, and check the test command
+against its target as item 1 below says. Take dependencies and stub-ready pairs
+from the plan's `## Dependencies` section when it has one, else from the
+Interfaces blocks as below. Take each task's `**User steps:**` as the steps to do
+with the user before dispatch. Edit the plan only before the first dispatch.
+Changes after that go in a task's `notes` or the image's "Updates".
+
+For a plan without the fields (one from `superpowers:writing-plans`), revise the
+plan so every task includes:
 
 1. The exact test command, and which suite it runs. Check that by reading the
    command's target (the package.json script, the Makefile target), not by
@@ -256,7 +276,7 @@ For each ready task, in this order:
    give a worktree its ports and database.
 2. Add its task to the queue. The JSON carries `task`, `title`, `plan`, `worktree`,
    `branch`, `files`, `doneWhen` (one narrow check, as a command and its expected
-   result), `sections` (the image sections that matter most), `reviewer` (copied
+   result, copied from the task's `**Done when:**` line when it has one), `sections` (the image sections that matter most), `reviewer` (copied
    from the task's `**Reviewer:**` line) and, when needed, `notes`:
 
    ```bash

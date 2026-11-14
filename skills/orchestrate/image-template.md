@@ -26,8 +26,10 @@ messages go here comes from the message review. -->
 ## Read before starting
 
 <!-- An ordered list of files every worker reads in full, each with one line on
-why: the spec, the plan, the project's CLAUDE.md, then the source files the work
-centers on and their immediate call paths. Absolute paths. -->
+why: the spec, the plan, the project's CLAUDE.md, `GLOSSARY.md` and the ADRs the
+spec or plan names, then the source files the work centers on and their immediate
+call paths. Absolute paths. Never a task's own `**Reads:**` files: those stay in
+its plan task. -->
 
 1.
 
@@ -35,7 +37,9 @@ centers on and their immediate call paths. Absolute paths. -->
 
 <!-- Each decision, the alternatives rejected, and the transcript line range where
 it was made. Quote the user's message verbatim when it only makes the decision.
-When that message is already quoted in Goal and principles, refer to its line. -->
+When that message is already quoted in Goal and principles, refer to its line.
+When the spec has a Decisions section, refer to it by path and quote only
+decisions made after the spec. -->
 
 ## Dead ends
 
