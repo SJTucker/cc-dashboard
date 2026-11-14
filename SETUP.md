@@ -434,7 +434,7 @@ of them.
   artifact and reads the answers from its comments. The round page loads its
   stylesheet from `fonts.googleapis.com`, which fetches the font files from
   `fonts.gstatic.com`, in the viewer's browser. It also runs `git fetch origin` in the
-  project when it creates the plan branch's worktree.
+  project at the start of each session.
 - **The `orch-plan` skill** runs `git fetch origin` in the project when it creates the
   plan branch's worktree.
 - **The mod** fetches `CHANGELOG.md` from `raw.githubusercontent.com/anthropics/claude-code`
