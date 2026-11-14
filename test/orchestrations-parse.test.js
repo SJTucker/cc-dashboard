@@ -400,3 +400,13 @@ test('a title with parentheses keeps the summary whole', () => {
   const note = r.notes.find((n) => n.task === 1);
   assert.equal(note.summary, 'use (a) not (b)');
 });
+
+test('a steer note keeps its title, and an old-form note has none', () => {
+  const r = parseOrchestrator([
+    ...orchestratorLines(),
+    metaNote('You steered Task 1 (Fix the regex) from the dashboard: go'),
+    metaNote('You steered Task 1 from the dashboard: again'),
+    metaNote('You steered a worker from the dashboard: stop'),
+  ]);
+  assert.deepEqual(r.notes.map((n) => [n.task, n.title, n.summary]), [[1, 'Fix the regex', 'go'], [1, null, 'again'], [null, null, 'stop']]);
+});

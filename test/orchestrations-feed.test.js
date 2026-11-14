@@ -439,3 +439,12 @@ test('two task-0 workers with different titles: a note for Task 0 carries the la
   const { feed } = feedOf(s);
   assert.equal(feed[0].text, 'You steered Task 0 (Fix B)');
 });
+
+test('a note that carries a title keeps it over the latest worker title', () => {
+  const s = new Script().prompt('go').use('Skill', { skill: 'orchestrate' });
+  startWorker(s, 0, workerPrompt(0).replace('Title 0', 'Stub A'));
+  startWorker(s, 0, workerPrompt(0).replace('Title 0', 'Fix B'));
+  metaNote(s, 'You steered Task 0 (Stub A) from the dashboard: go');
+  const { feed } = feedOf(s);
+  assert.equal(feed[0].text, 'You steered Task 0 (Stub A)');
+});
