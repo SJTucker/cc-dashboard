@@ -293,6 +293,7 @@ only variable that moves them.
 | `CC_DASHBOARD_PRICE_CHECK` | on | The server's price checks. `off` (in any case) stops the daily check and the new-model check. The Check prices button still works. |
 | `CC_DASHBOARD_USAGE_REFRESH` | on | The server's headless `/usage` runs, which keep Plan usage fresh. `off` (in any case) stops them. Plan usage then updates only when you run `/usage`. |
 | `CC_DASHBOARD_CLAUDE_BIN` | `claude` | The Claude Code binary those runs start. Set it when the server's `PATH` has no `claude`, for example under launchd. |
+| `CC_DASHBOARD_DEBUG` | unset | `1` makes the mod write a debug log, `<cfg>/cc-dashboard/mod-debug/<session id>.jsonl`. Any other value writes nothing. The mod reads it once per load, so reload the mod after changing it. |
 
 Set a variable for the server when you start it, for example
 `CLAUDE_CONFIG_DIR=/path/to/.claude npm start`.
@@ -330,6 +331,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/agent-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per subagent. Each holds the agent id and, for each model request the subagent made, its time, model, turn id, step index and four token counts. The server reads them into `transcripts.db` and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/headless-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<session id>.json` per headless session (`claude -p` with no transcript). Each holds the session id, its working folder, the cost Claude Code last reported and, for each model request, its time, model, subagent id when there is one, turn id, step index and four token counts. The server reads them into `transcripts.db` as call rows and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/claims/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per orchestrate worker, holding the worktree, run folder and task file it claimed. The mod reads the file after a reload, so the worktree guard keeps refusing edits outside the worktree. The mod empties the file when the agent ends. The mod engine has no delete, so the folder keeps one small file per worker. |
+| `<cfg>/cc-dashboard/mod-debug/` | `CLAUDE_CONFIG_DIR` | the mod, one `<session id>.jsonl` per session, only while `CC_DASHBOARD_DEBUG=1`. Each line is one event the mod handled, with its time, and the file keeps the last 2,000 lines. Nothing reads it. |
 | `<repo root>/.claude/handoffs/` of each session's project, or the session's folder outside git | none | the mod, in `document` handoff mode, 7 minutes before a 1-hour prompt cache expires. Each file summarises a whole conversation, so add `.claude/handoffs/` to that repo's `.gitignore`. |
 | `<repo root>/.claude/context-images/` of each session's project, or the session's folder outside git | none | the mod, in `image` handoff mode 7 minutes before a 1-hour prompt cache expires, and for `/context-image-handoff`. Each file holds quotes from a whole conversation, so add `.claude/context-images/` to that repo's `.gitignore`. |
 | `<cfg>/cc-dashboard/changes/` | `CLAUDE_CONFIG_DIR` | the mod |
