@@ -14,7 +14,8 @@ import type { AgentStep, HeadlessStep } from './steps'
 import { REPO_STEPS, documentResumePrompt, endFill, handoffDocument, handoffKind, handoffWaitMs, hourCacheExpiry, imageDocument, imageResumePrompt, indexPath, planHandoff, planImage, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 import { relayOnce } from './steer'
-import { claimedWorktree, guardReason, outsideWrite } from './guard'
+import { claimedWorktree, guardReason, outsideWrite, parseClaim } from './guard'
+import type { Claim } from './guard'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
@@ -43,13 +44,14 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // The orchestrate skill writes reset-prompt/<session id>.txt, the line to send after a
 // /clear. On that session's end the mod reads it, and empties it because $.fs has no
 // delete. After a /clear it fills the next session's input box with the line.
-// The mod writes six formats itself with $.fs.write, under <config dir>/cc-dashboard/:
+// The mod writes seven formats itself with $.fs.write, under <config dir>/cc-dashboard/:
 //   activity/<session id>.json   the session's state. Read by lib/activity.js.
 //   agent-usage/<agent id>.json  each model request of a subagent (steps.ts). Read by lib/agent-steps.js.
 //   headless-usage/<session id>.json  each model request of a session with no transcript (steps.ts). Read by lib/headless-usage.js.
 //   changes/<session id>.json    the setup changes checkSetup found. Read by collectMarkers in lib/changes.js.
 //   setup/<name>.json            the stored copy of each watched setup file. Read back by checkSetup.
 //   limit-warnings.json          the dismissed plan limit levels. Read by every running session's mod.
+//   claims/<agent id>.json       the worktree, run folder and task file an orchestrate worker claimed. Read back by the mod after a reload, so the worktree guard keeps working.
 // Activity has one writer per session, which keeps a session's states in order, where a
 // script started per event can finish out of order. The server reads the first four
 // formats, and the CONTRACT block in register.test.ts holds a sample of each, which
@@ -594,19 +596,76 @@ function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
   stepWrites.set(agentId, appendChain(stepWrites.get(agentId), () => recordStep($, agentId, step), (err) => logOnce($, `agent usage failed (${errorName(err)})`)))
 }
 
-// The worktree each subagent claimed with orch-claim, by agentId. A reload starts
-// the map empty, so a reload turns the guard off for workers already running.
-const claimedWorktrees = new Map<string, string>()
+// The claim each subagent made with orch-claim, by agentId. The mod also writes each
+// claim to <config dir>/cc-dashboard/claims/<agent id>.json. A reload starts this map
+// empty, so a tool call from an agent with no entry reads that file once per module
+// instance (claimLoads) and the guard keeps refusing edits outside the worktree.
+const claimedWorktrees = new Map<string, Claim>()
+const claimLoads = new Map<string, Promise<Claim | undefined>>()
+const AGENT_ID = /^[\w-]+$/
+
+async function claimFile($: EngineInterface, agentId: string) {
+  if (!AGENT_ID.test(agentId)) return null
+  const dir = await configDir($)
+  return dir ? `${dir}/cc-dashboard/claims/${agentId}.json` : null
+}
+
+// The claim of an agent this module instance has no entry for, from its claim file.
+// Reads the file the first time only. Every caller gets the same promise, so a second
+// tool call during the read waits for the claim. An empty or missing file is no claim.
+function loadClaim($: EngineInterface, agentId: string): Promise<Claim | undefined> {
+  const pending = claimLoads.get(agentId)
+  if (pending) return pending
+  const load = (async () => {
+    try {
+      const file = await claimFile($, agentId)
+      const claim = file ? parseClaim(await $.fs.read(file).then(String, () => undefined)) : null
+      if (claim) claimedWorktrees.set(agentId, claim)
+      return claim ?? undefined
+    } catch (err) {
+      logOnce($, `claim file read failed (${errorName(err)})`)
+      return undefined
+    }
+  })()
+  claimLoads.set(agentId, load)
+  return load
+}
+
+// Remembers a claim in memory and in its claim file. A failed write is logged and
+// the claim still holds in memory.
+async function saveClaim($: EngineInterface, agentId: string, claim: Claim) {
+  claimedWorktrees.set(agentId, claim)
+  claimLoads.set(agentId, Promise.resolve(claim))
+  try {
+    const file = await claimFile($, agentId)
+    if (file) await $.fs.write(file, JSON.stringify(claim))
+  } catch (err) {
+    logOnce($, `claim file write failed (${errorName(err)})`)
+  }
+}
+
+// Records a refused edit in the run's event log. The result is not awaited, and a
+// failure is logged, so the log never delays or changes the refusal.
+function reportDenied($: EngineInterface, claim: Claim, agentId: string, path: string) {
+  spawn($, 'orch-event', [claim.run, 'denied', '--agent', agentId, '--file', claim.file, '--text', path], '', 5000)
+    .catch((err) => logOnce($, `orch-event failed (${errorName(err)})`))
+}
 
 // Drops the agent's steps and its write chain once its last queued write settles.
 // A step queued before the chain settles replaces the chain, so this waits again on
 // the new one. A step queued after the entries are gone starts a new list from the file.
-function forgetAgentSteps(agentId: string) {
-  claimedWorktrees.delete(agentId)
+function forgetAgentSteps($: EngineInterface, agentId: string) {
+  claimLoads.delete(agentId)
+  if (claimedWorktrees.delete(agentId)) {
+    // $.fs has no delete, so the claim file is emptied. An empty file reads as no claim.
+    claimFile($, agentId)
+      .then((file) => file && $.fs.write(file, ''))
+      .catch((err) => logOnce($, `claim file write failed (${errorName(err)})`))
+  }
   const chain = stepWrites.get(agentId)
   if (!chain) return
   chain.finally(() => {
-    if (stepWrites.get(agentId) !== chain) return forgetAgentSteps(agentId)
+    if (stepWrites.get(agentId) !== chain) return forgetAgentSteps($, agentId)
     stepWrites.delete(agentId)
     agentSteps.delete(agentId)
   })
@@ -796,7 +855,7 @@ function stopSteerRelay() {
 // no activity for the id and returns, so it queues no write either. A write already
 // queued finds no state in writeActivity and writes nothing. A write already inside
 // fs.write finishes, and writeActivity does not record its text.
-function forgetSession(id: string) {
+function forgetSession($: EngineInterface, id: string) {
   endedSessions.delete(id)
   endedSessions.add(id)
   if (endedSessions.size > ENDED_SESSIONS_MAX) endedSessions.delete(endedSessions.values().next().value as string)
@@ -806,7 +865,7 @@ function forgetSession(id: string) {
   s?.writeTimer?.cancel()
   s?.handoffTimer?.cancel()
   s?.indexTimer?.cancel()
-  for (const agentId of s?.agentIds ?? []) forgetAgentSteps(agentId)
+  for (const agentId of s?.agentIds ?? []) forgetAgentSteps($, agentId)
   sessions.delete(id)
 }
 
@@ -1765,7 +1824,7 @@ export const register: Register = (on) => {
     const handoff = peekState(e.sessionId)?.handoff
     const interactive = peekState(e.sessionId)?.mode?.interactive !== false
     const headlessWrite = headlessWrites.get(e.sessionId)
-    forgetSession(e.sessionId)
+    forgetSession($, e.sessionId)
     endSteerRelay($, e)
     if (!interactive) {
       // A claude -p process exits once session.end returns, so a queued headless write
@@ -1831,7 +1890,7 @@ export const register: Register = (on) => {
       await track($, (_a, _now, s) => {
         s.endedAgents.add(agentId)
       }, false)
-      forgetAgentSteps(agentId)
+      forgetAgentSteps($, agentId)
       return result
     }
     await track($, (a, now, s) => {
@@ -1900,16 +1959,19 @@ export const register: Register = (on) => {
     if (e.agentId) {
       const agentId = e.agentId
       const args = e as unknown as Record<string, unknown>
-      const tree = claimedWorktrees.get(agentId)
-      if (tree) {
-        const path = outsideWrite(e.tool, args, tree)
-        if (path) return { deny: guardReason(path, tree) }
+      const claim = claimedWorktrees.get(agentId) ?? (await loadClaim($, agentId))
+      if (claim) {
+        const path = outsideWrite(e.tool, args, claim.worktree)
+        if (path) {
+          reportDenied($, claim, agentId, path)
+          return { deny: guardReason(path, claim.worktree) }
+        }
       }
       try {
         const result = await next(e)
-        if (!tree && e.tool === 'Bash' && 'text' in result && typeof result.text === 'string') {
+        if (!claim && e.tool === 'Bash' && 'text' in result && typeof result.text === 'string') {
           const found = claimedWorktree(typeof args.command === 'string' ? args.command : '', result.text)
-          if (found) claimedWorktrees.set(agentId, found)
+          if (found) await saveClaim($, agentId, found)
         }
         return result
       } finally {
