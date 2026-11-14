@@ -666,7 +666,7 @@ function createServer(config) {
         res.status(409).json({ error: 'orchestrator not live' });
         return;
       }
-      const request = writeSteerRequest(config.configDir, target.liveSessionId, { agentId, task: worker.task, text });
+      const request = writeSteerRequest(config.configDir, target.liveSessionId, { agentId, task: worker.task, title: worker.title, text });
       res.status(202).json({ id: request.id });
     } catch (err) {
       console.error('[API] /api/orchestrations/:id/steer failed:', err);

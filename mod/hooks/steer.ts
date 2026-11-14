@@ -47,11 +47,12 @@ export function pendingRequests(names: string[], handled: Set<string>): string[]
   return ids
 }
 
-export function steerNote(task: number | null, text: string): string {
-  return `You steered ${task === null ? 'a worker' : `Task ${task}`} from the dashboard: ${text}`
+export function steerNote(task: number | null, title: string | null, text: string): string {
+  const label = task === null ? 'a worker' : `Task ${task}${title ? ` (${title})` : ''}`
+  return `You steered ${label} from the dashboard: ${text}`
 }
 
-function parseRequest(text: string): { agentId: string, task: number | null, text: string, at: number | null } | null {
+function parseRequest(text: string): { agentId: string, task: number | null, title: string | null, text: string, at: number | null } | null {
   let body: unknown
   try {
     body = JSON.parse(text)
@@ -59,9 +60,9 @@ function parseRequest(text: string): { agentId: string, task: number | null, tex
     return null
   }
   if (typeof body !== 'object' || body === null) return null
-  const { agentId, task, text: steerText, at } = body as Record<string, unknown>
+  const { agentId, task, title, text: steerText, at } = body as Record<string, unknown>
   if (typeof agentId !== 'string' || !agentId || typeof steerText !== 'string' || !steerText) return null
-  return { agentId, task: typeof task === 'number' ? task : null, text: steerText, at: typeof at === 'number' && Number.isFinite(at) ? at : null }
+  return { agentId, task: typeof task === 'number' ? task : null, title: typeof title === 'string' && title ? title : null, text: steerText, at: typeof at === 'number' && Number.isFinite(at) ? at : null }
 }
 
 const errText = (err: unknown) => (err instanceof Error ? err.message : String(err))
@@ -103,7 +104,7 @@ export async function relayOnce(io: SteerIo, dir: string, handled: Set<string>):
         } else {
           delivered = sent.isDelivered === true
           if (!delivered) reason = sent.reason ?? 'the worker did not accept the message'
-          else await io.append(steerNote(request.task, request.text)).catch((err) => io.log(`steer note not appended (${errText(err)})`))
+          else await io.append(steerNote(request.task, request.title, request.text)).catch((err) => io.log(`steer note not appended (${errText(err)})`))
         }
       }
     } catch (err) {
