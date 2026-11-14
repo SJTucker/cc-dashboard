@@ -1918,6 +1918,16 @@ test('a failed orch-event run never blocks the guard', async ($, on) => {
   expect(inside.text).toBe('ok')
 })
 
+test('two outside edits at once after a reload are both refused', async ($, on) => {
+  const { state } = world(on)
+  state.files[CLAIM_FILE] = CLAIM_JSON
+  const first = $.tool.call(editCall('/code/app/x.js', 'a1'))
+  const second = $.tool.call(editCall('/code/app/y.js', 'a1'))
+  const answers = (await Promise.all([first, second])) as Array<{ deny?: string }>
+  expect(answers[0]?.deny).toContain('/code/app.t1')
+  expect(answers[1]?.deny).toContain('/code/app.t1')
+})
+
 test('an agent with no claim file reads it once', async ($, on) => {
   const { readLog } = world(on)
   await $.tool.call(editCall('/code/app/x.js', 'a2'))

@@ -599,9 +599,9 @@ function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
 // The claim each subagent made with orch-claim, by agentId. The mod also writes each
 // claim to <config dir>/cc-dashboard/claims/<agent id>.json. A reload starts this map
 // empty, so a tool call from an agent with no entry reads that file once per module
-// instance (claimFileChecked) and the guard keeps refusing edits outside the worktree.
+// instance (claimLoads) and the guard keeps refusing edits outside the worktree.
 const claimedWorktrees = new Map<string, Claim>()
-const claimFileChecked = new Set<string>()
+const claimLoads = new Map<string, Promise<Claim | undefined>>()
 const AGENT_ID = /^[\w-]+$/
 
 async function claimFile($: EngineInterface, agentId: string) {
@@ -611,26 +611,31 @@ async function claimFile($: EngineInterface, agentId: string) {
 }
 
 // The claim of an agent this module instance has no entry for, from its claim file.
-// Reads the file the first time only. An empty or missing file is no claim.
-async function loadClaim($: EngineInterface, agentId: string): Promise<Claim | undefined> {
-  if (claimFileChecked.has(agentId)) return undefined
-  claimFileChecked.add(agentId)
-  try {
-    const file = await claimFile($, agentId)
-    const claim = file ? parseClaim(await $.fs.read(file).then(String, () => undefined)) : null
-    if (claim) claimedWorktrees.set(agentId, claim)
-    return claim ?? undefined
-  } catch (err) {
-    logOnce($, `claim file read failed (${errorName(err)})`)
-    return undefined
-  }
+// Reads the file the first time only. Every caller gets the same promise, so a second
+// tool call during the read waits for the claim. An empty or missing file is no claim.
+function loadClaim($: EngineInterface, agentId: string): Promise<Claim | undefined> {
+  const pending = claimLoads.get(agentId)
+  if (pending) return pending
+  const load = (async () => {
+    try {
+      const file = await claimFile($, agentId)
+      const claim = file ? parseClaim(await $.fs.read(file).then(String, () => undefined)) : null
+      if (claim) claimedWorktrees.set(agentId, claim)
+      return claim ?? undefined
+    } catch (err) {
+      logOnce($, `claim file read failed (${errorName(err)})`)
+      return undefined
+    }
+  })()
+  claimLoads.set(agentId, load)
+  return load
 }
 
 // Remembers a claim in memory and in its claim file. A failed write is logged and
 // the claim still holds in memory.
 async function saveClaim($: EngineInterface, agentId: string, claim: Claim) {
   claimedWorktrees.set(agentId, claim)
-  claimFileChecked.add(agentId)
+  claimLoads.set(agentId, Promise.resolve(claim))
   try {
     const file = await claimFile($, agentId)
     if (file) await $.fs.write(file, JSON.stringify(claim))
@@ -650,6 +655,7 @@ function reportDenied($: EngineInterface, claim: Claim, agentId: string, path: s
 // A step queued before the chain settles replaces the chain, so this waits again on
 // the new one. A step queued after the entries are gone starts a new list from the file.
 function forgetAgentSteps($: EngineInterface, agentId: string) {
+  claimLoads.delete(agentId)
   if (claimedWorktrees.delete(agentId)) {
     // $.fs has no delete, so the claim file is emptied. An empty file reads as no claim.
     claimFile($, agentId)
