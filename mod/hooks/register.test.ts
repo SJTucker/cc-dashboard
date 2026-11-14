@@ -4403,12 +4403,46 @@ test('debug lines within 2 seconds share one write', async ($, on) => {
   expect(lines[0]).toMatchObject({ agent: 'a1', model: 'claude-haiku-4-5', input: 2, cacheRead: 33650, cacheWrite: 3649, output: 163 })
 })
 
-test('session.end flushes the debug buffer', async ($, on) => {
-  const { writes, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' } })
+// The debug write takes 50 ms. session.end must not return before it lands, because a
+// claude -p process exits once session.end returns.
+async function endWithSlowWrite($: Parameters<Parameters<typeof test>[1]>[0], clock: { advance(ms: number): Promise<void> }) {
+  let returned = false
+  const ending = $.session.end({ reason: 'other', sessionId: 's1' } as never).then(() => { returned = true })
+  await clock.advance(10)
+  const early = returned
+  await clock.advance(100)
+  await ending
+  return early
+}
+
+test('session.end flushes the debug buffer before it returns', async ($, on) => {
+  const { writes, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' }, writeMs: Array(30).fill(50) })
   await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
-  await $.session.end({ reason: 'other', sessionId: 's1' } as never)
-  await clock.settle()
+  await clock.advance(1)
+  const early = await endWithSlowWrite($, clock)
+  expect(early).toBe(false)
   const lines = debugLines(writes)
   expect(lines.some((l) => l.event === 'turn.step')).toBe(true)
   expect(lines.some((l) => l.event === 'session.end' && l.reason === 'other')).toBe(true)
+})
+
+test('session.end of a non-interactive session flushes the debug buffer before it returns', async ($, on) => {
+  const { writes, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' }, writeMs: Array(30).fill(50) })
+  await $.session.start({ ...start, isInteractive: false })
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.advance(1)
+  const early = await endWithSlowWrite($, clock)
+  expect(early).toBe(false)
+  const lines = debugLines(writes)
+  expect(lines.some((l) => l.event === 'turn.step')).toBe(true)
+  expect(lines.some((l) => l.event === 'session.end')).toBe(true)
+})
+
+test('session.end drops the session debug state, so a later flush reads the file again', async ($, on) => {
+  const { readLog } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' } })
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await $.session.end({ reason: 'other', sessionId: 's1' } as never)
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await $.session.end({ reason: 'other', sessionId: 's1' } as never)
+  expect(readLog.filter((p) => p === DEBUG_FILE)).toHaveLength(2)
 })

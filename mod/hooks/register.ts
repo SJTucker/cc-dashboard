@@ -1921,8 +1921,12 @@ export const register: Register = (on) => {
     const interactive = peekState(e.sessionId)?.mode?.interactive !== false
     const headlessWrite = headlessWrites.get(e.sessionId)
     await debug($, 'session.end', present(e, ['reason']), e.sessionId)
-    // The flush is not awaited, so it does not count against session.end's budget.
-    flushDebug($, e.sessionId)
+    // Awaited because a claude -p process exits once session.end returns, which would
+    // lose the buffered lines. flushDebug never rejects, and with the flag off the
+    // buffer is empty and it makes no $ call.
+    await flushDebug($, e.sessionId)
+    debugKept.delete(e.sessionId)
+    debugFlushes.delete(e.sessionId)
     forgetSession($, e.sessionId)
     endSteerRelay($, e)
     if (!interactive) {
