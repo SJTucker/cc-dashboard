@@ -749,6 +749,23 @@ function present(e: object, keys: string[]): Record<string, unknown> {
   return fields
 }
 
+// The worktree guard for one tool call of a subagent. Returns the agent's claim, from
+// memory or its claim file, and a deny reason when the call writes outside the
+// worktree. Logs the outcome to the debug log: 'denied', 'claim' (in memory),
+// 'claim-file' (loaded from the file) or 'none'.
+async function guardSubagent($: EngineInterface, agentId: string, tool: string, args: Record<string, unknown>) {
+  const held = claimedWorktrees.get(agentId)
+  const claim = held ?? (await loadClaim($, agentId))
+  const path = claim ? outsideWrite(tool, args, claim.worktree) : null
+  const guard = path ? 'denied' : !claim ? 'none' : held ? 'claim' : 'claim-file'
+  await debug($, 'tool.call', { agent: agentId, tool, guard })
+  if (claim && path) {
+    reportDenied($, claim, agentId, path)
+    return { claim, deny: guardReason(path, claim.worktree) }
+  }
+  return { claim, deny: undefined }
+}
+
 // Applies change to the session's headless record and writes the whole file. The
 // first write of a session this module instance has not seen reads the file first,
 // so a reload keeps the steps written before it.
@@ -2052,15 +2069,8 @@ export const register: Register = (on) => {
     if (e.agentId) {
       const agentId = e.agentId
       const args = e as unknown as Record<string, unknown>
-      const held = claimedWorktrees.get(agentId)
-      const claim = held ?? (await loadClaim($, agentId))
-      const path = claim ? outsideWrite(e.tool, args, claim.worktree) : null
-      const guard = path ? 'denied' : !claim ? 'none' : held ? 'claim' : 'claim-file'
-      await debug($, 'tool.call', { agent: agentId, tool: e.tool, guard })
-      if (claim && path) {
-        reportDenied($, claim, agentId, path)
-        return { deny: guardReason(path, claim.worktree) }
-      }
+      const { claim, deny } = await guardSubagent($, agentId, e.tool, args)
+      if (deny) return { deny }
       try {
         const result = await next(e)
         if (!claim && e.tool === 'Bash' && 'text' in result && typeof result.text === 'string') {
