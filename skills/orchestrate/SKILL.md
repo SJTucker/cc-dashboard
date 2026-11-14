@@ -267,12 +267,12 @@ For each worker, its transcript is
   plus `--board <board>` on exactly one armed watch, so each post wakes you
   once. When that watch exits, put `--board` on the next watch you arm. A watch
   counts board posts from its start, so first read the board entries added since
-  the last `POST` you handled. `--run` reads the worker's task files from its claim, so the watch can be
-  armed before the worker has claimed. `--run` also reports files changed in the
-  claimed worktree, found with git, so a worker that edits through Bash (`sed -i`,
-  a heredoc) raises DRIFT too. A `--files` entry ending in `/` covers a
-  whole folder: the scratchpad folder is this session's, so a worker's scratch
-  files are not reported as drift.
+  the last `POST` you handled. `--run` reads the worker's task files from its
+  claim, so the watch can be armed before the worker has claimed. `--run` also
+  reports files changed in the claimed worktree, found with git, so a worker that
+  edits through Bash (`sed -i`, a heredoc) raises DRIFT too. A `--files` entry
+  ending in `/` covers a whole folder: the scratchpad folder is this session's, so
+  a worker's scratch files are not reported as drift.
 - `timeout_ms`: 1800000.
 - `description`: `worker <agentId>`. You learn the worker's task from its `CLAIMED`
   line (section 8). The dashboard feed finds the worker from `agent-<agentId>.jsonl`
