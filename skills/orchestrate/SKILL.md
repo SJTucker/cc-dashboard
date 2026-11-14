@@ -120,6 +120,13 @@ Before scheduling, revise the plan so every task includes:
    trusting its name.
 2. A concrete test that fails before the task's change and passes after it.
 3. A requirement that the worker's report pastes the real test output.
+4. A `**Reviewer:**` line naming `opus` or `sonnet`, with a one-line reason. The
+   plan author writes it, and the plan review checks it. Add it here only for a
+   task that still has none. Choose `opus` when the task touches concurrency,
+   locking or claim code; adds or changes a model call, a network request or money
+   math; changes behaviour that a project rule ties to another file (a CLAUDE.md
+   "in the same change" rule); or is expected to change more than 300 lines of
+   code outside Markdown. Choose `sonnet` otherwise.
 
 A task is **ready** when every task it consumes from has merged into the plan
 branch. A task is **running** from its worker's dispatch until its branch merges
@@ -176,8 +183,8 @@ A run needs auto mode. A background worker cannot show a permission prompt, so a
 tool call it is not allowed is denied without one. If the session is not in auto
 mode, ask the user to switch before the first dispatch.
 
-Show the user the dependency list in one short list before dispatching. Create the
-plan branch if it does not exist, with the name and base the plan's Global
+Show the user the dependency list in one short list, with each task's reviewer
+model, before dispatching. Create the plan branch if it does not exist, with the name and base the plan's Global
 Constraints give. When the plan names no base, use the base the project's
 CLAUDE.md names for worktrees, else local `main`:
 `wt switch --create <plan branch> --base <base> --no-cd`.
@@ -248,8 +255,8 @@ For each ready task, in this order:
    give a worktree its ports and database.
 2. Add its task to the queue. The JSON carries `task`, `title`, `plan`, `worktree`,
    `branch`, `files`, `doneWhen` (one narrow check, as a command and its expected
-   result), `sections` (the image sections that matter most) and, when needed,
-   `notes`:
+   result), `sections` (the image sections that matter most), `reviewer` (copied
+   from the task's `**Reviewer:**` line) and, when needed, `notes`:
 
    ```bash
    <CLAIM> <run> --add work <<'EOF'
@@ -444,10 +451,19 @@ Check how the work was done, reading the implementer's work only through `<TI> <
 Report pass, or each problem with file, line and why.
 ```
 
-Every reviewer's Agent call uses `subagent_type: "orch-reviewer"`, `model: "sonnet"`,
-`run_in_background: true` and `description: "orchestrate reviewer"`. Start reviewers
-one per message, like workers. A relaunched implementer gets a new work task with
-the next `attempt` and the review findings in `notes`.
+Every reviewer's Agent call uses `subagent_type: "orch-reviewer"`, `model` set to
+the task's `reviewer` (Sonnet when the task has none), `run_in_background: true`
+and `description: "orchestrate reviewer"`. Start reviewers one per message, like
+workers. A relaunched implementer gets a new work task with the next `attempt` and
+the review findings in `notes`.
+
+Before starting a Sonnet reviewer, count the task's code changes with
+`git -C <worktree> diff --shortstat <plan branch>...<plan branch>-t<N> -- . ':(exclude)*.md'`.
+When insertions and deletions together pass 300, start the reviewer on Opus
+instead, and note the change in "Updates". A `"task": 0` task has no task branch.
+Count its commits with
+`git -C <worktree> diff --shortstat <commit before the worker started>..HEAD -- . ':(exclude)*.md'`.
+A diff that changes only Markdown prints nothing, which counts as 0.
 
 Read the whole review. Then run `EVENT <run> review-pass --task <N>` or
 `EVENT <run> review-fail --task <N> --text "<problem count> problems"`. When it

@@ -64,3 +64,21 @@ test('the skill squashes a task branch against its merge-base', () => {
   assert.doesNotMatch(text, /reset --soft\s+<plan branch>/);
   assert.doesNotMatch(text, /merge-base\s+HEAD/);
 });
+
+test('the plan gives each task a reviewer model', () => {
+  const five = section(5).replace(/\s+/g, ' ');
+  for (const s of ['**Reviewer:**', 'opus', 'sonnet', '300']) assert.ok(five.includes(s), s);
+});
+
+test('the skill reviews a task on its reviewer model, Sonnet when unset', () => {
+  const eleven = section(11).replace(/\s+/g, ' ');
+  assert.ok(eleven.includes("the task's `reviewer`"));
+  assert.ok(eleven.includes('Sonnet when the task has none'));
+  assert.ok(!eleven.includes('`subagent_type: "orch-reviewer"`, `model: "sonnet"`'));
+});
+
+test('the skill raises a large code diff to an Opus reviewer', () => {
+  const eleven = section(11).replace(/\s+/g, ' ');
+  assert.ok(eleven.includes('300'));
+  assert.ok(eleven.includes("':(exclude)*.md'"));
+});
