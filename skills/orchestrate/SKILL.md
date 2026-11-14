@@ -450,11 +450,15 @@ one per message, like workers. A relaunched implementer gets a new work task wit
 the next `attempt` and the review findings in `notes`.
 
 Read the whole review. Then run `EVENT <run> review-pass --task <N>` or
-`EVENT <run> review-fail --task <N> --text "<problem count> problems"`. When it fails, steer or relaunch the implementer with the
-findings. When it passes, merge the worker's branch into the plan branch. With `<N>` the task in the claimed file of the worker being merged, check
-`git merge-base --is-ancestor <plan branch>-t<N> <plan branch> && EVENT <run> merged --task <N>`, then run
-`wt remove -D <plan branch>-t<N>`. Without `-D`, `wt` keeps the branch, because
-it checks merges against the default branch, not the plan branch.
+`EVENT <run> review-fail --task <N> --text "<problem count> problems"`. When it
+fails, steer or relaunch the implementer with the findings. When it passes, merge
+the worker's branch into the plan branch. With `<N>` the task in the claimed file
+of the worker being merged, run this check, which logs the merge when it holds:
+
+`git merge-base --is-ancestor <plan branch>-t<N> <plan branch> && EVENT <run> merged --task <N>`
+
+Then run `wt remove -D <plan branch>-t<N>`. Without `-D`, `wt` keeps the branch,
+because it checks merges against the default branch, not the plan branch.
 
 A merge conflict that is trivial, you resolve. Otherwise abort the merge, and
 re-add the later task, which is ready again once the merge lands.
