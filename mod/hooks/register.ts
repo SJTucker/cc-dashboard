@@ -727,7 +727,9 @@ function forgetAgentSteps($: EngineInterface, agentId: string) {
   if (claimedWorktrees.delete(agentId)) {
     // $.fs has no delete, so the claim file is emptied. An empty file reads as no claim.
     claimFile($, agentId)
-      .then((file) => file && $.fs.write(file, ''))
+      .then((file) => {
+        if (file) return $.fs.write(file, '')
+      })
       .catch((err) => logOnce($, `claim file write failed (${errorName(err)})`))
   }
   const chain = stepWrites.get(agentId)
