@@ -15,7 +15,8 @@ the reviewer's final report, which is the same size whichever model writes it.
 ## What exists
 
 - Reviewers start as their own subagents (`skills/orchestrate/SKILL.md` section 11), on
-  Sonnet, and read the implementer's transcript through `transcript-index`.
+  the model the task's `reviewer` mark names, Sonnet when it has none, and read the
+  implementer's transcript through `transcript-index`.
 - Once the `orch-reviewer` agent type exists (spec
   `docs/superpowers/specs/2026-11-13-orch-agent-types-design.md`), the model is one field.
 

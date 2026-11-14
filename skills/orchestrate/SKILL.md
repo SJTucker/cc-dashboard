@@ -177,16 +177,17 @@ that task's `notes`, or in the image's "Updates" when it affects several tasks.
    once its dependencies have merged.
 
 `AskUserQuestion` stays fine before the first dispatch (sections 4 and 5) and in
-section 14 once the fix worker's review has passed.
+section 14 once the final review has returned and, when a fix worker ran, its
+review has passed.
 
 A run needs auto mode. A background worker cannot show a permission prompt, so a
 tool call it is not allowed is denied without one. If the session is not in auto
 mode, ask the user to switch before the first dispatch.
 
 Show the user the dependency list in one short list, with each task's reviewer
-model, before dispatching. Create the plan branch if it does not exist, with the name and base the plan's Global
-Constraints give. When the plan names no base, use the base the project's
-CLAUDE.md names for worktrees, else local `main`:
+model, before dispatching. Create the plan branch if it does not exist, with the
+name and base the plan's Global Constraints give. When the plan names no base, use
+the base the project's CLAUDE.md names for worktrees, else local `main`:
 `wt switch --create <plan branch> --base <base> --no-cd`.
 
 **Stub an interface.** Before dispatching a stub-ready task B on a producing
@@ -435,7 +436,7 @@ with `CLAIM <run> --add review`, then start the reviewer. Take the task from the
 reporting agent's claimed file `<run>/claimed/<file>`, the one its `CLAIMED` line
 names. Dispatch order does not say which task the agent did. The task carries that
 file's fields (`task`, `title`, `plan`, `worktree`, `branch`, `files`,
-`doneWhen`, `sections`) and `implementer: { agentId, transcript }`, with
+`doneWhen`, `sections`, `reviewer`) and `implementer: { agentId, transcript }`, with
 `transcript` the transcript path of the agent that claimed the work task. A
 reviewer's task is likewise the one in the claimed file its own `CLAIMED` line
 names.
@@ -454,16 +455,16 @@ Report pass, or each problem with file, line and why.
 Every reviewer's Agent call uses `subagent_type: "orch-reviewer"`, `model` set to
 the task's `reviewer` (Sonnet when the task has none), `run_in_background: true`
 and `description: "orchestrate reviewer"`. Start reviewers one per message, like
-workers. A relaunched implementer gets a new work task with the next `attempt` and
-the review findings in `notes`.
+workers. A relaunched implementer gets a new work task with the next `attempt`, the
+same `reviewer` and the review findings in `notes`.
 
 Before starting a Sonnet reviewer, count the task's code changes with
 `git -C <worktree> diff --shortstat <plan branch>...<plan branch>-t<N> -- . ':(exclude)*.md'`.
 When insertions and deletions together pass 300, start the reviewer on Opus
 instead, and note the change in "Updates". A `"task": 0` task has no task branch.
-Count its commits with
-`git -C <worktree> diff --shortstat <commit before the worker started>..HEAD -- . ':(exclude)*.md'`.
-A diff that changes only Markdown prints nothing, which counts as 0.
+Count its own commits with
+`git -C <worktree> show --shortstat <its commit> -- . ':(exclude)*.md'`, summing when
+it made several. A diff that changes only Markdown prints nothing, which counts as 0.
 
 Read the whole review. Then run `EVENT <run> review-pass --task <N>` or
 `EVENT <run> review-fail --task <N> --text "<problem count> problems"`. When it
@@ -532,6 +533,8 @@ The user reviews these across sessions before redesigning the image.
    test command. It commits on the plan branch, with a watch and a review as
    section 11 says. Nothing merges. The final review is not run a second time.
 3. Run `REPORT <image>` and show the output to the user. Then use
-   superpowers:finishing-a-development-branch on the plan branch.
+   superpowers:finishing-a-development-branch on the plan branch. `REPORT` has no
+   row for the final review agent, because it made no claim. Say so when you show
+   the output.
 
 The run folder stays beside the image, untracked, like the board.
