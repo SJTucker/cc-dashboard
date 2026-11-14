@@ -59,7 +59,7 @@ Before each round, put every frontier question in one pile:
 2. **Claude can make the call.** A sensible default exists, or a wrong answer is cheap to change later. Also any question whose recommended answer the owner would almost certainly accept. These go in the round as "my calls": one line each, with the reason.
 3. **Only the owner knows.** The answer changes what gets built, and investigation did not settle it. Only these become questions.
 
-A round with no questions in pile 3 still goes out if it has calls. When pile 3 is empty and no calls remain, the frontier is empty.
+A round with no questions in pile 3 still goes out if it has calls. The frontier is empty when pile 3 is empty, no calls remain, no investigation is still running, and recomputing the frontier adds nothing.
 
 ## 4. Ask each round
 
@@ -219,7 +219,7 @@ Put this line near the top of the spec, where `/orch-plan` reads it:
 When the session created or changed `GLOSSARY.md` or an ADR, commit them on the plan branch, so every worker worktree branched from it has them and the main checkout's git status does not change:
 
 ```bash
-git -C <worktree> add GLOSSARY.md docs/adr
+git -C <worktree> add <each file the session wrote or changed>
 git -C <worktree> commit -m "docs: record the <topic> glossary terms and decisions"
 ```
 
