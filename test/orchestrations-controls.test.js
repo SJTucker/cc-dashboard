@@ -90,6 +90,8 @@ test('steer writes a request in the live session folder', async (t) => {
   const req = JSON.parse(fs.readFileSync(file, 'utf8'));
   assert.deepEqual([req.id, req.agentId, req.task, req.text], [reqId, o.workerIds[0], 1, 'Stop after this file']);
   assert.equal(typeof req.at, 'number');
+  assert.equal(req.title, workerOf(await detailOf(url, o.sessionId), o.workerIds[0]).title);
+  assert.equal(typeof req.title, 'string');
   const w = workerOf(await detailOf(url, o.sessionId), o.workerIds[0]);
   assert.equal(w.lastSteer.state, 'pending');
   assert.equal(w.canSteer, true);
@@ -463,4 +465,11 @@ test('writeSteerRequest refuses a symlinked session folder or steer folder and w
   fs.symlinkSync(outside, path.join(cfg2, 'cc-dashboard', 'steer'));
   assert.throws(() => writeSteerRequest(cfg2, 'sess-2', { agentId: 'a1', task: 1, text: 'hi' }), /symlink|directory/);
   assert.deepEqual(fs.readdirSync(outside), []);
+});
+
+test('writeSteerRequest writes the title, or null when none is given', (t) => {
+  const cfg = tmpDir(t, 'steer-title');
+  const read = (r) => JSON.parse(fs.readFileSync(path.join(cfg, 'cc-dashboard', 'steer', 's1', `${r.id}.json`), 'utf8'));
+  assert.equal(read(writeSteerRequest(cfg, 's1', { agentId: 'a1', task: 1, title: 'Fix the regex', text: 'go' })).title, 'Fix the regex');
+  assert.equal(read(writeSteerRequest(cfg, 's1', { agentId: 'a1', task: 1, text: 'go' })).title, null);
 });

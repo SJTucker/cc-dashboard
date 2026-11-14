@@ -388,3 +388,15 @@ test('a claim prompt with a quoted run folder that has spaces gives that folder'
     assert.equal(r.agents[0].claimKind, 'work');
   }
 });
+
+test('a steer note with a title maps to its task', () => {
+  const r = parseOrchestrator([...orchestratorLines(), metaNote('You steered Task 1 (Fix the regex) from the dashboard: go')]);
+  const note = r.notes.find((n) => n.task === 1);
+  assert.equal(note.summary, 'go');
+});
+
+test('a title with parentheses keeps the summary whole', () => {
+  const r = parseOrchestrator([...orchestratorLines(), metaNote('You steered Task 1 (Fix parse (old notes)) from the dashboard: use (a) not (b)')]);
+  const note = r.notes.find((n) => n.task === 1);
+  assert.equal(note.summary, 'use (a) not (b)');
+});
