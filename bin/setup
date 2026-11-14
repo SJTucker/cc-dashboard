@@ -1,7 +1,8 @@
 #!/bin/sh
 # Takes a fresh clone to installed dependencies, a linked, validated mod, a linked
-# orchestrate skill and the two linked orchestrate agent files. It runs the steps in
-# SETUP.md, so a change to those steps changes this script too.
+# orchestrate skill, the linked orch-plan and orch-grill skills and the two linked
+# orchestrate agent files. It runs the steps in SETUP.md, so a change to those steps
+# changes this script too.
 # Preflight changes nothing on disk, so a failed check leaves nothing half done.
 # It does not start the server or edit settings.json.
 
@@ -11,6 +12,8 @@ unset CDPATH
 clone=$(cd "$(dirname "$0")/.." && pwd -P)
 mod="$clone/mod"
 skill="$clone/skills/orchestrate"
+plan_skill="$clone/skills/orch-plan"
+grill_skill="$clone/skills/orch-grill"
 agents="$clone/agents"
 
 # <cfg> as lib/config-dir.js resolves it: a leading ~ is expanded, empty is unset.
@@ -21,6 +24,8 @@ case "${CLAUDE_CONFIG_DIR:-}" in
 esac
 link="$cfg/skills/cc-dashboard"
 skill_link="$cfg/skills/orchestrate"
+plan_link="$cfg/skills/orch-plan"
+grill_link="$cfg/skills/orch-grill"
 worker_link="$cfg/agents/orch-worker.md"
 reviewer_link="$cfg/agents/orch-reviewer.md"
 
@@ -107,6 +112,10 @@ check_link "$link" "$mod"
 link_exists=$exists
 check_link "$skill_link" "$skill"
 skill_link_exists=$exists
+check_link "$plan_link" "$plan_skill"
+plan_link_exists=$exists
+check_link "$grill_link" "$grill_skill"
+grill_link_exists=$exists
 check_link "$worker_link" "$agents/orch-worker.md"
 worker_link_exists=$exists
 check_link "$reviewer_link" "$agents/orch-reviewer.md"
@@ -119,6 +128,8 @@ ok "npm install"
 
 make_link "$link" "$mod" "$link_exists"
 make_link "$skill_link" "$skill" "$skill_link_exists"
+make_link "$plan_link" "$plan_skill" "$plan_link_exists"
+make_link "$grill_link" "$grill_skill" "$grill_link_exists"
 make_link "$worker_link" "$agents/orch-worker.md" "$worker_link_exists"
 make_link "$reviewer_link" "$agents/orch-reviewer.md" "$reviewer_link_exists"
 

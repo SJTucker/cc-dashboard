@@ -1,0 +1,383 @@
+<title>Grill · TOPIC</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Instrument+Sans:wght@400;500;600&display=swap">
+<style>
+/* One dark answer sheet: header, a row per question, earlier rounds collapsed below. */
+:root {
+  --bg: #111316; --surface: #181B1F; --raised: #1F2328; --line: #2A2E34; --line-soft: #23272C; --edge: #33383F;
+  --fg: #E8EAED; --fg-2: #C9CED4; --muted: #9AA1A9; --faint: #7A818A;
+  --pick: #2F5FD8; --pick-line: #6B96FF; --pick-tint: #1B2742; --rec: #F0A766; --err: #FF8A80;
+  --sans: 'Instrument Sans', system-ui, -apple-system, sans-serif;
+  --mono: 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  color-scheme: dark;
+}
+body { background: var(--bg); color: var(--fg); font-family: var(--sans); font-size: 15px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 40px 64px }
+main { max-width: 1180px; margin: 0 auto; display: flex; flex-direction: column; gap: 20px }
+.mono { font-family: var(--mono) }
+.eyebrow { margin: 0; font: 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+header { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 12px }
+header .titles { flex: 1 1 420px; display: flex; flex-direction: column; gap: 6px; min-width: 0 }
+h1 { margin: 0; font-size: 28px; line-height: 1.2; font-weight: 600; text-wrap: balance }
+.count { font-size: 14px; color: var(--fg-2); font-variant-numeric: tabular-nums }
+.btn { font: inherit; font-size: 13px; font-weight: 600; min-height: 34px; padding: 0 14px; border-radius: 6px; border: 1px solid var(--edge); background: var(--raised); color: var(--fg); cursor: pointer }
+.btn:hover { border-color: #4A5059 }
+.btn.primary { background: var(--fg); border-color: var(--fg); color: var(--bg) }
+.btn.primary:hover { background: #FFFFFF }
+.btn:disabled { opacity: .4; cursor: default }
+.sheet { overflow-x: auto; background: var(--surface); border: 1px solid var(--line); border-radius: 10px }
+.sheet-inner { min-width: 880px }
+.row { display: grid; grid-template-columns: 56px minmax(0, 1.3fr) minmax(0, 1fr) 260px; gap: 20px; padding: 18px 20px; align-items: start }
+.head { padding-block: 12px; border-bottom: 1px solid var(--line); font: 11px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.q { border-bottom: 1px solid var(--line-soft) }
+.q:last-child { border-bottom: 0 }
+.qid { font: 500 13px var(--mono); color: var(--fg-2); padding-top: 2px }
+.cell { display: flex; flex-direction: column; gap: 4px; min-width: 0 }
+.qtitle { font-size: 16px; line-height: 1.35; font-weight: 600 }
+.qbody { font-size: 14px; line-height: 1.5; color: var(--muted); white-space: pre-line }
+.rectext { font-size: 14px; line-height: 1.45; white-space: pre-line }
+.why { font-size: 13px; line-height: 1.45; color: var(--rec); white-space: pre-line }
+.alts { margin-top: 4px; font-size: 13px; line-height: 1.45; color: var(--faint); white-space: pre-line }
+.actions { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px }
+.answer { display: flex; flex-direction: column; align-items: flex-start; gap: 6px }
+.seg { display: inline-flex; border: 1px solid var(--edge); border-radius: 6px; overflow: hidden }
+.seg button { font: inherit; font-size: 12px; font-weight: 600; min-height: 30px; padding: 0 10px; border: 0; border-right: 1px solid var(--edge); background: var(--raised); color: var(--fg-2); cursor: pointer }
+.seg button:last-child { border-right: 0 }
+.seg button:hover { background: #272C32; color: var(--fg) }
+.seg button[aria-pressed="true"] { background: var(--pick); color: #FFFFFF }
+.summary { font-size: 13px; line-height: 1.4; color: var(--muted) }
+.extra { padding: 0 20px 18px 96px; display: flex; flex-wrap: wrap; gap: 8px }
+.opt { display: flex; align-items: center; gap: 10px; text-align: left; font: inherit; font-size: 14px; line-height: 1.4; color: var(--fg); background: var(--raised); border: 1px solid var(--edge); border-radius: 8px; padding: 8px 12px; min-height: 38px; cursor: pointer }
+.opt:hover { border-color: #4A5059 }
+.opt[aria-checked="true"] { border-color: var(--pick-line); background: var(--pick-tint); box-shadow: inset 0 0 0 1px var(--pick-line) }
+.radio { width: 14px; height: 14px; border-radius: 50%; border: 1.5px solid var(--faint); flex: none; box-sizing: border-box }
+.opt[aria-checked="true"] .radio { border: 4px solid var(--pick-line) }
+.own { display: flex; flex-direction: column; gap: 6px; font-size: 13px; font-weight: 500; color: var(--fg-2); width: 100%; max-width: 720px }
+textarea { font: inherit; font-size: 14px; line-height: 1.5; color: var(--fg); background: var(--bg); border: 1px solid #4A5059; border-radius: 6px; padding: 8px 12px; width: 100%; box-sizing: border-box; resize: vertical }
+textarea::placeholder { color: var(--faint) }
+.btn:focus-visible, .seg button:focus-visible, .opt:focus-visible, textarea:focus-visible, summary:focus-visible { outline: 2px solid var(--pick-line); outline-offset: 2px }
+#status { margin: 0; font-size: 14px; line-height: 1.5; color: var(--fg-2) }
+#status.err { color: var(--err) }
+#status.ok { color: var(--pick-line); font-weight: 600 }
+#fallback[hidden] { display: none }
+#fallback { display: flex; flex-direction: column; gap: 8px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 16px }
+#fallback textarea { font: 13px/1.5 var(--mono) }
+.empty { padding: 28px 20px; font-size: 15px; color: var(--fg-2) }
+#history { display: flex; flex-direction: column; gap: 8px }
+details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px }
+summary { cursor: pointer; padding: 12px 16px; font: 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.callhead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line) }
+.callhead .eyebrow { flex: 1 1 auto }
+.past { padding: 0 16px 16px; display: grid; grid-template-columns: 56px minmax(0, 1fr) minmax(0, 1fr); gap: 10px 20px; font-size: 14px; line-height: 1.45 }
+.past span { min-width: 0; white-space: pre-line }
+.past .a { color: var(--fg-2) }
+@media (max-width: 640px) { .past { grid-template-columns: 40px minmax(0, 1fr) } .past .a { grid-column: 2 } }
+</style>
+
+<main>
+  <header>
+    <div class="titles">
+      <p class="eyebrow" id="eyebrow">Grill</p>
+      <h1 id="topic"></h1>
+    </div>
+    <span class="count"></span>
+    <button type="button" class="btn" id="accept-all">Accept all unanswered</button>
+    <button type="button" class="btn primary submit" id="submit">Submit round</button>
+  </header>
+  <div class="sheet">
+    <div class="sheet-inner" id="sheet">
+      <div class="row head"><span>#</span><span>Question</span><span>Claude recommends</span><span>Your answer</span></div>
+    </div>
+  </div>
+  <section id="calls" class="sheet" aria-label="Claude's calls" hidden>
+    <div class="callhead">
+      <p class="eyebrow">My calls: accepted unless you overrule</p>
+      <button type="button" class="btn" id="accept-calls">Accept all calls</button>
+    </div>
+    <div class="sheet-inner" id="calls-list"></div>
+  </section>
+  <div class="actions">
+    <span class="count"></span>
+    <button type="button" class="btn primary submit" id="submit-bottom">Submit round</button>
+  </div>
+  <p id="status" role="status"></p>
+  <div id="fallback" hidden>
+    <label for="fallback-text" class="eyebrow">Copy these answers into the terminal</label>
+    <textarea id="fallback-text" rows="6" readonly></textarea>
+    <button type="button" class="btn" id="copy">Copy answers</button>
+  </div>
+  <section id="history" aria-label="Earlier rounds"></section>
+</main>
+
+<!-- Claude fills this block each round; nothing else in the page changes. -->
+<script type="application/json" id="grill-data">
+{
+  "topic": "TOPIC",
+  "round": 1,
+  "questions": [
+    {
+      "id": "Q1",
+      "title": "Question title",
+      "body": "Question body.",
+      "options": ["Recommended option", "Another option"],
+      "recommended": 0,
+      "recommendation": "Recommended option",
+      "why": "Why Claude recommends it."
+    }
+  ],
+  "calls": [
+    { "id": "C1", "call": "A decision Claude made without asking.", "why": "One line on why it is safe to decide." }
+  ],
+  "history": []
+}
+</script>
+
+<script>
+const data = JSON.parse(document.getElementById('grill-data').textContent);
+const answers = {};
+const overrules = {};
+const calls = data.calls || [];
+const MAX_BYTES = 4000;
+let comments = null;
+let sent = false;
+
+const el = (tag, cls, text) => {
+  const node = document.createElement(tag);
+  if (cls) node.className = cls;
+  if (text != null) node.textContent = text;
+  return node;
+};
+
+const isAnswered = (q) => {
+  const a = answers[q.id];
+  if (!a) return false;
+  if (a.mode === 'accept') return true;
+  if (a.mode === 'other') return typeof a.pick === 'number';
+  return (a.text || '').trim() !== '';
+};
+
+const describe = (q) => {
+  const a = answers[q.id];
+  if (!a) return 'Not answered yet';
+  if (a.mode === 'accept') return 'Going with the recommendation';
+  if (a.mode === 'other') return typeof a.pick === 'number' ? 'Picked another option' : 'Pick one below';
+  return (a.text || '').trim() ? 'Your own answer' : 'Type it below';
+};
+
+const answerLine = (q) => {
+  const a = answers[q.id];
+  if (!isAnswered(q)) return q.id + ' unanswered';
+  if (a.mode === 'accept') return q.id + ' accept';
+  if (a.mode === 'other') return q.id + ' other: ' + q.options[a.pick];
+  return q.id + ' own: ' + a.text.trim().replace(/\s+/g, ' ');
+};
+
+const overruleLines = () => calls
+  .filter((c) => (overrules[c.id] || '').trim() !== '')
+  .map((c) => c.id + ' overrule: ' + overrules[c.id].trim().replace(/\s+/g, ' '));
+
+const reply = () => ['Grill round ' + data.round + ' answers'].concat(data.questions.map(answerLine), overruleLines()).join('\n');
+
+const setSubmitDisabled = (off) => {
+  document.querySelectorAll('.submit').forEach((b) => { b.disabled = off; });
+};
+
+const setAnswer = (q, patch) => {
+  answers[q.id] = Object.assign({}, answers[q.id], patch);
+  render();
+};
+
+function renderQuestion(q) {
+  const a = answers[q.id] || {};
+  const options = q.options || [];
+  const others = options.map((label, i) => ({ label, i })).filter((o) => o.i !== q.recommended);
+  const wrap = el('div', 'q');
+  const row = el('div', 'row');
+  row.append(el('span', 'qid', q.id));
+
+  const ask = el('div', 'cell');
+  ask.append(el('span', 'qtitle', q.title));
+  if (q.body) ask.append(el('span', 'qbody', q.body));
+  row.append(ask);
+
+  const rec = el('div', 'cell');
+  rec.append(el('span', 'rectext', q.recommendation));
+  if (q.why) rec.append(el('span', 'why', q.why));
+  if (others.length) rec.append(el('span', 'alts', 'Other options:\n' + others.map((o) => '· ' + o.label).join('\n')));
+  row.append(rec);
+
+  const answer = el('div', 'answer');
+  const seg = el('div', 'seg');
+  seg.setAttribute('role', 'group');
+  seg.setAttribute('aria-label', 'Answer ' + q.id);
+  const modes = [['accept', 'Accept']];
+  if (others.length) modes.push(['other', 'Other']);
+  modes.push(['own', 'My own']);
+  for (const [mode, label] of modes) {
+    const b = el('button', null, label);
+    b.type = 'button';
+    b.id = q.id + '-' + mode;
+    b.disabled = sent;
+    b.setAttribute('aria-pressed', String(a.mode === mode));
+    b.addEventListener('click', () => setAnswer(q, { mode }));
+    seg.append(b);
+  }
+  answer.append(seg, el('span', 'summary', describe(q)));
+  row.append(answer);
+  wrap.append(row);
+
+  if (a.mode === 'other') {
+    const extra = el('div', 'extra');
+    extra.setAttribute('role', 'radiogroup');
+    extra.setAttribute('aria-label', 'Other options for ' + q.id);
+    for (const o of others) {
+      const b = el('button', 'opt');
+      b.type = 'button';
+      b.disabled = sent;
+      b.setAttribute('role', 'radio');
+      b.setAttribute('aria-checked', String(a.pick === o.i));
+      b.append(el('span', 'radio'), el('span', null, o.label));
+      b.addEventListener('click', () => setAnswer(q, { pick: o.i }));
+      extra.append(b);
+    }
+    wrap.append(extra);
+  }
+  if (a.mode === 'own') {
+    const extra = el('div', 'extra');
+    const label = el('label', 'own', 'Your answer to ' + q.id);
+    const box = el('textarea');
+    box.id = q.id + '-text';
+    box.rows = 2;
+    box.disabled = sent;
+    box.placeholder = 'What you want instead, or why';
+    box.value = a.text || '';
+    box.addEventListener('input', () => {
+      answers[q.id].text = box.value;
+      updateHeader();
+      wrap.querySelector('.summary').textContent = describe(q);
+    });
+    label.append(box);
+    extra.append(label);
+    wrap.append(extra);
+  }
+  return wrap;
+}
+
+function renderCalls() {
+  const host = document.getElementById('calls-list');
+  document.getElementById('calls').hidden = !calls.length;
+  host.replaceChildren();
+  for (const c of calls) {
+    const row = el('div', 'row q');
+    row.append(el('span', 'qid', c.id), el('span', 'rectext', c.call), el('span', 'why', c.why));
+    const label = el('label', 'own', 'Overrule ' + c.id);
+    const box = el('textarea');
+    box.id = c.id + '-overrule';
+    box.rows = 2;
+    box.disabled = sent;
+    box.placeholder = 'Leave empty to accept';
+    box.value = overrules[c.id] || '';
+    box.addEventListener('input', () => { overrules[c.id] = box.value; });
+    label.append(box);
+    row.append(label);
+    host.append(row);
+  }
+  document.getElementById('accept-calls').disabled = sent;
+}
+
+function updateHeader() {
+  const done = data.questions.filter(isAnswered).length;
+  document.querySelectorAll('.count').forEach((n) => { n.textContent = data.questions.length || !calls.length ? done + ' of ' + data.questions.length + ' answered' : ''; });
+}
+
+function render() {
+  const focused = document.activeElement && document.activeElement.id;
+  const sheet = document.getElementById('sheet');
+  sheet.querySelectorAll('.q, .empty').forEach((n) => n.remove());
+  if (!data.questions.length) {
+    sheet.append(el('div', 'empty', calls.length
+      ? "No open questions. Review Claude's calls below, then submit."
+      : 'No open questions. Claude will ask in the terminal whether you have reached a shared understanding.'));
+  }
+  for (const q of data.questions) sheet.append(renderQuestion(q));
+  updateHeader();
+  renderCalls();
+  const none = !data.questions.length;
+  document.getElementById('accept-all').disabled = sent || none;
+  setSubmitDisabled(sent || (none && !calls.length));
+  if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
+}
+
+function renderHistory() {
+  const host = document.getElementById('history');
+  for (const past of (data.history || []).slice().reverse()) {
+    const d = el('details');
+    d.append(el('summary', null, 'Round ' + past.round + ' · ' + past.items.length + ' decisions'));
+    const list = el('div', 'past');
+    for (const item of past.items) {
+      const mark = item.by === 'claude' ? "Claude's call: " : '';
+      list.append(el('span', 'qid', item.id), el('span', null, item.title), el('span', 'a', mark + item.answer));
+    }
+    d.append(list);
+    host.append(d);
+  }
+}
+
+function setStatus(text, kind) {
+  const s = document.getElementById('status');
+  s.textContent = text;
+  s.className = kind || '';
+}
+
+function showFallback(reason) {
+  setStatus(reason, 'err');
+  document.getElementById('fallback-text').value = reply();
+  document.getElementById('fallback').hidden = false;
+}
+
+async function submit() {
+  const text = reply();
+  if (new TextEncoder().encode(text).length > MAX_BYTES) {
+    setStatus('These answers are too long to send in one comment. Shorten your own answers and submit again.', 'err');
+    return;
+  }
+  if (!comments) return showFallback('This view cannot send comments to Claude.');
+  let can = 'off';
+  try { can = await comments.canSendToClaude(); } catch (e) { can = 'off'; }
+  if (can !== 'available') return showFallback('No Claude session is listening to this page right now (' + can + ').');
+  setSubmitDisabled(true);
+  setStatus('Sending…');
+  try {
+    const anchor = await comments.anchorFor(document.querySelector('.sheet'));
+    await comments.sendToClaude({ anchor, text });
+    sent = true;
+    render();
+    setStatus('Sent to Claude. The next round will replace this page.', 'ok');
+  } catch (e) {
+    setSubmitDisabled(false);
+    if (e && e.code === 'rate_limited') return setStatus('Sent too often. Wait a moment and submit again.', 'err');
+    showFallback('Sending failed (' + ((e && e.code) || 'unknown') + ').');
+  }
+}
+
+document.getElementById('eyebrow').textContent = 'Grill · Round ' + data.round;
+document.getElementById('topic').textContent = data.topic;
+document.getElementById('accept-all').addEventListener('click', () => {
+  for (const q of data.questions) if (!answers[q.id] || !answers[q.id].mode) answers[q.id] = { mode: 'accept' };
+  render();
+});
+document.getElementById('accept-calls').addEventListener('click', () => {
+  for (const c of calls) overrules[c.id] = '';
+  render();
+});
+document.querySelectorAll('.submit').forEach((b) => b.addEventListener('click', submit));
+document.getElementById('copy').addEventListener('click', async () => {
+  const box = document.getElementById('fallback-text');
+  try { await navigator.clipboard.writeText(box.value); setStatus('Copied. Paste it into the terminal.', 'ok'); }
+  catch (e) { box.focus(); box.select(); }
+});
+render();
+renderHistory();
+(async () => {
+  comments = window.claude ? await window.claude.use('comments') : null;
+})();
+</script>
