@@ -21,5 +21,5 @@ then on.
 | [Subagent output is undercounted](subagent-output-undercount.md) | Open: the mod records subagent steps and the dashboard corrects new responses; estimating the 27,134 earlier responses open |
 | [Plan limit band below the prompt](limit-band-below-prompt.md) | Open: no mod render slot sits between the prompt and the status line; a `bin/limit-line` in the statusline script is the likely route; dismissing and shared band logic open |
 | [README screenshots after the design pass](readme-screenshots-after-design-pass.md) | Open: every screenshot predates the tabs, the sticky bar and the new legends; which to retake and how to scrub them open |
-| [Opus reviewer](opus-reviewer.md) | Open: run orchestrate's reviewer on Opus; check first whether Sonnet reviewers miss problems, then compare both on one run (about $0.40 extra per task) |
+| [Opus reviewer](opus-reviewer.md) | Open: a replay of 4 past tasks found Opus caught a missed problem Sonnet never did, at about 4× the cost per review; next is one live orchestrate run with both reviewers on every task |
 | [Subagent status line in Doing now](subagent-status-in-doing-now.md) | Open: show each subagent's status text instead of "1 subagent"; `meta.json` has the spawn description, and whether the live status line is readable anywhere is open |

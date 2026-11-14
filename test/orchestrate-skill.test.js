@@ -58,3 +58,9 @@ test('the skill logs each orchestrator event', () => {
 test('the feedback entry takes peak context and outside reads from the report', () => {
   assert.ok(section(13).includes('REPORT <image>'));
 });
+
+test('the skill squashes a task branch against its merge-base', () => {
+  assert.ok(section(11).includes('git reset --soft $(git merge-base <plan branch>-t<N> <plan branch>)'));
+  assert.doesNotMatch(text, /reset --soft\s+<plan branch>/);
+  assert.doesNotMatch(text, /merge-base\s+HEAD/);
+});

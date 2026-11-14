@@ -1147,7 +1147,7 @@ function commandImage($: EngineInterface, id: string, entry: Handoff | undefined
 
 // Starts the document or image handoff and waits for it. A failure is logged, and the
 // transcript handoff runs in its place, but only while the entry is still the one this
-// call set.
+// call set and the handoff setting is not off.
 async function startHandoff($: EngineInterface, id: string, expiresAt: number, kind: 'document' | 'image') {
   const entry: Handoff = { state: 'writing' }
   stateOf(id).handoff = entry

@@ -280,12 +280,12 @@ For each worker, its transcript is
   plus `--board <board>` on exactly one armed watch, so each post wakes you
   once. When that watch exits, put `--board` on the next watch you arm. A watch
   counts board posts from its start, so first read the board entries added since
-  the last `POST` you handled. `--run` reads the worker's task files from its claim, so the watch can be
-  armed before the worker has claimed. `--run` also reports files changed in the
-  claimed worktree, found with git, so a worker that edits through Bash (`sed -i`,
-  a heredoc) raises DRIFT too. A `--files` entry ending in `/` covers a
-  whole folder: the scratchpad folder is this session's, so a worker's scratch
-  files are not reported as drift.
+  the last `POST` you handled. `--run` reads the worker's task files from its
+  claim, so the watch can be armed before the worker has claimed. `--run` also
+  reports files changed in the claimed worktree, found with git, so a worker that
+  edits through Bash (`sed -i`, a heredoc) raises DRIFT too. A `--files` entry
+  ending in `/` covers a whole folder: the scratchpad folder is this session's, so
+  a worker's scratch files are not reported as drift.
 - `timeout_ms`: 1800000.
 - `description`: `worker <agentId>`. You learn the worker's task from its `CLAIMED`
   line (section 8). The dashboard feed finds the worker from `agent-<agentId>.jsonl`
@@ -451,9 +451,15 @@ the next `attempt` and the review findings in `notes`.
 
 Read the whole review. Then run `EVENT <run> review-pass --task <N>` or
 `EVENT <run> review-fail --task <N> --text "<problem count> problems"`. When it
-fails, steer or relaunch the implementer with the findings. When it passes, merge
-the worker's branch into the plan branch. With `<N>` the task in the claimed file
-of the worker being merged, run this check, which logs the merge when it holds:
+fails, steer or relaunch the implementer with the findings. If you ask an
+implementer to squash its commits, have it run
+`git reset --soft $(git merge-base <plan branch>-t<N> <plan branch>)` and commit
+once. Never reset to `<plan branch>` itself: it gains other tasks' merges after the
+task branches, and a soft reset to it stages their work as reverted.
+
+When the review passes, merge the worker's branch into the plan branch. With `<N>`
+the task in the claimed file of the worker being merged, run this check, which logs
+the merge when it holds:
 
 `git merge-base --is-ancestor <plan branch>-t<N> <plan branch> && EVENT <run> merged --task <N>`
 
