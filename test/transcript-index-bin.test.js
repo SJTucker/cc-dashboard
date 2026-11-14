@@ -532,3 +532,43 @@ test('a re-armed --watch --run --since-line past the claim does not repeat CLAIM
   assert.ok(!r.stdout.includes('CLAIM'), r.stdout);
   assert.ok(r.stdout.endsWith('DONE Report: done\n'), r.stdout);
 });
+
+const { parseEvents } = require('../lib/orchestrations/events');
+const eventLog = (run) => {
+  try {
+    return parseEvents(fs.readFileSync(path.join(run, 'events.jsonl'), 'utf8'));
+  } catch {
+    return [];
+  }
+};
+
+test('a watch with --run logs the claim and each printed event', (t) => {
+  const { file, run } = claimWorker(t, { task: { task: 3, title: 'Parse it', files: ['lib/a.js'], worktree: '/wt' } });
+  const r = watchRun(file, '--run', run);
+  assert.equal(r.status, 0, r.stderr);
+  const events = eventLog(run);
+  const claimed = events.filter((e) => e.kind === 'claimed');
+  assert.equal(claimed.length, 1, JSON.stringify(events));
+  assert.deepEqual({ ...claimed[0], t: undefined }, { t: undefined, kind: 'claimed', file: '0001-t3-a1.json', agent: 'a1', transcript: file, worktree: '/wt' });
+  for (const name of ['DRIFT', 'DONE']) {
+    const e = events.filter((x) => x.kind === 'watch' && x.name === name);
+    assert.equal(e.length, 1, name + JSON.stringify(events));
+    assert.equal(e[0].file, '0001-t3-a1.json');
+    assert.equal(e[0].agent, 'a1');
+  }
+});
+
+test('a re-armed watch does not log events at or before --since-line', (t) => {
+  const { file, run } = claimWorker(t, { task: { task: 3, title: 'Parse it', files: ['lib/a.js'], worktree: '/wt' } });
+  assert.equal(watchRun(file, '--run', run).status, 0);
+  assert.equal(watchRun(file, '--run', run, '--since-line', '5').status, 0);
+  const events = eventLog(run);
+  assert.equal(events.filter((e) => e.kind === 'claimed').length, 1, JSON.stringify(events));
+  assert.equal(events.filter((e) => e.name === 'DRIFT').length, 1, JSON.stringify(events));
+});
+
+test('a watch without --run writes no log', (t) => {
+  const { file, run } = claimWorker(t);
+  assert.equal(watchRun(file).status, 0);
+  assert.ok(!fs.existsSync(path.join(run, 'events.jsonl')));
+});
