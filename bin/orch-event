@@ -1,0 +1,59 @@
+#!/usr/bin/env node
+'use strict';
+
+// Appends one event to an orchestrate run's event log, <run>/events.jsonl (see
+// lib/orchestrations/events.js).
+//
+//   orch-event <run> <kind> --task <N> [--agent <id>] [--text <text>]
+//   orch-event <run> denied --agent <id> --file <task file> [--text <path>]
+//
+// <kind> is ready, waiting, answered, steer, review-pass, review-fail, merged or
+// dropped, written by the orchestrator, or denied, written by the mod when its
+// worktree guard refuses an edit. <run> is the run folder, an absolute path ending
+// in .run. It is created when missing, because the first events come before the
+// first `orch-claim --add`. Prints nothing and exits 0. Any problem prints
+// `orch-event: <reason>` on stderr and exits 1.
+
+const fs = require('fs');
+const { parseArgs } = require('util');
+const claims = require('../lib/orchestrations/claims');
+const events = require('../lib/orchestrations/events');
+
+const USAGE = 'usage: orch-event <run> <kind> --task <N> [--agent <id>] [--text <text>] | <run> denied --agent <id> --file <task file> [--text <path>]';
+
+function buildEvent(kind, values) {
+  const event = { kind };
+  if (kind === 'denied') {
+    if (!values.agent) throw new Error('--agent is required for denied');
+    if (!values.file || !claims.TASK_FILE.test(values.file)) throw new Error('--file must be a task file name for denied');
+    event.agent = values.agent;
+    event.file = values.file;
+  } else {
+    if (!/^\d+$/.test(values.task ?? '')) throw new Error(`--task must be an integer for ${kind}`);
+    event.task = Number(values.task);
+    if (values.agent) event.agent = values.agent;
+  }
+  if (values.text !== undefined) event.text = values.text;
+  return event;
+}
+
+function main() {
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: { task: { type: 'string' }, agent: { type: 'string' }, file: { type: 'string' }, text: { type: 'string' } },
+  });
+  const [run, kind, ...extra] = positionals;
+  if (!run || !kind || extra.length > 0) throw new Error(USAGE);
+  if (!claims.validRunDir(run)) throw new Error(`${run} is not a run folder: it must be an absolute path ending in .run`);
+  if (kind !== 'denied' && !events.ORCHESTRATOR_KINDS.includes(kind)) throw new Error(`${kind} is not a kind this command writes`);
+  const event = buildEvent(kind, values);
+  fs.mkdirSync(run, { recursive: true });
+  events.appendEvent(run, event);
+}
+
+try {
+  main();
+} catch (err) {
+  process.stderr.write(`orch-event: ${err.message}\n`);
+  process.exitCode = 1;
+}
