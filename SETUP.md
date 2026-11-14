@@ -165,7 +165,7 @@ cleared or ended marks.
 
 `skills/orchestrate/` is a Claude Code skill that runs an approved plan with
 background workers, each in its own `wt` worktree. It calls `bin/transcript-index`,
-`bin/board-post` and `bin/orch-claim` from this clone. Link it from the clone:
+`bin/board-post`, `bin/orch-claim`, `bin/orch-event` and `bin/orch-report` from this clone. Link it from the clone:
 
 ```bash
 ln -s "$PWD/skills/orchestrate" ~/.claude/skills/orchestrate

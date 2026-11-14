@@ -43,3 +43,18 @@ test('the skill checks the plan branch after each merge', () => {
 test('the skill says a run needs auto mode', () => {
   assert.ok(text.includes('auto mode'));
 });
+
+test('the skill defines EVENT and REPORT', () => {
+  assert.match(text, /- `EVENT`: `<clone>\/bin\/orch-event`/);
+  assert.match(text, /- `REPORT`: `<clone>\/bin\/orch-report`/);
+});
+
+test('the skill logs each orchestrator event', () => {
+  for (const kind of ['ready', 'waiting', 'answered', 'steer', 'review-pass', 'review-fail', 'merged', 'dropped']) {
+    assert.ok(text.includes(`EVENT <run> ${kind}`), kind);
+  }
+});
+
+test('the feedback entry takes peak context and outside reads from the report', () => {
+  assert.ok(section(13).includes('REPORT <image>'));
+});
