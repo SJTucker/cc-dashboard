@@ -389,3 +389,16 @@ test('a visit to #orchestration after the tab was removed is sent back to #now',
     assert.equal(other.hash, '#' + tab);
   }
 });
+
+test('the steer button and message input name the task with its title', async () => {
+  const titled = detail({ waves: [{ n: 1, workers: [worker({ task: 3, title: 'Fix the regex' })] }] });
+  render.renderDetail(root, titled, { now: NOW, actions: actions() });
+  let p = steerParts();
+  assert.equal(p.open.getAttribute('aria-label'), 'Steer Task 3 (Fix the regex)');
+  await p.open.click();
+  assert.equal(p.input.getAttribute('aria-label'), 'Message to the Task 3 (Fix the regex) worker');
+  const bare = detail({ waves: [{ n: 1, workers: [worker({ task: 3, title: null })] }] });
+  render.renderDetail(root, bare, { now: NOW + 3000, actions: actions() });
+  p = steerParts();
+  assert.equal(p.open.getAttribute('aria-label'), 'Steer Task 3');
+});

@@ -11,6 +11,9 @@ import {
   reviewLabel, shortAgo, statusView, stepAge, stepLabel, steerError, steerView, switcherState, taskLabel, unseenPosts,
 } from './view.mjs';
 
+// `Task 3 (Fix the regex)`, or `Task 3` when the worker has no title.
+const taskWithTitle = (w) => (typeof w.title === 'string' && w.title ? `Task ${w.task} (${w.title})` : `Task ${w.task}`);
+
 // Brings the keyed children of parent in line with items: creates missing ones,
 // updates all, orders them as items are, removes the rest. A repeated key gets a
 // numeric suffix. Returns the nodes it created.
@@ -599,7 +602,7 @@ function buildSteer(r, getCard) {
   };
   open.addEventListener('click', () => {
     const card = getCard();
-    input.setAttribute('aria-label', `Message to the ${card._worker?.task != null ? `Task ${card._worker.task}` : 'task'} worker`);
+    input.setAttribute('aria-label', `Message to the ${card._worker?.task != null ? taskWithTitle(card._worker) : 'task'} worker`);
     input.placeholder = input.getAttribute('aria-label');
     showError('');
     card._sendError = null;
@@ -664,7 +667,7 @@ function updateSteer(card, w, animate) {
   // A late send error ends when the worker has a newer steer or can no longer be steered.
   if (card._sendError && (card._sendError.forId !== w.lastSteer?.id || !w.canSteer)) card._sendError = null;
   const view = card._sending ? { word: 'Sending…', tone: 'plain' } : (card._sendError ?? steerView(w.lastSteer));
-  s.open.setAttribute('aria-label', w.task == null ? 'Steer this worker' : `Steer Task ${w.task}`);
+  s.open.setAttribute('aria-label', w.task == null ? 'Steer this worker' : `Steer ${taskWithTitle(w)}`);
   swapText(s.status, view?.word ?? '', { animate });
   setClass(s.status, 'warn', view?.tone === 'warn');
   if (s.form.hidden) s.open.hidden = !w.canSteer || !card._live;
