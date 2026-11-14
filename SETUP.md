@@ -12,8 +12,10 @@ what each panel shows.
 - **`node` on the PATH that Claude Code sees.** The mod runs the scripts in `bin/`
   directly, through their `#!/usr/bin/env node` line. A clone keeps their exec bit.
 - **`git` on the PATH (optional).** The server runs `git rev-parse`, `git log HEAD` (then `git log --all` when HEAD has nothing in the window), `git log -g HEAD` (the reflog, for amends), `git diff --numstat`, `git patch-id` and `git check-attr` in each repo of a Bash `git commit` call to count the lines that commit added and removed. `.gitattributes` decides which files are generated or vendored and count 0. All of these only read. Without `git`, lines come from Edit and Write calls only. A lookup that times out is retried once per server start.
-- **`wt` (worktrunk), for the orchestrate skill only.** The skill creates every
-  worker's worktree with `wt switch --create`. The dashboard and the mod do not use it.
+- **`wt` (worktrunk), for the orchestrate, orch-grill and orch-plan skills only.**
+  The orchestrate skill creates every worker's worktree with `wt switch --create`.
+  `orch-grill` and `orch-plan` create the plan branch's worktree the same way. The
+  dashboard and the mod do not use it.
 - **Claude Code.** The mod uses Claude Code's function hooks, which are early access.
   No minimum version is known. The mod was last run on 2.1.294.
 
@@ -33,8 +35,9 @@ Then open **http://localhost:3600**.
 `bin/setup` checks for Node 22.13 or later, `npm` and `claude` on your PATH, and
 stops before changing anything if one is missing. Then it runs `npm install`,
 links `mod/` to `~/.claude/skills/cc-dashboard`, `skills/orchestrate/` to
-`~/.claude/skills/orchestrate`, and `agents/orch-worker.md` and
-`agents/orch-reviewer.md` to `~/.claude/agents/`, and runs `claude plugin validate`
+`~/.claude/skills/orchestrate`, `skills/orch-plan/` to `~/.claude/skills/orch-plan`,
+`skills/orch-grill/` to `~/.claude/skills/orch-grill`, and `agents/orch-worker.md`
+and `agents/orch-reviewer.md` to `~/.claude/agents/`, and runs `claude plugin validate`
 on the mod. `bin/setup` reads `CLAUDE_CONFIG_DIR` from the shell that runs it, so set
 it there to the same value Claude Code uses. It is safe to run again. When a file,
 folder or link already sits at the link path, `bin/setup` stops, names the path and
@@ -170,6 +173,8 @@ clone. Link it from the clone:
 
 ```bash
 ln -s "$PWD/skills/orchestrate" ~/.claude/skills/orchestrate
+ln -s "$PWD/skills/orch-plan" ~/.claude/skills/orch-plan
+ln -s "$PWD/skills/orch-grill" ~/.claude/skills/orch-grill
 mkdir -p ~/.claude/agents
 ln -s "$PWD/agents/orch-worker.md" ~/.claude/agents/orch-worker.md
 ln -s "$PWD/agents/orch-reviewer.md" ~/.claude/agents/orch-reviewer.md
@@ -177,13 +182,19 @@ ln -s "$PWD/agents/orch-reviewer.md" ~/.claude/agents/orch-reviewer.md
 
 `bin/setup` runs these lines. The skill starts its workers and reviewers as the
 `orch-worker` and `orch-reviewer` agent types, and a run cannot start without them.
+`skills/orch-plan/` and `skills/orch-grill/` are the planning skills that write
+the plan and spec the orchestrate skill reads. You start them with `/orch-plan <spec path>` and `/orch-grill`. Each
+creates the plan branch's worktree with `wt` as its first step.
 A run ends with a Fable review of the plan branch through the user-level `pr-review`
 skill. Without `pr-review`, that review falls back to `/code-review high`.
 
-- **`skills/orchestrate/` must stay inside the clone.** The skill finds `bin/`
-  through its own real path, two folders up. A copy of the folder elsewhere finds no
-  scripts.
+- **`skills/orchestrate/`, `skills/orch-plan/` and `skills/orch-grill/` must stay
+  inside the clone.** The orchestrate skill finds `bin/` through its own real path,
+  two folders up. A copy of that folder elsewhere finds no scripts. `bin/setup`
+  links the planning skills by absolute path, so a copy of them elsewhere is not
+  the one the links point at.
 - **Moving the clone breaks the links.** Remove `~/.claude/skills/orchestrate`,
+  `~/.claude/skills/orch-plan`, `~/.claude/skills/orch-grill`,
   `~/.claude/agents/orch-worker.md` and `~/.claude/agents/orch-reviewer.md` and run
   the `ln -s` lines again from the new location, or run `bin/setup` again after
   removing the links.
@@ -339,6 +350,8 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, run by the mod |
 | `<cfg>/skills/cc-dashboard` (a symlink to the clone's `mod/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/skills/orchestrate` (a symlink to the clone's `skills/orchestrate/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
+| `<cfg>/skills/orch-plan` (a symlink to the clone's `skills/orch-plan/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
+| `<cfg>/skills/orch-grill` (a symlink to the clone's `skills/orch-grill/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/agents/orch-worker.md` (a symlink to the clone's `agents/orch-worker.md`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/agents/orch-reviewer.md` (a symlink to the clone's `agents/orch-reviewer.md`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
@@ -416,6 +429,9 @@ of them.
   when you click Refresh. Claude Code then fetches your plan usage from Anthropic with
   its own login and rewrites that cache. No model is called and the dashboard reads no
   token. Set `CC_DASHBOARD_USAGE_REFRESH=off` to stop it.
+- **The `orch-grill` skill** publishes each question round as a private claude.ai
+  artifact and reads the answers from its comments. The round page loads its fonts
+  from `fonts.googleapis.com` in the viewer's browser.
 - **The mod** fetches `CHANGELOG.md` from `raw.githubusercontent.com/anthropics/claude-code`
   in an interactive session when the running Claude Code version has no verdict, or
   when you run `/backfill-updates`.

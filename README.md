@@ -155,7 +155,9 @@ The dashboard ships a Claude Code mod in `mod/`. SETUP.md has the steps to link 
 into your skills folder. Every Claude Code session started after that loads it.
 
 `skills/orchestrate` is a separate Claude Code skill that runs an approved plan with
-background workers. `bin/setup` links it too, and SETUP.md has the manual steps.
+background workers. `skills/orch-grill` and `skills/orch-plan` are the planning skills
+that write the spec and plan it reads. `bin/setup` links all three, and SETUP.md has the
+manual steps.
 
 After each main turn, and whenever a rate-limit window moves by 1%, the mod runs
 `bin/record-statusline`. When a session ends, it runs `bin/record-session-end`. It
@@ -706,6 +708,8 @@ bin/record-session-end Marks a session snapshot ended, from the mod's session-en
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
 bin/review-session     Lists ended sessions to review and records Haiku's suggestions in transcripts.db
 skills/orchestrate/    Claude Code skill that runs an approved plan with background workers, each in its own worktree; SETUP.md has the install steps
+skills/orch-grill/     Claude Code skill that grills a design, then writes the spec and the glossary and ADRs it settled
+skills/orch-plan/      Claude Code skill that writes a plan whose tasks carry the fields orchestrate reads
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
 public/apple-touch-icon.png  Home-screen icon, linked from index.html
