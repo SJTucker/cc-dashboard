@@ -4361,3 +4361,54 @@ test('a turn.start during the transcript lookup of a handoff leaves no status an
   expect(statuses).not.toContain(READY)
   expect(Object.keys(state.store).filter((key) => key.startsWith('handoff:'))).toEqual([])
 })
+
+const DEBUG_FILE = '/home/u/.claude/cc-dashboard/mod-debug/s1.jsonl'
+const debugLines = (writes: Record<string, string>) => (writes[DEBUG_FILE] ?? '').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+
+test('with CC_DASHBOARD_DEBUG=1 a refused edit is in the debug log', async ($, on) => {
+  const { state, writes, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' } })
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  await $.tool.call(editCall('/code/app/x.js', 'a1'))
+  await clock.advance(2000)
+  await clock.settle()
+  const lines = debugLines(writes)
+  expect(lines.find((l) => l.event === 'tool.call' && l.guard === 'denied')).toMatchObject({ agent: 'a1', tool: 'Edit' })
+  expect(lines.find((l) => l.event === 'tool.call' && l.guard === 'none')).toMatchObject({ agent: 'a1', tool: 'Bash' })
+})
+
+test('without CC_DASHBOARD_DEBUG nothing is written to mod-debug', async ($, on) => {
+  const { state, writes, clock } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  await $.tool.call(editCall('/code/app/x.js', 'a1'))
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.advance(2000)
+  await clock.settle()
+  expect(Object.keys(writes).filter((p) => p.includes('mod-debug'))).toEqual([])
+})
+
+test('debug lines within 2 seconds share one write', async ($, on) => {
+  const { writeLog, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' } })
+  await readStep($.turn.step(stepInput({ agentId: 'a1', index: 0 }) as never) as never)
+  await readStep($.turn.step(stepInput({ agentId: 'a1', index: 1 }) as never) as never)
+  await clock.advance(2000)
+  await clock.settle()
+  const writesToDebug = writeLog.filter((w) => w.path === DEBUG_FILE)
+  expect(writesToDebug).toHaveLength(1)
+  const lines = writesToDebug[0]!.text.split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  expect(lines.filter((l) => l.event === 'turn.step')).toHaveLength(2)
+  expect(lines[0]).toMatchObject({ agent: 'a1', model: 'claude-haiku-4-5', input: 2, cacheRead: 33650, cacheWrite: 3649, output: 163 })
+})
+
+test('session.end flushes the debug buffer', async ($, on) => {
+  const { writes, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' } })
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await $.session.end({ reason: 'other', sessionId: 's1' } as never)
+  await clock.settle()
+  const lines = debugLines(writes)
+  expect(lines.some((l) => l.event === 'turn.step')).toBe(true)
+  expect(lines.some((l) => l.event === 'session.end' && l.reason === 'other')).toBe(true)
+})
