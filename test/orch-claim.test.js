@@ -54,6 +54,10 @@ test('--add refuses malformed JSON', (t) => {
 test('--add review refuses a task without implementer.transcript', (t) => {
   const run = runIn(t);
   assert.equal(claim([run, '--add', 'review'], input(3)).status, 1);
+  const empty = claim([run, '--add', 'review'], input(3, { implementer: { agentId: 'a1', transcript: '' } }));
+  assert.equal(empty.status, 1);
+  assert.match(empty.stderr, /implementer\.transcript/);
+  assert.equal(fs.existsSync(path.join(run, 'pending', 'review')) && fs.readdirSync(path.join(run, 'pending', 'review')).length, false);
   const ok = claim([run, '--add', 'review'], input(3, { implementer: { agentId: 'a1', transcript: '/t/a.jsonl' } }));
   assert.equal(ok.status, 0, ok.stderr);
   assert.equal(JSON.parse(fs.readFileSync(path.join(run, 'pending', 'review', ok.stdout.trim()), 'utf8')).kind, 'review');
@@ -65,6 +69,10 @@ test('--add accepts task 0 with notes, and sets attempt to 1 when absent', (t) =
   delete body.attempt;
   const r = claim([run, '--add', 'work'], JSON.stringify({ ...body, notes: 'fix shared code' }));
   assert.equal(r.stdout, '0001-t0-a1.json\n');
+  assert.equal(r.status, 0, r.stderr);
+  const written = JSON.parse(fs.readFileSync(path.join(run, 'pending', 'work', '0001-t0-a1.json'), 'utf8'));
+  assert.equal(written.attempt, 1);
+  assert.equal(written.notes, 'fix shared code');
 });
 
 test('<run> work prints the claim', (t) => {
