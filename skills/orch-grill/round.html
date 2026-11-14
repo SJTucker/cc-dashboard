@@ -64,7 +64,6 @@ textarea::placeholder { color: var(--faint) }
 #history { display: flex; flex-direction: column; gap: 8px }
 details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px }
 summary { cursor: pointer; padding: 12px 16px; font: 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
-.callrow { grid-template-columns: 56px minmax(0, 1.3fr) minmax(0, 1fr) 260px }
 .callhead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line) }
 .callhead .eyebrow { flex: 1 1 auto }
 .past { padding: 0 16px 16px; display: grid; grid-template-columns: 56px minmax(0, 1fr) minmax(0, 1fr); gap: 10px 20px; font-size: 14px; line-height: 1.45 }
@@ -267,7 +266,7 @@ function renderCalls() {
   document.getElementById('calls').hidden = !calls.length;
   host.replaceChildren();
   for (const c of calls) {
-    const row = el('div', 'row q callrow');
+    const row = el('div', 'row q');
     row.append(el('span', 'qid', c.id), el('span', 'rectext', c.call), el('span', 'why', c.why));
     const label = el('label', 'own', 'Overrule ' + c.id);
     const box = el('textarea');
