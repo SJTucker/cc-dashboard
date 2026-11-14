@@ -177,7 +177,7 @@ that task's `notes`, or in the image's "Updates" when it affects several tasks.
    once its dependencies have merged.
 
 `AskUserQuestion` stays fine before the first dispatch (sections 4 and 5) and in
-section 14, when no worker runs.
+section 14 once the fix worker's review has passed.
 
 A run needs auto mode. A background worker cannot show a permission prompt, so a
 tool call it is not allowed is denied without one. If the session is not in auto
@@ -514,6 +514,24 @@ The user reviews these across sessions before redesigning the image.
 
 ## 14. Finish
 
-After the last task merges, use superpowers:finishing-a-development-branch on the plan
-branch. Before that, run `REPORT <image>` and show the output to the user. The run
-folder stays beside the image, untracked, like the board.
+1. After the last task merges, start one subagent with
+   `subagent_type: "general-purpose"`, `model: "fable"`, `run_in_background: true`
+   and `description: "orchestrate final review"`. It needs the Agent tool, which
+   `orch-reviewer` does not have. Its prompt: run the `pr-review` skill with
+   `high <plan branch>`; there is no PR, and the base is `<base>`; work in the plan
+   branch's worktree and change no files; report the table. If `pr-review` is not
+   installed, run `/code-review high` on `<base>...<plan branch>` instead and verify
+   each finding by a trace or one test. The review runs in a subagent because it
+   reads the whole diff, and only its table returns to you. Arm no section 7 watch
+   for it. Its completion notification wakes you.
+2. When the table has no verified finding, skip this step. Otherwise start one
+   `"task": 0` worker in the plan branch's worktree. From section 9 it reuses only
+   the `"task": 0` task-file shape and the plan branch's worktree, and it needs no
+   user question first. Its `notes` carry the table, its `files` name the files the
+   findings cite, its `reviewer` is `opus`, and its `doneWhen` is the project's full
+   test command. It commits on the plan branch, with a watch and a review as
+   section 11 says. Nothing merges. The final review is not run a second time.
+3. Run `REPORT <image>` and show the output to the user. Then use
+   superpowers:finishing-a-development-branch on the plan branch.
+
+The run folder stays beside the image, untracked, like the board.

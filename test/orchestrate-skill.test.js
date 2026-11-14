@@ -18,7 +18,7 @@ function section(n) {
 test('the skill starts implementers and reviewers as the agent types', () => {
   assert.ok(text.includes('subagent_type: "orch-worker"'));
   assert.ok(text.includes('orch-reviewer'));
-  assert.ok(!text.includes('general-purpose'));
+  for (const n of [6, 11]) assert.ok(!section(n).includes('general-purpose'));
 });
 
 test('the worker message stays under 1,600 characters', () => {
@@ -81,4 +81,11 @@ test('the skill raises a large code diff to an Opus reviewer', () => {
   const eleven = section(11).replace(/\s+/g, ' ');
   assert.ok(eleven.includes('300'));
   assert.ok(eleven.includes("':(exclude)*.md'"));
+});
+
+test('the skill ends a run with a Fable review of the plan branch', () => {
+  const fourteen = section(14).replace(/\s+/g, ' ');
+  for (const s of ['pr-review', 'model: "fable"', 'subagent_type: "general-purpose"', '/code-review high', '"task": 0']) {
+    assert.ok(fourteen.includes(s), s);
+  }
 });

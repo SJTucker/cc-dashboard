@@ -177,6 +177,8 @@ ln -s "$PWD/agents/orch-reviewer.md" ~/.claude/agents/orch-reviewer.md
 
 `bin/setup` runs these lines. The skill starts its workers and reviewers as the
 `orch-worker` and `orch-reviewer` agent types, and a run cannot start without them.
+A run ends with a Fable review of the plan branch through the user-level `pr-review`
+skill. Without `pr-review`, that review falls back to `/code-review high`.
 
 - **`skills/orchestrate/` must stay inside the clone.** The skill finds `bin/`
   through its own real path, two folders up. A copy of the folder elsewhere finds no
