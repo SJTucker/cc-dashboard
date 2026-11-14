@@ -1,6 +1,6 @@
 #!/bin/sh
-# Takes a fresh clone to installed dependencies, a linked, validated mod and a linked
-# orchestrate skill. It runs the steps in SETUP.md, so a change to those steps
+# Takes a fresh clone to installed dependencies, a linked, validated mod, a linked
+# orchestrate skill and the two linked orchestrate agent files. It runs the steps in SETUP.md, so a change to those steps
 # changes this script too.
 # Preflight changes nothing on disk, so a failed check leaves nothing half done.
 # It does not start the server or edit settings.json.
@@ -11,6 +11,7 @@ unset CDPATH
 clone=$(cd "$(dirname "$0")/.." && pwd -P)
 mod="$clone/mod"
 skill="$clone/skills/orchestrate"
+agents="$clone/agents"
 
 # <cfg> as lib/config-dir.js resolves it: a leading ~ is expanded, empty is unset.
 case "${CLAUDE_CONFIG_DIR:-}" in
@@ -20,6 +21,8 @@ case "${CLAUDE_CONFIG_DIR:-}" in
 esac
 link="$cfg/skills/cc-dashboard"
 skill_link="$cfg/skills/orchestrate"
+worker_link="$cfg/agents/orch-worker.md"
+reviewer_link="$cfg/agents/orch-reviewer.md"
 
 # Each step line prints as it happens and is also kept for the summary at the end.
 results=
@@ -68,7 +71,12 @@ check_link() {
   if [ -L "$1" ]; then
     target=$(readlink "$1")
     # cd from the link's folder so a relative target resolves the way the link does.
-    resolved=$(cd "$(dirname "$1")" 2>/dev/null && cd "$target" 2>/dev/null && pwd -P)
+    # A file target resolves to its physical parent folder plus its base name.
+    if [ -f "$1" ]; then
+      resolved=$(cd "$(dirname "$1")" 2>/dev/null && cd "$(dirname "$target")" 2>/dev/null && printf '%s/%s' "$(pwd -P)" "$(basename "$target")")
+    else
+      resolved=$(cd "$(dirname "$1")" 2>/dev/null && cd "$target" 2>/dev/null && pwd -P)
+    fi
     if [ "$resolved" = "$2" ]; then
       exists=yes
     else
@@ -89,7 +97,7 @@ make_link() {
   if [ "$3" = yes ]; then
     ok "$1 already points at $2"
   else
-    mkdir -p "$cfg/skills" || stop "could not create $cfg/skills"
+    mkdir -p "$(dirname "$1")" || stop "could not create $(dirname "$1")"
     ln -s "$2" "$1" || stop "could not create $1"
     ok "linked $1 -> $2"
   fi
@@ -99,6 +107,10 @@ check_link "$link" "$mod"
 link_exists=$exists
 check_link "$skill_link" "$skill"
 skill_link_exists=$exists
+check_link "$worker_link" "$agents/orch-worker.md"
+worker_link_exists=$exists
+check_link "$reviewer_link" "$agents/orch-reviewer.md"
+reviewer_link_exists=$exists
 
 # Steps
 
@@ -107,6 +119,8 @@ ok "npm install"
 
 make_link "$link" "$mod" "$link_exists"
 make_link "$skill_link" "$skill" "$skill_link_exists"
+make_link "$worker_link" "$agents/orch-worker.md" "$worker_link_exists"
+make_link "$reviewer_link" "$agents/orch-reviewer.md" "$reviewer_link_exists"
 
 status=0
 if claude plugin validate "$mod"; then
