@@ -5,6 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { tmpDir } = require('./helpers');
+const { parseEvents } = require('../lib/orchestrations/events');
 const {
   addTask, claimNext, release, readClaimed, status, formatClaim, claimsInTranscript, validRunDir, runDirOf, TASK_FILE,
 } = require('../lib/orchestrations/claims');
@@ -208,4 +209,35 @@ test('a claimer that dies after link leaves an unstamped claim, the next claimer
   assert.deepEqual(s.work, ['0001-t1-a1.json']);
   assert.deepEqual(s.unstamped, []);
   assert.equal(claimNext(run, 'work').file, '0001-t1-a1.json');
+});
+
+function eventsOf(run) {
+  return parseEvents(fs.readFileSync(path.join(run, 'events.jsonl'), 'utf8'));
+}
+
+test('addTask appends an added event', (t) => {
+  const run = runIn(t);
+  addTask(run, 'work', task(3));
+  const events = eventsOf(run);
+  assert.equal(events.length, 1);
+  const { t: stamp, ...rest } = events[0];
+  assert.equal(typeof stamp, 'string');
+  assert.deepEqual(rest, { kind: 'added', file: '0001-t3-a1.json', task: 3, attempt: 1, queue: 'work' });
+});
+
+test('release appends a released event', (t) => {
+  const run = runIn(t);
+  addTask(run, 'work', task(3));
+  const { file } = claimNext(run, 'work');
+  release(run, file);
+  const { t: stamp, ...last } = eventsOf(run).at(-1);
+  assert.equal(typeof stamp, 'string');
+  assert.deepEqual(last, { kind: 'released', file, task: 3 });
+});
+
+test('claimNext appends nothing', (t) => {
+  const run = runIn(t);
+  addTask(run, 'work', task(3));
+  claimNext(run, 'work');
+  assert.deepEqual(eventsOf(run).map((e) => e.kind), ['added']);
 });
