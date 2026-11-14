@@ -222,7 +222,7 @@ test('addTask appends an added event', (t) => {
   assert.equal(events.length, 1);
   const { t: stamp, ...rest } = events[0];
   assert.equal(typeof stamp, 'string');
-  assert.deepEqual(rest, { kind: 'added', file: '0001-t3-a1.json', task: 3, attempt: 1, queue: 'work' });
+  assert.deepEqual(rest, { kind: 'added', file: '0001-t3-a1.json', task: 3, title: 'Parse the field', attempt: 1, queue: 'work' });
 });
 
 test('release appends a released event', (t) => {
