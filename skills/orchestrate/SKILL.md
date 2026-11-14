@@ -162,6 +162,10 @@ that task's `notes`, or in the image's "Updates" when it affects several tasks.
 `AskUserQuestion` stays fine before the first dispatch (sections 4 and 5) and in
 section 14, when no worker runs.
 
+A run needs auto mode. A background worker cannot show a permission prompt, so a
+tool call it is not allowed is denied without one. If the session is not in auto
+mode, ask the user to switch before the first dispatch.
+
 Show the user the dependency list in one short list before dispatching. Create the
 plan branch if it does not exist, with the name and base the plan's Global
 Constraints give. When the plan names no base, use the base the project's
@@ -215,7 +219,7 @@ Read <image> in full, then every file it lists under "Read before starting", in 
 If you find something that affects work beyond your task (a fact that contradicts the image or plan, a problem in shared code, a name or interface other tasks depend on), post it and keep going: <POST> <board> --from "Task <N>" --title "<one line>" --body "<details>", with <N> your task's number. If it blocks your task, stop and report instead.
 A task that looks too large or too hard does not block it: finish the part you can, commit it, and end your report with how you would split the rest.
 If the image or the plan contradicts the code, stop and report the contradiction instead of guessing.
-Commit on your branch with no attribution trailer. End your report with: files changed; the task's test command and its real output, failing before your change and passing after, pasted verbatim; anything you were unsure of; which parts of your starting context you used, and what you needed that was not there.
+Commit on your branch with no attribution trailer. End your report with: files changed; the task's test command and its real output, failing before your change and passing after, pasted verbatim; anything you were unsure of; if you stopped before finishing, what you tried; which parts of your starting context you used, and what you needed that was not there.
 ```
 
 Keep the message under 1,600 characters, not counting the absolute paths in it. Never
@@ -239,9 +243,14 @@ For each ready task, in this order:
    {"task": 1, "title": "...", "plan": "<plan path>", "worktree": "<path>", "branch": "<branch>", "files": ["..."], "doneWhen": "...", "sections": ["..."]}
    EOF
    ```
-3. Start the worker with the Agent tool: `subagent_type: "general-purpose"`,
+3. Start the worker with the Agent tool: `subagent_type: "orch-worker"`,
    `model: "sonnet"`, `run_in_background: true`, `description: "orchestrate worker"`
    (the same for every worker), and the fixed message as the prompt.
+
+   If the Agent tool refuses `orch-worker` or `orch-reviewer` as an unknown type,
+   dispatch nothing more, mark the task waiting, and ask the user to run `bin/setup`
+   from the clone. Never fall back to the default agent type, because the cache prefix and
+   the tool list both change.
 
 Send one `Agent` call per message. After each `Agent` call, the next message arms
 that agent's watch (section 7), then adds the next task and starts the next agent.
@@ -417,7 +426,7 @@ Check how the work was done, reading the implementer's work only through `<TI> <
 Report pass, or each problem with file, line and why.
 ```
 
-Every reviewer's Agent call uses `general-purpose`, `model: "sonnet"`,
+Every reviewer's Agent call uses `subagent_type: "orch-reviewer"`, `model: "sonnet"`,
 `run_in_background: true` and `description: "orchestrate reviewer"`. Start reviewers
 one per message, like workers. A relaunched implementer gets a new work task with
 the next `attempt` and the review findings in `notes`.
@@ -438,8 +447,10 @@ B: relaunch B with the output in `notes`.
 ## 12. After each merge
 
 Add to the image's "Updates" section what the merge changed that later tasks
-need: new names, moved files, board posts. Then dispatch every task that is now
-ready (section 6).
+need: new names, moved files, board posts. Then run the merged task's `doneWhen`
+command in the plan branch's worktree. If it fails, treat the output like a failed
+review of that task: relaunch it with the output in `notes`. Then dispatch every task
+that is now ready (section 6).
 
 ## 13. Feedback
 
