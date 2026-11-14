@@ -64,6 +64,9 @@ textarea::placeholder { color: var(--faint) }
 #history { display: flex; flex-direction: column; gap: 8px }
 details { background: var(--surface); border: 1px solid var(--line); border-radius: 10px }
 summary { cursor: pointer; padding: 12px 16px; font: 12px var(--mono); letter-spacing: .08em; text-transform: uppercase; color: var(--muted) }
+.callrow { grid-template-columns: 56px minmax(0, 1.3fr) minmax(0, 1fr) 260px }
+.callhead { display: flex; flex-wrap: wrap; align-items: center; gap: 12px; padding: 12px 20px; border-bottom: 1px solid var(--line) }
+.callhead .eyebrow { flex: 1 1 auto }
 .past { padding: 0 16px 16px; display: grid; grid-template-columns: 56px minmax(0, 1fr) minmax(0, 1fr); gap: 10px 20px; font-size: 14px; line-height: 1.45 }
 .past span { min-width: 0; white-space: pre-line }
 .past .a { color: var(--fg-2) }
@@ -85,6 +88,13 @@ summary { cursor: pointer; padding: 12px 16px; font: 12px var(--mono); letter-sp
       <div class="row head"><span>#</span><span>Question</span><span>Claude recommends</span><span>Your answer</span></div>
     </div>
   </div>
+  <section id="calls" class="sheet" aria-label="Claude's calls" hidden>
+    <div class="callhead">
+      <p class="eyebrow">My calls: accepted unless you overrule</p>
+      <button type="button" class="btn" id="accept-calls">Accept all calls</button>
+    </div>
+    <div class="sheet-inner" id="calls-list"></div>
+  </section>
   <div class="actions">
     <span class="count"></span>
     <button type="button" class="btn primary submit" id="submit-bottom">Submit round</button>
@@ -114,6 +124,9 @@ summary { cursor: pointer; padding: 12px 16px; font: 12px var(--mono); letter-sp
       "why": "Why Claude recommends it."
     }
   ],
+  "calls": [
+    { "id": "C1", "call": "A decision Claude made without asking.", "why": "One line on why it is safe to decide." }
+  ],
   "history": []
 }
 </script>
@@ -121,6 +134,8 @@ summary { cursor: pointer; padding: 12px 16px; font: 12px var(--mono); letter-sp
 <script>
 const data = JSON.parse(document.getElementById('grill-data').textContent);
 const answers = {};
+const overrules = {};
+const calls = data.calls || [];
 const MAX_BYTES = 4000;
 let comments = null;
 let sent = false;
@@ -156,7 +171,11 @@ const answerLine = (q) => {
   return q.id + ' own: ' + a.text.trim();
 };
 
-const reply = () => ['Grill round ' + data.round + ' answers'].concat(data.questions.map(answerLine)).join('\n');
+const overruleLines = () => calls
+  .filter((c) => (overrules[c.id] || '').trim() !== '')
+  .map((c) => c.id + ' overrule: ' + overrules[c.id].trim().replace(/\s+/g, ' '));
+
+const reply = () => ['Grill round ' + data.round + ' answers'].concat(data.questions.map(answerLine), overruleLines()).join('\n');
 
 const setSubmitDisabled = (off) => {
   document.querySelectorAll('.submit').forEach((b) => { b.disabled = off; });
@@ -243,6 +262,28 @@ function renderQuestion(q) {
   return wrap;
 }
 
+function renderCalls() {
+  const host = document.getElementById('calls-list');
+  document.getElementById('calls').hidden = !calls.length;
+  host.replaceChildren();
+  for (const c of calls) {
+    const row = el('div', 'row q callrow');
+    row.append(el('span', 'qid', c.id), el('span', 'rectext', c.call), el('span', 'why', c.why));
+    const label = el('label', 'own', 'Overrule ' + c.id);
+    const box = el('textarea');
+    box.id = c.id + '-overrule';
+    box.rows = 2;
+    box.disabled = sent;
+    box.placeholder = 'Leave empty to accept';
+    box.value = overrules[c.id] || '';
+    box.addEventListener('input', () => { overrules[c.id] = box.value; });
+    label.append(box);
+    row.append(label);
+    host.append(row);
+  }
+  document.getElementById('accept-calls').disabled = sent;
+}
+
 function updateHeader() {
   const done = data.questions.filter(isAnswered).length;
   document.querySelectorAll('.count').forEach((n) => { n.textContent = done + ' of ' + data.questions.length + ' answered'; });
@@ -257,9 +298,10 @@ function render() {
   }
   for (const q of data.questions) sheet.append(renderQuestion(q));
   updateHeader();
+  renderCalls();
   const none = !data.questions.length;
   document.getElementById('accept-all').disabled = sent || none;
-  setSubmitDisabled(sent || none);
+  setSubmitDisabled(sent || (none && !calls.length));
   if (focused && document.getElementById(focused)) document.getElementById(focused).focus();
 }
 
@@ -270,7 +312,8 @@ function renderHistory() {
     d.append(el('summary', null, 'Round ' + past.round + ' · ' + past.items.length + ' decisions'));
     const list = el('div', 'past');
     for (const item of past.items) {
-      list.append(el('span', 'qid', item.id), el('span', null, item.title), el('span', 'a', item.answer));
+      const mark = item.by === 'claude' ? "Claude's call: " : '';
+      list.append(el('span', 'qid', item.id), el('span', null, item.title), el('span', 'a', mark + item.answer));
     }
     d.append(list);
     host.append(d);
@@ -318,6 +361,10 @@ document.getElementById('eyebrow').textContent = 'Grill · Round ' + data.round;
 document.getElementById('topic').textContent = data.topic;
 document.getElementById('accept-all').addEventListener('click', () => {
   for (const q of data.questions) if (!answers[q.id] || !answers[q.id].mode) answers[q.id] = { mode: 'accept' };
+  render();
+});
+document.getElementById('accept-calls').addEventListener('click', () => {
+  for (const c of calls) overrules[c.id] = '';
   render();
 });
 document.querySelectorAll('.submit').forEach((b) => b.addEventListener('click', submit));
