@@ -101,6 +101,16 @@ test('agent cost, peak context and cache read share come from steps', () => {
   assert.equal(a.file, '0001-t2-a1.json');
 });
 
+test('an agent with a step on an unknown model gets a null cost, and run.cost leaves that agent out', () => {
+  const ok = { model: MODEL, t: T0 + MIN, input: 100, cacheRead: 900, cacheWrite: 0, output: 50 };
+  const bad = { model: 'not-a-model', t: T0 + 2 * MIN, input: 100, cacheRead: 0, cacheWrite: 0, output: 50 };
+  const r = build(CLAIM, { steps: { a1: [ok, bad] }, reads: { a1: [] } });
+  assert.equal(agent(r, 'a1').cost, null);
+  assert.equal(agent(r, 'a1').peakContext, 1000);
+  assert.equal(r.run.cost, null);
+  assert.match(renderReport(r), /n\/a/);
+});
+
 test('read outside the image lists only files the image text does not name', () => {
   const r = build(CLAIM, { reads: { a1: ['/w/lib/a.js', '/w/lib/b.js'] }, imageText: 'Edit lib/a.js first.' });
   assert.deepEqual(agent(r, 'a1').readOutsideImage, ['/w/lib/b.js']);
