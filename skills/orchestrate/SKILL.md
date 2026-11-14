@@ -31,6 +31,8 @@ Paths used below:
 - `TI`: `<clone>/bin/transcript-index`.
 - `POST`: `<clone>/bin/board-post`.
 - `CLAIM`: `<clone>/bin/orch-claim`.
+- `EVENT`: `<clone>/bin/orch-event`.
+- `REPORT`: `<clone>/bin/orch-report`.
 
 Never read a worker transcript raw: one line can hold a megabyte. Use the index
 (`TI <path>`), `TI <path> --steps <n>`, or `sed -n 'A,Bp' <path> | cut -c1-400` on
@@ -125,6 +127,14 @@ or the task is dropped. A task is **waiting** from the moment a question about i
 goes to the user until the user answers. A task that consumes from a waiting task
 is waiting too. A waiting task is not ready.
 
+Log each change of state to the run's event log, which `REPORT` reads at the end:
+
+- When a task becomes ready, run `EVENT <run> ready --task <N>`.
+- When a question goes to the user, run
+  `EVENT <run> waiting --task <N> --text "<question>"` for each task it makes waiting.
+- When the user answers, run `EVENT <run> answered --task <N>` for each of those tasks.
+- When a task is dropped, run `EVENT <run> dropped --task <N> --text "<why>"`.
+
 Flag any task whose prescribed fix you cannot prove closes the bug. Show the
 flagged tasks to the user with the dependency list. A flagged task is waiting
 until the user rules on it, and the other tasks are dispatched as usual.
@@ -196,6 +206,9 @@ Dispatch every ready task that fits under the limits in section 5, lowest task
 number first. Create a task's worktree only when the task is ready, because it must
 branch from the plan branch after its dependencies merge. The per-task steps below
 (worktree, `--add work`, Agent call, one Agent call per message) apply to each.
+When a task became ready at this moment, chain its `EVENT <run> ready --task <N>`
+onto the worktree command with `&&`, so it costs no extra tool call. `EVENT`
+creates the run folder, so this works before the first `--add`.
 
 Every worker of a run gets the same first message, and its task arrives after its
 shared reading through a claim queue. Claude Code caches a request only from an exact
@@ -403,6 +416,11 @@ A user row `You steered Task <N> from the dashboard: <text>` is a steer the user
 already delivered to the worker from the dashboard. Do not send a steer that
 contradicts it. If it affects later tasks, add it to "Updates".
 
+After each SendMessage steer, run
+`EVENT <run> steer --task <N> --agent <id> --text "<first 200 characters>"`.
+For a `You steered Task <N> from the dashboard` row, run
+`EVENT <run> steer --task <N> --text "dashboard: <first 200 characters>"`.
+
 ## 11. Review and merge
 
 When a worker reports, start a reviewer worker the same way: add a review task
@@ -431,11 +449,16 @@ Every reviewer's Agent call uses `subagent_type: "orch-reviewer"`, `model: "sonn
 one per message, like workers. A relaunched implementer gets a new work task with
 the next `attempt` and the review findings in `notes`.
 
-Read the whole review. When it fails, steer or relaunch the implementer with the
-findings. When it passes, merge the worker's branch into the plan branch. With `<N>` the task in the claimed file of the worker being merged, check
-`git merge-base --is-ancestor <plan branch>-t<N> <plan branch>`, then run
-`wt remove -D <plan branch>-t<N>`. Without `-D`, `wt` keeps the branch, because
-it checks merges against the default branch, not the plan branch.
+Read the whole review. Then run `EVENT <run> review-pass --task <N>` or
+`EVENT <run> review-fail --task <N> --text "<problem count> problems"`. When it
+fails, steer or relaunch the implementer with the findings. When it passes, merge
+the worker's branch into the plan branch. With `<N>` the task in the claimed file
+of the worker being merged, run this check, which logs the merge when it holds:
+
+`git merge-base --is-ancestor <plan branch>-t<N> <plan branch> && EVENT <run> merged --task <N>`
+
+Then run `wt remove -D <plan branch>-t<N>`. Without `-D`, `wt` keeps the branch,
+because it checks merges against the default branch, not the plan branch.
 
 A merge conflict that is trivial, you resolve. Otherwise abort the merge, and
 re-add the later task, which is ready again once the merge lands.
@@ -454,13 +477,15 @@ that is now ready (section 6).
 
 ## 13. Feedback
 
+Take "Peak context" and "Read outside the image" from the task's agent rows in
+`REPORT <image>`. The "Used / missing" line stays the worker's own answer.
 For each worker, append one entry to `<feedback>`, with `<N>` and `<title>` from its claimed file:
 
 ```
 ## Task <N>: <title> (<date>)
 - Used / missing: <the worker's own answer, quoted>
-- Peak context: <tokens from the --steps header>
-- Read outside the image: <files on the --steps Read: line that the image did not list>
+- Peak context: <the task's agent rows in REPORT <image>>
+- Read outside the image: <the task's agent rows in REPORT <image>>
 ```
 
 The user reviews these across sessions before redesigning the image.
@@ -468,4 +493,5 @@ The user reviews these across sessions before redesigning the image.
 ## 14. Finish
 
 After the last task merges, use superpowers:finishing-a-development-branch on the plan
-branch. The run folder stays beside the image, untracked, like the board.
+branch. Before that, run `REPORT <image>` and show the output to the user. The run
+folder stays beside the image, untracked, like the board.

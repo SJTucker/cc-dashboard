@@ -1878,6 +1878,74 @@ test("a finished subagent's claim is forgotten", async ($, on) => {
   expect(state.editsRun).toEqual(['/code/app/x.js'])
 })
 
+const CLAIM_FILE = '/home/u/.claude/cc-dashboard/claims/a1.json'
+const CLAIM_JSON = JSON.stringify({ worktree: '/code/app.t1', run: '/r/x.run', file: '0001-t1-a1.json' })
+
+test('a claim writes the claim file', async ($, on) => {
+  const { state, writes } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  expect(JSON.parse(writes[CLAIM_FILE] ?? 'null')).toEqual({ worktree: '/code/app.t1', run: '/r/x.run', file: '0001-t1-a1.json' })
+})
+
+test('a refused edit runs orch-event denied', async ($, on) => {
+  const { state, ran, clock } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  await $.tool.call(editCall('/code/app/x.js', 'a1'))
+  await clock.settle()
+  const call = ran.find((r) => r.argv[0]?.endsWith('/orch-event'))
+  expect(call?.argv.slice(1)).toEqual(['/r/x.run', 'denied', '--agent', 'a1', '--file', '0001-t1-a1.json', '--text', '/code/app/x.js'])
+})
+
+test('the guard refuses after a reload from the claim file', async ($, on) => {
+  const { state } = world(on)
+  state.files[CLAIM_FILE] = CLAIM_JSON
+  const answer = (await $.tool.call(editCall('/code/app/x.js', 'a1'))) as { deny?: string }
+  expect(answer.deny).toContain('/code/app.t1')
+})
+
+test('a failed orch-event run never blocks the guard', async ($, on) => {
+  const { state, clock } = world(on, {}, 0, true)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  const denied = (await $.tool.call(editCall('/code/app/x.js', 'a1'))) as { deny?: string }
+  await clock.settle()
+  expect(denied.deny).toContain('/code/app.t1')
+  const inside = (await $.tool.call(editCall('/code/app.t1/x.js', 'a1'))) as { deny?: string, text?: string }
+  expect(inside.text).toBe('ok')
+})
+
+test('two outside edits at once after a reload are both refused', async ($, on) => {
+  const { state } = world(on)
+  state.files[CLAIM_FILE] = CLAIM_JSON
+  const first = $.tool.call(editCall('/code/app/x.js', 'a1'))
+  const second = $.tool.call(editCall('/code/app/y.js', 'a1'))
+  const answers = (await Promise.all([first, second])) as Array<{ deny?: string }>
+  expect(answers[0]?.deny).toContain('/code/app.t1')
+  expect(answers[1]?.deny).toContain('/code/app.t1')
+})
+
+test('an agent with no claim file reads it once', async ($, on) => {
+  const { readLog } = world(on)
+  await $.tool.call(editCall('/code/app/x.js', 'a2'))
+  await $.tool.call(editCall('/code/app/y.js', 'a2'))
+  expect(readLog.filter((p) => p.endsWith('/claims/a2.json'))).toHaveLength(1)
+})
+
+test('an ending agent with a claim empties its claim file, and one without writes nothing', async ($, on) => {
+  const { state, writes, clock } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  await $.turn.complete(turnEnd({ agentId: 'a1' }))
+  await $.turn.complete(turnEnd({ agentId: 'a2' }))
+  await clock.settle()
+  expect(writes[CLAIM_FILE]).toBe('')
+  expect(Object.keys(writes).filter((p) => p.endsWith('/claims/a2.json'))).toEqual([])
+})
+
 test('the main loop is never refused', async ($, on) => {
   const { state } = world(on)
   state.toolText = claimText('/code/app.t1')
@@ -4292,4 +4360,89 @@ test('a turn.start during the transcript lookup of a handoff leaves no status an
   await clock.settle()
   expect(statuses).not.toContain(READY)
   expect(Object.keys(state.store).filter((key) => key.startsWith('handoff:'))).toEqual([])
+})
+
+const DEBUG_FILE = '/home/u/.claude/cc-dashboard/mod-debug/s1.jsonl'
+const debugLines = (writes: Record<string, string>) => (writes[DEBUG_FILE] ?? '').split('\n').filter(Boolean).map((l) => JSON.parse(l))
+
+test('with CC_DASHBOARD_DEBUG=1 a refused edit is in the debug log', async ($, on) => {
+  const { state, writes, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' } })
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  await $.tool.call(editCall('/code/app/x.js', 'a1'))
+  await clock.advance(2000)
+  await clock.settle()
+  const lines = debugLines(writes)
+  expect(lines.find((l) => l.event === 'tool.call' && l.guard === 'denied')).toMatchObject({ agent: 'a1', tool: 'Edit' })
+  expect(lines.find((l) => l.event === 'tool.call' && l.guard === 'none')).toMatchObject({ agent: 'a1', tool: 'Bash' })
+})
+
+test('without CC_DASHBOARD_DEBUG nothing is written to mod-debug', async ($, on) => {
+  const { state, writes, clock } = world(on)
+  state.toolText = claimText('/code/app.t1')
+  await $.tool.call(CLAIM_CALL)
+  state.toolText = 'ok'
+  await $.tool.call(editCall('/code/app/x.js', 'a1'))
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.advance(2000)
+  await clock.settle()
+  expect(Object.keys(writes).filter((p) => p.includes('mod-debug'))).toEqual([])
+})
+
+test('debug lines within 2 seconds share one write', async ($, on) => {
+  const { writeLog, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' } })
+  await readStep($.turn.step(stepInput({ agentId: 'a1', index: 0 }) as never) as never)
+  await readStep($.turn.step(stepInput({ agentId: 'a1', index: 1 }) as never) as never)
+  await clock.advance(2000)
+  await clock.settle()
+  const writesToDebug = writeLog.filter((w) => w.path === DEBUG_FILE)
+  expect(writesToDebug).toHaveLength(1)
+  const lines = writesToDebug[0]!.text.split('\n').filter(Boolean).map((l) => JSON.parse(l))
+  expect(lines.filter((l) => l.event === 'turn.step')).toHaveLength(2)
+  expect(lines[0]).toMatchObject({ agent: 'a1', model: 'claude-haiku-4-5', input: 2, cacheRead: 33650, cacheWrite: 3649, output: 163 })
+})
+
+// The debug write takes 50 ms. session.end must not return before it lands, because a
+// claude -p process exits once session.end returns.
+async function endWithSlowWrite($: Parameters<Parameters<typeof test>[1]>[0], clock: { advance(ms: number): Promise<void> }) {
+  let returned = false
+  const ending = $.session.end({ reason: 'other', sessionId: 's1' } as never).then(() => { returned = true })
+  await clock.advance(10)
+  const early = returned
+  await clock.advance(100)
+  await ending
+  return early
+}
+
+test('session.end flushes the debug buffer before it returns', async ($, on) => {
+  const { writes, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' }, writeMs: Array(30).fill(50) })
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.advance(1)
+  const early = await endWithSlowWrite($, clock)
+  expect(early).toBe(false)
+  const lines = debugLines(writes)
+  expect(lines.some((l) => l.event === 'turn.step')).toBe(true)
+  expect(lines.some((l) => l.event === 'session.end' && l.reason === 'other')).toBe(true)
+})
+
+test('session.end of a non-interactive session flushes the debug buffer before it returns', async ($, on) => {
+  const { writes, clock } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' }, writeMs: Array(30).fill(50) })
+  await $.session.start({ ...start, isInteractive: false })
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await clock.advance(1)
+  const early = await endWithSlowWrite($, clock)
+  expect(early).toBe(false)
+  const lines = debugLines(writes)
+  expect(lines.some((l) => l.event === 'turn.step')).toBe(true)
+  expect(lines.some((l) => l.event === 'session.end')).toBe(true)
+})
+
+test('session.end drops the session debug state, so a later flush reads the file again', async ($, on) => {
+  const { readLog } = world(on, { env: { HOME: '/home/u', CC_DASHBOARD_DEBUG: '1' } })
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await $.session.end({ reason: 'other', sessionId: 's1' } as never)
+  await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
+  await $.session.end({ reason: 'other', sessionId: 's1' } as never)
+  expect(readLog.filter((p) => p === DEBUG_FILE)).toHaveLength(2)
 })

@@ -10,11 +10,36 @@ const CLAIMED_LINE = /^CLAIMED \S+/m
 // Copies WORKTREE in lib/orchestrations/parse.js, which a mod cannot require.
 const WORKTREE = /^Your worktree is (\S+?);/m
 
-// The worktree an orch-claim call returned, or null when the command is not a claim
-// or the result holds no claim.
-export function claimedWorktree(command: string, text: string): string | null {
+export type Claim = { worktree: string; run: string; file: string }
+
+// Captures the run folder, with or without quotes, after orch-claim.
+const CLAIM_RUN = /\borch-claim\s+(?:"([^"]+)"|'([^']+)'|(\S+))\s+(?:work|review)\b/
+const CLAIMED_FILE = /^CLAIMED (\S+)/m
+
+// The claim an orch-claim call returned (worktree, run folder, task file), or null
+// when the command is not a claim or the result holds no claim.
+export function claimedWorktree(command: string, text: string): Claim | null {
   if (!CLAIM_COMMAND.test(command) || !CLAIMED_LINE.test(text)) return null
-  return WORKTREE.exec(text)?.[1] ?? null
+  const worktree = WORKTREE.exec(text)?.[1]
+  const m = CLAIM_RUN.exec(command)
+  const run = m?.[1] ?? m?.[2] ?? m?.[3]
+  const file = CLAIMED_FILE.exec(text)?.[1]
+  return worktree && run && file ? { worktree, run, file } : null
+}
+
+// Reads the text of a claim file back into a claim. An empty, unparseable or
+// incomplete file is no claim.
+export function parseClaim(text: string | undefined): Claim | null {
+  if (!text) return null
+  try {
+    const c = JSON.parse(text)
+    if (typeof c?.worktree === 'string' && typeof c.run === 'string' && typeof c.file === 'string' && c.worktree && c.run && c.file) {
+      return { worktree: c.worktree, run: c.run, file: c.file }
+    }
+  } catch {
+    // an empty or half-written file
+  }
+  return null
 }
 
 function inside(path: string, root: string): boolean {

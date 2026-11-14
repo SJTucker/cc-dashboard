@@ -14,7 +14,9 @@ import type { AgentStep, HeadlessStep } from './steps'
 import { REPO_STEPS, documentResumePrompt, endFill, handoffDocument, handoffKind, handoffWaitMs, hourCacheExpiry, imageDocument, imageResumePrompt, indexPath, planHandoff, planImage, resumePrompt } from './handoff'
 import type { StepOutput } from './handoff'
 import { relayOnce } from './steer'
-import { claimedWorktree, guardReason, outsideWrite } from './guard'
+import { debugLine, debugOn, keepLast } from './debug'
+import { claimedWorktree, guardReason, outsideWrite, parseClaim } from './guard'
+import type { Claim } from './guard'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts
@@ -43,13 +45,15 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // The orchestrate skill writes reset-prompt/<session id>.txt, the line to send after a
 // /clear. On that session's end the mod reads it, and empties it because $.fs has no
 // delete. After a /clear it fills the next session's input box with the line.
-// The mod writes six formats itself with $.fs.write, under <config dir>/cc-dashboard/:
+// The mod writes eight formats itself with $.fs.write, under <config dir>/cc-dashboard/:
 //   activity/<session id>.json   the session's state. Read by lib/activity.js.
 //   agent-usage/<agent id>.json  each model request of a subagent (steps.ts). Read by lib/agent-steps.js.
 //   headless-usage/<session id>.json  each model request of a session with no transcript (steps.ts). Read by lib/headless-usage.js.
 //   changes/<session id>.json    the setup changes checkSetup found. Read by collectMarkers in lib/changes.js.
 //   setup/<name>.json            the stored copy of each watched setup file. Read back by checkSetup.
 //   limit-warnings.json          the dismissed plan limit levels. Read by every running session's mod.
+//   claims/<agent id>.json       the worktree, run folder and task file an orchestrate worker claimed. Read back by the mod after a reload, so the worktree guard keeps working.
+//   mod-debug/<session id>.jsonl  the mod's debug log, written only when CC_DASHBOARD_DEBUG=1. Nothing reads it.
 // Activity has one writer per session, which keeps a session's states in order, where a
 // script started per event can finish out of order. The server reads the first four
 // formats, and the CONTRACT block in register.test.ts holds a sample of each, which
@@ -131,7 +135,73 @@ async function scriptPath($: EngineInterface, name: string) {
 
 // Runs a bin/ script with args and stdin, and returns its exit code and output.
 async function spawn($: EngineInterface, name: string, args: string[], stdin: string, timeoutMs: number): Promise<{ exitCode: number; stdout: string; stderr: string }> {
-  return $.process.run([await scriptPath($, name), ...args], { stdin, timeoutMs })
+  const path = await scriptPath($, name)
+  // The clock is read only with the debug flag on, so the flag off adds no $ call.
+  const start = (await debugEnabled($)) ? await $.clock.now() : undefined
+  const result = await $.process.run([path, ...args], { stdin, timeoutMs })
+  if (start !== undefined) debug($, 'script', { name, exitCode: result.exitCode, ms: (await $.clock.now()) - start })
+  return result
+}
+
+// The debug log (CC_DASHBOARD_DEBUG=1). The flag is read with $.env.get on the first
+// call after a load, because no $ exists at module load. Lines are buffered by session
+// id and flushed at most every 2 seconds, and by session.end. flushDebug reads a
+// session's file once per module instance and then keeps the lines it holds in memory.
+let debugFlag: Promise<boolean> | undefined
+const debugBuffers = new Map<string, string[]>()
+const debugKept = new Map<string, string[]>()
+const debugFlushes = new Map<string, Promise<void>>()
+let debugTimer: Timer | undefined
+
+function debugEnabled($: EngineInterface): Promise<boolean> {
+  debugFlag ??= Promise.resolve($.env.get('CC_DASHBOARD_DEBUG')).then(debugOn, () => false)
+  return debugFlag
+}
+
+// Never throws. With the flag off it returns before any other $ call. A caller that
+// knows the session (session.end) passes its id, which the line is buffered under.
+async function debug($: EngineInterface, event: string, fields: Record<string, unknown>, sessionId?: string): Promise<void> {
+  try {
+    if (!(await debugEnabled($))) return
+    const id = sessionId ?? (await $.session.id())
+    const line = debugLine(await $.clock.now(), event, fields)
+    const buffer = debugBuffers.get(id)
+    if (buffer) buffer.push(line)
+    else debugBuffers.set(id, [line])
+    debugTimer ??= $.clock.after(2000, () => {
+      debugTimer = undefined
+      for (const sessionId of [...debugBuffers.keys()]) flushDebug($, sessionId)
+    })
+  } catch (err) {
+    logOnce($, `debug log failed (${errorName(err)})`)
+  }
+}
+
+// Appends the session's buffered lines to its debug file and keeps the last 2,000.
+// Flushes of one session run one after the other. Never rejects.
+function flushDebug($: EngineInterface, sessionId: string): Promise<void> {
+  const next = (debugFlushes.get(sessionId) ?? Promise.resolve()).then(async () => {
+    const buffered = debugBuffers.get(sessionId)
+    if (!buffered?.length || !SESSION_ID.test(sessionId)) return
+    debugBuffers.delete(sessionId)
+    try {
+      const dir = await configDir($)
+      if (!dir) return
+      const file = `${dir}/cc-dashboard/mod-debug/${sessionId}.jsonl`
+      let kept = debugKept.get(sessionId)
+      if (!kept) {
+        const text = await $.fs.read(file).then(String, () => '')
+        kept = text.split('\n').filter(Boolean)
+      }
+      kept = keepLast([...kept, ...buffered])
+      debugKept.set(sessionId, kept)
+      await $.fs.write(file, `${kept.join('\n')}\n`)
+    } catch (err) {
+      logOnce($, `debug log write failed (${errorName(err)})`)
+    }
+  })
+  debugFlushes.set(sessionId, next)
+  return next
 }
 
 // A bin/ script's fail() prints its own reason to stderr. An uncaught exception prints
@@ -594,22 +664,108 @@ function queueStep($: EngineInterface, agentId: string, step: AgentStep) {
   stepWrites.set(agentId, appendChain(stepWrites.get(agentId), () => recordStep($, agentId, step), (err) => logOnce($, `agent usage failed (${errorName(err)})`)))
 }
 
-// The worktree each subagent claimed with orch-claim, by agentId. A reload starts
-// the map empty, so a reload turns the guard off for workers already running.
-const claimedWorktrees = new Map<string, string>()
+// The claim each subagent made with orch-claim, by agentId. The mod also writes each
+// claim to <config dir>/cc-dashboard/claims/<agent id>.json. A reload starts this map
+// empty, so a tool call from an agent with no entry reads that file once per module
+// instance (claimLoads) and the guard keeps refusing edits outside the worktree.
+const claimedWorktrees = new Map<string, Claim>()
+const claimLoads = new Map<string, Promise<Claim | undefined>>()
+const AGENT_ID = /^[\w-]+$/
+
+async function claimFile($: EngineInterface, agentId: string) {
+  if (!AGENT_ID.test(agentId)) return null
+  const dir = await configDir($)
+  return dir ? `${dir}/cc-dashboard/claims/${agentId}.json` : null
+}
+
+// The claim of an agent this module instance has no entry for, from its claim file.
+// Reads the file the first time only. Every caller gets the same promise, so a second
+// tool call during the read waits for the claim. An empty or missing file is no claim.
+function loadClaim($: EngineInterface, agentId: string): Promise<Claim | undefined> {
+  const pending = claimLoads.get(agentId)
+  if (pending) return pending
+  const load = (async () => {
+    try {
+      const file = await claimFile($, agentId)
+      const claim = file ? parseClaim(await $.fs.read(file).then(String, () => undefined)) : null
+      if (claim) claimedWorktrees.set(agentId, claim)
+      return claim ?? undefined
+    } catch (err) {
+      logOnce($, `claim file read failed (${errorName(err)})`)
+      return undefined
+    }
+  })()
+  claimLoads.set(agentId, load)
+  return load
+}
+
+// Remembers a claim in memory and in its claim file. A failed write is logged and
+// the claim still holds in memory.
+async function saveClaim($: EngineInterface, agentId: string, claim: Claim) {
+  claimedWorktrees.set(agentId, claim)
+  claimLoads.set(agentId, Promise.resolve(claim))
+  try {
+    const file = await claimFile($, agentId)
+    if (file) await $.fs.write(file, JSON.stringify(claim))
+  } catch (err) {
+    logOnce($, `claim file write failed (${errorName(err)})`)
+  }
+}
+
+// Records a refused edit in the run's event log. The result is not awaited, and a
+// failure is logged, so the log never delays or changes the refusal.
+function reportDenied($: EngineInterface, claim: Claim, agentId: string, path: string) {
+  spawn($, 'orch-event', [claim.run, 'denied', '--agent', agentId, '--file', claim.file, '--text', path], '', 5000)
+    .catch((err) => logOnce($, `orch-event failed (${errorName(err)})`))
+}
 
 // Drops the agent's steps and its write chain once its last queued write settles.
 // A step queued before the chain settles replaces the chain, so this waits again on
 // the new one. A step queued after the entries are gone starts a new list from the file.
-function forgetAgentSteps(agentId: string) {
-  claimedWorktrees.delete(agentId)
+function forgetAgentSteps($: EngineInterface, agentId: string) {
+  claimLoads.delete(agentId)
+  if (claimedWorktrees.delete(agentId)) {
+    // $.fs has no delete, so the claim file is emptied. An empty file reads as no claim.
+    claimFile($, agentId)
+      .then((file) => {
+        if (file) return $.fs.write(file, '')
+      })
+      .catch((err) => logOnce($, `claim file write failed (${errorName(err)})`))
+  }
   const chain = stepWrites.get(agentId)
   if (!chain) return
   chain.finally(() => {
-    if (stepWrites.get(agentId) !== chain) return forgetAgentSteps(agentId)
+    if (stepWrites.get(agentId) !== chain) return forgetAgentSteps($, agentId)
     stepWrites.delete(agentId)
     agentSteps.delete(agentId)
   })
+}
+
+// The listed fields of an engine event that it carries, for a debug line.
+function present(e: object, keys: string[]): Record<string, unknown> {
+  const fields: Record<string, unknown> = {}
+  for (const key of keys) {
+    const value = (e as Record<string, unknown>)[key]
+    if (value !== undefined) fields[key] = value
+  }
+  return fields
+}
+
+// The worktree guard for one tool call of a subagent. Returns the agent's claim, from
+// memory or its claim file, and a deny reason when the call writes outside the
+// worktree. Logs the outcome to the debug log: 'denied', 'claim' (in memory),
+// 'claim-file' (loaded from the file) or 'none'.
+async function guardSubagent($: EngineInterface, agentId: string, tool: string, args: Record<string, unknown>) {
+  const held = claimedWorktrees.get(agentId)
+  const claim = held ?? (await loadClaim($, agentId))
+  const path = claim ? outsideWrite(tool, args, claim.worktree) : null
+  const guard = path ? 'denied' : !claim ? 'none' : held ? 'claim' : 'claim-file'
+  await debug($, 'tool.call', { agent: agentId, tool, guard })
+  if (claim && path) {
+    reportDenied($, claim, agentId, path)
+    return { claim, deny: guardReason(path, claim.worktree) }
+  }
+  return { claim, deny: undefined }
 }
 
 // Applies change to the session's headless record and writes the whole file. The
@@ -796,7 +952,7 @@ function stopSteerRelay() {
 // no activity for the id and returns, so it queues no write either. A write already
 // queued finds no state in writeActivity and writes nothing. A write already inside
 // fs.write finishes, and writeActivity does not record its text.
-function forgetSession(id: string) {
+function forgetSession($: EngineInterface, id: string) {
   endedSessions.delete(id)
   endedSessions.add(id)
   if (endedSessions.size > ENDED_SESSIONS_MAX) endedSessions.delete(endedSessions.values().next().value as string)
@@ -806,7 +962,7 @@ function forgetSession(id: string) {
   s?.writeTimer?.cancel()
   s?.handoffTimer?.cancel()
   s?.indexTimer?.cancel()
-  for (const agentId of s?.agentIds ?? []) forgetAgentSteps(agentId)
+  for (const agentId of s?.agentIds ?? []) forgetAgentSteps($, agentId)
   sessions.delete(id)
 }
 
@@ -1655,6 +1811,7 @@ export const register: Register = (on) => {
   on('session.start', async ($, e, next) => {
     try {
       const id = await $.session.id()
+      await debug($, 'session.start', present(e, ['source']))
       endedSessions.delete(id)
       stateOf(id).mode = { interactive: e.isInteractive, cwd: e.cwd }
       await $.command.register({
@@ -1765,7 +1922,14 @@ export const register: Register = (on) => {
     const handoff = peekState(e.sessionId)?.handoff
     const interactive = peekState(e.sessionId)?.mode?.interactive !== false
     const headlessWrite = headlessWrites.get(e.sessionId)
-    forgetSession(e.sessionId)
+    await debug($, 'session.end', present(e, ['reason']), e.sessionId)
+    // Awaited because a claude -p process exits once session.end returns, which would
+    // lose the buffered lines. flushDebug never rejects, and with the flag off the
+    // buffer is empty and it makes no $ call.
+    await flushDebug($, e.sessionId)
+    debugKept.delete(e.sessionId)
+    debugFlushes.delete(e.sessionId)
+    forgetSession($, e.sessionId)
     endSteerRelay($, e)
     if (!interactive) {
       // A claude -p process exits once session.end returns, so a queued headless write
@@ -1813,6 +1977,7 @@ export const register: Register = (on) => {
   // A turn that begins is working. turn.start has no agentId: a subagent's run raises
   // none.
   on('turn.start', async ($, e, next) => {
+    await debug($, 'turn.start', present(e, ['turnId']))
     endedSessions.delete(await $.session.id())
     if (!(await nonInteractive($))) await dropHandoff($)
     await track($, (a, now) => setState(a, 'working', now))
@@ -1825,13 +1990,14 @@ export const register: Register = (on) => {
   // it running, and the file is rewritten. A main-thread turn that ends arms the
   // handoff timer and queues the transcript index.
   on('turn.complete', async ($, e, next) => {
+    await debug($, 'turn.complete', { ...present(e, ['turnId']), ...(e.agentId ? { agent: e.agentId } : {}) })
     if (e.agentId) {
       const agentId = e.agentId
       const result = await next(e)
       await track($, (_a, _now, s) => {
         s.endedAgents.add(agentId)
       }, false)
-      forgetAgentSteps(agentId)
+      forgetAgentSteps($, agentId)
       return result
     }
     await track($, (a, now, s) => {
@@ -1868,6 +2034,15 @@ export const register: Register = (on) => {
     try {
       if (result.usage) {
         const id = await $.session.id()
+        const u = result.usage
+        await debug($, 'turn.step', {
+          ...(e.agentId ? { agent: e.agentId } : {}),
+          model: u.model,
+          input: u.input_tokens,
+          cacheRead: u.cache_read_input_tokens,
+          cacheWrite: u.cache_creation_input_tokens,
+          output: u.output_tokens,
+        })
         const mode = SESSION_ID.test(id) ? await headlessMode($, id) : undefined
         const now = await $.clock.now()
         // A headless session has no transcript rows for agent-usage to correct, so its
@@ -1900,16 +2075,13 @@ export const register: Register = (on) => {
     if (e.agentId) {
       const agentId = e.agentId
       const args = e as unknown as Record<string, unknown>
-      const tree = claimedWorktrees.get(agentId)
-      if (tree) {
-        const path = outsideWrite(e.tool, args, tree)
-        if (path) return { deny: guardReason(path, tree) }
-      }
+      const { claim, deny } = await guardSubagent($, agentId, e.tool, args)
+      if (deny) return { deny }
       try {
         const result = await next(e)
-        if (!tree && e.tool === 'Bash' && 'text' in result && typeof result.text === 'string') {
+        if (!claim && e.tool === 'Bash' && 'text' in result && typeof result.text === 'string') {
           const found = claimedWorktree(typeof args.command === 'string' ? args.command : '', result.text)
-          if (found) claimedWorktrees.set(agentId, found)
+          if (found) await saveClaim($, agentId, found)
         }
         return result
       } finally {
@@ -1937,6 +2109,7 @@ export const register: Register = (on) => {
   // file with the new subagent count.
   on('agent.spawn', async ($, e, next) => {
     const result = await next(e)
+    await debug($, 'agent.spawn', result.agentId ? { agent: result.agentId } : {})
     await track($, () => {}, false)
     return result
   })
