@@ -350,7 +350,7 @@ test('a dashboard note after a reset counts as a steer of a worker launched befo
   const workers = d.waves.flatMap((w) => w.workers);
   assert.equal(workers.length, 1);
   assert.equal(workers[0].steerCount, 1);
-  assert.ok(d.feed.some((f) => f.text === 'You steered Task 1'));
+  assert.ok(d.feed.some((f) => f.text === 'You steered Task 1 (Task 1)'));
 });
 
 test('a dashboard note is not mapped to a worker a later session launched', (t) => {
@@ -604,7 +604,7 @@ test('the feed names the claimed task for a watch whose description has another 
   install(config);
   const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 2, files: ['lib/b.js'], steps: working('lib/b.js'), monitorDescription: 'Task 1 worker' }] });
   const texts = detailOf(config, o.sessionId).feed.map((f) => f.text);
-  assert.ok(texts.includes('Watching Task 2'), JSON.stringify(texts));
+  assert.ok(texts.includes('Watching Task 2 (Task 2)'), JSON.stringify(texts));
   assert.ok(!texts.includes('Watching Task 1'), JSON.stringify(texts));
 });
 
@@ -617,7 +617,7 @@ test('the feed names the claimed task for a watch re-armed after a reset', (t) =
   const rearm = { type: 'assistant', sessionId: 'sess-b', timestamp: new Date().toISOString(), message: { role: 'assistant', content: [{ type: 'tool_use', id: 'toolu_rearm', name: 'Monitor', input: { description: 'Task 1 worker', command: `/c/bin/transcript-index ${workerFile} --watch --run ${a.runDir} --since-line 9` } }] } };
   fs.appendFileSync(b.transcript, JSON.stringify(rearm) + '\n');
   const d = createOrchestrations(config.configDir).detail('sess-a');
-  assert.equal(d.feed[0].text, 'Watching Task 2', JSON.stringify(d.feed.map((f) => f.text)));
+  assert.equal(d.feed[0].text, 'Watching Task 2 (Task 2)', JSON.stringify(d.feed.map((f) => f.text)));
 });
 
 test('planPath comes from the claimed task when the transcript names none', (t) => {

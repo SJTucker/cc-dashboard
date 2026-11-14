@@ -198,7 +198,7 @@ test('stepsOf drops the isMeta steer note, so the feed reads it from parsed.stee
 
 test('the steer note shows in the feed as You steered', () => {
   const { lines } = noteLines();
-  const entry = actionFeed(lines, parseOrchestrator(lines)).find((e) => e.text === 'You steered Task 2');
+  const entry = actionFeed(lines, parseOrchestrator(lines)).find((e) => e.text === 'You steered Task 2 (Task 2)');
   assert.ok(entry);
   assert.equal(entry.glyph, '↗');
   assert.equal(entry.detail, 'Stop after this file');
