@@ -6,20 +6,22 @@
 //
 //   orch-event <run> <kind> --task <N> [--agent <id>] [--text <text>]
 //   orch-event <run> denied --agent <id> --file <task file> [--text <path>]
+//   orch-event <run> final-review --agent <id> [--text <text>]
 //
-// <kind> is ready, waiting, answered, steer, review-pass, review-fail, merged or
-// dropped, written by the orchestrator, or denied, written by the mod when its
-// worktree guard refuses an edit. <run> is the run folder, an absolute path ending
-// in .run. It is created when missing, because the first events come before the
-// first `orch-claim --add`. Prints nothing and exits 0. Any problem prints
-// `orch-event: <reason>` on stderr and exits 1.
+// <kind> is ready, waiting, answered, steer, review-pass, review-fail, merged,
+// dropped or final-review, written by the orchestrator (final-review takes no
+// --task: it names the agent that reviews the whole branch), or denied, written
+// by the mod when its worktree guard refuses an edit. <run> is the run folder,
+// an absolute path ending in .run. It is created when missing, because the
+// first events come before the first `orch-claim --add`. Prints nothing and
+// exits 0. Any problem prints `orch-event: <reason>` on stderr and exits 1.
 
 const fs = require('fs');
 const { parseArgs } = require('util');
 const claims = require('../lib/orchestrations/claims');
 const events = require('../lib/orchestrations/events');
 
-const USAGE = 'usage: orch-event <run> <kind> --task <N> [--agent <id>] [--text <text>] | <run> denied --agent <id> --file <task file> [--text <path>]';
+const USAGE = 'usage: orch-event <run> <kind> --task <N> [--agent <id>] [--text <text>] | <run> denied --agent <id> --file <task file> [--text <path>] | <run> final-review --agent <id> [--text <text>]';
 
 function buildEvent(kind, values) {
   const event = { kind };
@@ -28,6 +30,9 @@ function buildEvent(kind, values) {
     if (!values.file || !claims.TASK_FILE.test(values.file)) throw new Error('--file must be a task file name for denied');
     event.agent = values.agent;
     event.file = values.file;
+  } else if (kind === 'final-review') {
+    if (!values.agent) throw new Error('--agent is required for final-review');
+    event.agent = values.agent;
   } else {
     if (!/^\d+$/.test(values.task ?? '')) throw new Error(`--task must be an integer for ${kind}`);
     event.task = Number(values.task);

@@ -90,6 +90,14 @@ test('the skill ends a run with a Fable review of the plan branch', () => {
   }
 });
 
+test('the skill logs the final review and runs the misses report', () => {
+  const fourteen = section(14).replace(/\s+/g, ' ');
+  assert.ok(fourteen.includes('EVENT <run> final-review --agent'));
+  assert.ok(fourteen.includes('MISSES <image> --branch <plan branch> --base <base>'));
+  assert.ok(!fourteen.includes('no row for the final review agent'));
+  assert.match(text, /- `MISSES`: `<clone>\/bin\/orch-misses`/);
+});
+
 test('an Opus worker fixes the problems passing reviews left before the Fable review starts', () => {
   assert.ok(section(11).includes('<leftovers>'));
   const fourteen = section(14).replace(/\s+/g, ' ');
@@ -162,6 +170,18 @@ test('the image template names the glossary and the spec\'s decisions', () => {
   const template = fs.readFileSync(path.join(__dirname, '..', 'skills', 'orchestrate', 'image-template.md'), 'utf8');
   assert.ok(template.includes('GLOSSARY.md'));
   assert.ok(template.includes('Decisions section'));
+});
+
+test('the run review doc names only bin tools that exist', () => {
+  const doc = fs.readFileSync(path.join(__dirname, '..', 'docs', 'orchestrate-run-review.md'), 'utf8');
+  const names = [...new Set([...doc.matchAll(/bin\/([\w-]+)/g)].map((m) => m[1]))];
+  assert.ok(names.includes('orch-report'));
+  assert.ok(names.includes('orch-misses'));
+  for (const name of names) {
+    const file = path.join(__dirname, '..', 'bin', name);
+    assert.ok(fs.statSync(file).isFile(), `bin/${name} is not a file`);
+    fs.accessSync(file, fs.constants.X_OK);
+  }
 });
 
 test('section 3 names the plan reads setting and leaves the plan out with sections', () => {

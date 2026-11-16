@@ -35,6 +35,7 @@ Paths used below:
 - `CLAIM`: `<clone>/bin/orch-claim`.
 - `EVENT`: `<clone>/bin/orch-event`.
 - `REPORT`: `<clone>/bin/orch-report`.
+- `MISSES`: `<clone>/bin/orch-misses`.
 
 Never read a worker transcript raw: one line can hold a megabyte. Use the index
 (`TI <path>`), `TI <path> --steps <n>`, or `sed -n 'A,Bp' <path> | cut -c1-400` on
@@ -620,16 +621,17 @@ The user reviews these across sessions before redesigning the image.
    branch's worktree and change no files; report the table. If `pr-review` is not
    installed, run `/code-review high` on `<base>...<plan branch>` instead and verify
    each finding by a trace or one test. The review runs in a subagent because it
-   reads the whole diff, and only its table returns to you. Arm no section 7 watch
-   for it. Its completion notification wakes you.
+   reads the whole diff, and only its table returns to you. Right after it starts,
+   run `EVENT <run> final-review --agent <agent id>`, so `REPORT` can price it. Arm
+   no section 7 watch for it. Its completion notification wakes you.
 3. When the table has no verified finding, skip this step. Otherwise start a
    second `"task": 0` fix worker as step 1 says, with the table in its `notes` and
    the files the findings cite in its `files`. The final review is not run a
    second time.
-4. Run `REPORT <image>` and show the output to the user. Then use
-   superpowers:finishing-a-development-branch on the plan branch. `REPORT` has no
-   row for the final review agent, because it made no claim. Both fix workers are
-   Task 0, so `REPORT` counts them in one Task 0 row. Say both when you show the
-   output.
+4. Run `MISSES <image> --branch <plan branch> --base <base>`, then
+   `REPORT <image>`, and show both outputs to the user. Then use
+   superpowers:finishing-a-development-branch on the plan branch. Both fix workers
+   are Task 0, so `REPORT` counts them in one Task 0 row. Say both when you show
+   the output.
 
 The run folder stays beside the image, untracked, like the board.

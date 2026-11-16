@@ -171,8 +171,8 @@ cleared or ended marks.
 
 `skills/orchestrate/` is a Claude Code skill that runs an approved plan with
 background workers, each in its own `wt` worktree. It calls `bin/transcript-index`,
-`bin/board-post`, `bin/orch-claim`, `bin/orch-event` and `bin/orch-report` from this
-clone. Link it from the clone:
+`bin/board-post`, `bin/orch-claim`, `bin/orch-event`, `bin/orch-misses` and `bin/orch-report`
+from this clone. Link it from the clone:
 
 ```bash
 ln -s "$PWD/skills/orchestrate" ~/.claude/skills/orchestrate
@@ -299,12 +299,20 @@ bin/orch-report docs/superpowers/images/<name>.md [--json]
 ```
 
 - The run line gives the start, the end, the number of agents, their total cost and the mean number of agents running.
-- Each task row gives attempts, review passes and fails, steers, guard refusals, the wait for a free slot, wall time, time spent waiting on you, and watch events by name.
-- Each agent row gives cost, peak context, the share of the prompt read from cache, and the files the agent read that the image never names.
+- Each task row gives attempts, review passes and fails, steers, guard refusals, the wait for a free slot, wall time, time spent waiting on you, the cost of its implementers (`Impl`) and reviewers (`Review`), and watch events by name.
+- Each agent row gives cost, peak context, the share of the prompt read from cache, the cache share of its first request (`1st cache`), and the files the agent read that the image never names.
+- The `Final review` line gives the cost of the final-review agent and the agents it started, with `≥` when the final agent has usage and an agent it started has neither a step file nor a transcript.
+- `Steers:` and `Questions:` list the text of each steer and each question, one `Task <N>: <text>` line each. A list with no entries is left out.
 
-Cost, peak context and cache share are `n/a` for a run reported more than a day
-after it ended, because the server deletes `agent-usage/` files a day after their
-last write. An agent with no transcript shows `n/a` for its reads.
+The server deletes `agent-usage/` files a day after their last write. After that,
+cost, peak context and cache share come from the agent's transcript, and are `n/a`
+only for an agent with neither. `bin/orch-report` saves each report as `report.json` in the run folder and fills a later `n/a` from it, so the costs outlast the step files. An agent with no transcript shows `n/a` for its reads.
+
+`bin/orch-misses` runs read-only git commands in the current directory and reads a run folder. It lists commits that landed on a passed task's files after the task merged, and the final review's fixes.
+
+```bash
+bin/orch-misses docs/superpowers/images/<name>.md --branch <plan branch> --base <base>
+```
 
 ## rtk
 
@@ -347,7 +355,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 
 | Path | Override | Written by |
 |---|---|---|
-| `<cfg>/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` | Claude Code. `bin/skill-cost` also reads each session's `subagents/agent-*.jsonl` transcripts, read-only. `bin/orch-report` reads the transcript of each worker in a run, read-only. |
+| `<cfg>/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` | Claude Code. `bin/skill-cost` also reads each session's `subagents/agent-*.jsonl` transcripts, read-only. `bin/orch-report` reads the transcript of each worker in a run, `subagents/agent-<id>.jsonl` for the final-review agent and every agent it started, and the `subagents/agent-*.meta.json` files beside them to find the agents the final-review agent started, read-only. |
 | `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_CONFIG_DIR` | Claude Code. `bin/record-statusline` reads `oauthAccount.accountUuid` from it, to tag each reading in `rate-limits.json` with the logged-in account. |
 | `<cfg>/plugins/installed_plugins.json` | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/plugins/store/cc-dashboard_<id>.json` | `CLAUDE_CONFIG_DIR` | Claude Code, for the mod's key-value store. It holds the update check, the setup snapshots, and a ready handoff's resume prompt per session until that session's next prompt or end. |
@@ -364,7 +372,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/cc-dashboard/reset-prompt/` | `CLAUDE_CONFIG_DIR` | the orchestrate skill writes one `<session id>.txt` holding the reset line it offers, and the mod writes one for `/context-image-handoff`. The mod reads it when that session ends. A `/clear` fills the next session's input box with the line, unless the file is over 24 hours old. The mod then empties the file, on any end, because the mod engine has no delete. The server also reads it, for the Orchestration tab's reset phase. |
 | `<cfg>/cc-dashboard/steer/` | `CLAUDE_CONFIG_DIR` | the server writes one `<session id>/<request id>.json` per steer sent from the Orchestration tab, into the folder of the orchestrator's live session. The mod in that session lists the folder every 2 seconds, sends each request's text to the worker with `$.session.send`, adds a note row to the orchestrator's transcript, and writes `<request id>.result.json` beside the request (`delivered`, and a `reason` when it is false). It does this only for an interactive session that started while `<cfg>/skills/orchestrate/SKILL.md` existed. Without that file the mod never lists the folder. The server reads both for the worker card's steer state. While the Orchestration tab polls, at most once every 10 minutes, the server walks every `<session id>/` folder here whose name is a valid session id, even when that session is no longer listed. In each it deletes request files, result files and leftover temp files (`<request id>.json.<pid>`) older than 24 hours, then removes the folder once it is empty. Each poll of one orchestration also deletes the expired files in that orchestration's own folders. It never follows a symlink and never touches a name that is not one of those file names. Without the orchestrate skill installed it does none of this. |
 | `<cfg>/cc-dashboard/activity/` | `CLAUDE_CONFIG_DIR` | the mod. The server deletes files older than a day when the page shows the Today range. |
-| `<cfg>/cc-dashboard/agent-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per subagent. Each holds the agent id and, for each model request the subagent made, its time, model, turn id, step index and four token counts. The server reads them into `transcripts.db` and deletes each file a day after it was last written. `bin/orch-report` reads the file of each worker in a run. |
+| `<cfg>/cc-dashboard/agent-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per subagent. Each holds the agent id and, for each model request the subagent made, its time, model, turn id, step index and four token counts. The server reads them into `transcripts.db` and deletes each file a day after it was last written. `bin/orch-report` reads the file of each worker in a run, and the file of the final-review agent and of every agent it started. |
 | `<cfg>/cc-dashboard/headless-usage/` | `CLAUDE_CONFIG_DIR` | the mod, one `<session id>.json` per headless session (`claude -p` with no transcript). Each holds the session id, its working folder, the cost Claude Code last reported and, for each model request, its time, model, subagent id when there is one, turn id, step index and four token counts. The server reads them into `transcripts.db` as call rows and deletes each file a day after it was last written. |
 | `<cfg>/cc-dashboard/claims/` | `CLAUDE_CONFIG_DIR` | the mod, one `<agent id>.json` per orchestrate worker, holding the worktree, run folder and task file it claimed. The mod reads the file after a reload, so the worktree guard keeps refusing edits outside the worktree. The mod empties the file when the agent ends. The mod engine has no delete, so the folder keeps one small file per worker. |
 | `<cfg>/cc-dashboard/mod-debug/` | `CLAUDE_CONFIG_DIR` | the mod, one `<session id>.jsonl` per session, only while `CC_DASHBOARD_DEBUG=1`. Each line is one event the mod handled, with its time, and the file keeps the last 2,000 lines. Nothing reads it. |
@@ -383,7 +391,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | The git repos where a session ran `git commit` through Bash | none | git. The server and `bin/skill-cost` run `git rev-parse --show-toplevel`, `git log --numstat` (on `HEAD`, then `--all` when HEAD has nothing in the window), `git log -g HEAD`, `git diff --numstat`, `git patch-id` and `git check-attr` (which reads `.gitattributes` for `linguist-generated` and `linguist-vendored`) there, read-only, to count the lines of the commits made during each call. When the folder is gone, it falls back to the repo the folder name encodes. |
 | `<cfg>/projects/**/subagents/agent-<id>.meta.json` | `CLAUDE_CONFIG_DIR` | Claude Code. `bin/transcript-index --steps` and `--watch` read the one beside the worker transcript they are given, for the agent's description, type, model and finished flag. |
 | A board file, at the path its first argument names. The orchestrate skill puts it beside its context image, at `<project>/docs/superpowers/images/<name>.board.jsonl`. | none | `bin/board-post` appends one JSON line per post. The server reads it for the Orchestration tab's board and appends a post from "You" when you post there, only to an absolute path ending in `.board.jsonl`. `bin/transcript-index --watch --board` reads it. |
-| A run folder beside the context image, at `<project>/docs/superpowers/images/<name>.run/`, holding `pending/work/`, `pending/review/` and `claimed/` task files. | none | `bin/orch-claim` adds, claims and releases task files. `bin/orch-claim --add` also reads the task's plan file (`task.plan`) when `reads` is `sections`, and stores the cut sections in the task file as `planExcerpt`. `bin/orch-claim --check-plan <plan>` also reads a plan file and changes nothing. `bin/transcript-index --watch --run` and the server read claimed task files, the server only under `<run>/claimed/` with names matching `NNNN-tN-aN.json`. The folder also holds `events.jsonl`, the run's event log. `bin/orch-claim`, `bin/orch-event` (which the mod runs for each refused worker edit) and `bin/transcript-index --watch --run` append one JSON line per event to it, and `bin/orch-report` reads it. `bin/orch-event` creates the folder when it is missing. |
+| A run folder beside the context image, at `<project>/docs/superpowers/images/<name>.run/`, holding `pending/work/`, `pending/review/` and `claimed/` task files. | none | `bin/orch-claim` adds, claims and releases task files. `bin/orch-claim --add` also reads the task's plan file (`task.plan`) when `reads` is `sections`, and stores the cut sections in the task file as `planExcerpt`. `bin/orch-claim --check-plan <plan>` also reads a plan file and changes nothing. `bin/transcript-index --watch --run` and the server read claimed task files, the server only under `<run>/claimed/` with names matching `NNNN-tN-aN.json`. The folder also holds `events.jsonl`, the run's event log. `bin/orch-claim`, `bin/orch-event` (which the mod runs for each refused worker edit) and `bin/transcript-index --watch --run` append one JSON line per event to it, and `bin/orch-report` and `bin/orch-misses` read it. `bin/orch-report` also writes `report.json` there. `bin/orch-misses` also reads `claimed/`. `bin/orch-event` creates the folder when it is missing. |
 | `<cfg>/skills/orchestrate/SKILL.md` | `CLAUDE_CONFIG_DIR` | `bin/setup` (through the `skills/orchestrate` link). The server checks that it is readable to show the Orchestration tab. |
 | `<cfg>/projects/**/<session id>/subagents/agent-<id>.jsonl` and `.meta.json` | `CLAUDE_CONFIG_DIR` | Claude Code. The server reads each worker's transcript and meta file for the Orchestration tab. |
 | rtk's `history.db` | `RTK_DB` | rtk |

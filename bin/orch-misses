@@ -1,0 +1,98 @@
+#!/usr/bin/env node
+'use strict';
+
+// Lists commits that landed on a passed task's files after the task merged, and the
+// final review's fixes, for an orchestrate run.
+//
+//   orch-misses <image path> --branch <plan branch> --base <base>
+//
+// Runs read-only git commands in the current directory, which must be inside the plan
+// branch's repository: `git log --no-merges --name-only <base>..<branch>`. Reads
+// <run>/events.jsonl and <run>/claimed/*.json (the run folder is the image path with
+// .md replaced by .run). Prints `Candidates:` with one row per commit and task, then
+// `Final-review fixes:` with the title and the first 400 characters of the notes of each
+// `"task": 0` work file claimed after the run's final-review event (every such file when
+// the log has no final-review event). `none` stands for an empty list. Candidates are
+// for a human or the final review to classify: later work on a shared file can match.
+//
+// Any problem prints `orch-misses: <reason>` on stderr and exits 1.
+
+const fs = require('fs');
+const path = require('path');
+const { execFileSync } = require('child_process');
+const { parseArgs } = require('util');
+const claims = require('../lib/orchestrations/claims');
+const { eventsPath, parseEvents, taskOfFile } = require('../lib/orchestrations/events');
+const { parseGitLog, lateCommits } = require('../lib/orchestrations/misses');
+
+const USAGE = 'usage: orch-misses <image path> --branch <plan branch> --base <base> (run inside the plan branch\'s repository)';
+const NOTES_MAX = 400;
+
+// Every claimed task file as {task, attempt, data}, skipping files readClaimed rejects.
+function readClaimedFiles(runDir) {
+  let names;
+  try {
+    names = fs.readdirSync(path.join(runDir, 'claimed')).sort();
+  } catch {
+    return [];
+  }
+  const out = [];
+  for (const name of names) {
+    const id = taskOfFile(name);
+    const data = id && claims.readClaimed(runDir, name);
+    if (data) out.push({ ...id, data });
+  }
+  return out;
+}
+
+// { [task]: files of its highest attempt }, task 0 included for the caller to ignore.
+function filesByTask(claimed) {
+  const best = new Map();
+  for (const c of claimed) {
+    if (!best.has(c.task) || c.attempt > best.get(c.task).attempt) best.set(c.task, c);
+  }
+  return Object.fromEntries([...best].map(([n, c]) => [n, c.data.files]));
+}
+
+function finalFixes(claimed, events) {
+  const review = events.filter((e) => e.kind === 'final-review').pop();
+  const since = review ? Date.parse(review.t) : -Infinity;
+  return claimed
+    .filter((c) => c.task === 0 && c.data?.kind === 'work' && Date.parse(c.data.claimedAt) > since)
+    .map((c) => `${c.data.title ?? '(no title)'}: ${String(c.data.notes ?? '').slice(0, NOTES_MAX)}`);
+}
+
+function main() {
+  const { values, positionals } = parseArgs({
+    allowPositionals: true,
+    options: { branch: { type: 'string' }, base: { type: 'string' } },
+  });
+  if (positionals.length !== 1 || !values.branch || !values.base) throw new Error(USAGE);
+  const runDir = claims.runDirOf(path.resolve(positionals[0]));
+  let text;
+  try {
+    text = fs.readFileSync(eventsPath(runDir), 'utf8');
+  } catch (err) {
+    throw new Error(`cannot read the event log ${eventsPath(runDir)}: ${err.code ?? err.message}`);
+  }
+  const events = parseEvents(text);
+  const claimed = readClaimedFiles(runDir);
+  let log;
+  try {
+    log = execFileSync('git', ['log', '--no-merges', '--name-only', '--format=%H%x09%ct%x09%s', `${values.base}..${values.branch}`], { encoding: 'utf8', cwd: process.cwd(), maxBuffer: 64 * 1024 * 1024 });
+  } catch (err) {
+    throw new Error(`git log ${values.base}..${values.branch} failed: ${String(err.stderr ?? err.message).trim()}`);
+  }
+  const late = lateCommits({ events, tasks: filesByTask(claimed), commits: parseGitLog(log) });
+  const rows = late.map((l) => `Task ${l.task}  ${l.sha.slice(0, 7)}  ${l.subject}  ${l.files.join(', ')}`);
+  const fixes = finalFixes(claimed, events);
+  const out = ['Candidates:', ...(rows.length ? rows : ['none']), '', 'Final-review fixes:', ...(fixes.length ? fixes : ['none'])];
+  process.stdout.write(out.join('\n') + '\n');
+}
+
+try {
+  main();
+} catch (err) {
+  process.stderr.write(`orch-misses: ${err.message}\n`);
+  process.exitCode = 1;
+}

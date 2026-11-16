@@ -112,3 +112,19 @@ test('orch-event denied without --file exits 1', (t) => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /^orch-event: /);
 });
+
+test('orch-event final-review writes agent and text with no task', (t) => {
+  const dir = runDir(t);
+  const r = run([dir, 'final-review', '--agent', 'f1', '--text', 'pr-review high']);
+  assert.equal(r.status, 0, r.stderr);
+  const [e] = events(dir);
+  assert.deepEqual({ kind: e.kind, agent: e.agent, text: e.text, task: e.task }, { kind: 'final-review', agent: 'f1', text: 'pr-review high', task: undefined });
+});
+
+test('orch-event final-review without --agent exits 1', (t) => {
+  const dir = runDir(t);
+  const r = run([dir, 'final-review']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^orch-event: .*--agent/);
+  assert.equal(fs.existsSync(path.join(dir, 'events.jsonl')), false);
+});
