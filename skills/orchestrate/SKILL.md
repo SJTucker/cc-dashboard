@@ -342,6 +342,14 @@ same when you resume a finished worker with SendMessage: its watch exited at
 `DONE`, so start a new one from the line count at that `DONE`. Do the same
 after a `KILLED` or `FAILED` watch.
 
+A steer or resume can ask the worker to edit a file outside its task's `files`,
+such as review findings in another file or an export the task did not plan. Add
+each such path to `--files` on the watch, after the scratchpad folder:
+`--files <scratchpad folder>/,<path>,<path>`. A finished worker gets the paths on
+its new watch. For a running worker, stop its watch with TaskStop and re-arm it
+with `--since-line` and the added paths. Add only the paths the message names, so
+an edit to any other file still raises DRIFT.
+
 ## 8. On each watch event
 
 Run `TI <worker transcript> --steps 20` and decide:
@@ -444,12 +452,15 @@ file. Others keep going. If they want it fixed:
    touches the fixed files.
 4. Resume each stopped worker with SendMessage, naming the fix commit and the
    Updates entry, and re-arm its watch (section 7). Steer each running worker
-   the same way.
+   the same way, and re-arm its watch too. A running watch compares the worktree
+   with the HEAD it saw at its start, so the merge in step 3 shows the fixed
+   files as DRIFT until the watch restarts.
 
 ## 10. Steer
 
 SendMessage to the worker with one concrete correction, and the image section
-or board post it rests on.
+or board post it rests on. When the correction names a file outside the task's
+`files`, re-arm the watch with that file added (section 7).
 
 A user row `You steered Task <N> (<title>) from the dashboard: <text>` (older rows
 read `You steered Task <N> from the dashboard: <text>`) is a steer the user
@@ -500,7 +511,9 @@ it made several. A diff that changes only Markdown prints nothing, which counts 
 
 Read the whole review. Then run `EVENT <run> review-pass --task <N>` or
 `EVENT <run> review-fail --task <N> --text "<problem count> problems"`. When it
-fails, steer or relaunch the implementer with the findings.
+fails, steer or relaunch the implementer with the findings. A steered implementer's
+watch gets the files the findings cite that are outside the task's `files`
+(section 7).
 
 A review that passes can still list problems, such as a minor display bug. Append
 each one to `<leftovers>` as one line:
