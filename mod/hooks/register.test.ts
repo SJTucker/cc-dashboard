@@ -3975,6 +3975,7 @@ test('a saved "transcript" handoff setting runs the image handoff', async ($, on
 const imageCmd = { command: 'context-image-handoff', args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }
 const CMD_STARTED = 'context-image-handoff: writing the context image. The status line says when /clear will resume from it.'
 const CMD_READY = 'context image ready · /clear to resume'
+const CMD_TRANSCRIPT = 'context image failed · /clear to resume from the transcript'
 const CMD_FAILED = 'context image failed · see the cc-dashboard log'
 
 test('/context-image-handoff returns at once, then queues the image prompt in the reset file even with handoff off', async ($, on) => {
@@ -4034,13 +4035,22 @@ test('/context-image-handoff run twice while it writes forks once', async ($, on
   expect(forked.length).toBe(1)
 })
 
-test('/context-image-handoff logs a fork failure, sets the failed status and queues nothing', async ($, on) => {
+test('/context-image-handoff logs a fork failure and queues the transcript prompt in its place', async ($, on) => {
   const { writes, statuses, logged, clock } = world(on, imageWorld({ forkReply: { isAnswered: false, reason: 'nothing-to-fork' } }))
+  await $.command.run(imageCmd)
+  await clock.settle()
+  expect(writes[RESET_FILE]).toBe(`${RESUME}\n`)
+  expect(statuses).toEqual([CMD_TRANSCRIPT])
+  expect(logged).toEqual(['context image failed (fork nothing-to-fork)'])
+})
+
+test('/context-image-handoff sets the failed status when the transcript fallback also fails', async ($, on) => {
+  const { writes, statuses, logged, clock } = world(on, imageWorld({ forkReply: { isAnswered: false, reason: 'nothing-to-fork' }, writeFails: true }))
   await $.command.run(imageCmd)
   await clock.settle()
   expect(writes[RESET_FILE]).toBe(undefined)
   expect(statuses).toEqual([CMD_FAILED])
-  expect(logged).toEqual(['context image failed (fork nothing-to-fork)'])
+  expect(logged).toEqual(['context image failed (fork nothing-to-fork)', expect.stringMatching(/^transcript fallback failed \(/)])
 })
 
 test('a document handoff whose cache expired before the timer fired makes the expired transcript handoff and no fork', async ($, on) => {

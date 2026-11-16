@@ -997,6 +997,7 @@ const HANDOFF_STATUS_DOCUMENT = 'handoff ready · /clear to resume'
 const HANDOFF_STATUS_IMAGE = 'cache expires soon · /clear to resume from the context image'
 const HANDOFF_STATUS_IMAGE_EXPIRED = 'cache expired · /clear to resume from the context image'
 const COMMAND_STATUS_READY = 'context image ready · /clear to resume'
+const COMMAND_STATUS_TRANSCRIPT = 'context image failed · /clear to resume from the transcript'
 const COMMAND_STATUS_FAILED = 'context image failed · see the cc-dashboard log'
 const HANDOFF_STEP_TIMEOUT_MS = 5000
 // $.ui.status() with no text clears the status. On Claude Code 2.1.296, $.ui.status('')
@@ -1117,10 +1118,28 @@ async function writeImage($: EngineInterface, id: string, entry: Handoff, expire
   armExpiry($, id, await markReady($, id, imageResumePrompt(path), status), wait, HANDOFF_STATUS_IMAGE_EXPIRED)
 }
 
+// The fallback of /context-image-handoff when the image fails: queues the transcript
+// resume prompt in the session's reset file and returns the status to show. A failure
+// here is logged and returns the failed status.
+async function commandTranscript($: EngineInterface, id: string) {
+  try {
+    const path = await transcriptPath($, await $.session.root(), id)
+    if (!path) throw new Error('transcript not found')
+    const resetPath = await resetPromptPath($, id)
+    if (!resetPath) throw new Error('no config dir')
+    await $.fs.write(resetPath, `${resumePrompt(path, await existingIndex($, id))}\n`)
+    return COMMAND_STATUS_TRANSCRIPT
+  } catch (err) {
+    logEach($, `transcript fallback failed (${errorText(err)})`)
+    return COMMAND_STATUS_FAILED
+  }
+}
+
 // The /context-image-handoff work: writes the image, queues the prompt in the session's
-// reset file and sets the status. A failure is logged and queues nothing. The entry
-// goes away when it is still the record's, so a later idle gap can get its own handoff.
-// The status stays as it is when the session ended or a prompt arrived meanwhile.
+// reset file and sets the status. A failure is logged, and the transcript resume prompt
+// is queued in its place. The entry goes away when it is still the record's, so a later
+// idle gap can get its own handoff. The status stays as it is when the session ended or
+// a prompt arrived meanwhile.
 function commandImage($: EngineInterface, id: string, entry: Handoff | undefined) {
   const done = async () => {
     try {
@@ -1132,7 +1151,7 @@ function commandImage($: EngineInterface, id: string, entry: Handoff | undefined
       return COMMAND_STATUS_READY
     } catch (err) {
       logEach($, `context image failed (${errorText(err)})`)
-      return COMMAND_STATUS_FAILED
+      return commandTranscript($, id)
     }
   }
   return done()

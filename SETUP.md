@@ -119,8 +119,10 @@ background, whatever the `handoff` setting says, and without the 1-hour cache or
 50,000-token checks. When the image is written, the status line shows `context image
 ready · /clear to resume`, and the prompt that reads it is queued in
 `<cfg>/cc-dashboard/reset-prompt/<session id>.txt`, so the next `/clear` fills it. If the
-fork or the write fails, the status line shows `context image failed · see the
-cc-dashboard log` and nothing is queued. While a context image or handoff is being
+fork or the write fails, the transcript resume prompt is queued in its place, and the
+status line shows `context image failed · /clear to resume from the transcript`. If
+that also fails, the status line shows `context image failed · see the cc-dashboard log`
+and nothing is queued. While a context image or handoff is being
 written, the command starts nothing. Claude Code's own compaction (`/compact`, threshold
 and idle) is unchanged, because Claude Code does not pass compaction to installed mods.
 
