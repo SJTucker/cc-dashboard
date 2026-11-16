@@ -8,9 +8,10 @@
 // Reads <run>/events.jsonl (the run folder is the image path with .md replaced by
 // .run), each claimed agent's agent-usage step file and transcript, and the image
 // text. Prints a run line, one row per task and one row per agent. Cost, peak
-// context and cache share are n/a for an agent with no step file, which the server
-// deletes a day after its last write. Reads outside the image are n/a for an agent
-// with no transcript. --json prints the report as JSON.
+// context and cache share come from the agent's step file. The server deletes that
+// file a day after its last write, so without it they come from the usage lines of
+// the agent's transcript. They are n/a for an agent with neither. Reads outside the
+// image are n/a for an agent with no transcript. --json prints the report as JSON.
 //
 // A missing image, or a run folder with no events, prints `orch-report: <reason>`
 // on stderr and exits 1.
@@ -20,7 +21,7 @@ const { parseArgs } = require('util');
 const { loadConfig } = require('../lib/config-dir');
 const { runDirOf } = require('../lib/orchestrations/claims');
 const { eventsPath, parseEvents } = require('../lib/orchestrations/events');
-const { buildReport, renderReport } = require('../lib/orchestrations/report');
+const { buildReport, renderReport, transcriptSteps } = require('../lib/orchestrations/report');
 const { readAgentSteps, getAgentUsageDir } = require('../lib/agent-steps');
 const { filesRead } = require('../lib/transcript-index');
 const path = require('path');
@@ -41,10 +42,10 @@ async function stepsOf(dir, agent) {
   return rows.ok ? rows.agentSteps : [];
 }
 
-function readsOf(transcript) {
+function transcriptLines(transcript) {
   if (typeof transcript !== 'string') return null;
   try {
-    return filesRead(fs.readFileSync(transcript, 'utf8').split('\n').filter(Boolean));
+    return fs.readFileSync(transcript, 'utf8').split('\n').filter(Boolean);
   } catch {
     return null;
   }
@@ -61,8 +62,10 @@ async function main() {
   const reads = {};
   for (const e of events) {
     if (e.kind !== 'claimed' || typeof e.agent !== 'string' || e.agent in reads) continue;
-    steps[e.agent] = await stepsOf(usageDir, e.agent);
-    reads[e.agent] = readsOf(e.transcript);
+    const lines = transcriptLines(e.transcript);
+    const fromFile = await stepsOf(usageDir, e.agent);
+    steps[e.agent] = fromFile.length || !lines ? fromFile : transcriptSteps(lines);
+    reads[e.agent] = lines ? filesRead(lines) : null;
   }
   const report = buildReport({ events, steps, reads, imageText, imagePath: image });
   process.stdout.write(values.json ? `${JSON.stringify(report, null, 2)}\n` : renderReport(report));

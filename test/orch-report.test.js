@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { tmpDir } = require('./helpers');
-const { buildReport, renderReport } = require('../lib/orchestrations/report');
+const { buildReport, renderReport, transcriptSteps } = require('../lib/orchestrations/report');
 const { costForUsage } = require('../lib/pricing');
 
 const REPORT = path.join(__dirname, '..', 'bin', 'orch-report');
@@ -188,6 +188,37 @@ test('orch-report prints a row per task and exits 0', (t) => {
   const j = spawnSync(process.execPath, [REPORT, image, '--json'], { encoding: 'utf8', env });
   assert.equal(j.status, 0, j.stderr);
   assert.equal(JSON.parse(j.stdout).tasks[0].task, 2);
+});
+
+const usageLine = (m, id, req, usage, model = MODEL) =>
+  JSON.stringify({ type: 'assistant', timestamp: at(m), requestId: req, message: { id, model, usage } });
+
+test('transcriptSteps counts each response once, with its largest usage', () => {
+  const steps = transcriptSteps([
+    usageLine(1, 'm1', 'r1', { input_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 20, output_tokens: 3 }),
+    usageLine(1, 'm1', 'r1', { input_tokens: 5, cache_read_input_tokens: 100, cache_creation_input_tokens: 20, output_tokens: 40 }),
+    usageLine(2, 'm2', 'r2', { input_tokens: 1, cache_read_input_tokens: 300, output_tokens: 7 }),
+    usageLine(3, 'm3', 'r3', { input_tokens: 0, output_tokens: 0 }, '<synthetic>'),
+    JSON.stringify({ type: 'user', timestamp: at(4), message: { content: 'hi' } }),
+    'not json',
+  ]);
+  assert.deepEqual(steps, [
+    { t: T0 + MIN, model: MODEL, input: 5, cacheRead: 100, cacheWrite: 20, output: 40 },
+    { t: T0 + 2 * MIN, model: MODEL, input: 1, cacheRead: 300, cacheWrite: 0, output: 7 },
+  ]);
+});
+
+test('orch-report falls back to the transcript when the agent has no agent-usage file', (t) => {
+  const base = tmpDir(t, 'report');
+  const image = writeRun(base);
+  fs.writeFileSync(path.join(base, 'none.jsonl'), usageLine(5, 'm1', 'r1', { input_tokens: 10, cache_read_input_tokens: 90, output_tokens: 5 }) + '\n');
+  const env = { ...process.env, CLAUDE_CONFIG_DIR: path.join(base, 'cfg') };
+  const j = spawnSync(process.execPath, [REPORT, image, '--json'], { encoding: 'utf8', env });
+  assert.equal(j.status, 0, j.stderr);
+  const a = JSON.parse(j.stdout).agents[0];
+  assert.equal(a.peakContext, 100);
+  assert.equal(a.cacheReadShare, 0.9);
+  assert.ok(a.cost > 0);
 });
 
 test('orch-report with a missing image exits 1', (t) => {
