@@ -7,6 +7,11 @@
 //   orch-claim <run> --add work|review      add a task, JSON on stdin; prints the file name
 //   orch-claim <run> --release <file>       return a claimed task to its pending queue
 //   orch-claim <run> --status               list pending files and claimed files with no time
+//   orch-claim --check-plan <plan>          check every task of a plan for plan reads sections; changes nothing
+//
+// --add work with "reads": "sections" stores the task's plan sections, which the claim prints. It refuses a plan
+// that lacks a required shared section or misspells a shared heading, and a claim over MAX_EXCERPT bytes.
+// --check-plan also refuses a plan's own Task 0 and a task number used twice, and lists the plan's other ## sections.
 //
 // <run> is the run folder, an absolute path ending in .run. An empty queue prints
 // a NO TASK line and exits 0. Any other problem prints `orch-claim: <reason>` on
@@ -15,12 +20,23 @@
 const fs = require('fs');
 const { parseArgs } = require('util');
 const claims = require('../lib/orchestrations/claims');
+const { planSections, sharedHeadings, planTasks, otherSections } = require('../lib/orchestrations/plan-sections');
 
-const USAGE = 'usage: orch-claim <run> work|review | <run> --add work|review | <run> --release <file> | <run> --status';
+const USAGE = 'usage: orch-claim <run> work|review | <run> --add work|review | <run> --release <file> | <run> --status | --check-plan <plan>';
+
+// Claude Code replaces Bash output over about 30 KB with a 2 KB preview. --add counts the UTF-8 bytes of the whole
+// claim formatClaim prints, plan excerpt included. --check-plan has no task's other fields, so it counts the excerpt
+// alone. The 5 KB below that 30 KB cut leaves room for the fields a task adds.
+const MAX_EXCERPT = 25000;
 
 function kindArg(v) {
   if (!claims.KINDS.includes(v)) throw new Error(USAGE);
   return v;
+}
+
+function checkReads(reads, kind) {
+  if (kind !== 'work') throw new Error('task.reads is for work tasks only: leave out the reads field copied from the claimed work file');
+  if (reads !== 'whole' && reads !== 'sections') throw new Error('task.reads must be "whole" or "sections"');
 }
 
 function checkTask(task, kind) {
@@ -36,14 +52,120 @@ function checkTask(task, kind) {
   if (!Array.isArray(task.files) || task.files.length === 0 || !task.files.every((f) => typeof f === 'string')) throw new Error('task.files must be a non-empty array of strings');
   // The attempt goes into the file name, which must match TASK_FILE.
   if (task.attempt !== undefined && (!Number.isInteger(task.attempt) || task.attempt < 1)) throw new Error('task.attempt must be an integer >= 1');
+  // addCommand counts the notes toward MAX_EXCERPT as part of the claim, which prints them as one Notes: line.
+  if (task.notes !== undefined && typeof task.notes !== 'string') throw new Error('task.notes must be a string');
+  if (task.reads !== undefined) checkReads(task.reads, kind);
   if (kind === 'review' && (typeof task.implementer?.transcript !== 'string' || !task.implementer.transcript)) throw new Error('a review task needs implementer.transcript');
+}
+
+function readPlan(planPath) {
+  try {
+    return fs.readFileSync(planPath, 'utf8');
+  } catch (err) {
+    throw new Error(`reads "sections" needs the plan file: ${err.message}`);
+  }
+}
+
+// Joins names as "A", "A and B" or "A, B and C".
+function joinNames(names) {
+  return names.length < 2 ? names.join('') : `${names.slice(0, -1).join(', ')} and ${names.at(-1)}`;
+}
+
+// Refuses a plan whose shared sections a worker would not see: a misspelled heading is renamed, a missing one means whole.
+function checkShared(text, planPath) {
+  const { missing, miscased } = sharedHeadings(text);
+  if (miscased.length === 1) throw new Error(`${planPath} spells the ${miscased[0]} heading differently: rename it to ## ${miscased[0]}`);
+  if (miscased.length) throw new Error(`${planPath} spells the ${joinNames(miscased)} headings differently: rename them to ${joinNames(miscased.map((n) => `## ${n}`))}`);
+  if (missing.length) throw new Error(`${planPath} has no ${joinNames(missing)} section${missing.length > 1 ? 's' : ''}: run this plan with plan reads whole`);
+}
+
+// The task's plan sections. Throws when the plan has none for the task.
+function excerptOf(text, planPath, n) {
+  const excerpt = planSections(text, n);
+  if (!excerpt) throw new Error(`reads "sections": ${planPath} has no "### Task ${n}:" section`);
+  return excerpt;
+}
+
+// Throws when text is over MAX_EXCERPT bytes. what names the text in the message, for example "plan sections are".
+function checkBytes(what, text) {
+  const bytes = Buffer.byteLength(text);
+  if (bytes > MAX_EXCERPT) throw new Error(`${what} ${bytes} bytes, over ${MAX_EXCERPT.toLocaleString('en-US')}: run this plan with plan reads whole`);
+  return bytes;
+}
+
+// Problems with a plan's task numbers. Task 0 is the orchestrator's number for stub and fix tasks, and planSections
+// finds only the first heading of a number, so a plan's own Task 0 and any repeated number are refused.
+function numberProblems(tasks) {
+  const problems = tasks.includes(0) ? ["Task 0 is reserved for stub and fix tasks: renumber the plan's Task 0"] : [];
+  const repeated = new Set(tasks.filter((n, i) => tasks.indexOf(n) !== i));
+  for (const n of repeated) problems.push(`Task ${n} appears more than once`);
+  return problems;
+}
+
+// Prints each task's excerpt length, then each ## section no excerpt carries. Prints one stderr line for the shared
+// sections, for each task-number problem and for each task that fails. The other ## sections are not refusals.
+function checkPlan(planPath) {
+  const text = readPlan(planPath);
+  let failed = false;
+  const fail = (msg) => {
+    failed = true;
+    process.stderr.write(`orch-claim: ${msg}\n`);
+  };
+  try {
+    checkShared(text, planPath);
+  } catch (err) {
+    fail(err.message);
+  }
+  const tasks = planTasks(text);
+  if (tasks.length === 0) fail(`${planPath} has no "### Task <N>:" heading`);
+  numberProblems(tasks).forEach(fail);
+  for (const n of new Set(planSections(text, 0) ? [0, ...tasks] : tasks)) {
+    try {
+      process.stdout.write(`Task ${n}: ${checkBytes('plan sections are', excerptOf(text, planPath, n))} bytes\n`);
+    } catch (err) {
+      fail(`Task ${n}: ${err.message}`);
+    }
+  }
+  for (const heading of otherSections(text)) process.stdout.write(`Not in any excerpt: ${heading}\n`);
+  if (failed) process.exitCode = 1;
+}
+
+function addCommand(run, kind) {
+  const k = kindArg(kind);
+  let task;
+  try {
+    task = JSON.parse(fs.readFileSync(0, 'utf8'));
+  } catch (err) {
+    throw new Error(`the task on stdin is not valid JSON: ${err.message}`);
+  }
+  checkTask(task, k);
+  // A review task built by the skill leaves out reads and planExcerpt. A planExcerpt that still arrives is
+  // dropped, so it never reaches a reviewer. checkTask refuses reads on a review task.
+  delete task.planExcerpt;
+  const full = { ...task, kind: k, attempt: task.attempt ?? 1 };
+  if (task.reads === 'sections') {
+    const text = readPlan(task.plan);
+    checkShared(text, task.plan);
+    try {
+      full.planExcerpt = excerptOf(text, task.plan, task.task);
+      // addTask picks the sequence number. A placeholder of the same width gives the claim's length.
+      checkBytes('the claim with its plan sections is', claims.formatClaim(`0000-t${full.task}-a${full.attempt}.json`, full));
+    } catch (err) {
+      throw new Error(`Task ${task.task}: ${err.message}`);
+    }
+  }
+  process.stdout.write(`${claims.addTask(run, k, full)}\n`);
 }
 
 function main() {
   const { values, positionals } = parseArgs({
     allowPositionals: true,
-    options: { add: { type: 'boolean' }, release: { type: 'string' }, status: { type: 'boolean' } },
+    options: { add: { type: 'boolean' }, 'check-plan': { type: 'string' }, release: { type: 'string' }, status: { type: 'boolean' } },
   });
+  if (values['check-plan'] !== undefined) {
+    if (positionals.length > 0 || values.add || values.status || values.release !== undefined) throw new Error(USAGE);
+    return checkPlan(values['check-plan']);
+  }
   const [run, kind, ...extra] = positionals;
   if (!run || extra.length > 0) throw new Error(USAGE);
   if (!claims.validRunDir(run)) throw new Error(`${run} is not a run folder: it must be an absolute path ending in .run`);
@@ -57,15 +179,7 @@ function main() {
     if (!claims.TASK_FILE.test(values.release)) throw new Error(`${values.release} is not a task file name`);
     claims.release(run, values.release);
   } else if (values.add) {
-    const k = kindArg(kind);
-    let task;
-    try {
-      task = JSON.parse(fs.readFileSync(0, 'utf8'));
-    } catch (err) {
-      throw new Error(`the task on stdin is not valid JSON: ${err.message}`);
-    }
-    checkTask(task, k);
-    process.stdout.write(`${claims.addTask(run, k, { ...task, kind: k, attempt: task.attempt ?? 1 })}\n`);
+    addCommand(run, kind);
   } else {
     const k = kindArg(kind);
     const got = claims.claimNext(run, k);

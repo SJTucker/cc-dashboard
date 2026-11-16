@@ -1,6 +1,6 @@
 # Orchestrate workers share one prompt prefix
 
-Status: accepted (2026-11-11, extended 2026-11-14)
+Status: accepted (2026-11-11, extended 2026-11-14, 2026-11-16)
 
 Every orchestrate worker and reviewer begins by reading the same files: the context image and the files it lists under "Read before starting". A Sonnet request reads the prompt cache only on an exact match from the start of the request. So the orchestrate skill sends every agent of a run the same request start, and the task-specific part arrives later. A worker started within the 5-minute cache window of a sibling then reads that shared reading from the sibling's cache entries instead of writing its own.
 
@@ -24,6 +24,7 @@ Two agents of one type share a cache entry only when all of these are identical 
 So, during a run:
 
 - The image's "Read before starting" lists only files every worker needs. A task's own extra reading comes after its claim.
+- With plan reads `sections`, the default, the plan is not in the shared reading. Each worker's plan sections arrive in its claim, after the shared reading.
 - The plan and the image do not change between dispatches in a wave. Changes after the first dispatch go in a task's `notes` or the image's "Updates", added between waves.
 - Nothing links, unlinks or changes the `description` of a skill or agent in `<cfg>` mid-run, because the skill listing is part of the system prompt.
 - The main checkout's git status stays fixed. Files a planning session wrote get committed before the run starts.
@@ -34,6 +35,8 @@ So, during a run:
 - Two agents started 0.17 s apart shared nothing and both wrote the full 18.9k. A follower needs its leader's entries to exist first, which is why there is one Agent call per message.
 - A `general-purpose` subagent's first request carried about 39k tokens before the task. An `orch-worker` carried 13.0k for the same first message, with siblings reading all of it from cache (Claude Code 2.1.323, 2026-11-13).
 - Across 12 runs, Agent calls made from a folder other than the project root caused 9 of 47 cache misses.
+- Sharing saves only the cache write. Every worker still pays a cache read of the shared documents on each later step. In the 2026-11-14 orch-grill-and-plan and orchestrate-task-titles runs, 7 of 9 followers missed the shared reading: 5 because the orchestrator edited the image between dispatches or the worker's step-2 reply differed, and 2 (the Task 0 workers) after the 5-minute cache window.
+- In an A/B replay of one plan (2026-11-16, one run per setting), section reads gave every worker a peak context 9k to 21k tokens lower. Worker cost was 15–20% lower on the two tasks that passed their first review in both runs.
 - On Sonnet 5.5 a 5-minute cache write costs $2.50/MTok and a read $0.10/MTok.
 
 `bin/skill-cost` re-measures run cost. A follower within a wave should write close to 0 tokens through its shared reading.

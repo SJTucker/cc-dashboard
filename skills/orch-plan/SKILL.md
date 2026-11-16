@@ -198,6 +198,8 @@ Field labels: `**Test command:**`, `**Fails before, passes after:**`, `**Done wh
 - **Reads:** existing files the worker needs beyond its own Files, each with one line on why (a test helper and its limits, the stylesheet and token names, the caller of a changed function). The worker opens them after it claims the task.
 - **User steps:** any step that needs the owner (a decision, a manual check, a live check that needs a permission auto mode does not give). Each says what is needed and why. `orchestrate` does these before dispatch.
 
+Steps after the last task that no worker does, such as final checks or the merge, go under a `## ` heading. A `### ` heading other than `### Task N:` stays in the task above it, so it reaches that task's worker.
+
 The `**Reviewer:**` rule, copied from `orchestrate` section 5, item 4. Choose `opus` when the task touches concurrency,
 locking or claim code; adds or changes a model call, a network request or money
 math; changes behaviour that a project rule ties to another file (a CLAUDE.md

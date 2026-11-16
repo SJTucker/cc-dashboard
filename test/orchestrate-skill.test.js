@@ -163,3 +163,79 @@ test('the image template names the glossary and the spec\'s decisions', () => {
   assert.ok(template.includes('GLOSSARY.md'));
   assert.ok(template.includes('Decisions section'));
 });
+
+test('section 3 names the plan reads setting and leaves the plan out with sections', () => {
+  const three = section(3);
+  assert.ok(three.includes('Plan reads'));
+  assert.ok(three.includes('sections'));
+});
+
+test('section 6 adds reads to work tasks only', () => {
+  const six = section(6);
+  assert.ok(six.includes('"reads": "sections"'));
+  assert.ok(six.includes('Review tasks never carry'));
+});
+
+test('section 11 keeps the plan excerpt out of review tasks', () => {
+  assert.ok(section(11).includes('planExcerpt'));
+});
+
+test('the image template records plan reads', () => {
+  const template = fs.readFileSync(path.join(__dirname, '..', 'skills', 'orchestrate', 'image-template.md'), 'utf8');
+  assert.ok(template.includes('Plan reads:'));
+});
+
+test('the worker message is unchanged by plan reads', () => {
+  const after = text.slice(text.indexOf('Build the worker message once per session'));
+  const match = after.match(/```\n([\s\S]*?)\n```/);
+  assert.ok(match, 'worker message block not found');
+  assert.ok(!match[1].includes('sections'));
+});
+
+test('section 3 makes sections the default and checks the plan', () => {
+  const three = section(3).replace(/\s+/g, ' ');
+  assert.ok(three.includes('--check-plan'));
+  assert.ok(three.includes('rename it to ## '));
+  assert.ok(three.includes('Plan reads: whole ('));
+  assert.ok(!three.includes('`whole` by default'));
+});
+
+test('section 6 rechecks the plan and adds a task the plan cannot cut without reads', () => {
+  const six = section(6).replace(/\s+/g, ' ');
+  assert.ok(six.includes('--check-plan'));
+  assert.ok(six.includes('with no `reads`'));
+  assert.ok(six.includes('the line ranges of the plan\'s Global Constraints, Review Focus and Dependencies sections and of its task section'));
+  assert.ok(!six.includes('or run with `whole`'));
+});
+
+test('the image template defaults plan reads to sections', () => {
+  const template = fs.readFileSync(path.join(__dirname, '..', 'skills', 'orchestrate', 'image-template.md'), 'utf8');
+  assert.ok(template.includes('- Plan reads: sections'));
+});
+
+test('section 3 says what to do with sections --check-plan lists as in no excerpt', () => {
+  const three = section(3).replace(/\s+/g, ' ');
+  assert.ok(three.includes('Not in any excerpt'));
+  assert.ok(three.includes('copy that text into the image'));
+  assert.ok(three.includes('## Final checks'));
+});
+
+test('section 3 and the image template list the plan in Read before starting only with whole', () => {
+  const template = fs.readFileSync(path.join(__dirname, '..', 'skills', 'orchestrate', 'image-template.md'), 'utf8');
+  // The Sources comment lists the plan for every run, so only the Read before starting comment is checked.
+  const reads = template.slice(template.indexOf('## Read before starting'), template.indexOf('## Decisions')).replace(/\s+/g, ' ');
+  const three = section(3).replace(/\s+/g, ' ');
+  for (const t of [three, reads]) {
+    assert.ok(!t.includes('the spec, the plan,'));
+    assert.ok(t.includes('the plan only when plan reads is `whole`'));
+  }
+});
+
+test('a renumber or repeated-task refusal sends the plan back for renumbering, not to whole', () => {
+  const three = section(3).replace(/\s+/g, ' ');
+  assert.ok(three.includes('When stderr says `renumber` or `appears more than once`, renumber the plan\'s tasks and run the check again'));
+  assert.ok(three.includes('`rename them to`'));
+  const six = section(6).replace(/\s+/g, ' ');
+  assert.ok(six.includes('Only a failure the plan cannot be fixed for (a missing shared section, a task over the limit) switches the run to `whole`'));
+  assert.ok(!six.includes('exit 1, switch the run to `whole`'));
+});

@@ -103,3 +103,7 @@ test("the skill starts in the plan branch's worktree", () => {
     assert.ok(text.includes(word), `lacks ${word}`);
   }
 });
+
+test('orch-plan keeps steps after the last task under a ## heading', () => {
+  assert.ok(text.replace(/\s+/g, ' ').includes('Steps after the last task that no worker does'));
+});

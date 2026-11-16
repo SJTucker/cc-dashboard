@@ -12,6 +12,7 @@ index, the board file and the feedback log. -->
 
 - Spec:
 - Plan:
+- Plan reads: sections
 - Orchestrator transcript:
 - Transcript index:
 - Board:
@@ -26,10 +27,12 @@ messages go here comes from the message review. -->
 ## Read before starting
 
 <!-- An ordered list of files every worker reads in full, each with one line on
-why: the spec, the plan, the project's CLAUDE.md, `GLOSSARY.md` and the ADRs the
-spec or plan names, then the source files the work centers on and their immediate
-call paths. Absolute paths. Never a task's own `**Reads:**` files: those stay in
-its plan task. -->
+why: the spec, the project's CLAUDE.md, `GLOSSARY.md` and the ADRs the spec or
+plan names, then the source files the work centers on and their immediate call
+paths. Absolute paths. Never a task's own `**Reads:**` files: those stay in its
+plan task. List the plan only when plan reads is `whole`. With
+`Plan reads: sections`, the default, each worker gets its plan sections in its
+claim. -->
 
 1.
 

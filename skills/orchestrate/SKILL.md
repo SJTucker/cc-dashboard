@@ -81,7 +81,7 @@ something.
 - When the spec has a Decisions section (an `orch-grill` spec does), the image's
   "Decisions" refers to the spec by path and quotes only decisions the user made
   after the spec was written.
-- "Read before starting" names the spec, the plan, the project's CLAUDE.md, the
+- "Read before starting" names the spec, the project's CLAUDE.md, the
   `GLOSSARY.md` and ADRs the spec or plan names, and the source files the work
   centers on with their immediate call paths (the files that call them and that
   they call), as absolute paths in reading order. Give `GLOSSARY.md` and the ADRs
@@ -89,7 +89,26 @@ something.
   else in the main checkout, because `orch-grill` commits them on the plan branch
   only. A task's `**Reads:**` files stay in its plan task and never go in "Read
   before starting", which holds only files every worker needs
-  (`docs/adr/0001-orchestrate-workers-share-one-prompt-prefix.md`).
+  (`docs/adr/0001-orchestrate-workers-share-one-prompt-prefix.md`). It names
+  the plan only when plan reads is `whole`.
+- A run has a plan reads setting: `sections` by default. With `sections`, "Read
+  before starting" lists the spec and leaves out the plan, because each worker gets
+  its own plan sections in its claim. With `whole`, it lists both. Before writing
+  the image, run `CLAIM --check-plan <plan path>`. On exit 0, record
+  `Plan reads: sections` in the image's Sources section. On exit 1:
+  - When stderr says `rename it to ## <name>` (or `rename them to` for several
+    headings), correct those headings in the plan and run the check again.
+  - When stderr says `renumber` or `appears more than once`, renumber the plan's
+    tasks and run the check again.
+  - Otherwise, use `whole` and record the reason in Sources as
+    `Plan reads: whole (<reason>)`, for example `Plan reads: whole (no Review Focus section)`.
+  - The owner can also ask for `whole`.
+
+  `--check-plan` also prints a `Not in any excerpt: ## <heading>` line for each
+  `## ` section of the plan that no excerpt carries. Read each one. If it holds
+  instructions a worker needs, copy that text into the image (Goal and principles
+  or Orientation), or use `whole`. Orchestrator-only sections such as
+  `## Final checks` need nothing.
 - "Lookup" carries `<index>` and `<transcript>` filled in.
 
 Run `wc -w <image>`. Over 4,000 words means cut, starting with anything a worker
@@ -292,6 +311,23 @@ For each ready task, in this order:
 
    A `title` must not contain `"`, a backtick, `$`, `\` or a newline. Reword a plan
    title that does.
+
+   When the run's plan reads setting is `sections`, every work task carries
+   `"reads": "sections"`, relaunches and stub and fix tasks (`"task": 0`) included.
+   Review tasks never carry `reads`. `--add` then stores the task's plan sections
+   in the task file, and the claim prints them. Section 5 can edit the plan after
+   section 3's check. Before the first `--add` of a run, run
+   `<CLAIM> --check-plan <plan path>` again if the plan changed since section 3. On
+   exit 1, fix the plan as section 3 says for a heading to rename or a task to
+   renumber, and run the check again. Only a failure the plan cannot be fixed for
+   (a missing shared section, a task over the limit) switches the run to `whole`:
+   change the image's line to `Plan reads: whole (<reason>)` and add the plan to
+   "Read before starting". When
+   `--add` still refuses after the first dispatch, add the task with no `reads`, and
+   with `notes` naming the plan path, the line ranges of the plan's Global
+   Constraints, Review Focus and Dependencies sections and of its task section. A task
+   added after the first dispatch that the plan has no section for, such as a split
+   from section 8, also carries no `reads` and puts its whole work in `notes`.
 3. Start the worker with the Agent tool: `subagent_type: "orch-worker"`,
    `model: "sonnet"`, `run_in_background: true`, `description: "orchestrate worker"`
    (the same for every worker), and the fixed message as the prompt.
@@ -480,7 +516,8 @@ reporting agent's claimed file `<run>/claimed/<file>`, the one its `CLAIMED` lin
 names. Dispatch order does not say which task the agent did. The task carries that
 file's fields (`task`, `title`, `plan`, `worktree`, `branch`, `files`,
 `doneWhen`, `sections`, `reviewer`) and `implementer: { agentId, transcript }`, with
-`transcript` the transcript path of the agent that claimed the work task. A
+`transcript` the transcript path of the agent that claimed the work task. The
+review task leaves out the claimed work file's `reads` and `planExcerpt`. A
 reviewer's task is likewise the one in the claimed file its own `CLAIMED` line
 names.
 

@@ -222,7 +222,22 @@ test('addTask appends an added event', (t) => {
   assert.equal(events.length, 1);
   const { t: stamp, ...rest } = events[0];
   assert.equal(typeof stamp, 'string');
-  assert.deepEqual(rest, { kind: 'added', file: '0001-t3-a1.json', task: 3, title: 'Parse the field', attempt: 1, queue: 'work' });
+  assert.deepEqual(rest, { kind: 'added', file: '0001-t3-a1.json', task: 3, title: 'Parse the field', attempt: 1, queue: 'work', reads: 'whole' });
+});
+
+test("addTask records the reads setting on a work task's added event", (t) => {
+  const run = runIn(t);
+  addTask(run, 'work', { ...task(3), reads: 'sections' });
+  addTask(run, 'work', task(4));
+  addTask(run, 'review', { ...task(3), kind: 'review' });
+  const ev = eventsOf(run);
+  assert.equal(ev[0].reads, 'sections');
+  assert.equal(ev[1].reads, 'whole');
+  assert.equal('reads' in ev[2], false);
+});
+
+test('formatClaim prints no plan sections line without an excerpt', () => {
+  assert.doesNotMatch(formatClaim('0001-t3-a1.json', task(3)), /Your sections of the plan/);
 });
 
 test('release appends a released event', (t) => {
