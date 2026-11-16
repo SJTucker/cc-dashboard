@@ -28,6 +28,8 @@ export function quotePath(path: string) {
 
 // The prompt the mod puts in the input box after /clear. index is the transcript's
 // index file from bin/transcript-index, passed only when it exists.
+// Measured 2026-11-12: the index line did not lower resume cost or improve the first
+// reply. Re-measure by replaying the same transcripts with and without it.
 export function resumePrompt(path: string, index?: string) {
   const start = index
     ? `Start with its index, ${quotePath(index)}. It lists each prompt the user typed with the transcript lines it covers, ` +

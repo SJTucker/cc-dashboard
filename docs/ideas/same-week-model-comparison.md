@@ -25,3 +25,20 @@ this month with last month cannot give that.
 - How to count a prompt whose calls used more than one model, for example a
   subagent on Haiku.
 - Where it shows: a Setup changes style before/after panel, or a table.
+
+## Spike findings (2026-09-24)
+
+A throwaway spike over the owner's transcripts and rtk history found:
+
+- Session-start context (the first main-thread call's input plus cache tokens) does
+  not depend on the task. It steps up when plugins or skills are installed. Two
+  models in the same week differed by about 1.3K tokens on it, so a rise is setup,
+  not model.
+- Main-thread Bash result size dropped by about a third after an rtk config change,
+  and rtk's own history agreed. Transcripts record the command before a hook
+  rewrites it, so rtk's effect cannot be split out by command text.
+- Model drift is best compared inside one week with both models running, not month
+  against month.
+- Cost per commit and cost per prompt are too noisy (coefficient of variation about
+  0.7) to credit to a single change.
+- `history.jsonl` timestamps are local time. Plugin `installedAt` values are UTC.

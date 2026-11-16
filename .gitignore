@@ -6,3 +6,4 @@ docs/superpowers/
 changes.json
 mod/.claude-plugin/types/
 .worktrees/
+/mod-probe/
