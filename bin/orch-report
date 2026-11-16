@@ -64,7 +64,7 @@ async function main() {
     steps[e.agent] = await stepsOf(usageDir, e.agent);
     reads[e.agent] = readsOf(e.transcript);
   }
-  const report = buildReport({ events, steps, reads, imageText });
+  const report = buildReport({ events, steps, reads, imageText, imagePath: image });
   process.stdout.write(values.json ? `${JSON.stringify(report, null, 2)}\n` : renderReport(report));
 }
 
