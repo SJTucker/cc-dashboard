@@ -32,3 +32,9 @@ wt switch --create <branch> --base main --no-cd
 Local `main` is often ahead of `origin/main`. A worktree based on `origin/main`
 leaves out the unpushed commits. `EnterWorktree` bases on `origin/main` by
 default and turns on the isolation guard, so don't use it here.
+
+## Commits
+
+Squash a branch's commits into one before it merges into `main`. Use
+`git reset --soft $(git merge-base main HEAD)` in the branch's worktree, then
+commit once with a message that covers the whole branch.
