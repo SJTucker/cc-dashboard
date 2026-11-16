@@ -90,6 +90,15 @@ test('the skill ends a run with a Fable review of the plan branch', () => {
   }
 });
 
+test('an Opus worker fixes the problems passing reviews left before the Fable review starts', () => {
+  assert.ok(section(11).includes('<leftovers>'));
+  const fourteen = section(14).replace(/\s+/g, ' ');
+  const fix = fourteen.indexOf('Its `notes` carry the lines of `<leftovers>`');
+  assert.ok(fix >= 0);
+  assert.ok(fix < fourteen.indexOf('model: "fable"'));
+  assert.ok(fourteen.includes('`model: "opus"`'));
+});
+
 test('the worker message signs board posts with the task title', () => {
   const after = text.slice(text.indexOf('Build the worker message once per session'));
   const message = after.match(/```\n([\s\S]*?)\n```/)[1];
