@@ -54,6 +54,18 @@ test('slot wait starts at the last ready before the first claim', () => {
   assert.equal(task(r, 2).wallMs, 30 * MIN);
 });
 
+test('a task with no ready or merged event, like Task 0, runs from its first added to its last review pass', () => {
+  const r = build([
+    ev(0, 'added', { file: '0011-t0-a1.json', task: 0, attempt: 1, queue: 'work' }),
+    ev(1, 'claimed', { file: '0011-t0-a1.json', agent: 'a1', transcript: '/t/a1.jsonl', worktree: '/w' }),
+    ev(3, 'added', { file: '0012-t0-a1.json', task: 0, attempt: 1, queue: 'review' }),
+    ev(7, 'review-fail', { task: 0 }),
+    ev(9, 'review-pass', { task: 0 }),
+  ]);
+  assert.equal(task(r, 0).slotWaitMs, 1 * MIN);
+  assert.equal(task(r, 0).wallMs, 9 * MIN);
+});
+
 test('waiting time sums each waiting to answered pair, and an open pair runs to the last event', () => {
   const r = build([
     ev(0, 'ready', { task: 2 }),
@@ -116,6 +128,11 @@ test('read outside the image lists only files the image text does not name', () 
   assert.deepEqual(agent(r, 'a1').readOutsideImage, ['/w/lib/b.js']);
   const full = build(CLAIM, { reads: { a1: ['/w/lib/a.js', '/other/c.js'] }, imageText: 'see /other/c.js' });
   assert.deepEqual(agent(full, 'a1').readOutsideImage, ['/w/lib/a.js']);
+});
+
+test('read outside the image leaves out the image file itself', () => {
+  const r = build(CLAIM, { reads: { a1: ['/repo/image.md', '/w/lib/b.js'] }, imagePath: '/repo/image.md' });
+  assert.deepEqual(agent(r, 'a1').readOutsideImage, ['/w/lib/b.js']);
 });
 
 test('an agent with no steps or no transcript gets nulls', () => {
