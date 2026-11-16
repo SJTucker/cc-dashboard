@@ -3974,6 +3974,7 @@ test('a saved "transcript" handoff setting runs the image handoff', async ($, on
 // /context-image-handoff: writes the image on request and queues it in the reset file.
 const imageCmd = { command: 'context-image-handoff', args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }
 const CMD_STARTED = 'context-image-handoff: writing the context image. The status line says when /clear will resume from it.'
+const CMD_WRITING = 'writing context image…'
 const CMD_READY = 'context image ready · /clear to resume'
 const CMD_TRANSCRIPT = 'context image failed · /clear to resume from the transcript'
 const CMD_FAILED = 'context image failed · see the cc-dashboard log'
@@ -3988,7 +3989,7 @@ test('/context-image-handoff returns at once, then queues the image prompt in th
   expect(forked.length).toBe(1)
   expect(writes[IMG_PATH]).toBe('# Context image: Fix login\nbody\n')
   expect(writes[RESET_FILE]).toBe(`${imageResumePrompt(IMG_PATH)}\n`)
-  expect(statuses).toEqual([CMD_READY])
+  expect(statuses).toEqual([CMD_WRITING, CMD_READY])
 })
 
 test('the image queued by /context-image-handoff fills the input after the next /clear', async ($, on) => {
@@ -4035,12 +4036,44 @@ test('/context-image-handoff run twice while it writes forks once', async ($, on
   expect(forked.length).toBe(1)
 })
 
+test('a /clear while /context-image-handoff writes clears the writing status', async ($, on) => {
+  const { statuses, clock } = world(on, imageWorld({ forkMs: 5_000 }))
+  await $.command.run(imageCmd)
+  await $.session.end(clear)
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(statuses).toEqual([CMD_WRITING, undefined])
+})
+
+test('a prompt while /context-image-handoff writes keeps the writing status, then shows ready', async ($, on) => {
+  const { writes, statuses, clock } = world(on, imageWorld({ forkMs: 5_000 }))
+  await $.command.run(imageCmd)
+  await clock.advance(1)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(writes[RESET_FILE]).toBe(`${imageResumePrompt(IMG_PATH)}\n`)
+  expect(statuses).toEqual([CMD_WRITING, CMD_READY])
+})
+
+test('a second /context-image-handoff after a prompt while the first writes forks once', async ($, on) => {
+  const { forked, clock } = world(on, imageWorld({ forkMs: 5_000 }))
+  await $.command.run(imageCmd)
+  await clock.advance(1)
+  await $.turn.start({ text: 'more', turnId: 't2' })
+  const second = await $.command.run(imageCmd)
+  expect(second).toEqual({ text: 'context-image-handoff: a context image or handoff is already being written.' })
+  await clock.advance(5_000)
+  await clock.settle()
+  expect(forked.length).toBe(1)
+})
+
 test('/context-image-handoff logs a fork failure and queues the transcript prompt in its place', async ($, on) => {
   const { writes, statuses, logged, clock } = world(on, imageWorld({ forkReply: { isAnswered: false, reason: 'nothing-to-fork' } }))
   await $.command.run(imageCmd)
   await clock.settle()
   expect(writes[RESET_FILE]).toBe(`${RESUME}\n`)
-  expect(statuses).toEqual([CMD_TRANSCRIPT])
+  expect(statuses).toEqual([CMD_WRITING, CMD_TRANSCRIPT])
   expect(logged).toEqual(['context image failed (fork nothing-to-fork)'])
 })
 
@@ -4049,7 +4082,7 @@ test('/context-image-handoff sets the failed status when the transcript fallback
   await $.command.run(imageCmd)
   await clock.settle()
   expect(writes[RESET_FILE]).toBe(undefined)
-  expect(statuses).toEqual([CMD_FAILED])
+  expect(statuses).toEqual([CMD_WRITING, CMD_FAILED])
   expect(logged).toEqual(['context image failed (fork nothing-to-fork)', expect.stringMatching(/^transcript fallback failed \(/)])
 })
 

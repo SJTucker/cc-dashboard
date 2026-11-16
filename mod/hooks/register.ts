@@ -996,6 +996,11 @@ const HANDOFF_STATUS_EXPIRED = 'cache expired · /clear to resume from the trans
 const HANDOFF_STATUS_DOCUMENT = 'handoff ready · /clear to resume'
 const HANDOFF_STATUS_IMAGE = 'cache expires soon · /clear to resume from the context image'
 const HANDOFF_STATUS_IMAGE_EXPIRED = 'cache expired · /clear to resume from the context image'
+const COMMAND_STATUS_WRITING = 'writing context image…'
+// The sessions whose status /context-image-handoff set to COMMAND_STATUS_WRITING.
+// commandImage removes its id when it finishes. session.end removes the id and clears
+// the status, because commandImage sets no status for an ended session.
+const imageWritingIds = new Set<string>()
 const COMMAND_STATUS_READY = 'context image ready · /clear to resume'
 const COMMAND_STATUS_TRANSCRIPT = 'context image failed · /clear to resume from the transcript'
 const COMMAND_STATUS_FAILED = 'context image failed · see the cc-dashboard log'
@@ -1138,8 +1143,9 @@ async function commandTranscript($: EngineInterface, id: string) {
 // The /context-image-handoff work: writes the image, queues the prompt in the session's
 // reset file and sets the status. A failure is logged, and the transcript resume prompt
 // is queued in its place. The entry goes away when it is still the record's, so a later
-// idle gap can get its own handoff. The status stays as it is when the session ended or
-// a prompt arrived meanwhile.
+// idle gap can get its own handoff. A prompt during the fork does not stop the status,
+// because the reset file is queued either way and the next /clear resumes from it. The
+// status stays as it is when the session ended.
 function commandImage($: EngineInterface, id: string, entry: Handoff | undefined) {
   const done = async () => {
     try {
@@ -1157,11 +1163,11 @@ function commandImage($: EngineInterface, id: string, entry: Handoff | undefined
   return done()
     .then((status) => {
       const s = peekState(id)
-      const stale = entry !== undefined && s?.handoff !== entry
       if (entry && s?.handoff === entry) s.handoff = undefined
-      if (!stale && !endedSessions.has(id)) $.ui.status(status)
+      if (!endedSessions.has(id)) $.ui.status(status)
     })
     .catch((err) => logEach($, `context image failed (${errorText(err)})`))
+    .finally(() => imageWritingIds.delete(id))
 }
 
 // Starts the document or image handoff and waits for it. A failure is logged, and the
@@ -1376,7 +1382,8 @@ async function dropHandoff($: EngineInterface) {
     const s = peekState(id)
     const handoff = s?.handoff
     if (s) s.handoff = undefined
-    if (handoff || !statusCleared) $.ui.status()
+    // A context image the command is still writing keeps its writing status.
+    if ((handoff || !statusCleared) && !imageWritingIds.has(id)) $.ui.status()
     if (handoff || !statusCleared) await deleteStoredHandoff($, id)
     statusCleared = true
   } catch (err) {
@@ -1873,16 +1880,19 @@ export const register: Register = (on) => {
 
   // Writes a context image in the background and queues its resume prompt in the reset
   // file, so the next /clear fills it whatever the handoff setting says. It checks
-  // neither the cache TTL nor the token count.
+  // neither the cache TTL nor the token count. The status says the image is being
+  // written until commandImage replaces it, or a prompt or session.end clears it.
   on('command.run', { command: 'context-image-handoff' }, async ($) => {
     const id = await $.session.id()
     const path = await transcriptPath($, await $.session.root(), id)
     if (!path) return { text: 'context-image-handoff: transcript not found. Send a prompt first, then run /context-image-handoff again.' }
-    if (peekState(id)?.handoff?.state === 'writing') return { text: 'context-image-handoff: a context image or handoff is already being written.' }
+    if (imageWritingIds.has(id) || peekState(id)?.handoff?.state === 'writing') return { text: 'context-image-handoff: a context image or handoff is already being written.' }
     // With no handoff in the record, a 'writing' entry blocks the auto timer and a second
     // command run while the fork runs. A ready or failed handoff stays as it is.
     const entry: Handoff | undefined = peekState(id)?.handoff ? undefined : { state: 'writing' }
     if (entry) stateOf(id).handoff = entry
+    imageWritingIds.add(id)
+    $.ui.status(COMMAND_STATUS_WRITING)
     $.clock.after(0, () => {
       commandImage($, id, entry)
     })
@@ -1939,7 +1949,8 @@ export const register: Register = (on) => {
   // /clear and is emptied on any end, so a later end of the same session finds nothing.
   on('session.end', async ($, e, next) => {
     const handoff = peekState(e.sessionId)?.handoff
-    const interactive = peekState(e.sessionId)?.mode?.interactive !== false
+    const imageWriting = imageWritingIds.delete(e.sessionId)
+    const interactive =peekState(e.sessionId)?.mode?.interactive !== false
     const headlessWrite = headlessWrites.get(e.sessionId)
     await debug($, 'session.end', present(e, ['reason']), e.sessionId)
     // Awaited because a claude -p process exits once session.end returns, which would
@@ -1968,8 +1979,10 @@ export const register: Register = (on) => {
     // clear and the store delete below still run for it.
     const handoffOn = (await dashboardSettings($)).handoff !== 'off'
     const fill = endFill(e.reason, reset, stored, handoffOn)
+    // commandImage sets no status once the session has ended, so a writing status that
+    // /context-image-handoff set is cleared here.
     if (fill !== undefined) prefillAfterClear($, fill)
-    else if (stored !== undefined) $.ui.status()
+    else if (stored !== undefined || imageWriting) $.ui.status()
     if (stored !== undefined) await deleteStoredHandoff($, e.sessionId)
     // The lookup runs after the hook returns, so it does not count against the hook's
     // budget. It uses findTranscript, which caches nothing for the ended session. A

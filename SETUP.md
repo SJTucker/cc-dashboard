@@ -116,8 +116,9 @@ cache expires. The mod writes no file for it and makes no model call.
 
 `/context-image-handoff` writes a context image of the current session in the
 background, whatever the `handoff` setting says, and without the 1-hour cache or
-50,000-token checks. When the image is written, the status line shows `context image
-ready · /clear to resume`, and the prompt that reads it is queued in
+50,000-token checks. While the image is being written, the status line shows `writing
+context image…`, and prompts sent meanwhile leave it there. When the image is written, the status
+line shows `context image ready · /clear to resume`, and the prompt that reads it is queued in
 `<cfg>/cc-dashboard/reset-prompt/<session id>.txt`, so the next `/clear` fills it. If the
 fork or the write fails, the transcript resume prompt is queued in its place, and the
 status line shows `context image failed · /clear to resume from the transcript`. If
