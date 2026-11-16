@@ -369,6 +369,54 @@ test('GET /api/limits starts a /usage refresh, and POST /api/refresh starts anot
   assert.strictEqual(runs.length, 2);
 });
 
+test('GET /api/limits starts a /usage refresh once when the account changes', async (t) => {
+  const { runs, spawn } = recordingSpawn();
+  const { url, config } = await startServer(t, { usageRefresh: { bin: 'claude-test', spawn } });
+  const file = path.join(config.configDir, '.claude.json');
+  const write = (account, fetchedAtMs) => fs.writeFileSync(file, JSON.stringify({
+    oauthAccount: { accountUuid: account },
+    cachedUsageUtilization: { fetchedAtMs, accountUuid: 'acct-1', utilization: {} },
+  }));
+
+  // A routine run on the first account, so the next routine run is 5 minutes away.
+  write('acct-1', Date.now() - 10 * 60 * 1000);
+  await fetch(`${url}/api/limits`);
+  assert.strictEqual(runs.length, 1);
+  write('acct-1', Date.now());
+  runs[0].proc.emit('exit', 0, null);
+
+  write('acct-2', Date.now());
+  await fetch(`${url}/api/limits`);
+  assert.strictEqual(runs.length, 2);
+  runs[1].proc.emit('exit', 1, null); // the run fails and leaves the old cache
+
+  await fetch(`${url}/api/limits`);
+  await fetch(`${url}/api/limits`);
+  assert.strictEqual(runs.length, 2); // no retry on every poll
+});
+
+test('a switch during a routine /usage run starts its own run once that one ends', async (t) => {
+  const { runs, spawn } = recordingSpawn();
+  const { url, config } = await startServer(t, { usageRefresh: { bin: 'claude-test', spawn } });
+  const file = path.join(config.configDir, '.claude.json');
+  const write = (account, fetchedAtMs) => fs.writeFileSync(file, JSON.stringify({
+    oauthAccount: { accountUuid: account },
+    cachedUsageUtilization: { fetchedAtMs, accountUuid: 'acct-1', utilization: {} },
+  }));
+
+  write('acct-1', Date.now() - 10 * 60 * 1000);
+  await fetch(`${url}/api/limits`);
+  assert.strictEqual(runs.length, 1); // still running
+
+  write('acct-2', Date.now() - 10 * 60 * 1000);
+  await fetch(`${url}/api/limits`);
+  assert.strictEqual(runs.length, 1);
+  runs[0].proc.emit('exit', 0, null);
+
+  await fetch(`${url}/api/limits`);
+  assert.strictEqual(runs.length, 2);
+});
+
 test('the default test config starts no /usage refresh', async (t) => {
   const { url, config } = await startServer(t);
   await fetch(`${url}/api/limits`);

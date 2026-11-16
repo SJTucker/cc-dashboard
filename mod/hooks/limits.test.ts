@@ -106,6 +106,12 @@ test('parseRateLimitsFile reads both windows and turns resets_at seconds into IS
   expect(parseRateLimitsFile('{"fetchedAtMs":1,"rate_limits":{"spend_limit":{"used_percentage":9}}}')).toBeNull()
 })
 
+test('parseUsageCache ignores a cache from another account', async () => {
+  const cache = { fetchedAtMs: 7_000, accountUuid: 'acct-1', utilization: { five_hour: { utilization: 80, resets_at: '2026-10-25T22:49:59Z' } } }
+  expect(parseUsageCache(JSON.stringify({ oauthAccount: { accountUuid: 'acct-2' }, cachedUsageUtilization: cache }))).toBeNull()
+  expect(parseUsageCache(JSON.stringify({ oauthAccount: { accountUuid: 'acct-1' }, cachedUsageUtilization: cache }))?.fetchedAtMs).toBe(7_000)
+})
+
 test('parseUsageCache reads cachedUsageUtilization and keeps its ISO resets_at', async () => {
   const text = JSON.stringify({ other: 1, cachedUsageUtilization: { fetchedAtMs: 7_000, utilization: {
     five_hour: { utilization: 80, resets_at: '2026-10-25T22:49:59.768560+00:00' },

@@ -84,6 +84,7 @@ function dailyShareRow(today) {
   }
   if (today.from === 'first-reading') notes.push("counted from today's first reading");
   if (today.from === 'reset') notes.push('counted from the weekly reset');
+  if (today.from === 'account-switch') notes.push('counted from the switch to this plan');
   if (today.from === 'no-reading-today') notes.push('no API response yet today');
 
   const meter = shareMeter(today);

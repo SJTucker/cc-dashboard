@@ -8,7 +8,7 @@ const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const ROOT = path.join(__dirname, '..');
-const { getRateLimitsPath, recordRateLimits, readLimits, readDailyShare, readUsageFetchedAt } = require('../lib/limits');
+const { getRateLimitsPath, recordRateLimits, readLimits, readDailyShare, readUsageFetchedAt, readAccountUuid } = require('../lib/limits');
 
 const NOW = Date.parse('2026-09-28T17:55:00Z');
 const FETCHED = NOW - 3 * 60 * 1000;
@@ -262,6 +262,9 @@ test('bin/record-statusline writes rate-limits.json under CLAUDE_CONFIG_DIR with
     transcript_path: transcript,
     rate_limits: { five_hour: { used_percentage: 12.5, resets_at: Math.floor(NOW / 1000) + 3600 } },
   });
+  fs.writeFileSync(path.join(config, '.claude.json'), JSON.stringify({
+    oauthAccount: { accountUuid: 'acct-9', emailAddress: 'someone@example.com' },
+  }));
   const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'record-statusline')], {
     input,
     encoding: 'utf8',
@@ -270,9 +273,12 @@ test('bin/record-statusline writes rate-limits.json under CLAUDE_CONFIG_DIR with
   assert.strictEqual(result.status, 0);
   assert.strictEqual(result.stdout, '');
   assert.strictEqual(result.stderr, '');
-  const written = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const raw = fs.readFileSync(file, 'utf8');
+  const written = JSON.parse(raw);
   assert.strictEqual(written.fetchedAtMs, FETCHED);
   assert.strictEqual(written.rate_limits.five_hour.used_percentage, 12.5);
+  assert.strictEqual(written.accountUuid, 'acct-9');
+  assert.ok(!raw.includes('someone@example.com'));
 });
 
 // Local wall-clock times, so the tests hold in any timezone.
@@ -286,9 +292,10 @@ function weekInput(transcriptMs, percent, resetsAtMs = RESET) {
   });
 }
 
-function weekFile(fetchedAtMs, percent, dayStart, resetsAtMs = RESET) {
+function weekFile(fetchedAtMs, percent, dayStart, resetsAtMs = RESET, account) {
   const content = { fetchedAtMs, rate_limits: { seven_day: { used_percentage: percent, resets_at: Math.floor(resetsAtMs / 1000) } } };
   if (dayStart) content.dayStart = dayStart;
+  if (account) content.accountUuid = account;
   return writeRateLimits(content);
 }
 
@@ -464,6 +471,58 @@ test('a previous reading just before midnight, with no baseline, starts the new 
   assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 12, from: 'previous-reading' });
 });
 
+test('readAccountUuid reads oauthAccount.accountUuid, or null', () => {
+  assert.strictEqual(readAccountUuid(writeClaudeJson({ oauthAccount: { accountUuid: 'acct-2' } })), 'acct-2');
+  assert.strictEqual(readAccountUuid(writeClaudeJson({ oauthAccount: { emailAddress: 'someone@example.com' } })), null);
+  assert.strictEqual(readAccountUuid(writeClaudeJson('not json')), null);
+  assert.strictEqual(readAccountUuid(missingFile('.claude.json')), null);
+});
+
+test('recordRateLimits stores the account it was given, and no key without one', () => {
+  const file = missingFile('rate-limits.json');
+  recordRateLimits(weekInput(at(2026, 9, 30, 9), 13), file, 'acct-1');
+  assert.strictEqual(readBack(file).accountUuid, 'acct-1');
+  const bare = missingFile('rate-limits.json');
+  recordRateLimits(weekInput(at(2026, 9, 30, 9), 13), bare);
+  assert.ok(!('accountUuid' in readBack(bare)));
+});
+
+test('a reading from another account restarts the day at that account\'s weekly percent', () => {
+  const file = weekFile(at(2026, 9, 30, 9), 11, { date: '2026-09-30', percent: 4, from: 'previous-reading' }, RESET, 'acct-1');
+  recordRateLimits(weekInput(at(2026, 9, 30, 12), 6, at(2026, 10, 6, 4)), file, 'acct-2');
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 6, from: 'account-switch' });
+  recordRateLimits(weekInput(at(2026, 9, 30, 13), 8, at(2026, 10, 6, 4)), file, 'acct-2');
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 6, from: 'account-switch' });
+});
+
+test('switching back the same day restarts the day again at the first account\'s current percent', () => {
+  const file = weekFile(at(2026, 9, 30, 12), 8, { date: '2026-09-30', percent: 6, from: 'account-switch' }, at(2026, 10, 6, 4), 'acct-2');
+  recordRateLimits(weekInput(at(2026, 9, 30, 14), 12), file, 'acct-1');
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 12, from: 'account-switch' });
+});
+
+test('a switch ignores the other account\'s passed reset time', () => {
+  const file = weekFile(at(2026, 9, 29, 18), 90, { date: '2026-09-29', percent: 80, from: 'previous-reading' }, at(2026, 9, 30, 5), 'acct-1');
+  recordRateLimits(weekInput(at(2026, 9, 30, 8), 3, at(2026, 10, 6, 4)), file, 'acct-2');
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 3, from: 'account-switch' });
+});
+
+test('a stored reading with no account is not a switch', () => {
+  const dayStart = { date: '2026-09-30', percent: 12, from: 'previous-reading' };
+  const file = weekFile(at(2026, 9, 30, 9), 13, dayStart);
+  recordRateLimits(weekInput(at(2026, 9, 30, 11), 15), file, 'acct-1');
+  const written = readBack(file);
+  assert.deepStrictEqual(written.dayStart, dayStart);
+  assert.strictEqual(written.accountUuid, 'acct-1');
+});
+
+test('a reading with no account keeps the day baseline of a stored account', () => {
+  const dayStart = { date: '2026-09-30', percent: 12, from: 'previous-reading' };
+  const file = weekFile(at(2026, 9, 30, 9), 13, dayStart, RESET, 'acct-1');
+  recordRateLimits(weekInput(at(2026, 9, 30, 11), 15), file);
+  assert.deepStrictEqual(readBack(file).dayStart, dayStart);
+});
+
 test('a previous reading just after midnight, with no baseline, counts as the same day', () => {
   const file = weekFile(at(2026, 9, 30, 0, 1), 12);
   recordRateLimits(weekInput(at(2026, 9, 30, 8), 13), file);
@@ -624,6 +683,53 @@ test('readLimits keeps the cache-only rows when the statusline source is newer, 
   // A cache under 5 minutes older than the statusline reading carries no asOf.
   const recent = readLimits({ claudeJson: cache(NOW - 4 * 60 * 1000), rateLimits, now: NOW });
   assert.deepStrictEqual(recent.limits.map((l) => Object.hasOwn(l, 'asOf')), [false, false, false]);
+});
+
+test('a same-account reading below the day baseline restarts the day at its own percent', () => {
+  // The first reading after a /login carried the old plan's 11% under the new account.
+  const file = weekFile(at(2026, 9, 30, 12), 11, { date: '2026-09-30', percent: 11, from: 'account-switch' }, RESET, 'acct-2');
+  recordRateLimits(weekInput(at(2026, 9, 30, 13), 6, at(2026, 10, 6, 4)), file, 'acct-2');
+  assert.deepStrictEqual(readBack(file).dayStart, { date: '2026-09-30', percent: 6, from: 'account-switch' });
+});
+
+test('a reading with no account keeps the stored account', () => {
+  const file = weekFile(at(2026, 9, 30, 9), 13, { date: '2026-09-30', percent: 12, from: 'previous-reading' }, RESET, 'acct-1');
+  recordRateLimits(weekInput(at(2026, 9, 30, 11), 15), file, null);
+  assert.strictEqual(readBack(file).accountUuid, 'acct-1');
+});
+
+test('readDailyShare is null when the stored reading belongs to another account', () => {
+  const file = weekFile(at(2026, 9, 30, 9), 18, { date: '2026-09-30', percent: 13, from: 'previous-reading' }, RESET, 'acct-1');
+  const now = at(2026, 9, 30, 10);
+  assert.strictEqual(readDailyShare({ rateLimits: file, claudeJson: writeClaudeJson({ oauthAccount: { accountUuid: 'acct-2' } }), now }), null);
+  assert.strictEqual(readDailyShare({ rateLimits: file, claudeJson: writeClaudeJson({ oauthAccount: { accountUuid: 'acct-1' } }), now }).share, 5);
+  assert.strictEqual(readDailyShare({ rateLimits: file, now }).share, 5);
+});
+
+test('readLimits skips a statusline reading from another account', () => {
+  const rateLimits = writeRateLimits({ fetchedAtMs: FETCHED, accountUuid: 'acct-1', rate_limits: { seven_day: { used_percentage: 11, resets_at: Math.floor(NOW / 1000) + 86400 } } });
+  const claudeJson = writeClaudeJson({ oauthAccount: { accountUuid: 'acct-2' } });
+  assert.strictEqual(readLimits({ claudeJson, rateLimits, now: NOW }), null);
+  const same = writeClaudeJson({ oauthAccount: { accountUuid: 'acct-1' } });
+  assert.strictEqual(readLimits({ claudeJson: same, rateLimits, now: NOW }).limits[0].percent, 11);
+});
+
+// withCache's cache belongs to acct-1.
+const otherAccount = (claudeJson) => ({ ...claudeJson, oauthAccount: { accountUuid: 'acct-2' } });
+const sameAccount = (claudeJson) => ({ ...claudeJson, oauthAccount: { accountUuid: 'acct-1' } });
+
+test('readLimits ignores a usage cache from another account', () => {
+  const claudeJson = writeClaudeJson(otherAccount(withCache({ five_hour: usageWindow(6, '2026-09-28T22:20:00Z') })));
+  assert.strictEqual(readLimits({ claudeJson, rateLimits: missingFile('rate-limits.json'), now: NOW }), null);
+});
+
+test('readLimits keeps a usage cache from the logged-in account', () => {
+  const claudeJson = writeClaudeJson(sameAccount(withCache({ five_hour: usageWindow(6, '2026-09-28T22:20:00Z') })));
+  assert.strictEqual(readLimits({ claudeJson, rateLimits: missingFile('rate-limits.json'), now: NOW }).limits[0].percent, 6);
+});
+
+test('readUsageFetchedAt is null for a usage cache from another account', () => {
+  assert.strictEqual(readUsageFetchedAt(writeClaudeJson(otherAccount(withCache({})))), null);
 });
 
 test('readUsageFetchedAt returns the cache time, or null with no usable cache', () => {

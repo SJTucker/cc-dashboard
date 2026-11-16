@@ -17,7 +17,7 @@ const { readRtkUsage, readRtkWindows, readRtkDaily } = require('./lib/rtk');
 const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
-const { readLimits, readUsageFetchedAt, readDailyShare, getRateLimitsPath } = require('./lib/limits');
+const { readLimits, readUsageFetchedAt, readDailyShare, getRateLimitsPath, readAccountUuid } = require('./lib/limits');
 const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = require('./lib/sessions');
 const { readCacheState, getCacheDir } = require('./lib/cache');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
@@ -241,6 +241,11 @@ function createServer(config) {
       lastFetchedAt: () => readUsageFetchedAt(config.claudeJsonPath),
     })
     : null;
+  // The logged-in account at the last GET /api/limits. A /login to another plan starts
+  // one /usage run straight away, so the scoped rows and credits for the new plan do
+  // not wait for the routine 5-minute interval. While a routine run is still going the
+  // switch stays pending, and a later poll starts the run.
+  let lastAccountUuid = null;
 
   const app = express();
   // Express names itself in every response unless told not to.
@@ -295,9 +300,12 @@ function createServer(config) {
   // readLimits() and readDailyShare() return null rather than throwing, so there is
   // no error branch.
   app.get('/api/limits', (req, res) => {
+    const account = readAccountUuid(config.claudeJsonPath);
+    const switched = account && lastAccountUuid && account !== lastAccountUuid;
+    if (!switched || !usageRefresher || usageRefresher.refreshNow()) lastAccountUuid = account ?? lastAccountUuid;
     usageRefresher?.seen();
     const limits = readLimits({ claudeJson: config.claudeJsonPath, rateLimits: rateLimitsPath });
-    res.json(limits && { ...limits, today: readDailyShare({ rateLimits: rateLimitsPath }) });
+    res.json(limits && { ...limits, today: readDailyShare({ rateLimits: rateLimitsPath, claudeJson: config.claudeJsonPath }) });
   });
 
   // All history, whatever range the page shows: a before/after needs data on both

@@ -347,7 +347,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | Path | Override | Written by |
 |---|---|---|
 | `<cfg>/projects/**/*.jsonl` | `CLAUDE_CONFIG_DIR` | Claude Code. `bin/skill-cost` also reads each session's `subagents/agent-*.jsonl` transcripts, read-only. `bin/orch-report` reads the transcript of each worker in a run, read-only. |
-| `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_CONFIG_DIR` | Claude Code |
+| `~/.claude.json`, or `<cfg>/.claude.json` when `CLAUDE_CONFIG_DIR` is set | `CLAUDE_CONFIG_DIR` | Claude Code. `bin/record-statusline` reads `oauthAccount.accountUuid` from it, to tag each reading in `rate-limits.json` with the logged-in account. |
 | `<cfg>/plugins/installed_plugins.json` | `CLAUDE_CONFIG_DIR` | Claude Code |
 | `<cfg>/plugins/store/cc-dashboard_<id>.json` | `CLAUDE_CONFIG_DIR` | Claude Code, for the mod's key-value store. It holds the update check, the setup snapshots, and a ready handoff's resume prompt per session until that session's next prompt or end. |
 | `<cfg>/rate-limits.json` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline`, run by the mod |
@@ -428,10 +428,10 @@ of them.
   once an hour), and when you click Check prices. Set
   `CC_DASHBOARD_PRICE_CHECK=off` to stop the daily and new-model fetches.
 - **The server runs `claude -p --no-session-persistence /usage`** while a dashboard page
-  is open: when the `/usage` cache in `~/.claude.json` is at least 5 minutes old, and
-  when you click Refresh. Claude Code then fetches your plan usage from Anthropic with
-  its own login and rewrites that cache. No model is called and the dashboard reads no
-  token. Set `CC_DASHBOARD_USAGE_REFRESH=off` to stop it.
+  is open: when the `/usage` cache in `~/.claude.json` is at least 5 minutes old, when
+  the logged-in account changes, and when you click Refresh. Claude Code then fetches
+  your plan usage from Anthropic with its own login and rewrites that cache. No model
+  is called and the dashboard reads no token. Set `CC_DASHBOARD_USAGE_REFRESH=off` to stop it.
 - **The `orch-grill` skill** publishes each question round as a private claude.ai
   artifact and reads the answers from its comments. The round page loads its
   stylesheet from `fonts.googleapis.com`, which fetches the font files from

@@ -378,7 +378,11 @@ reading before it, so the day's first API response counts toward that day. After
 a weekly reset, the day counts from 0. If `rate-limits.json` has a reading from
 earlier the same day but no `dayStart`, the day counts from that reading. The
 "Today (share of the week)" row then says "counted from today's first reading",
-because usage before that reading is not known. On a workday (Monday to Friday) the
+because usage before that reading is not known. `bin/record-statusline` also
+stores the logged-in account with each reading. After a `/login` to another plan,
+the day counts from the new plan's weekly percent at its first reading, and the
+row says "counted from the switch to this plan". Until the new plan's first reading,
+the panel leaves out the old plan's reading and the Today row. On a workday (Monday to Friday) the
 share is compared with two budgets. The fixed budget is 20% of the week. The
 rolling budget is the weekly percent left at the start of the day, divided by the
 workdays left before the reset. The warning banner shows when today reaches 19%.

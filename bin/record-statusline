@@ -5,15 +5,16 @@
 // hook (mod/hooks/register.ts). The mod reports a non-zero exit as a failure in
 // the transcript, so this script must exit 0 whatever stdin contains. It never
 // prints anything, because the mod does not use its stdout.
-// It records two things: the plan rate limits (lib/limits.js) and a snapshot of
+// It records two things: the plan rate limits (lib/limits.js), tagged with the
+// logged-in account from .claude.json, and a snapshot of
 // the session's cost block (lib/sessions.js). Each runs on its own, so a failure
 // in one does not stop the other.
 
 const { loadConfig } = require('../lib/config-dir');
-const { recordRateLimits, getRateLimitsPath } = require('../lib/limits');
+const { recordRateLimits, getRateLimitsPath, readAccountUuid } = require('../lib/limits');
 const { recordSession, getSessionsDir } = require('../lib/sessions');
 
-const { configDir } = loadConfig();
+const { configDir, claudeJsonPath } = loadConfig();
 
 let input = '';
 process.stdin.on('data', (chunk) => {
@@ -28,7 +29,7 @@ process.stdin.on('end', () => {
     process.exit(0); // bad JSON: say nothing, exit clean
   }
   try {
-    recordRateLimits(parsed, getRateLimitsPath(configDir));
+    recordRateLimits(parsed, getRateLimitsPath(configDir), readAccountUuid(claudeJsonPath));
   } catch {
     // An unwritable file or a missing transcript: say nothing.
   }

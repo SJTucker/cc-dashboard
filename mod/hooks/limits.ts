@@ -86,11 +86,15 @@ export function parseRateLimitsFile(text: string | undefined): Snapshot | null {
 }
 
 // cachedUsageUtilization in .claude.json, which /usage and the server's usage refresher
-// write. Its resets_at is an ISO string.
+// write. Its resets_at is an ISO string. A cache from another account than the logged-in
+// one is ignored: after a /login to another plan it holds the old plan's numbers.
 export function parseUsageCache(text: string | undefined): Snapshot | null {
-  const cache = parseObject(text)?.cachedUsageUtilization
+  const parsed = parseObject(text)
+  const cache = parsed?.cachedUsageUtilization
   if (cache === null || typeof cache !== 'object') return null
-  const { fetchedAtMs, utilization } = cache as Record<string, unknown>
+  const { fetchedAtMs, utilization, accountUuid } = cache as Record<string, unknown>
+  const account = (parsed?.oauthAccount as Record<string, unknown> | undefined)?.accountUuid
+  if (typeof account === 'string' && typeof accountUuid === 'string' && account !== accountUuid) return null
   return snapshotOf(fetchedAtMs, utilization, (w) => w.utilization,
     (w) => (typeof w.resets_at === 'string' ? w.resets_at : undefined))
 }
