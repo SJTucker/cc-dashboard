@@ -156,7 +156,7 @@ Interfaces blocks as below. Take each task's `**User steps:**` as the steps to d
 with the user before dispatch. Edit the plan only before the first dispatch.
 Changes after that go in a task's `notes` or the image's "Updates".
 
-For a plan without the fields (one from `superpowers:writing-plans`), revise the
+For a plan without the fields (one from `writing-plans`), revise the
 plan so every task includes:
 
 1. The exact test command, and which suite it runs. Check that by reading the
@@ -638,8 +638,8 @@ The user reviews these across sessions before redesigning the image.
    `"fix": "final-review"` and the title prefix `Final review fix: `. The final
    review is not run a second time.
 4. Run `MISSES <image> --branch <plan branch> --base <base>`, then
-   `REPORT <image>`, and show both outputs to the user. Then use
-   superpowers:finishing-a-development-branch on the plan branch. Each fix task has
+   `REPORT <image>`, and show both outputs to the user. Then read
+   `~/.claude/skills/finishing-a-development-branch/SKILL.md` and follow it on the plan branch. Each fix task has
    its own `REPORT` row.
 
 **Grouping.** Group the findings: the lines of `<leftovers>` in step 1 and the
