@@ -6,7 +6,7 @@ const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 const { tmpDir } = require('./helpers');
-const { buildReport, renderReport, mergeSnapshot, transcriptSteps } = require('../lib/orchestrations/report');
+const { buildReport, renderReport, mergeSnapshot, transcriptSteps, readsOutside } = require('../lib/orchestrations/report');
 const { costForUsage } = require('../lib/pricing');
 
 const REPORT = path.join(__dirname, '..', 'bin', 'orch-report');
@@ -124,15 +124,43 @@ test('an agent with a step on an unknown model gets a null cost, and run.cost le
 });
 
 test('read outside the image lists only files the image text does not name', () => {
-  const r = build(CLAIM, { reads: { a1: ['/w/lib/a.js', '/w/lib/b.js'] }, imageText: 'Edit lib/a.js first.' });
-  assert.deepEqual(agent(r, 'a1').readOutsideImage, ['/w/lib/b.js']);
-  const full = build(CLAIM, { reads: { a1: ['/w/lib/a.js', '/other/c.js'] }, imageText: 'see /other/c.js' });
-  assert.deepEqual(agent(full, 'a1').readOutsideImage, ['/w/lib/a.js']);
+  const r = build(CLAIM, { reads: { a1: ['/w/lib/a.js', '/other/b.js'] }, imageText: 'Edit lib/a.js first.' });
+  assert.deepEqual(agent(r, 'a1').readOutsideImage, ['/other/b.js']);
+  const full = build(CLAIM, { reads: { a1: ['/other/a.js', '/other/c.js'] }, imageText: 'see /other/c.js' });
+  assert.deepEqual(agent(full, 'a1').readOutsideImage, ['/other/a.js']);
+});
+
+test('read outside the image drops temp, transcript, run-folder and worktree source files', () => {
+  const ignoreDirs = ['/tmp', '/private/tmp', '/cfg/projects', '/repo/docs/superpowers/images/x.run'];
+  const reads = [
+    '/tmp/x',
+    '/private/tmp/claude-502/s/scratchpad/before.txt',
+    '/cfg/projects/-p/s/subagents/agent-a.jsonl',
+    '/repo/docs/superpowers/images/x.run/events.jsonl',
+    '/w/plan-t1/src/a.ts',
+  ];
+  assert.deepEqual(readsOutside(reads, '/w/plan-t1', '', null, ignoreDirs), []);
+});
+
+test('read outside the image keeps docs and rules', () => {
+  const reads = [
+    '/w/plan-t1/CLAUDE.md',
+    '/w/plan-t1/.claude/rules/db.md',
+    '/w/plan-t1/.claude/settings.json',
+    '/repo/CLAUDE.md',
+    '/repo/docs/superpowers/plans/p.md',
+    '/home/.claude/plugins/cache/s/SKILL.md',
+  ];
+  assert.deepEqual(readsOutside(reads, '/w/plan-t1', '', null, ['/tmp']), reads);
+});
+
+test('a worktree path is matched as a folder', () => {
+  assert.deepEqual(readsOutside(['/w/plan-t10/src/a.ts'], '/w/plan-t1', '', null), ['/w/plan-t10/src/a.ts']);
 });
 
 test('read outside the image leaves out the image file itself', () => {
-  const r = build(CLAIM, { reads: { a1: ['/repo/image.md', '/w/lib/b.js'] }, imagePath: '/repo/image.md' });
-  assert.deepEqual(agent(r, 'a1').readOutsideImage, ['/w/lib/b.js']);
+  const r = build(CLAIM, { reads: { a1: ['/repo/image.md', '/other/b.js'] }, imagePath: '/repo/image.md' });
+  assert.deepEqual(agent(r, 'a1').readOutsideImage, ['/other/b.js']);
 });
 
 test('an agent with no steps or no transcript gets nulls', () => {
@@ -219,6 +247,18 @@ test('orch-report falls back to the transcript when the agent has no agent-usage
   assert.equal(a.peakContext, 100);
   assert.equal(a.cacheReadShare, 0.9);
   assert.ok(a.cost > 0);
+});
+
+test('orch-report leaves reads under the run folder out of the reads outside the image', (t) => {
+  const base = tmpDir(t, 'report');
+  const image = writeRun(base);
+  const runRead = path.join(base, 'img.run', 'claimed', '0001-t2-a1.json');
+  const read = (file, id) => JSON.stringify({ type: 'assistant', timestamp: at(4), cwd: '/w', message: { role: 'assistant', content: [{ type: 'tool_use', id, name: 'Read', input: { file_path: file } }] } });
+  fs.writeFileSync(path.join(base, 'none.jsonl'), [read(runRead, 'r1'), read('/elsewhere/rules.md', 'r2')].join('\n') + '\n');
+  const env = { ...process.env, CLAUDE_CONFIG_DIR: path.join(base, 'cfg') };
+  const j = spawnSync(process.execPath, [REPORT, image, '--json'], { encoding: 'utf8', env });
+  assert.equal(j.status, 0, j.stderr);
+  assert.deepEqual(JSON.parse(j.stdout).agents[0].readOutsideImage, ['/elsewhere/rules.md']);
 });
 
 test('orch-report with a missing image exits 1', (t) => {
@@ -660,4 +700,31 @@ test('bin/orch-report falls back to transcripts for the final agent and its chil
   fs.rmSync(path.join(subs, 'agent-c1.jsonl'));
   fs.rmSync(path.join(base, 'img.run', 'report.json'), { force: true });
   assert.equal(go().run.finalPartial, true);
+});
+
+test('review-fix events count apart from steers', () => {
+  const r = build([
+    ev(0, 'steer', { task: 1, text: 'use Read, not sed' }),
+    ev(1, 'review-fix', { task: 1, text: 'rewrap line 4' }),
+    ev(2, 'review-fix', { task: 1, text: 'assert the exact cost' }),
+  ]);
+  const t = task(r, 1);
+  assert.strictEqual(t.steers, 1);
+  assert.deepStrictEqual(t.steerTexts, ['use Read, not sed']);
+  assert.strictEqual(t.reviewFixes, 2);
+  assert.deepStrictEqual(t.reviewFixTexts, ['rewrap line 4', 'assert the exact cost']);
+});
+
+test('a log with only steer events reports no review fixes', () => {
+  const t = task(build([ev(0, 'steer', { task: 1, text: 'x' })]), 1);
+  assert.strictEqual(t.reviewFixes, 0);
+  assert.deepStrictEqual(t.reviewFixTexts, []);
+});
+
+test('renderReport prints a Fixes column and a Review fixes list', () => {
+  const withFix = renderReport(build([ev(0, 'review-fix', { task: 1, text: 'rewrap line 4' })]));
+  assert.match(withFix, /Steers\s+Fixes/);
+  assert.match(withFix, /Review fixes:\n\s*Task 1: rewrap line 4/);
+  const without = renderReport(build([ev(0, 'steer', { task: 1, text: 'x' })]));
+  assert.doesNotMatch(without, /Review fixes:/);
 });

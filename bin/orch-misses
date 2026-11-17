@@ -10,10 +10,17 @@
 // branch's repository: `git log --no-merges --name-only <base>..<branch>`. Reads
 // <run>/events.jsonl and <run>/claimed/*.json (the run folder is the image path with
 // .md replaced by .run). Prints `Candidates:` with one row per commit and task, then
-// `Final-review fixes:` with the title and the first 400 characters of the notes of each
-// `"task": 0` work file claimed after the run's final-review event (every such file when
-// the log has no final-review event). `none` stands for an empty list. Candidates are
-// for a human or the final review to classify: later work on a shared file can match.
+// `Final-review fixes:` with the title and the first 400 characters of the notes of
+// each task with `"fix": "final-review"`, one line per task from its highest attempt.
+// Older runs marked final-review fixes as `"task": 0` work files with no `fix` field.
+// In a run where no claimed file has a `fix` field, those files are listed too when
+// claimed after the run's final-review event, or all of them when the log has no
+// final-review event. A task with a `fix` field in any attempt is a fix task: it opens
+// no window, so its commits on a passed task's files list as candidates. Such a row
+// ends with `(fix task <N>: <title>)` when the commit falls inside fix task N's
+// claimed-to-merged window and touches one of its files. `none` stands for an empty
+// list. Candidates are for a human or the final review to
+// classify: later work on a shared file can match.
 //
 // Any problem prints `orch-misses: <reason>` on stderr and exits 1.
 
@@ -23,7 +30,7 @@ const { execFileSync } = require('child_process');
 const { parseArgs } = require('util');
 const claims = require('../lib/orchestrations/claims');
 const { eventsPath, parseEvents, taskOfFile } = require('../lib/orchestrations/events');
-const { parseGitLog, lateCommits } = require('../lib/orchestrations/misses');
+const { parseGitLog, lateCommits, windowOf } = require('../lib/orchestrations/misses');
 
 const USAGE = 'usage: orch-misses <image path> --branch <plan branch> --base <base> (run inside the plan branch\'s repository)';
 const NOTES_MAX = 400;
@@ -45,20 +52,60 @@ function readClaimedFiles(runDir) {
   return out;
 }
 
-// { [task]: files of its highest attempt }, task 0 included for the caller to ignore.
-function filesByTask(claimed) {
+// The task numbers with a `fix` field in any attempt.
+function fixTaskNumbers(claimed) {
+  return new Set(claimed.filter((c) => c.data?.fix !== undefined).map((c) => c.task));
+}
+
+// Map of task number to its highest attempt, over the claimed files `keep` accepts.
+function highestAttempts(claimed, keep) {
   const best = new Map();
   for (const c of claimed) {
+    if (!keep(c)) continue;
     if (!best.has(c.task) || c.attempt > best.get(c.task).attempt) best.set(c.task, c);
   }
+  return best;
+}
+
+// { [task]: files of its highest attempt }, leaving out every task with a `fix` field in any attempt.
+// Task 0 stays in for the caller to ignore.
+function filesByTask(claimed) {
+  const fixTasks = fixTaskNumbers(claimed);
+  const best = highestAttempts(claimed, (c) => !fixTasks.has(c.task));
   return Object.fromEntries([...best].map(([n, c]) => [n, c.data.files]));
 }
 
+// Each fix task's number, title and files from its highest attempt, and its claimed-to-merged window.
+function fixWindows(claimed, events) {
+  const fixTasks = fixTaskNumbers(claimed);
+  return [...highestAttempts(claimed, (c) => fixTasks.has(c.task))].map(([n, c]) => ({
+    task: n,
+    title: c.data.title ?? '(no title)',
+    files: Array.isArray(c.data.files) ? c.data.files : [],
+    window: windowOf(events, n),
+  }));
+}
+
+// `  (fix task <N>: <title>)` for each fix task whose window holds the commit and whose files it touches.
+function fixLabel(commit, fixes) {
+  return fixes
+    .filter((f) => f.window && commit.t >= f.window[0] && commit.t <= f.window[1] && commit.files.some((file) => f.files.includes(file)))
+    .map((f) => `  (fix task ${f.task}: ${f.title})`)
+    .join('');
+}
+
 function finalFixes(claimed, events) {
-  const review = events.filter((e) => e.kind === 'final-review').pop();
-  const since = review ? Date.parse(review.t) : -Infinity;
-  return claimed
-    .filter((c) => c.task === 0 && c.data?.kind === 'work' && Date.parse(c.data.claimedAt) > since)
+  const finalTasks = new Set(claimed.filter((c) => c.data?.kind === 'work' && c.data.fix === 'final-review').map((c) => c.task));
+  const fixed = [...highestAttempts(claimed, (c) => finalTasks.has(c.task) && c.data?.kind === 'work').values()];
+  // The Task 0 rule is for old runs only. A run with fix tasks also claims Task 0 for board-post fixes.
+  let old = [];
+  if (fixTaskNumbers(claimed).size === 0) {
+    const review = events.filter((e) => e.kind === 'final-review').pop();
+    const since = review ? Date.parse(review.t) : -Infinity;
+    old = claimed.filter((c) => c.data?.kind === 'work' && c.task === 0 && Date.parse(c.data.claimedAt) > since);
+  }
+  return [...fixed, ...old]
+    .sort((a, b) => claimed.indexOf(a) - claimed.indexOf(b))
     .map((c) => `${c.data.title ?? '(no title)'}: ${String(c.data.notes ?? '').slice(0, NOTES_MAX)}`);
 }
 
@@ -83,8 +130,11 @@ function main() {
   } catch (err) {
     throw new Error(`git log ${values.base}..${values.branch} failed: ${String(err.stderr ?? err.message).trim()}`);
   }
-  const late = lateCommits({ events, tasks: filesByTask(claimed), commits: parseGitLog(log) });
-  const rows = late.map((l) => `Task ${l.task}  ${l.sha.slice(0, 7)}  ${l.subject}  ${l.files.join(', ')}`);
+  const commits = parseGitLog(log);
+  const bySha = new Map(commits.map((c) => [c.sha, c]));
+  const windows = fixWindows(claimed, events);
+  const late = lateCommits({ events, tasks: filesByTask(claimed), commits });
+  const rows = late.map((l) => `Task ${l.task}  ${l.sha.slice(0, 7)}  ${l.subject}  ${l.files.join(', ')}${fixLabel(bySha.get(l.sha), windows)}`);
   const fixes = finalFixes(claimed, events);
   const out = ['Candidates:', ...(rows.length ? rows : ['none']), '', 'Final-review fixes:', ...(fixes.length ? fixes : ['none'])];
   process.stdout.write(out.join('\n') + '\n');

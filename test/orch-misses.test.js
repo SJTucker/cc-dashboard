@@ -159,3 +159,114 @@ test('orch-misses prints none under an empty heading', (t) => {
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout, 'Candidates:\nnone\n\nFinal-review fixes:\nnone\n');
 });
+
+// Task 1 passes and merges; Task 4 is a fix task whose window holds the one late commit on a.js.
+function fixTaskRun(t, fix) {
+  const { run, image, repo } = fixture(t);
+  const base = git(repo, 'rev-parse', 'HEAD').trim();
+  fs.writeFileSync(path.join(repo, 'lib/a.js'), 'a2');
+  git(repo, 'commit', '-qam', 'fix: late change to a');
+  writeClaimed(run, '0001-t1-a1.json', { task: 1, kind: 'work', files: ['lib/a.js'], claimedAt: '2020-01-01T00:00:01.000Z' });
+  writeClaimed(run, '0002-t4-a1.json', { task: 4, kind: 'work', fix, title: 'Final review fix: a.js', notes: 'rename x', files: ['lib/a.js'], claimedAt: '2020-01-01T00:01:00.000Z' });
+  writeEvents(run, [
+    { t: '2020-01-01T00:00:05.000Z', kind: 'review-pass', task: 1 },
+    { t: '2020-01-01T00:00:06.000Z', kind: 'merged', task: 1 },
+    { t: '2020-01-01T00:01:00.000Z', kind: 'claimed', file: '0002-t4-a1.json', agent: 'w4' },
+    { t: '2099-01-01T00:00:00.000Z', kind: 'merged', task: 4 },
+  ]);
+  return spawnSync(process.execPath, [MISSES, image, '--branch', 'HEAD', '--base', base], { encoding: 'utf8', cwd: repo });
+}
+
+test('a final-review fix task is listed and opens no window', (t) => {
+  const r = fixTaskRun(t, 'final-review');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Candidates:\nTask 1 +[0-9a-f]{7} +fix: late change to a +lib\/a\.js +\(fix task 4: Final review fix: a\.js\)\n/);
+  assert.ok(!r.stdout.includes('Task 4'));
+  assert.match(r.stdout, /Final-review fixes:\nFinal review fix: a\.js: rename x\n/);
+});
+
+test('a leftovers fix task is not a final-review fix', (t) => {
+  const r = fixTaskRun(t, 'leftovers');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Candidates:\nTask 1 .* \(fix task 4: Final review fix: a\.js\)\n/);
+  assert.match(r.stdout, /Final-review fixes:\nnone\n$/);
+});
+
+test('a task whose attempt 1 carries fix and attempt 2 does not still opens no window', (t) => {
+  const { run, image, repo } = fixture(t);
+  const base = git(repo, 'rev-parse', 'HEAD').trim();
+  fs.writeFileSync(path.join(repo, 'lib/a.js'), 'a2');
+  git(repo, 'commit', '-qam', 'fix: late change to a');
+  writeClaimed(run, '0001-t1-a1.json', { task: 1, kind: 'work', files: ['lib/a.js'], claimedAt: '2020-01-01T00:00:01.000Z' });
+  writeClaimed(run, '0002-t4-a1.json', { task: 4, kind: 'work', fix: 'leftovers', title: 'Leftover fix: a.js', notes: 'rename x', files: ['lib/a.js'], claimedAt: '2020-01-01T00:01:00.000Z' });
+  writeClaimed(run, '0003-t4-a2.json', { task: 4, kind: 'work', title: 'Leftover fix: a.js', notes: 'rename x again', files: ['lib/a.js'], claimedAt: '2020-01-01T00:02:00.000Z' });
+  writeEvents(run, [
+    { t: '2020-01-01T00:00:05.000Z', kind: 'review-pass', task: 1 },
+    { t: '2020-01-01T00:00:06.000Z', kind: 'merged', task: 1 },
+    { t: '2020-01-01T00:01:00.000Z', kind: 'claimed', file: '0002-t4-a1.json', agent: 'w4' },
+    { t: '2020-01-01T00:02:00.000Z', kind: 'claimed', file: '0003-t4-a2.json', agent: 'w4b' },
+    { t: '2099-01-01T00:00:00.000Z', kind: 'merged', task: 4 },
+  ]);
+  const r = spawnSync(process.execPath, [MISSES, image, '--branch', 'HEAD', '--base', base], { encoding: 'utf8', cwd: repo });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Candidates:\nTask 1 +[0-9a-f]{7} +fix: late change to a +lib\/a\.js +\(fix task 4: Leftover fix: a\.js\)\n/);
+  assert.ok(!r.stdout.includes('Task 4'));
+});
+
+test('a candidate outside every fix task\'s window carries no label', (t) => {
+  const { run, image, repo } = fixture(t);
+  const base = git(repo, 'rev-parse', 'HEAD').trim();
+  fs.writeFileSync(path.join(repo, 'lib/a.js'), 'a2');
+  git(repo, 'commit', '-qam', 'fix: late change to a');
+  writeClaimed(run, '0001-t1-a1.json', { task: 1, kind: 'work', files: ['lib/a.js'], claimedAt: '2020-01-01T00:00:01.000Z' });
+  writeClaimed(run, '0002-t4-a1.json', { task: 4, kind: 'work', fix: 'leftovers', title: 'Leftover fix: a.js', notes: 'x', files: ['lib/a.js'], claimedAt: '2020-01-01T00:01:00.000Z' });
+  writeEvents(run, [
+    { t: '2020-01-01T00:00:05.000Z', kind: 'review-pass', task: 1 },
+    { t: '2020-01-01T00:00:06.000Z', kind: 'merged', task: 1 },
+    { t: '2020-01-01T00:01:00.000Z', kind: 'claimed', file: '0002-t4-a1.json', agent: 'w4' },
+    { t: '2020-01-01T00:02:00.000Z', kind: 'merged', task: 4 },
+  ]);
+  const r = spawnSync(process.execPath, [MISSES, image, '--branch', 'HEAD', '--base', base], { encoding: 'utf8', cwd: repo });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Candidates:\nTask 1 +[0-9a-f]{7} +fix: late change to a +lib\/a\.js\n/);
+});
+
+test('a relaunched final-review fix task lists once, from its highest attempt', (t) => {
+  const { run, image, repo } = fixture(t);
+  writeClaimed(run, '0001-t4-a1.json', { task: 4, kind: 'work', fix: 'final-review', title: 'Final review fix: a.js', notes: 'first try', files: ['lib/a.js'], claimedAt: at(30) });
+  writeClaimed(run, '0002-t4-a2.json', { task: 4, kind: 'work', fix: 'final-review', title: 'Final review fix: a.js', notes: 'second try', files: ['lib/a.js'], claimedAt: at(40) });
+  writeEvents(run, [ev(20, { kind: 'final-review', agent: 'f1' })]);
+  const r = spawnSync(process.execPath, [MISSES, image, '--branch', 'HEAD', '--base', 'HEAD'], { encoding: 'utf8', cwd: repo });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Final-review fixes:\nFinal review fix: a\.js: second try\n$/);
+});
+
+test('a run with fix tasks does not list a Task 0 file claimed after final-review', (t) => {
+  const { run, image, repo } = fixture(t);
+  writeClaimed(run, '0001-t4-a1.json', { task: 4, kind: 'work', fix: 'final-review', title: 'Final review fix: a.js', notes: 'rename x', files: ['lib/a.js'], claimedAt: at(30) });
+  writeClaimed(run, '0002-t0-a1.json', { task: 0, kind: 'work', title: 'board fix', notes: 'from the board', files: ['lib/b.js'], claimedAt: at(31) });
+  writeEvents(run, [ev(20, { kind: 'final-review', agent: 'f1' })]);
+  const r = spawnSync(process.execPath, [MISSES, image, '--branch', 'HEAD', '--base', 'HEAD'], { encoding: 'utf8', cwd: repo });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Final-review fixes:\nFinal review fix: a\.js: rename x\n$/);
+  assert.ok(!r.stdout.includes('board fix'));
+});
+
+test('a commit inside a fix task\'s window on none of its files carries no label', (t) => {
+  const { run, image, repo } = fixture(t);
+  const base = git(repo, 'rev-parse', 'HEAD').trim();
+  fs.writeFileSync(path.join(repo, 'lib/b.js'), 'b2');
+  git(repo, 'add', '-A');
+  git(repo, 'commit', '-qm', 'fix: late change to b');
+  writeClaimed(run, '0001-t1-a1.json', { task: 1, kind: 'work', files: ['lib/a.js', 'lib/b.js'], claimedAt: '2020-01-01T00:00:01.000Z' });
+  writeClaimed(run, '0002-t4-a1.json', { task: 4, kind: 'work', fix: 'leftovers', title: 'Leftover fix: a.js', notes: 'x', files: ['lib/a.js'], claimedAt: '2020-01-01T00:01:00.000Z' });
+  writeEvents(run, [
+    { t: '2020-01-01T00:00:05.000Z', kind: 'review-pass', task: 1 },
+    { t: '2020-01-01T00:00:06.000Z', kind: 'merged', task: 1 },
+    { t: '2020-01-01T00:01:00.000Z', kind: 'claimed', file: '0002-t4-a1.json', agent: 'w4' },
+    { t: '2099-01-01T00:00:00.000Z', kind: 'merged', task: 4 },
+  ]);
+  const r = spawnSync(process.execPath, [MISSES, image, '--branch', 'HEAD', '--base', base], { encoding: 'utf8', cwd: repo });
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Candidates:\nTask 1 +[0-9a-f]{7} +fix: late change to b +lib\/b\.js\n/);
+});

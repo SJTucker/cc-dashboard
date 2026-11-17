@@ -121,8 +121,11 @@ owns the code, in that task's own step style.]
 (its test can use a fake of the producer's Interfaces block, so it is
 stub-ready) or `behaviour` (it must wait for the merge), and the files it
 changes. Below that, a list of every file that two or more tasks change,
-with those tasks. Two tasks that share a file must have a dependency
-between them, so they never run at once.]
+with those tasks. Two tasks that share a code file must have a dependency
+between them, so they never run at once. A Markdown file (docs, `SETUP.md`,
+a README, skill text) or other prose-only file is listed but needs no
+dependency: tasks that share only such files run in parallel, and the
+orchestrator resolves the conflict at merge.]
 
 ---
 ```
@@ -243,7 +246,7 @@ After writing the complete plan, look at the spec with fresh eyes and check the 
 
 **5. Proportion:** Compare the plan's length to the spec's. A plan several times longer than the spec it implements is a transcript of the program, not a plan. If code blocks are most of the document, replace bodies with signatures, test names and assertions, and check that each step is still unambiguous.
 
-**6. Dependencies:** Every Consumes names a Produces of an earlier task or existing code. Every file that two or more tasks change has a dependency between those tasks.
+**6. Dependencies:** Every Consumes names a Produces of an earlier task or existing code. Every code file that two or more tasks change has a dependency between those tasks. A Markdown or other prose-only file shared by tasks needs no dependency.
 
 **7. Test commands:** Each task's test command was checked against the script or target it calls.
 

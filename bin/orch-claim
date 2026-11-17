@@ -54,6 +54,8 @@ function checkTask(task, kind) {
   if (task.attempt !== undefined && (!Number.isInteger(task.attempt) || task.attempt < 1)) throw new Error('task.attempt must be an integer >= 1');
   // addCommand counts the notes toward MAX_EXCERPT as part of the claim, which prints them as one Notes: line.
   if (task.notes !== undefined && typeof task.notes !== 'string') throw new Error('task.notes must be a string');
+  // A fix task handles leftovers or final-review findings. bin/orch-misses reads the field.
+  if (task.fix !== undefined && task.fix !== 'leftovers' && task.fix !== 'final-review') throw new Error('task.fix must be "leftovers" or "final-review"');
   if (task.reads !== undefined) checkReads(task.reads, kind);
   if (kind === 'review' && (typeof task.implementer?.transcript !== 'string' || !task.implementer.transcript)) throw new Error('a review task needs implementer.transcript');
 }

@@ -299,16 +299,16 @@ bin/orch-report docs/superpowers/images/<name>.md [--json]
 ```
 
 - The run line gives the start, the end, the number of agents, their total cost and the mean number of agents running.
-- Each task row gives attempts, review passes and fails, steers, guard refusals, the wait for a free slot, wall time, time spent waiting on you, the cost of its implementers (`Impl`) and reviewers (`Review`), and watch events by name.
-- Each agent row gives cost, peak context, the share of the prompt read from cache, the cache share of its first request (`1st cache`), and the files the agent read that the image never names.
+- Each task row gives attempts, review passes and fails, steers, review fixes, guard refusals, the wait for a free slot, wall time, time spent waiting on you, the cost of its implementers (`Impl`) and reviewers (`Review`), and watch events by name.
+- Each agent row gives cost, peak context, the share of the prompt read from cache, the cache share of its first request (`1st cache`), and the files the agent read that the image never names. That list leaves out temp folders, Claude Code transcripts, the run folder, and the agent's own worktree except Markdown and `.claude/` files.
 - The `Final review` line gives the cost of the final-review agent and the agents it started, with `≥` when the final agent has usage and an agent it started has neither a step file nor a transcript.
-- `Steers:` and `Questions:` list the text of each steer and each question, one `Task <N>: <text>` line each. A list with no entries is left out.
+- `Steers:`, `Review fixes:` and `Questions:` list the text of each steer, review fix and question, one `Task <N>: <text>` line each. A list with no entries is left out. A steer is a correction from the orchestrator or you. A review fix is a reviewer's findings sent back to the implementer.
 
 The server deletes `agent-usage/` files a day after their last write. After that,
 cost, peak context and cache share come from the agent's transcript, and are `n/a`
 only for an agent with neither. `bin/orch-report` saves each report as `report.json` in the run folder and fills a later `n/a` from it, so the costs outlast the step files. An agent with no transcript shows `n/a` for its reads.
 
-`bin/orch-misses` runs read-only git commands in the current directory and reads a run folder. It lists commits that landed on a passed task's files after the task merged, and the final review's fixes.
+`bin/orch-misses` runs read-only git commands in the current directory and reads a run folder. It lists commits that landed on a passed task's files after the task merged, and the final review's fixes. Final-review fixes are the tasks marked `fix: "final-review"`, one line per task from its highest attempt. In older runs, where no claimed file carries a `fix` field, they are the `task: 0` work files claimed after the final review (all of them when the log has no `final-review` event). A task whose file carries a `fix` field (`"leftovers"` or `"final-review"`) opens no window, so its commits list as candidates. A candidate row ends with `(fix task <N>: <title>)` when the commit falls inside fix task N's claimed-to-merged window and touches one of its files.
 
 ```bash
 bin/orch-misses docs/superpowers/images/<name>.md --branch <plan branch> --base <base>

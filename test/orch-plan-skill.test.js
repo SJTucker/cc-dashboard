@@ -107,3 +107,8 @@ test("the skill starts in the plan branch's worktree", () => {
 test('orch-plan keeps steps after the last task under a ## heading', () => {
   assert.ok(text.replace(/\s+/g, ' ').includes('Steps after the last task that no worker does'));
 });
+
+test('the Dependencies template says a shared Markdown file needs no dependency', () => {
+  const deps = section('Dependencies').replace(/\s+/g, ' ');
+  assert.ok(deps.includes('A Markdown file (docs, `SETUP.md`, a README, skill text) or other prose-only file is listed but needs no dependency'));
+});

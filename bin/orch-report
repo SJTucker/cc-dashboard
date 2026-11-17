@@ -23,6 +23,7 @@
 // on stderr and exits 1.
 
 const fs = require('fs');
+const os = require('os');
 const { parseArgs } = require('util');
 const { loadConfig } = require('../lib/config-dir');
 const { runDirOf, writeAtomic } = require('../lib/orchestrations/claims');
@@ -109,7 +110,8 @@ async function main() {
   const image = path.resolve(positionals[0]);
   const imageText = readText(image, 'the image');
   const events = parseEvents(readText(eventsPath(runDirOf(image)), 'the event log'));
-  const usageDir = getAgentUsageDir(loadConfig().configDir);
+  const { configDir } = loadConfig();
+  const usageDir = getAgentUsageDir(configDir);
   const steps = {};
   const reads = {};
   for (const e of events) {
@@ -142,7 +144,14 @@ async function main() {
   } catch {
     // no saved report, or an unreadable one, counts as none
   }
-  const report = mergeSnapshot(buildReport({ events, steps, reads, imageText, imagePath: image, finalPartial }), prev);
+  // Working files: the run folder, temp folders (/tmp is /private/tmp on macOS) and Claude Code's transcripts.
+  const ignoreDirs = [runDir, '/tmp', '/private/tmp', os.tmpdir(), path.join(configDir, 'projects')];
+  try {
+    ignoreDirs.push(fs.realpathSync(os.tmpdir()));
+  } catch {
+    // TMPDIR names a missing folder
+  }
+  const report = mergeSnapshot(buildReport({ events, steps, reads, imageText, imagePath: image, finalPartial, ignoreDirs }), prev);
   process.stdout.write(values.json ? `${JSON.stringify(report, null, 2)}\n` : renderReport(report));
   try {
     writeAtomic(saved, `${JSON.stringify(report, null, 2)}\n`);

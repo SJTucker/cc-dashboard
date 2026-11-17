@@ -76,6 +76,20 @@ test('orch-event appends an orchestrator event', (t) => {
   assert.deepEqual({ kind: e.kind, task: e.task, agent: e.agent, text: e.text }, { kind: 'steer', task: 3, agent: 'a1', text: 'use the stub' });
 });
 
+test('orch-event appends a review-fix event', (t) => {
+  const dir = runDir(t);
+  const r = run([dir, 'review-fix', '--task', '3', '--agent', 'a1', '--text', 'two problems']);
+  assert.equal(r.status, 0, r.stderr);
+  const [e] = events(dir);
+  assert.deepEqual({ kind: e.kind, task: e.task, agent: e.agent, text: e.text }, { kind: 'review-fix', task: 3, agent: 'a1', text: 'two problems' });
+});
+
+test('orch-event review-fix without --task exits 1', (t) => {
+  const r = run([runDir(t), 'review-fix']);
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /^orch-event: /);
+});
+
 test('orch-event creates the run folder', (t) => {
   const dir = path.join(tmpDir(t, 'events'), 'new.run');
   const r = run([dir, 'ready', '--task', '1']);

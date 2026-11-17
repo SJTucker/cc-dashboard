@@ -420,3 +420,20 @@ test('--add refuses a shared heading with a suffix and names it', (t) => {
   assert.equal(r.status, 1);
   assert.match(r.stderr, /rename it to ## Dependencies\n/);
 });
+
+test('--add accepts fix leftovers and final-review', (t) => {
+  const run = runIn(t);
+  for (const [n, fix] of [[3, 'leftovers'], [4, 'final-review']]) {
+    const r = claim([run, '--add', 'work'], input(n, { fix }));
+    assert.equal(r.status, 0, r.stderr);
+    const file = path.join(run, 'pending', 'work', r.stdout.trim());
+    assert.equal(JSON.parse(fs.readFileSync(file, 'utf8')).fix, fix);
+  }
+});
+
+test('--add refuses an unknown fix value', (t) => {
+  const run = runIn(t);
+  const r = claim([run, '--add', 'work'], input(3, { fix: 'later' }));
+  assert.equal(r.status, 1);
+  assert.match(r.stderr, /task\.fix must be "leftovers" or "final-review"/);
+});

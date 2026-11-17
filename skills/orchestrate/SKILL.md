@@ -194,7 +194,9 @@ From the plan's Interfaces blocks and file lists:
 
 - Record, for each task, the tasks it consumes from and its files.
 - At most 3 implementer workers run at once. Reviewers do not count toward the 3.
-- Two running tasks never share a file.
+- Two running tasks never share a code file. Markdown files (docs, `SETUP.md`,
+  READMEs, skill text) and other prose-only files do not count. Two tasks that
+  both edit one may run at once, and section 11 resolves the conflict at merge.
 - A task B that consumes from task A only through a signature is **stub-ready**
   on A when B's plan test can replace A with a fake of A's Interfaces block, so
   that test does not depend on A's behaviour. A stub that throws `not implemented`
@@ -221,8 +223,8 @@ that task's `notes`, or in the image's "Updates" when it affects several tasks.
    once its dependencies have merged.
 
 `AskUserQuestion` stays fine before the first dispatch (sections 4 and 5) and in
-section 14 once the final review has returned and, when step 3's fix worker ran,
-its review has passed.
+section 14 once the final review has returned and, when step 3 added fix tasks,
+they have all merged.
 
 A run needs auto mode. A background worker cannot show a permission prompt, so a
 tool call it is not allowed is denied without one. If the session is not in auto
@@ -246,7 +248,7 @@ task A:
    commits the stub to the plan branch, and it gets a watch and a review like any
    task.
    While it runs, it counts toward section 5's limit of 3 implementers, and it
-   shares no file with a running task.
+   shares no code file with a running task.
 2. B is ready once the stub's review passes and the stub commit is on the plan
    branch. Then dispatch A and B together, within the limits above. A replaces the
    stub in its own worktree.
@@ -314,21 +316,21 @@ For each ready task, in this order:
    title that does.
 
    When the run's plan reads setting is `sections`, every work task carries
-   `"reads": "sections"`, relaunches and stub and fix tasks (`"task": 0`) included.
-   Review tasks never carry `reads`. `--add` then stores the task's plan sections
-   in the task file, and the claim prints them. Section 5 can edit the plan after
-   section 3's check. Before the first `--add` of a run, run
-   `<CLAIM> --check-plan <plan path>` again if the plan changed since section 3. On
-   exit 1, fix the plan as section 3 says for a heading to rename or a task to
-   renumber, and run the check again. Only a failure the plan cannot be fixed for
-   (a missing shared section, a task over the limit) switches the run to `whole`:
-   change the image's line to `Plan reads: whole (<reason>)` and add the plan to
-   "Read before starting". When
+   `"reads": "sections"`, relaunches and stub and section 9 fix tasks (`"task": 0`)
+   included. Section 14's fix tasks carry no `reads`. Review tasks never carry
+   `reads`. `--add` then stores the task's plan sections in the task file, and the
+   claim prints them. Section 5 can edit the plan after section 3's check. Before
+   the first `--add` of a run, run `<CLAIM> --check-plan <plan path>` again if the
+   plan changed since section 3. On exit 1, fix the plan as section 3 says for a
+   heading to rename or a task to renumber, and run the check again. Only a failure
+   the plan cannot be fixed for (a missing shared section, a task over the limit)
+   switches the run to `whole`: change the image's line to
+   `Plan reads: whole (<reason>)` and add the plan to "Read before starting". When
    `--add` still refuses after the first dispatch, add the task with no `reads`, and
    with `notes` naming the plan path, the line ranges of the plan's Global
-   Constraints, Review Focus and Dependencies sections and of its task section. A task
-   added after the first dispatch that the plan has no section for, such as a split
-   from section 8, also carries no `reads` and puts its whole work in `notes`.
+   Constraints, Review Focus and Dependencies sections and of its task section. A
+   task added after the first dispatch that the plan has no section for, such as a
+   split from section 8, also carries no `reads` and puts its whole work in `notes`.
 3. Start the worker with the Agent tool: `subagent_type: "orch-worker"`,
    `model: "sonnet"`, `run_in_background: true`, `description: "orchestrate worker"`
    (the same for every worker), and the fixed message as the prompt.
@@ -549,16 +551,24 @@ it made several. A diff that changes only Markdown prints nothing, which counts 
 
 Read the whole review. Then run `EVENT <run> review-pass --task <N>` or
 `EVENT <run> review-fail --task <N> --text "<problem count> problems"`. When it
-fails, steer or relaunch the implementer with the findings. A steered implementer's
-watch gets the files the findings cite that are outside the task's `files`
-(section 7).
+fails, steer or relaunch the implementer with the findings. Every SendMessage that
+sends a review's problems to the implementer is followed by
+`EVENT <run> review-fix --task <N> --agent <id> --text "<first 200 characters>"`,
+not by `steer`. Section 10's `steer` stays for corrections that do not come from a
+review. A steered implementer's watch gets the files the findings cite that are
+outside the task's `files` (section 7).
 
 A review that passes can still list problems, such as a minor display bug. Append
 each one to `<leftovers>` as one line:
 `Task <N> (<title>): <file>:<line> <problem>`. Section 14 fixes them before the
-final review. A `"task": 0` worker's review is the exception: steer that worker
-with every problem its review lists, pass or fail. If you ask an
-implementer to squash its commits, have it run
+final review. A `"task": 0` worker's review, and a fix task's (`fix` set), is the
+exception: steer that worker with every problem its review lists, pass or fail, and
+log it as `review-fix`. For a fix task whose review passes with problems, log
+`review-pass`, send the problems as a `review-fix`, and merge only after the worker
+reports its commit. Append nothing to `<leftovers>`. Merging first would run
+`wt remove -D` on the worktree the worker is still fixing in. A relaunch of a fix
+task, and each task split from one under section 8, keeps its `fix` value. If you
+ask an implementer to squash its commits, have it run
 `git reset --soft $(git merge-base <plan branch>-t<N> <plan branch>)` and commit
 once. Never reset to `<plan branch>` itself: it gains other tasks' merges after the
 task branches, and a soft reset to it stages their work as reverted.
@@ -572,8 +582,10 @@ the merge when it holds:
 Then run `wt remove -D <plan branch>-t<N>`. Without `-D`, `wt` keeps the branch,
 because it checks merges against the default branch, not the plan branch.
 
-A merge conflict that is trivial, you resolve. Otherwise abort the merge, and
-re-add the later task, which is ready again once the merge lands.
+A merge conflict that is trivial, you resolve. A conflict in a Markdown or other
+prose-only file counts as trivial: keep both sides' text, and reword where the
+two sides describe the same thing. Otherwise abort the merge, and re-add the
+later task, which is ready again once the merge lands.
 
 When the second task of a stub-ready pair merges, run B's `doneWhen` command in
 the plan branch's worktree. If it fails, treat the output like a failed review of
@@ -605,33 +617,56 @@ The user reviews these across sessions before redesigning the image.
 ## 14. Finish
 
 1. After the last task merges, read `<leftovers>`. When it is missing or empty,
-   skip this step. Otherwise start one `"task": 0` fix worker in the plan branch's
-   worktree. From section 9 it reuses only the `"task": 0` task-file shape and the
-   plan branch's worktree, and it needs no user question first. Its `notes` carry
-   the lines of `<leftovers>`, its `files` name the files those lines cite, its
-   `reviewer` is `opus`, and its `doneWhen` is the project's full test command.
-   Start it as section 6 says, with `model: "opus"` in place of `"sonnet"`. It commits on the plan branch, with a watch and a review as
-   section 11 says. Nothing merges. These fixes go first so that the final review
-   reads the branch with them in it.
-2. When step 1's review has passed, or step 1 was skipped, start one subagent with
-   `subagent_type: "general-purpose"`, `model: "fable"`, `run_in_background: true`
-   and `description: "orchestrate final review"`. It needs the Agent tool, which
-   `orch-reviewer` does not have. Its prompt: run the `pr-review` skill with
-   `high <plan branch>`; there is no PR, and the base is `<base>`; work in the plan
-   branch's worktree and change no files; report the table. If `pr-review` is not
-   installed, run `/code-review high` on `<base>...<plan branch>` instead and verify
-   each finding by a trace or one test. The review runs in a subagent because it
-   reads the whole diff, and only its table returns to you. Right after it starts,
-   run `EVENT <run> final-review --agent <agent id>`, so `REPORT` can price it. Arm
-   no section 7 watch for it. Its completion notification wakes you.
-3. When the table has no verified finding, skip this step. Otherwise start a
-   second `"task": 0` fix worker as step 1 says, with the table in its `notes` and
-   the files the findings cite in its `files`. The final review is not run a
-   second time.
+   skip this step. Otherwise group the lines as "Grouping" below says, and run each
+   group as one fix task with `"fix": "leftovers"` and the title prefix
+   `Leftover fix: `. These fixes go first so that the final review reads the branch
+   with them in it.
+2. When step 1's fix tasks have all merged, or step 1 was skipped, start one
+   subagent with `subagent_type: "general-purpose"`, `model: "fable"`,
+   `run_in_background: true` and `description: "orchestrate final review"`. It needs
+   the Agent tool, which `orch-reviewer` does not have. Its prompt: run the
+   `pr-review` skill with `high <plan branch>`; there is no PR, and the base is
+   `<base>`; work in the plan branch's worktree and change no files; report the
+   table. If `pr-review` is not installed, run `/code-review high` on
+   `<base>...<plan branch>` instead and verify each finding by a trace or one test.
+   The review runs in a subagent because it reads the whole diff, and only its table
+   returns to you. Right after it starts, run
+   `EVENT <run> final-review --agent <agent id>`, so `REPORT` can price it. Arm no
+   section 7 watch for it. Its completion notification wakes you.
+3. When the table has no verified finding, skip this step. Otherwise group the
+   verified rows as "Grouping" below says, and run each group as one fix task with
+   `"fix": "final-review"` and the title prefix `Final review fix: `. The final
+   review is not run a second time.
 4. Run `MISSES <image> --branch <plan branch> --base <base>`, then
    `REPORT <image>`, and show both outputs to the user. Then use
-   superpowers:finishing-a-development-branch on the plan branch. Both fix workers
-   are Task 0, so `REPORT` counts them in one Task 0 row. Say both when you show
-   the output.
+   superpowers:finishing-a-development-branch on the plan branch. Each fix task has
+   its own `REPORT` row.
+
+**Grouping.** Group the findings: the lines of `<leftovers>` in step 1 and the
+verified table rows in step 3. Findings that cite a common file share a group,
+transitively. A finding that cites no file is a group of its own, and its `files`
+are the files you pick from the finding. When those picked files overlap another
+group's, run it after that group merges, because section 5 lets no two running
+tasks share a code file.
+
+Each group is one fix task with the next unused task number, added and dispatched
+as section 6 says: its own `<plan branch>-t<N>` worktree and a Sonnet implementer.
+Its task file has:
+
+- no `reads` (section 6's rule for a task the plan has no section for);
+- `notes` holding the group's findings, the plan path and the line range of its
+  Global Constraints section, because a fix task with no `reads` gets no plan
+  sections otherwise;
+- `files`, the files the findings cite;
+- `doneWhen`, the narrowest test command that covers those files;
+- `reviewer`, chosen by section 5, item 4, from the files the group cites, else
+  `sonnet` (section 11's line count still raises it at review time, since no diff
+  exists at `--add`);
+- `"fix": "leftovers"` (step 1) or `"fix": "final-review"` (step 3).
+
+Watch, review and merge as sections 7 to 11 say. Add the task numbers to
+"Updates". After the last fix task of a step merges, run the project's full test
+command in the plan branch's worktree. A failure becomes one more fix task of the
+same kind, with the output in `notes`.
 
 The run folder stays beside the image, untracked, like the board.

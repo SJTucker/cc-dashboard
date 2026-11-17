@@ -85,7 +85,7 @@ test('the skill raises a large code diff to an Opus reviewer', () => {
 
 test('the skill ends a run with a Fable review of the plan branch', () => {
   const fourteen = section(14).replace(/\s+/g, ' ');
-  for (const s of ['pr-review', 'model: "fable"', 'subagent_type: "general-purpose"', '/code-review high', '"task": 0']) {
+  for (const s of ['pr-review', 'model: "fable"', 'subagent_type: "general-purpose"', '/code-review high', '"fix": "final-review"']) {
     assert.ok(fourteen.includes(s), s);
   }
 });
@@ -98,13 +98,34 @@ test('the skill logs the final review and runs the misses report', () => {
   assert.match(text, /- `MISSES`: `<clone>\/bin\/orch-misses`/);
 });
 
-test('an Opus worker fixes the problems passing reviews left before the Fable review starts', () => {
+test('fix tasks for the leftovers start before the Fable review', () => {
   assert.ok(section(11).includes('<leftovers>'));
   const fourteen = section(14).replace(/\s+/g, ' ');
-  const fix = fourteen.indexOf('Its `notes` carry the lines of `<leftovers>`');
-  assert.ok(fix >= 0);
-  assert.ok(fix < fourteen.indexOf('model: "fable"'));
-  assert.ok(fourteen.includes('`model: "opus"`'));
+  const fable = fourteen.indexOf('model: "fable"');
+  assert.ok(fourteen.indexOf('"fix": "leftovers"') >= 0);
+  assert.ok(fourteen.indexOf('"fix": "leftovers"') < fable);
+  assert.ok(fourteen.lastIndexOf('"fix": "final-review"') > fable);
+  assert.ok(fourteen.includes('cites no file'));
+  assert.ok(!fourteen.includes('`model: "opus"`'));
+});
+
+test('the skill logs relayed review findings as review-fix', () => {
+  assert.ok(section(11).includes('review-fix --task <N>'));
+  assert.ok(section(11).replace(/\s+/g, ' ').includes('merge only after the worker reports its commit'));
+  assert.ok(section(10).includes('steer --task <N>'));
+});
+
+test('the worker and reviewer messages are unchanged', () => {
+  const crypto = require('crypto');
+  const block = (marker) => text.slice(text.indexOf(marker)).match(/```\n([\s\S]*?)\n```/)[1];
+  const sha = (s) => crypto.createHash('sha256').update(s).digest('hex');
+  assert.strictEqual(sha(block('Build the worker message once per session')), 'a9324d43cb6fc7ba5a6631b134ac8e362d698108195c56d1ad475ad2dbb7472f');
+  assert.strictEqual(sha(block('Build the reviewer message once per session')), '8d83e2ef1ef59527a2acbc2dbf26b23ea4f5c4b7cda64ee61529cba5ca2ad817');
+});
+
+test('the run review doc reads review fixes and the 5-minute cache', () => {
+  const doc = fs.readFileSync(path.join(__dirname, '..', 'docs', 'orchestrate-run-review.md'), 'utf8');
+  for (const s of ['Review fixes:', 'fix: "final-review"', '5 minutes']) assert.ok(doc.includes(s), s);
 });
 
 test('the worker message signs board posts with the task title', () => {
@@ -258,4 +279,9 @@ test('a renumber or repeated-task refusal sends the plan back for renumbering, n
   const six = section(6).replace(/\s+/g, ' ');
   assert.ok(six.includes('Only a failure the plan cannot be fixed for (a missing shared section, a task over the limit) switches the run to `whole`'));
   assert.ok(!six.includes('exit 1, switch the run to `whole`'));
+});
+
+test('tasks that share only Markdown files may run at once, and the merge resolves the conflict', () => {
+  assert.ok(section(5).replace(/\s+/g, ' ').includes('Two running tasks never share a code file'));
+  assert.ok(section(11).replace(/\s+/g, ' ').includes('A conflict in a Markdown or other prose-only file counts as trivial'));
 });
