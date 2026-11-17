@@ -121,6 +121,7 @@ const CONTRACT = {
     { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
     { "script": "cache-state", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl" } },
     { "script": "transcript-index", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl", "out": "/nonexistent/idx/abc.md" } },
+    { "script": "archive-transcripts", "args": [], "stdin": {} },
     { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
     { "script": "record-statusline", "args": [], "stdin": {
       "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 } }, "fetched_at_ms": 61000 } },
@@ -215,6 +216,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   const reviewRan: Ran[] = []
   const cacheRan: Ran[] = []
   const indexRan: Ran[] = []
+  const archiveRan: Ran[] = []
   const repoRan: string[] = []
   const endSawRan: number[] = []
   const listed: string[] = []
@@ -391,6 +393,10 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
       repoRan.push(key)
       return { value: { exitCode: 0, stdout: state.repo[key] ?? '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
     }
+    if (e.argv[0]?.endsWith('/archive-transcripts')) {
+      archiveRan.push({ argv: e.argv, stdin: e.init?.stdin === undefined ? undefined : JSON.parse(e.init.stdin), timeoutMs: e.init?.timeoutMs })
+      return { value: { exitCode: 0, stdout: '', stderr: '', isStdoutTruncated: false, isStderrTruncated: false } }
+    }
     if (runThrows) throw new Error('spawn failed')
     const stdin = e.init?.stdin
     let parsed: unknown = stdin
@@ -431,7 +437,7 @@ function world(on: On, w: Partial<World> = {}, exitCode = 0, runThrows = false) 
   })
   on('tool.check', () => ({ decision: state.verdict }))
   on('agent.spawn', () => ({ model: 'claude-haiku-4-5', agentId: 'a1' }))
-  return { ran, reviewRan, cacheRan, indexRan, repoRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, forked, statuses, fills, sent, appended }
+  return { ran, reviewRan, cacheRan, indexRan, archiveRan, repoRan, state, listed, readLog, endSawRan, clock, fetched, asked, registered, logged, writes, writeLog, forked, statuses, fills, sent, appended }
 }
 
 const measure = (rateLimits: SessionRateLimit[], cost: { usd: number } | null = { usd: 0.42 }) => ({
@@ -1670,7 +1676,7 @@ const stdinShape = (stdin: unknown) => (typeof stdin === 'string' ? 'text' : Obj
 const callKey = (c: { script: string; args: readonly string[]; stdin: unknown }) => JSON.stringify([c.script, c.args, stdinShape(c.stdin)])
 
 test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) => {
-  const { ran, reviewRan, cacheRan, indexRan, clock, state } = world(on, {
+  const { ran, reviewRan, cacheRan, indexRan, archiveRan, clock, state } = world(on, {
     contextTokens: 60_000,
     scripts: judging,
     reviews: reviewing(),
@@ -1691,7 +1697,7 @@ test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) 
   await $.session.start({ ...start, isInteractive: false })
   await $.session.measure(measure([FIVE, WEEK]))
   await clock.settle()
-  const made = [...ran, ...reviewRan, ...cacheRan, ...indexRan].map((r) =>
+  const made = [...ran, ...reviewRan, ...cacheRan, ...indexRan, ...archiveRan].map((r) =>
     callKey({ script: r.argv[0]?.split('/').pop() ?? '', args: r.argv.slice(1), stdin: r.stdin }),
   )
   expect([...new Set(made)].sort()).toEqual(contract.map(callKey).sort())
@@ -3731,6 +3737,26 @@ test('limitBand turned off clears a band that is showing', async ($, on) => {
   await clock.settle()
   expect(await bandLine(ui)).toBeUndefined()
   await ui.unmount()
+})
+
+test('an interactive start runs archive-transcripts', async ($, on) => {
+  const { archiveRan, clock } = world(on)
+  await startAndSettle($, clock)
+  expect(archiveRan.length).toBe(1)
+  expect(archiveRan[0]?.timeoutMs).toBe(600_000)
+})
+
+test('archive off runs no archive-transcripts', async ($, on) => {
+  const { archiveRan, clock } = world(on, { files: setting({ archive: false }) })
+  await startAndSettle($, clock)
+  expect(archiveRan).toEqual([])
+})
+
+test('a non-interactive start runs no archive-transcripts', async ($, on) => {
+  const { archiveRan, clock } = world(on)
+  await $.session.start({ ...start, isInteractive: false })
+  await clock.settle()
+  expect(archiveRan).toEqual([])
 })
 
 test('setupMarkers off runs no setup check', async ($, on) => {

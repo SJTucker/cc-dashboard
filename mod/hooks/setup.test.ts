@@ -160,7 +160,7 @@ test('changesFileText appends new entries to an earlier array and ignores anythi
   expect(changesFileText([], [entry]).endsWith(']\n')).toBe(true)
 })
 
-const SETTING_DEFAULTS = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true }
+const SETTING_DEFAULTS = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true, archive: true }
 
 test('parseDashboardSettings defaults every key', async () => {
   for (const text of ['', '[]', 'null', 'nope', undefined]) expect(parseDashboardSettings(text)).toEqual(SETTING_DEFAULTS)

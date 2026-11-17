@@ -1896,3 +1896,152 @@ test('a flagged entry whose re-read fails is not retried on the next load', asyn
   assert.strictEqual(rows.entries().length, 1, 'the previous entry stays');
   store.close();
 });
+
+// A subagent transcript with an optional meta file. `ageMs` sets the transcript's mtime.
+function writeSubagent(dir, ageMs, meta) {
+  const sub = path.join(dir, 's', 'subagents');
+  fs.mkdirSync(sub, { recursive: true });
+  const file = writeFile(sub, 'agent-a1', ['1'], ageMs);
+  if (meta) fs.writeFileSync(path.join(sub, 'agent-a1.meta.json'), JSON.stringify(meta));
+  return { file, sub };
+}
+const META = { agentType: 'Explore', description: 'Map tab', toolUseId: 'toolu_1' };
+const agentRowsIn = (dbFile) => {
+  const raw = new sqlite.DatabaseSync(dbFile);
+  const rows = raw.prepare('SELECT * FROM agents').all().map((r) => ({ ...r }));
+  raw.close();
+  return rows;
+};
+
+test('a refresh writes an agents row from the subagent\'s meta.json', async () => {
+  const { dir } = makeProjects();
+  const { file } = writeSubagent(dir, 2 * DAY_MS, META);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const { refresh } = harness(dir, { store });
+  await refresh();
+  const [row] = agentRowsIn(dbFile);
+  assert.strictEqual(row.agent_id, 'a1');
+  assert.strictEqual(row.session_id, 's');
+  assert.strictEqual(row.agent_type, 'Explore');
+  assert.strictEqual(row.description, 'Map tab');
+  assert.strictEqual(row.started_at, Date.parse(JSON.parse(fs.readFileSync(file, 'utf8').split('\n')[0]).timestamp));
+  store.close();
+});
+
+test('a subagent written today with its meta file gets its row on the first refresh', async () => {
+  const { dir } = makeProjects();
+  writeSubagent(dir, 0, META);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  await harness(dir, { store }).refresh();
+  assert.strictEqual(agentRowsIn(dbFile).length, 1);
+  store.close();
+});
+
+test('a subagent whose meta file appears on a later refresh gets its description', async () => {
+  const { dir } = makeProjects();
+  const { sub } = writeSubagent(dir, 0, null);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const { refresh } = harness(dir, { store });
+  await refresh();
+  assert.strictEqual(agentRowsIn(dbFile).length, 0);
+  fs.writeFileSync(path.join(sub, 'agent-a1.meta.json'), JSON.stringify(META));
+  await refresh();
+  assert.strictEqual(agentRowsIn(dbFile)[0].description, 'Map tab');
+  store.close();
+});
+
+test('a settled subagent with no meta file gets a row with nulls', async () => {
+  const { dir } = makeProjects();
+  writeSubagent(dir, 2 * DAY_MS, null);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  await harness(dir, { store }).refresh();
+  const [row] = agentRowsIn(dbFile);
+  assert.strictEqual(row.agent_id, 'a1');
+  assert.strictEqual(row.agent_type, null);
+  assert.strictEqual(row.description, null);
+  store.close();
+});
+
+test('a main session transcript gets no agents row', async () => {
+  const { dir } = makeProjects();
+  writeFile(dir, 'main', ['1'], 2 * DAY_MS);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  await harness(dir, { store }).refresh();
+  assert.strictEqual(agentRowsIn(dbFile).length, 0);
+  store.close();
+});
+
+test('a failed agents write is retried on the next refresh', async () => {
+  const { dir } = makeProjects();
+  writeSubagent(dir, 0, META);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  failTransactionsOnce(store);
+  const warn = mockWarn();
+  const warnings = [];
+  console.warn = (m) => warnings.push(m);
+  const { refresh } = harness(dir, { store });
+  try {
+    await refresh();
+    assert.strictEqual(agentRowsIn(dbFile).length, 0);
+    assert.strictEqual(warnings.filter((w) => /Could not write agent rows/.test(w)).length, 1);
+    await refresh();
+  } finally {
+    warn.restore();
+  }
+  assert.strictEqual(agentRowsIn(dbFile).length, 1);
+  store.close();
+});
+
+test('a subagent that already has an agents row is not read again on later refreshes', async () => {
+  const { dir } = makeProjects();
+  const { sub } = writeSubagent(dir, 2 * DAY_MS, META);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const { refresh } = harness(dir, { store });
+  await refresh();
+  const metaFile = path.join(sub, 'agent-a1.meta.json');
+  fs.writeFileSync(metaFile, JSON.stringify({ ...META, description: 'Changed' }));
+  const realRead = fs.readFileSync;
+  let metaReads = 0;
+  fs.readFileSync = function (file, ...rest) {
+    if (file === metaFile) metaReads += 1;
+    return realRead.call(this, file, ...rest);
+  };
+  try {
+    await refresh();
+  } finally {
+    fs.readFileSync = realRead;
+  }
+  assert.strictEqual(metaReads, 0, 'the meta file of a known agent is not read');
+  assert.strictEqual(agentRowsIn(dbFile)[0].description, 'Map tab');
+  store.close();
+});
+
+test('a running subagent with no meta file has its transcript\'s first line left unread and gets no row', async () => {
+  const { dir } = makeProjects();
+  const { file } = writeSubagent(dir, 0, null);
+  const dbFile = tmpDb();
+  const store = openStore(dbFile);
+  const { refresh } = harness(dir, { store });
+  const realOpen = fs.openSync;
+  let opens = 0;
+  fs.openSync = function (target, ...rest) {
+    if (target === file) opens += 1;
+    return realOpen.call(this, target, ...rest);
+  };
+  try {
+    await refresh();
+    await refresh();
+  } finally {
+    fs.openSync = realOpen;
+  }
+  assert.strictEqual(opens, 0, 'the transcript is not opened for a row that will not be written');
+  assert.strictEqual(agentRowsIn(dbFile).length, 0);
+  store.close();
+});

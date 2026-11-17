@@ -60,6 +60,7 @@ export function parseDashboardSettings(text: unknown) {
     setupLabels: v.setupLabels !== false,
     activity: v.activity !== false,
     limitBand: v.limitBand !== false,
+    archive: v.archive !== false,
   }
 }
 

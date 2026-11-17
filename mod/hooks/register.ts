@@ -19,12 +19,13 @@ import { claimedWorktree, guardReason, outsideWrite, parseClaim } from './guard'
 import type { Claim } from './guard'
 import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
 
-// Records the dashboard's plan usage and session snapshots by running the scripts
-// in bin/, and judges new Claude Code releases for the setup changes markers
-// through bin/judge-updates, and reviews ended sessions
-// for setup suggestions through bin/review-session. At each interactive session start it
-// also compares the setup files with stored copies and writes a marker for each change
-// (checkSetup). It also shows a dismissable plan limit band above the prompt when the
+// Records the dashboard's plan usage and session snapshots by running the scripts in
+// bin/, and judges new Claude Code releases for the setup changes markers through
+// bin/judge-updates, and reviews ended sessions for setup suggestions through
+// bin/review-session. At each interactive session start it also compares the setup files
+// with stored copies and writes a marker for each change (checkSetup) and runs
+// bin/archive-transcripts, which keeps gzipped copies of the transcripts.
+// It also shows a dismissable plan limit band above the prompt when the
 // Session or Week window passes 75% or 90%, and shares the dismissal between running
 // sessions through limit-warnings.json.
 // After each main-thread turn of an interactive session it runs bin/transcript-index,
@@ -37,9 +38,10 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // behaviour would run. A setting that is off stops the work behind it. handoff 'off'
 // arms no timer, runs no bin/cache-state and prefills no handoff, but
 // /context-image-handoff runs whatever the setting says. transcriptIndex false runs no
-// bin/transcript-index. setupMarkers false runs no checkSetup. setupLabels false
-// makes no Haiku label call, no release judging call and no changelog fetch. activity
-// false writes no activity file. limitBand false shows no band and starts no recheck.
+// bin/transcript-index. archive false runs no bin/archive-transcripts. setupMarkers
+// false runs no checkSetup. setupLabels false makes no Haiku label call, no release
+// judging call and no changelog fetch. activity false writes no activity file. limitBand
+// false shows no band and starts no recheck.
 // The bin/ scripts write the session, usage, update-verdict and review files, so the
 // formats, the atomic writes and the freshness checks of those files are theirs.
 // The orchestrate skill writes reset-prompt/<session id>.txt, the line to send after a
@@ -1430,6 +1432,9 @@ async function fillResume($: EngineInterface, resume: string) {
 // pending and does not start a second bin/transcript-index.
 const INDEX_DELAY_MS = 1000
 const INDEX_TIMEOUT_MS = 10_000
+// The first bin/archive-transcripts run gzips every transcript on disk. A run the timeout
+// kills resumes from the script's state.json.
+const ARCHIVE_TIMEOUT_MS = 600_000
 const indexing = new Set<string>()
 
 function queueIndex($: EngineInterface, id: string) {
@@ -1858,6 +1863,11 @@ export const register: Register = (on) => {
           dashboardSettings($)
             .then((settings) => (settings.setupMarkers ? checkSetup($) : undefined))
             .catch((err) => logEach($, `setup check failed (${errorName(err)})`))
+        })
+        $.clock.after(0, () => {
+          dashboardSettings($)
+            .then((settings) => (settings.archive ? run($, 'archive-transcripts', {}, ARCHIVE_TIMEOUT_MS) : undefined))
+            .catch((err) => logEach($, `transcript archive failed (${errorName(err)})`))
         })
       }
       return result

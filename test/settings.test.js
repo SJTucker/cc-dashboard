@@ -7,7 +7,7 @@ const path = require('path');
 const { readSettings, writeSettings, getSettingsPath, validSettingValue } = require('../lib/settings');
 const helpers = require('./helpers');
 
-const DEFAULTS = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true };
+const DEFAULTS = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true, archive: true };
 
 function put(cfg, text) {
   const file = getSettingsPath(cfg);
@@ -72,3 +72,11 @@ test('writeSettings keeps unknown keys', (t) => {
 
 // The mod keeps its own parse in mod/hooks/setup.ts. Its fixtures match
 // test/mod-contract.test.js and 'parseDashboardSettings matches the server fixtures' in mod/hooks/setup.test.ts.
+
+test('archive false reads as false and every other value as true', (t) => {
+  const cfg = helpers.tmpDir(t, 'settings');
+  put(cfg, '{"archive": false}');
+  assert.strictEqual(readSettings(cfg).archive, false);
+  put(cfg, '{"archive": 0}');
+  assert.strictEqual(readSettings(cfg).archive, true);
+});

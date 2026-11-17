@@ -15,17 +15,17 @@ const { tmpDir, freshServerDb, holdWriteLock } = helpers;
 const tmpFile = () => path.join(helpers.tmpDir(null, 'db'), 'nested', 'transcripts.db');
 const tables = (db) => db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' ORDER BY name").all().map((r) => r.name);
 
-test('SCHEMA_VERSION is 4', () => {
-  assert.strictEqual(SCHEMA_VERSION, 4);
+test('SCHEMA_VERSION is 5', () => {
+  assert.strictEqual(SCHEMA_VERSION, 5);
 });
 
-test('openDatabase creates the folder, all four tables, WAL mode and schema 4', () => {
+test('openDatabase creates the folder, all five tables, WAL mode and schema 5', () => {
   const file = tmpFile();
   const db = openDatabase(file);
-  assert.deepStrictEqual(tables(db), ['files', 'meta', 'reviews', 'suggestions']);
+  assert.deepStrictEqual(tables(db), ['agents', 'files', 'meta', 'reviews', 'suggestions']);
   assert.strictEqual(db.prepare('PRAGMA journal_mode').get().journal_mode, 'wal');
   assert.strictEqual(db.prepare('PRAGMA busy_timeout').get().timeout, 5000);
-  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '4');
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '5');
   db.close();
 });
 
@@ -41,15 +41,15 @@ test('openDatabase upgrades a v1 file in place and keeps its rows', () => {
   `);
   v1.close();
   const db = openDatabase(file);
-  assert.deepStrictEqual(tables(db), ['files', 'meta', 'reviews', 'suggestions']);
+  assert.deepStrictEqual(tables(db), ['agents', 'files', 'meta', 'reviews', 'suggestions']);
   assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM files').get().n, 1);
-  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '4');
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '5');
   const indexNames = db.prepare("SELECT name FROM sqlite_master WHERE type = 'index'").all().map((r) => r.name);
   assert.ok(!indexNames.includes('reviews_reviewed_at'), 'the v3 index is gone');
   db.close();
 });
 
-test('openDatabase upgrades a v2 file to 4, keeps suggestions and dismissals, and then accepts duplicate', () => {
+test('openDatabase upgrades a v2 file to 5, keeps suggestions and dismissals, and then accepts duplicate', () => {
   const file = tmpFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const v2 = new DatabaseSync(file);
@@ -74,7 +74,7 @@ test('openDatabase upgrades a v2 file to 4, keeps suggestions and dismissals, an
   assert.strictEqual(reader.prepare('SELECT COUNT(*) AS n FROM suggestions').get().n, 2);
 
   const db = openDatabase(file);
-  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '4');
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '5');
   assert.deepStrictEqual(db.prepare('SELECT idx, text, dismissed_at, reason FROM suggestions ORDER BY idx').all().map((r) => ({ ...r })), [
     { idx: 0, text: 'open one', dismissed_at: null, reason: null },
     { idx: 1, text: 'done one', dismissed_at: 5, reason: 'done' },
@@ -97,7 +97,7 @@ test('openDatabase upgrades a v2 file to 4, keeps suggestions and dismissals, an
   again.close();
 });
 
-test('openDatabase upgrades a v3 file to 4, keeps rows and reasons, accepts expired and swaps the indexes', () => {
+test('openDatabase upgrades a v3 file to 5, keeps rows and reasons, accepts expired and swaps the indexes', () => {
   const file = tmpFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const v3 = new DatabaseSync(file);
@@ -125,7 +125,7 @@ test('openDatabase upgrades a v3 file to 4, keeps rows and reasons, accepts expi
   v3.close();
 
   const db = openDatabase(file);
-  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '4');
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '5');
   assert.deepStrictEqual(db.prepare('SELECT idx, text, dismissed_at, reason FROM suggestions ORDER BY idx').all().map((r) => ({ ...r })), [
     { idx: 0, text: 'open one', dismissed_at: null, reason: null },
     { idx: 1, text: 'dup one', dismissed_at: 5, reason: 'duplicate' },
@@ -141,14 +141,27 @@ test('openDatabase upgrades a v3 file to 4, keeps rows and reasons, accepts expi
   db.close();
 });
 
+test('openDatabase adds the agents table to a schema 4 file and marks it 5', () => {
+  const file = tmpFile();
+  openDatabase(file).close();
+  const raw = new DatabaseSync(file);
+  raw.exec("DROP TABLE agents; UPDATE meta SET value = '4' WHERE key = 'schema'; INSERT INTO files VALUES ('/p/a.jsonl', 1, 1.5, 1, 1, 2, 1, '{}');");
+  raw.close();
+  const db = openDatabase(file);
+  assert.ok(tables(db).includes('agents'));
+  assert.strictEqual(db.prepare("SELECT value FROM meta WHERE key = 'schema'").get().value, '5');
+  assert.strictEqual(db.prepare('SELECT COUNT(*) AS n FROM files').get().n, 1);
+  db.close();
+});
+
 test('openDatabase throws for a newer schema and leaves the bytes unchanged', () => {
   const file = tmpFile();
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const raw = new DatabaseSync(file);
-  raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO meta VALUES ('schema', '5');");
+  raw.exec("CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT); INSERT INTO meta VALUES ('schema', '" + (SCHEMA_VERSION + 1) + "');");
   raw.close();
   const before = fs.readFileSync(file);
-  assert.throws(() => openDatabase(file), /schema 5, newer than this dashboard's 4/);
+  assert.throws(() => openDatabase(file), new RegExp(`newer than this dashboard's ${SCHEMA_VERSION}`));
   assert.ok(fs.readFileSync(file).equals(before));
 });
 

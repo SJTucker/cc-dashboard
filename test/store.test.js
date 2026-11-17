@@ -450,3 +450,16 @@ test('migration 7 to 8 leaves rows as they are', () => {
   const old = rowsOf({ prompts: [{ id: 'u1', t: 1, sessionId: 's1' }] });
   assert.deepStrictEqual(MIGRATIONS[7](old), old);
 });
+
+test('putAgent writes a row that agentIds returns', () => {
+  const dbFile = path.join(helpers.tmpDir(null, 'store-agents'), 'transcripts.db');
+  const store = openStore(dbFile);
+  assert.strictEqual(store.agentIds().size, 0);
+  store.putAgent({ agentId: 'x', sessionId: 's', agentType: 'Explore', description: 'Map tab', toolUseId: 'toolu_1', parentAgentId: null, startedAt: 1000, hasMeta: true });
+  assert.ok(store.agentIds().has('x'));
+  store.close();
+  const raw = new (require('../lib/sqlite').DatabaseSync)(dbFile);
+  const row = { ...raw.prepare('SELECT * FROM agents').get() };
+  raw.close();
+  assert.deepStrictEqual(row, { agent_id: 'x', session_id: 's', agent_type: 'Explore', description: 'Map tab', tool_use_id: 'toolu_1', parent_agent_id: null, started_at: 1000 });
+});

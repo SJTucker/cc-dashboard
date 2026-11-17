@@ -66,6 +66,12 @@ export const MOD_SETTINGS = [
     affects: 'No panel. The band shows in Claude Code only.',
     info: 'Shows a dismissable band above the prompt at 75% and 90% of a plan limit.',
   },
+  {
+    key: 'archive',
+    label: 'Transcript archive',
+    affects: 'No panel. Keeps transcripts after Claude Code deletes them.',
+    info: 'At session start, copies new transcript lines into archive/ as gzip, with no model call. Claude Code deletes transcripts after cleanupPeriodDays (30 days by default). The archive keeps them and is never pruned.',
+  },
 ];
 
 const statusNode = () => document.getElementById('modSettingsStatus');

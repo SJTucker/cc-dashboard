@@ -128,7 +128,7 @@ test('each reader skips a truncated copy of its sample without throwing', async 
 // This file loads no mod code, so the mod side lives in mod/hooks/setup.test.ts, test
 // 'parseDashboardSettings matches the server fixtures'. Keep the two fixture lists identical.
 test('mod and server parse settings.json alike', (t) => {
-  const defaults = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true };
+  const defaults = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true, archive: true };
   const fixtures = [
     ['', defaults],
     ['[]', defaults],

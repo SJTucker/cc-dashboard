@@ -1,0 +1,42 @@
+#!/usr/bin/env node
+'use strict';
+
+// Mirrors <cfg>/projects into <cfg>/cc-dashboard/archive/ as gzipped copies, built
+// by lib/archive.js.
+//
+// Run by the mod (mod/hooks/register.ts) at each interactive session start. Stdin is
+// ignored. It exits 0 when the `archive` setting is off (nothing is written), when
+// another run holds the lock, and when the run finished with no failed file. It
+// exits 1 with `archive-transcripts: <reason>` on stderr when a transcript could not
+// be archived (after archiving the others) or when the archive folder, the state
+// file or the lock throws. The mod logs that line once.
+
+const { loadConfig } = require('../lib/config-dir');
+const { readSettings } = require('../lib/settings');
+const { getProjectsDir } = require('../lib/transcript-files');
+const { archiveTranscripts, withArchiveLock, getArchiveDir } = require('../lib/archive');
+
+function fail(message) {
+  process.stderr.write(`archive-transcripts: ${message}\n`);
+  process.exitCode = 1;
+}
+
+function main() {
+  const { configDir } = loadConfig();
+  if (readSettings(configDir).archive === false) return;
+  const archiveDir = getArchiveDir(configDir);
+  const outcome = withArchiveLock(archiveDir, () => archiveTranscripts({ projectsDir: getProjectsDir(configDir), archiveDir }));
+  if (!outcome.ran) {
+    process.stdout.write('archive-transcripts: another run holds the lock\n');
+    return;
+  }
+  const r = outcome.result;
+  process.stdout.write(`archive-transcripts: ${r.added} added, ${r.appended} appended, ${r.rebuilt} rebuilt, ${r.rewritten} rewritten, ${r.unchanged} unchanged, ${r.metaCopied} meta copied, ${r.failed} failed\n`);
+  if (r.failed > 0) fail(`${r.failed} transcripts could not be archived: ${r.firstError}`);
+}
+
+try {
+  main();
+} catch (err) {
+  fail(err.message);
+}
