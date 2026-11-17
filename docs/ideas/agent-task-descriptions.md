@@ -77,6 +77,8 @@ change.
 
 - Store the prompt as well? Reading it costs nothing extra, since it is the first
   line of the file the row store already reads. Storing it keeps it after the
-  `.jsonl` is deleted. The one prompt sampled was 1,755 characters. The
+  `.jsonl` is deleted. If [Keep whole transcripts](transcript-archive.md) ships,
+  the prompt stays readable from the backup and the table may need only the
+  description. The one prompt sampled was 1,755 characters. The
   [Costliest prompts](costliest-prompts.md) idea has the same open question for user
   prompts.

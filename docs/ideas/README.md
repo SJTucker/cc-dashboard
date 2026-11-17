@@ -24,4 +24,5 @@ then on.
 | [Opus reviewer](opus-reviewer.md) | Open: a replay of 4 past tasks found Opus caught a missed problem Sonnet never did, at about 4× the cost per review; next is one live orchestrate run with both reviewers on every task |
 | [Subagent status line in Doing now](subagent-status-in-doing-now.md) | Open: show each subagent's status text instead of "1 subagent"; `meta.json` has the spawn description, and whether the live status line is readable anywhere is open |
 | [Subagent task descriptions in transcripts.db](agent-task-descriptions.md) | Open: an `agents` table filled from each subagent's `meta.json`, which every transcript on disk has, for SQL queries only; whether to store the prompt open |
+| [Keep whole transcripts](transcript-archive.md) | Open: back up `.jsonl` files before `cleanupPeriodDays` deletes them; raise the setting or keep gzipped copies under `<cfg>/cc-dashboard/archive/` open |
 | [Questions panel](questions-panel.md) | Open: list the questions an orchestrate run waits on in the Orchestration tab and take answers there; the `waiting` events already hold the text; how an answer reaches the orchestrator open |
