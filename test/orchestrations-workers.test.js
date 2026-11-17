@@ -494,3 +494,41 @@ test('an agent that matched the claim template with an invalid run folder is sta
   assert.equal(state.raw, 'starting');
   assert.ok(!state.events.some((e) => e.type === 'DRIFT'));
 });
+
+test('a merged worker carries the merge time as mergedAt', () => {
+  const at = '2026-11-17T11:22:00.000Z';
+  assert.equal(resolveStatuses([st({ task: '5' })], [], [{ task: '5', at }], [])[0].mergedAt, at);
+  assert.equal(resolveStatuses([st({ task: '5' })], [], [], [])[0].mergedAt, null);
+  assert.equal(resolveStatuses([st({ task: '5' })], [], [{ task: '5', at: '' }], [])[0].mergedAt, null);
+});
+
+test('reviews lists every round for the task, oldest first', () => {
+  const rs = [
+    st({ agentId: 'r2', task: '5', raw: 'done', report: 'Pass', startedAt: iso(20) }),
+    st({ agentId: 'r1', task: '5', raw: 'done', report: 'Changes: add a timeout', startedAt: iso(10) }),
+  ];
+  const [w] = resolveStatuses([st({ task: '5', raw: 'done' })], rs, [], []);
+  assert.deepEqual(w.reviews.map((r) => r.status), ['changes', 'passed']);
+  assert.deepEqual(w.review, w.reviews[1]);
+});
+
+test('a reviewer started before the worker is not one of its reviews', () => {
+  const early = st({ agentId: 'r0', task: '5', raw: 'done', report: 'Pass', startedAt: iso(-100) });
+  const [w] = resolveStatuses([st({ task: '5', raw: 'done', startedAt: iso(0) })], [early], [], []);
+  assert.deepEqual(w.reviews, []);
+  assert.equal(w.review, null);
+});
+
+test('a wave of merged workers ends at its latest merge', () => {
+  const m = (id, mergedAt) => ({ agentId: id, startedAt: iso(0), status: 'merged', lastActiveAt: iso(1), mergedAt });
+  const waves = groupWaves([m('a', '2026-11-17T11:20:00.000Z'), m('b', '2026-11-17T11:22:00.000Z')]);
+  assert.equal(waves[0].endedAt, '2026-11-17T11:22:00.000Z');
+});
+
+test('a wave with an unmerged worker has no end', () => {
+  const waves = groupWaves([
+    { agentId: 'a', startedAt: iso(0), status: 'merged', lastActiveAt: iso(1), mergedAt: '2026-11-17T11:20:00.000Z' },
+    { agentId: 'b', startedAt: iso(0), status: 'working', lastActiveAt: iso(1), mergedAt: null },
+  ]);
+  assert.equal(waves[0].endedAt, null);
+});

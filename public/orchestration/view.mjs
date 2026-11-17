@@ -1,7 +1,7 @@
 // The Orchestration tab's view-model helpers: pure functions from data to the
 // words, numbers and class names the renderer draws. No DOM here, so node can
 // import this module (test/modules-load.test.js).
-import { formatDuration } from '../format.mjs';
+import { formatDuration, formatTokens } from '../format.mjs';
 
 export const CONTEXT_BUDGET = 200000;
 export const EMPTY_TEXT = 'No orchestration ran today. Start one with the orchestrate skill.';
@@ -9,13 +9,13 @@ export const EMPTY_TEXT = 'No orchestration ran today. Start one with the orches
 const STATUS_VIEWS = {
   working: { glyph: '●', word: 'Working', tone: 'live' },
   review: { glyph: '◐', word: 'In review', tone: 'plain' },
-  changes: { glyph: '◐', word: 'Changes asked', tone: 'plain' },
+  changes: { glyph: '↺', word: 'Changes asked', tone: 'plain' },
   passed: { glyph: '✓', word: 'Passed', tone: 'plain' },
   merged: { glyph: '✓', word: 'Merged', tone: 'plain' },
   done: { glyph: '✓', word: 'Done', tone: 'plain' },
   stuck: { glyph: '!', word: 'Stuck', tone: 'warn' },
   quiet: { glyph: '○', word: 'Quiet', tone: 'plain' },
-  starting: { glyph: '○', word: 'Starting', tone: 'plain' },
+  starting: { glyph: '◌', word: 'Starting', tone: 'plain' },
 };
 
 // { glyph, word, tone } for a worker status. Every status has a shape and a word,
@@ -186,4 +186,203 @@ export function othersCount(board) {
 // "T3" for a worker with a task number, else "".
 export function taskLabel(worker) {
   return worker.task == null ? '' : `T${worker.task}`;
+}
+
+// ---------- The redesigned tab ----------
+
+// The context size where the meter turns amber. It matches LARGE_CONTEXT_TOKENS in
+// lib/aggregate.js, the line Claude Code's own usage view draws.
+export const CONTEXT_WARN = 150000;
+
+const wholeK = (n) => (n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+
+// The context meter's words and fill: "63.2k", "137k left" or "12k over", the 0 to 1
+// ratio of the budget, and whether the size is at the warning line.
+export function contextView(tokens) {
+  if (tokens == null) return { value: '—', left: '', ratio: 0, warn: false };
+  const left = CONTEXT_BUDGET - tokens;
+  return {
+    value: formatTokens(tokens),
+    left: left >= 0 ? `${wholeK(left)} left` : `${wholeK(-left)} over`,
+    ratio: meterRatio(tokens),
+    warn: tokens >= CONTEXT_WARN,
+  };
+}
+
+// The same rule as isTaskFile in lib/transcript-index.js: a planned entry ending in /
+// is a folder, else a path equals the entry or ends with /<entry>.
+function isPlanned(path, files) {
+  return files.some((f) => (f.endsWith('/') ? path.startsWith(f) || path.includes(`/${f}`) : path === f || path.endsWith(`/${f}`)));
+}
+
+// One cell per planned file, touched or not, and the edited paths outside the plan.
+// files are plan-relative, touched and edited are absolute worktree paths.
+export function filesView(worker) {
+  const files = worker.files ?? [];
+  const touched = worker.touched ?? [];
+  const cells = files.map((path) => ({ path, touched: touched.some((t) => isPlanned(t, [path])) }));
+  const outside = (worker.edited ?? []).filter((f) => !touched.includes(f));
+  return { cells, outside };
+}
+
+const ROUND_WORDS = { passed: 'passed', changes: 'changes asked', running: 'in review' };
+
+// The merged row's review history: "passed first time", "no review" or the rounds
+// joined with ", then ". Repeats of one round collapse into "×2".
+export function reviewHistory(reviews) {
+  if (!reviews?.length) return 'no review';
+  if (reviews.length === 1 && reviews[0].status === 'passed') return 'passed first time';
+  const runs = [];
+  for (const { status } of reviews) {
+    if (runs.at(-1)?.status === status) runs.at(-1).n += 1;
+    else runs.push({ status, n: 1 });
+  }
+  return runs.map(({ status, n }) => `${ROUND_WORDS[status] ?? status}${n > 1 ? ` ×${n}` : ''}`).join(', then ');
+}
+
+// "4m" between two ISO times, or a dash when either is missing.
+export function tookLabel(startIso, endIso) {
+  const start = startIso ? Date.parse(startIso) : NaN;
+  const end = endIso ? Date.parse(endIso) : NaN;
+  if (Number.isNaN(start) || Number.isNaN(end)) return '—';
+  return formatDuration(Math.max(0, end - start));
+}
+
+// The length of each wave in ms, or null when unknown. A wave ends at its endedAt, else
+// where the next wave starts. The last wave of a live run with no endedAt runs until now.
+export function waveSpans(waves, { live, now }) {
+  return waves.map((w, i) => {
+    const start = w.startedAt ? Date.parse(w.startedAt) : NaN;
+    const isLast = i === waves.length - 1;
+    let end = NaN;
+    let running = false;
+    if (w.endedAt) end = Date.parse(w.endedAt);
+    else if (!isLast) end = waves[i + 1].startedAt ? Date.parse(waves[i + 1].startedAt) : NaN;
+    else if (live) {
+      end = now;
+      running = true;
+    }
+    const ms = Number.isNaN(start) || Number.isNaN(end) ? null : Math.max(0, end - start);
+    return { n: w.n, startedAt: w.startedAt, ms, running };
+  });
+}
+
+// Folds each run of consecutive routine ("·") feed entries into one group. A group's
+// key is its oldest entry's key, so it holds when newer entries arrive. The feed is
+// newest first, so the oldest entry of a group is its last.
+export function foldFeed(feed) {
+  const out = [];
+  let run = [];
+  const flush = () => {
+    if (!run.length) return;
+    const oldest = run.at(-1);
+    const newest = run[0];
+    const label = run.length === 1
+      ? `1 routine check · ${clock(oldest.at)}`
+      : `${run.length} routine checks · ${clock(oldest.at)}–${clock(newest.at)}`;
+    out.push({ kind: 'group', key: `g:${oldest.at}|${oldest.line}`, entries: run, label });
+    run = [];
+  };
+  for (const entry of feed ?? []) {
+    if (entry.glyph === '·') run.push(entry);
+    else {
+      flush();
+      out.push({ kind: 'entry', key: `${entry.at}|${entry.line}`, entry });
+    }
+  }
+  flush();
+  return out;
+}
+
+function latestAttention(worker) {
+  return [...(worker.events ?? [])].reverse().find((e) => ATTENTION.has(e.type)) ?? null;
+}
+
+function stuckWorkers(detail) {
+  return (detail.waves ?? [])
+    .flatMap((wave) => wave.workers ?? [])
+    .filter((w) => w.status === 'stuck')
+    .sort((a, b) => (a.task ?? Infinity) - (b.task ?? Infinity));
+}
+
+// What needs the owner: the orchestrator's question when the live run is waiting, then
+// each stuck worker in task order with its latest attention event.
+export function attentionItems(detail) {
+  const items = [];
+  if (detail.live && detail.now?.state === 'waiting') items.push({ kind: 'waiting', text: detail.now.detail ?? '', since: detail.now.since });
+  for (const worker of stuckWorkers(detail)) {
+    const event = latestAttention(worker);
+    if (event) items.push({ kind: 'stuck', worker, event: { type: event.type, text: event.text, at: event.at } });
+  }
+  return items;
+}
+
+// The run switcher card's pill, meta line, phase pips and counts.
+export function runCard(summary, now = Date.now()) {
+  const pill = summary.waiting
+    ? { glyph: '⏸', text: 'Waiting for you', tone: 'warn' }
+    : summary.live
+      ? { glyph: '●', text: 'Live', tone: 'live' }
+      : { glyph: '○', text: switcherState(summary, now), tone: 'plain' };
+  const meta = [summary.project];
+  if (summary.branch) meta.push(summary.branch);
+  if (summary.wave != null) meta.push(`wave ${summary.wave}`);
+  if (summary.lastActiveAt != null) meta.push(`last active ${clock(summary.lastActiveAt)}`);
+  meta.push(`board ${summary.boardCount ?? 0}`);
+  const pips = phaseSteps(summary.phase, summary.live).map((step) => {
+    const state = step.state === 'todo' ? 'next' : step.state;
+    return { name: step.name, state, wait: state === 'now' && Boolean(summary.waiting) };
+  });
+  const c = summary.counts ?? {};
+  const count = (glyph, word, n, warn = false) => ({ glyph, word, n: n ?? 0, tone: n ? (warn ? 'warn' : 'plain') : 'zero' });
+  const counts = [count('●', 'working', c.working), count('◐', 'review', c.review), count('✓', 'merged', c.merged), count('!', 'attention', c.attention, true)];
+  return { pill, meta: meta.filter((x) => x != null && x !== ''), pips, counts };
+}
+
+const STEER_STATES = {
+  pending: { glyph: '◌', word: 'Pending' },
+  delivered: { glyph: '✓', word: 'Delivered' },
+  unclaimed: { glyph: '○', word: 'Unclaimed' },
+  failed: { glyph: '✕', word: 'Failed' },
+};
+export const STEER_DRAIN_MS = 30000;
+
+// The steer row of a worker card, or null with no steer. drainMs is the time left of
+// the 30 s a pending steer is expected to take, clamped to 0..30000.
+export function steerState(lastSteer, now = Date.now()) {
+  const view = lastSteer && STEER_STATES[lastSteer.state];
+  if (!view) return null;
+  const pending = lastSteer.state === 'pending';
+  const failedLike = lastSteer.state === 'failed' || lastSteer.state === 'unclaimed';
+  // at is epoch ms from the server, or an ISO string.
+  const age = now - new Date(lastSteer.at).getTime();
+  return {
+    glyph: view.glyph,
+    word: view.word,
+    sub: pending ? 'Waiting for the orchestrator session to pick it up.' : failedLike ? steerView(lastSteer).word : '',
+    again: failedLike,
+    drainMs: pending && !Number.isNaN(age) ? Math.min(STEER_DRAIN_MS, Math.max(0, STEER_DRAIN_MS - age)) : 0,
+  };
+}
+
+// The attention banner's line under a stuck worker, from its lastSteer.
+export function steerMeta(lastSteer) {
+  if (!lastSteer) return '';
+  if (lastSteer.state === 'pending') return `Your steer from ${clock(lastSteer.at)} is waiting for pickup.`;
+  if (lastSteer.state === 'delivered') return `Steer delivered at ${clock(lastSteer.at)}. Watching for a change.`;
+  return steerView(lastSteer)?.word ?? '';
+}
+
+// The status block's now line: waiting, else the first stuck task, else what is running.
+export function nowView(detail) {
+  const n = detail.now ?? {};
+  const since = n.since ? `since ${clock(n.since)}` : '';
+  if (detail.live && n.state === 'waiting') return { glyph: '?', text: 'Waiting for you', since, tone: 'warn' };
+  const stuck = stuckWorkers(detail)[0];
+  if (stuck) {
+    const event = latestAttention(stuck);
+    return { glyph: '!', text: `${stuck.task == null ? 'A worker' : `Task ${stuck.task}`} stuck, ${event?.type ?? 'STUCK'}`, since, tone: 'warn' };
+  }
+  if (!detail.live) return { glyph: '○', text: n.text ?? '', since, tone: 'plain' };
+  return { glyph: '●', text: n.text ?? '', since, tone: 'live' };
 }

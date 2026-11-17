@@ -7,7 +7,7 @@ const path = require('node:path');
 const { bootServer, testConfig } = require('./helpers');
 const { createOrchestrations } = require('../lib/orchestrations/discover');
 const { stepsOf } = require('../lib/transcript-index');
-const { writeOrchestration } = require('./orchestration-fixture');
+const { writeOrchestration, writeDemo } = require('./orchestration-fixture');
 
 function install(config) {
   const file = path.join(config.configDir, 'skills', 'orchestrate', 'SKILL.md');
@@ -663,4 +663,29 @@ test('a worker with two claims is stuck in detail', (t) => {
   const o = writeOrchestration(config.configDir, { live: true, claims: true, workers: [{ task: 1, claims: 2, files: ['lib/a.js'], steps: working('lib/a.js') }] });
   const [w] = workersOf(detailOf(config, o.sessionId));
   assert.equal(w.status, 'stuck');
+});
+
+test('the demo covers every state the tab draws', (t) => {
+  const config = testConfig(t);
+  writeDemo(config.configDir);
+  const orch = createOrchestrations(config.configDir);
+  assert.equal(orch.installed(), true);
+  // A reviewer's verdict is read once its finished flag has held for two polls.
+  orch.detail('demo-live-1');
+  const live = orch.detail('demo-live-1');
+  const workers = workersOf(live);
+  assert.deepEqual(workers.map((w) => w.status).sort(), ['merged', 'stuck', 'working']);
+  const merged = workers.find((w) => w.status === 'merged');
+  assert.equal(live.waves.length, 1);
+  assert.ok(live.waves.at(-1).workers.some((w) => w.agentId === merged.agentId));
+  assert.deepEqual(merged.reviews.map((r) => r.status), ['changes', 'passed']);
+  assert.ok(merged.mergedAt);
+  assert.ok(merged.mergedAt > merged.reviews.at(-1).endedAt, `${merged.mergedAt} vs ${merged.reviews.at(-1).endedAt}`);
+  const stuck = workers.find((w) => w.status === 'stuck');
+  assert.ok(stuck.events.some((e) => e.type === 'DRIFT'));
+  assert.equal(stuck.lastSteer?.state, 'pending');
+  const waiting = orch.detail('demo-waiting-1');
+  assert.equal(waiting.waiting, true);
+  assert.ok(waiting.now.detail.includes('corpus path'), waiting.now.detail);
+  assert.equal(orch.detail('demo-ended-1').live, false);
 });

@@ -17,6 +17,8 @@
 //     finished  true writes finished: true into the .meta.json and ends the transcript with the
 //               worker's report as an assistant text record.
 //     tokens    the context size of the worker's last assistant record, default grows with steps.
+//     lateReport true writes the worker's final report record after every worker has started, so
+//               its lastActiveAt is later than the other workers' startedAt and they share its wave.
 //     merged    true adds a parent Bash `git merge <topic>-t<N>`.
 //     steer     a string adds a parent SendMessage to the worker with that message.
 //   claims      true: workers get the fixed first message (description `orchestrate worker`) and
@@ -25,7 +27,14 @@
 //               and its CLAIMED result. Per worker: `claim: false` leaves it unclaimed, `claims: 2` adds a
 //               second claim (task number + 10).
 //   reviewers   with claims: [{ task, finished, report }] reviewers started after the workers, each with
-//               the fixed reviewer message and a claimed review task for that task number.
+//               the fixed reviewer message and a claimed review task for that task number. A task may
+//               appear more than once, one entry per review round, oldest first.
+//   activity    { state: 'working'|'waiting', text? } writes <configDir>/cc-dashboard/activity/<sessionId>.json
+//               in the shape lib/activity.js reads. With text, the orchestrator transcript ends with an
+//               assistant text record holding it, so now.detail shows it.
+//   pendingSteer { task, text } writes a steer request for that task's worker, with no result file. Its
+//               at is 10 minutes after the time of writing, so lastSteer.state reads 'pending' for 10
+//               minutes (a steer turns unclaimed only when now - at passes 30 s).
 //   board       [{ t, from, title, body }] written to the board file, one JSON line each
 //   clearedFrom session id written to the snapshot's clearedFrom
 //   resetLine   true (or a string) makes the transcript's first user prompt the reset line
@@ -33,7 +42,9 @@
 //   live        true: the snapshot is active now and not ended, so the live rule holds.
 //               false (default): the snapshot is 30 minutes old and ended.
 //
-// Run as `node test/orchestration-fixture.js <configDir>` to write a two-orchestration demo.
+// Run as `node test/orchestration-fixture.js <configDir>` to write a three-orchestration demo.
+// writeDemo also writes <configDir>/skills/orchestrate/SKILL.md (a one-line placeholder), so a
+// server run on that folder reports the orchestrate skill as installed and lists the runs.
 
 const fs = require('node:fs');
 const path = require('node:path');
@@ -107,6 +118,8 @@ function writeOrchestration(configDir, opts = {}) {
     side({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: `CLAIMED ${file}\nDo the task.`, is_error: false }] } }),
   ];
   const workerIds = [];
+  const merges = [];
+  const lateReports = [];
   const workerFiles = [];
   workers.forEach((w, i) => {
     const n = w.task ?? i + 1;
@@ -161,33 +174,46 @@ function writeOrchestration(configDir, opts = {}) {
       }
     });
     if (w.finished) {
-      const usage = w.tokens ? { ...usageAt(steps.length), cache_read_input_tokens: w.tokens - 510 } : usageAt(steps.length);
-      wl.push(assistantOf(side, [{ type: 'text', text: `Task ${n} done: ${title}. Tests pass.` }], usage));
+      const writeReport = () => {
+        const usage = w.tokens ? { ...usageAt(steps.length), cache_read_input_tokens: w.tokens - 510 } : usageAt(steps.length);
+        wl.push(assistantOf(side, [{ type: 'text', text: `Task ${n} done: ${title}. Tests pass.` }], usage));
+      };
+      if (w.lateReport) lateReports.push(writeReport);
+      else writeReport();
     }
     workerFiles.push({ file: workerFile, lines: wl, meta: { agentType: 'general-purpose', description, toolUseId: `toolu_agent${n}`, spawnDepth: 1, requestShape: 'agent', model: 'claude-sonnet-5-5', ...(w.finished ? { finished: true } : {}) } });
 
     if (w.steer) lines.push(assistantOf(parent, [use('SendMessage', { to: agentId, summary: `Steer Task ${n}`, message: w.steer }, `toolu_send${n}`)]));
+    // A merge follows the task's reviews, so it is written after the reviewer records.
     if (w.merged) {
-      lines.push(assistantOf(parent, [use('Bash', { command: `cd ${project}/.worktrees/${topic} && git merge --no-ff ${topic}-t${n}` }, `toolu_merge${n}`)]));
-      lines.push(resultOf(parent, `toolu_merge${n}`));
+      merges.push(() => {
+        lines.push(assistantOf(parent, [use('Bash', { command: `cd ${project}/.worktrees/${topic} && git merge --no-ff ${topic}-t${n}` }, `toolu_merge${n}`)]));
+        lines.push(resultOf(parent, `toolu_merge${n}`));
+      });
     }
   });
 
+  for (const writeReport of lateReports) writeReport();
+
   const reviewerIds = [];
-  for (const rv of claimed ? opts.reviewers ?? [] : []) {
-    const agentId = 'r' + crypto.createHash('sha1').update(`${sessionId}:review:${rv.task}`).digest('hex').slice(0, 16);
+  for (const [ri, rv] of (claimed ? opts.reviewers ?? [] : []).entries()) {
+    const rid = `${rv.task}_${ri}`;
+    const agentId = 'r' + crypto.createHash('sha1').update(`${sessionId}:review:${rid}`).digest('hex').slice(0, 16);
     reviewerIds.push(agentId);
     const description = 'orchestrate reviewer';
     const reviewPrompt = firstMessage('review');
     const reviewFile = path.join(subagents, `agent-${agentId}.jsonl`);
-    lines.push(assistantOf(parent, [use('Agent', { description, subagent_type: 'general-purpose', model: 'sonnet', prompt: reviewPrompt }, `toolu_rev${rv.task}`)]));
-    lines.push(resultOf(parent, `toolu_rev${rv.task}`, { toolUseResult: { isAsync: true, status: 'async_launched', agentId, description, resolvedModel: 'claude-sonnet-5-5', prompt: reviewPrompt } }));
+    lines.push(assistantOf(parent, [use('Agent', { description, subagent_type: 'general-purpose', model: 'sonnet', prompt: reviewPrompt }, `toolu_rev${rid}`)]));
+    lines.push(resultOf(parent, `toolu_rev${rid}`, { toolUseResult: { isAsync: true, status: 'async_launched', agentId, description, resolvedModel: 'claude-sonnet-5-5', prompt: reviewPrompt } }));
     const side = sidechain(agentId);
-    const rl = [side({ type: 'user', uuid: `r${rv.task}-u0`, message: { role: 'user', content: reviewPrompt } })];
-    rl.push(...claimRecords(side, `r${rv.task}-claim`, 'review', claimTask('review', rv.task, `Review Task ${rv.task}`, ['lib/x.js'], 'the review is done')));
+    const rl = [side({ type: 'user', uuid: `r${rid}-u0`, message: { role: 'user', content: reviewPrompt } })];
+    rl.push(...claimRecords(side, `r${rid}-claim`, 'review', claimTask('review', rv.task, `Review Task ${rv.task}`, ['lib/x.js'], 'the review is done')));
     if (rv.finished) rl.push(assistantOf(side, [{ type: 'text', text: rv.report ?? 'PASS: no findings.' }], { input_tokens: 10, output_tokens: 100, cache_creation_input_tokens: 500, cache_read_input_tokens: 20000 }));
-    workerFiles.push({ file: reviewFile, lines: rl, meta: { agentType: 'general-purpose', description, toolUseId: `toolu_rev${rv.task}`, spawnDepth: 1, requestShape: 'agent', model: 'claude-sonnet-5-5', ...(rv.finished ? { finished: true } : {}) } });
+    workerFiles.push({ file: reviewFile, lines: rl, meta: { agentType: 'general-purpose', description, toolUseId: `toolu_rev${rid}`, spawnDepth: 1, requestShape: 'agent', model: 'claude-sonnet-5-5', ...(rv.finished ? { finished: true } : {}) } });
   }
+
+  for (const writeMerge of merges) writeMerge();
+  if (opts.activity?.text) lines.push(assistantOf(parent, [{ type: 'text', text: opts.activity.text }]));
 
   const base = Date.now() - (live ? 0 : 30 * 60 * 1000) - count * STEP_MS;
   const clock = base + count * STEP_MS;
@@ -220,25 +246,46 @@ function writeOrchestration(configDir, opts = {}) {
   };
   writeFile(path.join(configDir, 'cc-dashboard', 'sessions', `${sessionId}.json`), JSON.stringify(snapshot));
   const mtime = new Date(live ? Date.now() : lastActiveAt);
+  if (opts.activity) {
+    const at = Date.now();
+    writeFile(path.join(configDir, 'cc-dashboard', 'activity', `${sessionId}.json`), JSON.stringify({ sessionId, state: opts.activity.state, since: at, updatedAt: at }));
+  }
+  if (opts.pendingSteer) {
+    const i = workers.findIndex((w, k) => (w.task ?? k + 1) === opts.pendingSteer.task);
+    if (i === -1) throw new Error(`pendingSteer: no worker for task ${opts.pendingSteer.task}`);
+    const id = crypto.randomUUID();
+    const request = { id, agentId: workerIds[i], task: opts.pendingSteer.task, title: workers[i].title ?? null, text: opts.pendingSteer.text, at: Date.now() + 10 * 60 * 1000 };
+    writeFile(path.join(configDir, 'cc-dashboard', 'steer', sessionId, `${id}.json`), JSON.stringify(request));
+  }
   fs.utimesSync(transcript, mtime, mtime);
   for (const wf of workerFiles) fs.utimesSync(wf.file, mtime, mtime);
 
   return { sessionId, transcript, imagePath, boardPath, workerIds, reviewerIds, runDir };
 }
 
-// A demo for browser checks: one live orchestration mid-wave with a finished worker,
-// a working one and a board, and one ended orchestration in another project.
+// A demo for browser checks, three orchestrations:
+//   parse-field   live, mid-wave, one wave. Task 1 merged after two review rounds, Task 2 stuck on a
+//                 DRIFT event with a pending steer, Task 3 working. It has a board.
+//   cache-banner  ended, in another project.
+//   situational-variables-dialog  live and waiting on a question.
 function writeDemo(configDir) {
+  writeFile(path.join(configDir, 'skills', 'orchestrate', 'SKILL.md'), '# orchestrate\n');
   const base = '2026-11-10T09:';
   const first = writeOrchestration(configDir, {
     topic: 'parse-field',
     sessionId: 'demo-live-1',
     live: true,
+    claims: true,
     workers: [
-      { task: 1, title: 'Parse the field', files: ['lib/parse.js', 'test/parse.test.js'], finished: true, merged: true, steps: [{ tool: 'Read', file_path: 'lib/parse.js' }, { tool: 'Edit', file_path: 'lib/parse.js' }, { tool: 'Bash', command: 'node --test test/parse.test.js' }] },
+      { task: 1, title: 'Parse the field', files: ['lib/parse.js', 'test/parse.test.js'], finished: true, lateReport: true, merged: true, steps: [{ tool: 'Read', file_path: 'lib/parse.js' }, { tool: 'Edit', file_path: 'lib/parse.js' }, { tool: 'Bash', command: 'node --test test/parse.test.js' }] },
       { task: 2, title: 'Render the field', files: ['public/panels/field.mjs'], steer: 'Use formatField from public/format.mjs.', tokens: 130000, steps: [{ tool: 'Read', file_path: 'public/format.mjs' }, { tool: 'Edit', file_path: 'public/panels/field.mjs' }, { tool: 'Edit', file_path: 'lib/unrelated.js' }] },
       { task: 3, title: 'Document the field', files: ['README.md'], steps: [] },
     ],
+    reviewers: [
+      { task: 1, finished: true, report: 'CHANGES: parse.js drops the sign of negative fields.' },
+      { task: 1, finished: true, report: 'PASS: no findings.' },
+    ],
+    pendingSteer: { task: 2, text: 'Leave lib/unrelated.js alone and finish public/panels/field.mjs.' },
     board: [
       { t: `${base}01:00.000Z`, from: 'Task 1', title: 'Field is a string', body: 'The API returns the field as a string, not a number.' },
       { t: `${base}04:00.000Z`, from: 'Task 2', title: 'Using formatField', body: 'Rendering with formatField from public/format.mjs.' },
@@ -252,7 +299,15 @@ function writeDemo(configDir) {
     workers: [{ task: 1, title: 'Show the banner', files: ['public/banner.mjs'], finished: true, merged: true, steps: [{ tool: 'Edit', file_path: 'public/banner.mjs' }] }],
     board: [{ t: `${base}00:30.000Z`, from: 'Task 1', title: 'Banner done', body: '' }],
   });
-  return [first, second];
+  const third = writeOrchestration(configDir, {
+    topic: 'situational-variables-dialog',
+    project: path.join(configDir, 'work', 'f-forge'),
+    sessionId: 'demo-waiting-1',
+    live: true,
+    workers: [{ task: 1, title: 'Build the dialog', files: ['public/dialog.mjs'], finished: true, merged: true, steps: [{ tool: 'Edit', file_path: 'public/dialog.mjs' }] }, { task: 2, title: 'Run Stage 1', files: ['lib/stage1.js'], steps: [{ tool: 'Read', file_path: 'lib/stage1.js' }] }],
+    activity: { state: 'waiting', text: 'Task 2 needs the corpus path before Stage 1 can run. Should it use data/corpus or the indexed copy in .qmd/?' },
+  });
+  return [first, second, third];
 }
 
 if (require.main === module) {

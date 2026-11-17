@@ -51,3 +51,16 @@ export function swapText(node, text, { animate, write = (n, t) => { n.textConten
     node._swapFade = node.animate([{ opacity: 0, ...blur }, { opacity: 1, ...clear }], { duration: 160, easing: EASE });
   };
 }
+
+// Writes text into node. When node already held a different value written by flashText,
+// a cyan wash fades out over 900ms. The first write, an unchanged value, animate false,
+// reduced motion and a node without animate() all write without the wash.
+export function flashText(node, text, { animate = true } = {}) {
+  const value = String(text);
+  const previous = node.dataset.flashed;
+  if (previous === value) return;
+  node.dataset.flashed = value;
+  node.textContent = value;
+  if (previous === undefined || !animate || reducedMotion() || !canAnimate(node)) return;
+  node.animate([{ backgroundColor: 'rgba(63,224,255,.28)' }, { backgroundColor: 'transparent' }], { duration: 900, easing: 'ease-out' });
+}
