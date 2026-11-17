@@ -13,6 +13,7 @@ const SKILL = fs.realpathSync(path.join(__dirname, '..', 'skills', 'orchestrate'
 const PLAN_SKILL = fs.realpathSync(path.join(__dirname, '..', 'skills', 'orch-plan'));
 const GRILL_SKILL = fs.realpathSync(path.join(__dirname, '..', 'skills', 'orch-grill'));
 const BRAINSTORM_SKILL = fs.realpathSync(path.join(__dirname, '..', 'skills', 'orch-brainstorm'));
+const DIAGNOSE_SKILL = fs.realpathSync(path.join(__dirname, '..', 'skills', 'diagnosing-orchestrate'));
 const AGENTS = fs.realpathSync(path.join(__dirname, '..', 'agents'));
 
 // A fake HOME with stub node, npm and claude on PATH. Each stub appends its name
@@ -55,6 +56,7 @@ test('a fresh run installs, links the mod and the skill and validates the mod', 
   assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'orch-plan')), PLAN_SKILL);
   assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'orch-grill')), GRILL_SKILL);
   assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'orch-brainstorm')), BRAINSTORM_SKILL);
+  assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'diagnosing-orchestrate')), DIAGNOSE_SKILL);
   for (const name of ['orch-worker', 'orch-reviewer']) {
     assert.strictEqual(fs.readlinkSync(agentLinkPath(box.home, name)), path.join(AGENTS, `${name}.md`));
   }
@@ -90,7 +92,7 @@ test('a fresh run leaves the rest of the config folder alone', (t) => {
   assert.strictEqual(code, 0, out);
   for (const [rel, body] of Object.entries(seeded)) assert.strictEqual(fs.readFileSync(path.join(cfg, rel), 'utf8'), body);
   assert.deepStrictEqual(fs.readdirSync(cfg).sort(), ['agents', 'plugins', 'settings.json', 'skills']);
-  assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'skills')).sort(), ['cc-dashboard', 'orch-brainstorm', 'orch-grill', 'orch-plan', 'orchestrate', 'other']);
+  assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'skills')).sort(), ['cc-dashboard', 'diagnosing-orchestrate', 'orch-brainstorm', 'orch-grill', 'orch-plan', 'orchestrate', 'other']);
   assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'agents')).sort(), ['Explore.md', 'orch-reviewer.md', 'orch-worker.md']);
   assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'plugins')), ['installed_plugins.json']);
 });
@@ -196,7 +198,7 @@ test('a file at an agent link path stops the script and changes nothing', (t) =>
   assert.doesNotMatch(calls, /npm install/);
 });
 
-for (const name of ['orch-plan', 'orch-grill', 'orch-brainstorm']) {
+for (const name of ['orch-plan', 'orch-grill', 'orch-brainstorm', 'diagnosing-orchestrate']) {
   test(`a file at a planning skill link path stops the script and changes nothing (${name})`, (t) => {
     const box = sandbox(t);
     const link = planningLinkPath(box.home, name);
@@ -302,6 +304,7 @@ test('a clone path with a space links the right folder', (t) => {
   fs.mkdirSync(path.join(clone, 'skills', 'orch-plan'));
   fs.mkdirSync(path.join(clone, 'skills', 'orch-grill'));
   fs.mkdirSync(path.join(clone, 'skills', 'orch-brainstorm'));
+  fs.mkdirSync(path.join(clone, 'skills', 'diagnosing-orchestrate'));
   fs.mkdirSync(path.join(clone, 'agents'));
   for (const name of ['orch-worker', 'orch-reviewer']) fs.writeFileSync(path.join(clone, 'agents', `${name}.md`), '---\n---\n');
   fs.copyFileSync(SCRIPT, path.join(clone, 'bin', 'setup'));
@@ -312,6 +315,7 @@ test('a clone path with a space links the right folder', (t) => {
   assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'orch-plan')), path.join(clone, 'skills', 'orch-plan'));
   assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'orch-grill')), path.join(clone, 'skills', 'orch-grill'));
   assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'orch-brainstorm')), path.join(clone, 'skills', 'orch-brainstorm'));
+  assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'diagnosing-orchestrate')), path.join(clone, 'skills', 'diagnosing-orchestrate'));
   assert.strictEqual(fs.readlinkSync(agentLinkPath(box.home, 'orch-worker')), path.join(clone, 'agents', 'orch-worker.md'));
   assert.ok(calls.includes(`claude plugin validate ${path.join(clone, 'mod')}`), calls);
 });

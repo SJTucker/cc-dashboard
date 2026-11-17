@@ -156,7 +156,8 @@ into your skills folder. Every Claude Code session started after that loads it.
 
 `skills/orchestrate` is a separate Claude Code skill that runs an approved plan with
 background workers. `skills/orch-grill`, `skills/orch-brainstorm` and `skills/orch-plan` are the planning
-skills that write the spec and plan it reads. `bin/setup` links all four, and SETUP.md has the
+skills that write the spec and plan it reads. `skills/diagnosing-orchestrate` finds why a run
+went wrong. `bin/setup` links all five, and SETUP.md has the
 manual steps.
 
 After each main turn, and whenever a rate-limit window moves by 1%, the mod runs
@@ -714,6 +715,7 @@ bin/review-session     Lists ended sessions to review and records Haiku's sugges
 skills/orchestrate/    Claude Code skill that runs an approved plan with background workers, each in its own worktree; SETUP.md has the install steps
 skills/orch-grill/     Claude Code skill that grills a design, then writes the spec and the glossary and ADRs it settled
 skills/orch-brainstorm/ Claude Code skill that brainstorms a design with the owner and writes the spec /orch-plan reads
+skills/diagnosing-orchestrate/ Claude Code skill that finds, with cited evidence, why an orchestrate run went wrong
 skills/orch-plan/      Claude Code skill that writes a plan whose tasks carry the fields orchestrate reads
 mod/                   Claude Code mod that runs the recorders, records live session state, judges new Claude Code releases and records setup changes
 public/api.mjs         getJson: one GET and what each kind of failure resolves to
