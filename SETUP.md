@@ -276,7 +276,8 @@ Each refresh runs the whole statusline script, so keep the script fast.
 ## Compare the cost of two skills
 
 `bin/skill-cost` compares sessions that ran the `orchestrate` skill with sessions
-that ran `superpowers:subagent-driven-development`, per subagent and per 100 lines
+that ran `subagent-driven-development` (typed as `/subagent-driven-development`, or called as
+`superpowers:subagent-driven-development` in older transcripts), per subagent and per 100 lines
 changed, and pairs runs of similar size. It only reads `<cfg>/projects/` and runs
 read-only git, and a run over a few weeks takes a minute or two.
 
@@ -286,7 +287,8 @@ bin/skill-cost --since 2026-10-20 [--min-subagents 5] [--size-band 0.5] [--json]
 
 A session can hold several segments. A segment starts at a skill marker (a `Skill`
 call or the typed slash command) and ends at a marker of the other skill, at a
-`superpowers:finishing-a-development-branch` call, at `--until`, or at the session's
+`finishing-a-development-branch` call or typed command (`superpowers:` prefixed in older
+transcripts), a Read of that skill's `SKILL.md`, at `--until`, or at the session's
 last line. `--until <sessionIdPrefix>=<ISO time>` cuts one session's segment early.
 `--since` is UTC midnight and filters on a run's first segment start. A planning
 session pairs with its execution session through the plan path (an absolute `.md`

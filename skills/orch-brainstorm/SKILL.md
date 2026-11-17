@@ -1,11 +1,11 @@
 ---
 name: orch-brainstorm
-description: "You MUST use this before any creative work - creating features, building components, adding functionality, modifying behavior, or planning anything new. Use it in place of the brainstorming skill, which Claude cannot call. Also on /orch-brainstorm. Ends with a written spec that /orch-plan turns into a plan for orchestrate."
+description: "You MUST use this before any creative work - creating features, building components, adding functionality, modifying behavior, or planning anything new. Also on /orch-brainstorm. Ends with a written spec that /orch-plan turns into a plan for orchestrate."
 ---
 
 # Brainstorming
 
-This skill replaces the `brainstorming` skill for this owner. Every file it names sits beside this SKILL.md.
+This skill replaces upstream superpowers `brainstorming` for this owner. Every file it names sits beside this SKILL.md.
 
 You are very good at building. You build what you believe your human
 partner wants, and that belief is usually thinner than it feels. This
@@ -291,7 +291,7 @@ stays labeled throwaway, and keeping what it produced is a new request
 that comes back through this gate.
 
 After the design doc is approved, the next step is the plan, which the owner
-starts with `/orch-plan <spec path>`. Do not invoke `writing-plans`,
+starts with `/orch-plan <spec path>`. Do not write the plan yourself, and do not invoke
 `orch-plan`, `/plan-review` or `orchestrate` yourself.
 </HARD-GATE>
 

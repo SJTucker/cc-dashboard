@@ -45,8 +45,8 @@ When a message to the user names a task, write `Task <N> (<title>)`, never the b
 
 ## 1. When to use
 
-Only when the user asks for it. Otherwise superpowers' own execution skills
-(subagent-driven-development, executing-plans) apply.
+Only when the user asks for it. Otherwise the owner types
+`/subagent-driven-development` or `/executing-plans`.
 
 ## 2. Review the messages
 

@@ -62,7 +62,7 @@ No line-count limit applies to a task. `orchestrate` splits a task that raises `
 
 **Discovery gets its own task.** When a task must find something out by running it (a live probe, an engine behaviour nobody has checked), that finding becomes a task of its own, ahead of the task that uses it. Its report states the facts it found, and the later task consumes them as `behaviour`. A worker that probes and builds in one task spends its context on probes that fail, not on the build.
 
-**Specs without the orch-grill sections.** A spec from the `brainstorming` skill has no Decisions or Edge cases section, and a repo may have no `GLOSSARY.md` or ADRs. Every rule below that reads one of those applies only when it exists. Write the plan without it otherwise.
+**Specs without the orch-grill sections.** A spec written without orch-grill or orch-brainstorm may have no Decisions or Edge cases section, and a repo may have no `GLOSSARY.md` or ADRs. Every rule below that reads one of those applies only when it exists. Write the plan without it otherwise.
 
 **Edge cases into tests.** When the spec has an Edge cases list, each edge case gets a test in the task that owns the code, or a line in Review Focus saying why it has none. Review Focus still lists the five uncovered failure modes most likely to bite.
 

@@ -2,7 +2,8 @@
 'use strict';
 
 // Compares the token cost of sessions that ran the orchestrate skill with sessions
-// that ran superpowers:subagent-driven-development (SDD), per subagent and per 100
+// that ran subagent-driven-development (SDD; old transcripts name it
+// superpowers:subagent-driven-development), per subagent and per 100
 // lines changed, and pairs runs of similar size. Read-only.
 //
 // Usage: bin/skill-cost [--since YYYY-MM-DD] [--min-subagents N] [--size-band F]

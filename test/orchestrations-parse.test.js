@@ -220,6 +220,15 @@ test('finishing is set by the finishing skill', () => {
   assert.equal(parseOrchestrator(lines).finishing, true);
 });
 
+test('finishing is set by the unprefixed skill, a Read of its SKILL.md, or the typed command', () => {
+  const fin = (extra) => parseOrchestrator([...orchestratorLines(), extra]).finishing;
+  assert.equal(fin(assistant(use('Skill', { skill: 'finishing-a-development-branch' }, 'f1'))), true);
+  assert.equal(fin(assistant(use('Read', { file_path: '/Users/x/.claude/skills/finishing-a-development-branch/SKILL.md' }, 'f2'))), true);
+  assert.equal(fin(assistant(use('Read', { file_path: '/Users/x/.claude/skills/other/SKILL.md' }, 'f3'))), false);
+  const cmd = JSON.stringify({ type: 'user', timestamp: '2026-11-01T10:00:00.000Z', message: { content: '<command-message>x</command-message>\n<command-name>/finishing-a-development-branch</command-name>' } });
+  assert.equal(fin(cmd), true);
+});
+
 test('malformed lines are skipped', () => {
   assert.equal(parseOrchestrator(['{oops', ...orchestratorLines(), '']).agents.length, 1);
 });

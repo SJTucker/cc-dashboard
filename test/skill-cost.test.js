@@ -195,6 +195,19 @@ test('finishing-a-development-branch ends a segment and a later marker starts a 
   ]);
 });
 
+const readCall = (m, file_path) => JSON.stringify({ type: 'assistant', timestamp: iso(m), message: { content: [{ type: 'tool_use', name: 'Read', input: { file_path } }] } });
+
+test('unprefixed skill names count as sdd markers and finishes, as Skill calls and typed commands', () => {
+  const sdd = 'subagent-driven-development';
+  const fin = 'finishing-a-development-branch';
+  assert.deepStrictEqual(sc.scanSession(text(skillCall(1, sdd))).markers, [{ skill: 'sdd', t: T(1) }]);
+  assert.deepStrictEqual(sc.scanSession(text(typedCmd(1, sdd))).markers, [{ skill: 'sdd', t: T(1) }]);
+  assert.deepStrictEqual(sc.scanSession(text(skillCall(2, fin))).finishes, [T(2)]);
+  assert.deepStrictEqual(sc.scanSession(text(typedCmd(3, fin))).finishes, [T(3)]);
+  assert.deepStrictEqual(sc.scanSession(text(readCall(4, '/Users/x/.claude/skills/finishing-a-development-branch/SKILL.md'))).finishes, [T(4)]);
+  assert.deepStrictEqual(sc.scanSession(text(readCall(5, '/Users/x/.claude/skills/other/SKILL.md'))).finishes, []);
+});
+
 test('plan paths come only from assistant lines', () => {
   const sentence = 'You are the orchestrator for /plans/p.md.';
   const scan = sc.scanSession(text(
