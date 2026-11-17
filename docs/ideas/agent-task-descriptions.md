@@ -29,9 +29,17 @@ cost can be read next to what it was asked to do.
   on disk had a meta file, back to the oldest on 2026-10-06. 2,124 of them had a
   `description`. The 28 without one were not inspected. The one team agent sampled
   had no `toolUseId`.
-- The prompt is not in `meta.json`. It is in the parent session's Agent tool_use
-  `input.prompt`, and again in the tool_result's `toolUseResult.prompt`. The link is
-  `toolUseResult.agentId`, which equals the `<id>` in the file name.
+- The prompt is not in `meta.json`. It is the first line of the subagent's own
+  `agent-<id>.jsonl`, as a `user` message. All 465 sampled files whose parent
+  recorded a prompt matched it on that first line. No join to the parent is needed.
+- The parent session also has the prompt, in the Agent tool_use `input.prompt` and
+  in `toolUseResult.prompt`, linked by `toolUseResult.agentId`. `toolUseResult` has
+  several shapes. Background launches (`async_launched`, 458 of 467 sampled) carry
+  `agentId`, `description` and `prompt`. Foreground results (`completed`) and
+  teammates carry `prompt` but no `description`. `forked` results carry neither.
+- `transcripts.db` holds no message text. `files.data` holds extracted rows, and
+  `reviews.transcript` is a file path. Prompts are readable only from the `.jsonl`
+  files while those files exist.
 - The transcript cleanup deletes `meta.json` along with the transcript. A
   description that is not stored before then is lost. Agents whose files are already
   gone (`files.on_disk = 0`) cannot be backfilled.
@@ -60,11 +68,15 @@ would want to join on `agent_id`. A field in the row JSON would need only an
 `EXTRACT_VERSION` bump, so it stays the fallback if the table is not worth a schema
 change.
 
+## Decisions
+
+- SQL queries during analysis of past transcripts are the only reader (owner,
+  2026-11-17). No page or `/api/*` route shows the table.
+
 ## Open questions
 
-- What reads the column? Nothing shows a single agent today. Candidates: a per-agent
-  list in Where usage goes, the session review, or SQL queries only.
-- Store the prompt as well? It needs a join to the parent session's tool_use, because
-  `meta.json` does not have it. The one prompt sampled was 1,755 characters. The
+- Store the prompt as well? Reading it costs nothing extra, since it is the first
+  line of the file the row store already reads. Storing it keeps it after the
+  `.jsonl` is deleted. The one prompt sampled was 1,755 characters. The
   [Costliest prompts](costliest-prompts.md) idea has the same open question for user
   prompts.
