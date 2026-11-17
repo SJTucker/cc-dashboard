@@ -36,7 +36,8 @@ Then open **http://localhost:3600**.
 stops before changing anything if one is missing. Then it runs `npm install`,
 links `mod/` to `~/.claude/skills/cc-dashboard`, `skills/orchestrate/` to
 `~/.claude/skills/orchestrate`, `skills/orch-plan/` to `~/.claude/skills/orch-plan`,
-`skills/orch-grill/` to `~/.claude/skills/orch-grill`, and `agents/orch-worker.md`
+`skills/orch-grill/` to `~/.claude/skills/orch-grill`, `skills/orch-brainstorm/` to
+`~/.claude/skills/orch-brainstorm`, and `agents/orch-worker.md`
 and `agents/orch-reviewer.md` to `~/.claude/agents/`, and runs `claude plugin validate`
 on the mod. `bin/setup` reads `CLAUDE_CONFIG_DIR` from the shell that runs it, so set
 it there to the same value Claude Code uses. It is safe to run again. When a file,
@@ -178,6 +179,7 @@ from this clone. Link it from the clone:
 ln -s "$PWD/skills/orchestrate" ~/.claude/skills/orchestrate
 ln -s "$PWD/skills/orch-plan" ~/.claude/skills/orch-plan
 ln -s "$PWD/skills/orch-grill" ~/.claude/skills/orch-grill
+ln -s "$PWD/skills/orch-brainstorm" ~/.claude/skills/orch-brainstorm
 mkdir -p ~/.claude/agents
 ln -s "$PWD/agents/orch-worker.md" ~/.claude/agents/orch-worker.md
 ln -s "$PWD/agents/orch-reviewer.md" ~/.claude/agents/orch-reviewer.md
@@ -185,21 +187,23 @@ ln -s "$PWD/agents/orch-reviewer.md" ~/.claude/agents/orch-reviewer.md
 
 `bin/setup` runs these lines. The skill starts its workers and reviewers as the
 `orch-worker` and `orch-reviewer` agent types, and a run cannot start without them.
-`skills/orch-plan/` and `skills/orch-grill/` are the planning skills that write
-the plan and spec the orchestrate skill reads. You start them with `/orch-grill`
-and `/orch-plan <spec path>`. `orch-grill` creates the plan branch's worktree as its
+`skills/orch-plan/`, `skills/orch-grill/` and `skills/orch-brainstorm/` are the
+planning skills that write the plan and spec the orchestrate skill reads. You start
+them with `/orch-grill`, `/orch-brainstorm` and `/orch-plan <spec path>`. Claude also
+starts `orch-brainstorm` before creative work. It writes the spec `/orch-plan` reads
+and needs no `wt`. `orch-grill` creates the plan branch's worktree as its
 first step. `orch-plan` reuses the worktree the spec names, or creates it.
 A run ends with a Fable review of the plan branch through the user-level `pr-review`
 skill. Without `pr-review`, that review falls back to `/code-review high`.
 
-- **`skills/orchestrate/`, `skills/orch-plan/` and `skills/orch-grill/` must stay
-  inside the clone.** The orchestrate skill finds `bin/` through its own real path,
+- **`skills/orchestrate/`, `skills/orch-plan/`, `skills/orch-grill/` and
+  `skills/orch-brainstorm/` must stay inside the clone.** The orchestrate skill finds `bin/` through its own real path,
   two folders up. A copy of that folder elsewhere finds no scripts. The planning
   skills need nothing outside their own folder. Their links point into the clone,
   so Claude Code loads the clone's copy and picks up its updates.
 - **Moving the clone breaks the links.** Remove `~/.claude/skills/orchestrate`,
   `~/.claude/skills/orch-plan`, `~/.claude/skills/orch-grill`,
-  `~/.claude/agents/orch-worker.md` and `~/.claude/agents/orch-reviewer.md` and run
+  `~/.claude/skills/orch-brainstorm`, `~/.claude/agents/orch-worker.md` and `~/.claude/agents/orch-reviewer.md` and run
   the `ln -s` lines again from the new location, or run `bin/setup` again after
   removing the links.
 - **It needs `wt`.** See Requirements.
@@ -364,6 +368,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/skills/orchestrate` (a symlink to the clone's `skills/orchestrate/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/skills/orch-plan` (a symlink to the clone's `skills/orch-plan/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/skills/orch-grill` (a symlink to the clone's `skills/orch-grill/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
+| `<cfg>/skills/orch-brainstorm` (a symlink to the clone's `skills/orch-brainstorm/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/agents/orch-worker.md` (a symlink to the clone's `agents/orch-worker.md`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/agents/orch-reviewer.md` (a symlink to the clone's `agents/orch-reviewer.md`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
@@ -446,6 +451,8 @@ of them.
   stylesheet from `fonts.googleapis.com`, which fetches the font files from
   `fonts.gstatic.com`, in the viewer's browser. It also runs `git fetch origin` in the
   project at the start of each session.
+- **The `orch-brainstorm` skill** makes no network request. Its builder check starts
+  one Sonnet subagent on a project-size spec.
 - **The `orch-plan` skill** runs `git fetch origin` in the project when it creates the
   plan branch's worktree.
 - **The mod** fetches `CHANGELOG.md` from `raw.githubusercontent.com/anthropics/claude-code`
