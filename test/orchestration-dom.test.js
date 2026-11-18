@@ -120,14 +120,14 @@ test('a merge that swaps one card for a merged row leaves the later cards in pla
   const two = (first) => detail({ waves: [{ n: 1, startedAt: iso(-600_000), workers: [first, worker({ agentId: 'ag2', task: 2, title: 'Second' })] }] });
   render.renderDetail(root, two(worker()), { now: NOW, actions: actions() });
   const body = root.querySelector('.orch-workers');
-  const second = body.children.find((c) => c.dataset.key === 'ag2:card');
+  const second = [...body.children].find((c) => c.dataset.key === 'ag2:card');
   const calls = [];
   const original = body.insertBefore.bind(body);
   body.insertBefore = (child, ref) => { calls.push(child); return original(child, ref); };
   render.renderDetail(root, two(worker({ status: 'merged', mergedAt: iso(-1000) })), { now: NOW + 3000, actions: actions() });
   assert.equal(calls.includes(second), false, 'the second card is not moved');
-  assert.strictEqual(body.children.find((c) => c.dataset.key === 'ag2:card'), second);
-  assert.deepEqual(body.children.map((c) => c.dataset.key), ['ag1:fin', 'ag2:card']);
+  assert.strictEqual([...body.children].find((c) => c.dataset.key === 'ag2:card'), second);
+  assert.deepEqual([...body.children].map((c) => c.dataset.key), ['ag1:fin', 'ag2:card']);
 });
 
 test('a stuck worker with no task is named generically in the banner', () => {
@@ -146,7 +146,7 @@ function deferred() {
   const promise = new Promise((r) => { resolve = r; });
   return { promise, resolve };
 }
-const byText = (node, text) => node.querySelectorAll('.orch-btn').find((b) => b.textContent === text);
+const byText = (node, text) => [...node.querySelectorAll('.orch-btn')].find((b) => b.textContent === text);
 const boardForm = () => root.querySelector('.orch-composer');
 const boardField = () => boardForm().querySelectorAll('.orch-field')[0];
 const postButton = () => byText(boardForm(), 'Post');
@@ -469,21 +469,21 @@ test('a run card shows its pill, meta line, four phase pips and four counts', ()
   assert.ok(card.querySelector('.run-meta').textContent.includes('last active'));
   assert.equal(card.querySelectorAll('.pip').length, 4);
   assert.equal(card.querySelector('.run-pip-labels').querySelectorAll('span').length, 4);
-  const counts = card.querySelectorAll('.cnt');
+  const counts = [...card.querySelectorAll('.cnt')];
   assert.equal(counts.length, 4);
   assert.deepEqual(counts.map((c) => c.querySelector('b').textContent), ['2', '0', '1', '0']);
   assert.ok(counts[0].textContent.includes('working') && counts[1].textContent.includes('review') && counts[2].textContent.includes('merged') && counts[3].textContent.includes('attention'));
-  assert.deepEqual(card.querySelectorAll('.pip').map((p) => (p.classList.contains('done') ? 'done' : p.classList.contains('now') ? 'now' : 'next')), ['done', 'done', 'now', 'next']);
+  assert.deepEqual([...card.querySelectorAll('.pip')].map((p) => (p.classList.contains('done') ? 'done' : p.classList.contains('now') ? 'now' : 'next')), ['done', 'done', 'now', 'next']);
 });
 
 test("a waiting run's current pip carries wait and its pill reads Waiting for you", () => {
   drawCards([summary({ waiting: true })]);
   const card = root.querySelector('.run');
   assert.equal(card.querySelector('.run-pill').textContent, '⏸ Waiting for you');
-  const now = card.querySelectorAll('.pip').filter((p) => p.classList.contains('now'));
+  const now = [...card.querySelectorAll('.pip')].filter((p) => p.classList.contains('now'));
   assert.equal(now.length, 1);
   assert.ok(now[0].classList.contains('wait'));
-  assert.equal(card.querySelectorAll('.pip').filter((p) => p.classList.contains('wait')).length, 1);
+  assert.equal([...card.querySelectorAll('.pip')].filter((p) => p.classList.contains('wait')).length, 1);
 });
 
 test('zero counts are dimmed and attention above zero is amber', () => {
@@ -498,10 +498,10 @@ test('zero counts are dimmed and attention above zero is amber', () => {
 test('a poll with one changed count keeps the card node and changes only that number', () => {
   drawCards([summary()]);
   const card = root.querySelector('.run');
-  const before = card.querySelectorAll('.cnt').map((c) => c.querySelector('b').textContent);
+  const before = [...card.querySelectorAll('.cnt')].map((c) => c.querySelector('b').textContent);
   drawCards([summary({ counts: { working: 2, review: 0, merged: 2, attention: 0 } })]);
   assert.equal(root.querySelector('.run'), card);
-  const after = card.querySelectorAll('.cnt').map((c) => c.querySelector('b').textContent);
+  const after = [...card.querySelectorAll('.cnt')].map((c) => c.querySelector('b').textContent);
   assert.deepEqual(before, ['2', '0', '1', '0']);
   assert.deepEqual(after, ['2', '0', '2', '0']);
 });
@@ -542,7 +542,7 @@ const waitingDetail = (over = {}) => detail({
   now: { state: 'waiting', text: 'Waiting for you', detail: 'Which branch should I merge into?', since: iso(-120_000) },
   ...over,
 });
-const banners = () => root.querySelector('.orch-banner').querySelectorAll('.banner');
+const banners = () => [...root.querySelector('.orch-banner').querySelectorAll('.banner')];
 
 async function withClipboard(writeText, fn) {
   const had = Object.getOwnPropertyDescriptor(globalThis, 'navigator');
@@ -612,7 +612,7 @@ test('two stuck workers give two entries, and each Steer button opens its own wo
   assert.deepEqual(banners().map((x) => x.dataset.key), ['stuck:agB', 'stuck:agA']);
   assert.ok(root.querySelector('.now-line').textContent.includes('Task 1 stuck, STUCK'));
   await byText(banners()[0], 'Steer Task 1').click();
-  const cards = root.querySelectorAll('.worker');
+  const cards = [...root.querySelectorAll('.worker')];
   const form = (key) => cards.find((c) => c._agentId === key).querySelector('.steer-form');
   assert.equal(form('agB').hidden, false);
   assert.equal(form('agA').hidden, true);
@@ -775,7 +775,7 @@ test('the files meter has one cell per planned file and names files outside the 
     edited: ['/wt/lib/a.js', '/wt/other.js'],
   });
   render.renderDetail(root, oneWave(w), { now: NOW, actions: actions() });
-  const cells = inCard('.files').querySelectorAll('.cell');
+  const cells = [...inCard('.files').querySelectorAll('.cell')];
   assert.equal(cells.length, 4);
   assert.equal(cells.filter((c) => c.classList.contains('touched')).length, 1);
   assert.ok(inCard('.meters').textContent.includes('1 of 4 planned'));
@@ -845,7 +845,7 @@ test('earlier waves are one row each, listing every task, with took Xm', () => {
     ...waves.map((wv) => ({ ...wv, n: wv.n + 1 })),
   ];
   render.renderDetail(root, detail({ waves: three }), { now: NOW, actions: actions() });
-  const order = root.querySelector('.orch-waves').querySelectorAll('.past-wave').map((r) => r.querySelector('.wn').textContent);
+  const order = [...root.querySelector('.orch-waves').querySelectorAll('.past-wave')].map((r) => r.querySelector('.wn').textContent);
   assert.deepEqual(order, ['Wave 2', 'Wave 1'], 'earlier waves are newest first');
   render.renderDetail(root, detail({ waves }), { now: NOW, actions: actions() });
   const rows = root.querySelector('.orch-waves').querySelectorAll('.past-wave');
@@ -868,7 +868,7 @@ test('a live run whose last wave is all merged still shows that wave, as merged 
   const waves = [{ n: 3, startedAt: iso(-1_200_000), endedAt: iso(-300_000), workers: [mergedWorker({ agentId: 'a' }), mergedWorker({ agentId: 'b', task: 5 })] }];
   render.renderDetail(root, detail({ waves }), { now: NOW, actions: actions() });
   assert.ok(root.querySelector('.orch-waves').textContent.includes('WAVE 3'));
-  const cards = root.querySelectorAll('.worker');
+  const cards = [...root.querySelectorAll('.worker')];
   assert.equal(cards.length, 2);
   assert.ok(cards.every((c) => c.classList.contains('fin')));
   assert.equal(root.querySelectorAll('.past-wave').length, 0);
@@ -957,7 +957,7 @@ test('a working card that merges on the next poll becomes a fin row with no mete
   render.renderDetail(root, oneWave(worker({ agentId: 'agM', task: 4 })), { now: NOW, actions: actions() });
   assert.ok(inCard('.meters'));
   render.renderDetail(root, oneWave(mergedWorker()), { now: NOW + 3000, actions: actions() });
-  const cards = root.querySelectorAll('.worker');
+  const cards = [...root.querySelectorAll('.worker')];
   assert.equal(cards.length, 1);
   assert.ok(cards[0].classList.contains('fin'));
   assert.equal(cards[0].querySelector('.meters'), null);
@@ -977,7 +977,7 @@ test('an open card lists Done when, each planned file with ● or ○, outside f
   assert.equal(inCard('.chev').getAttribute('aria-expanded'), 'true');
   const t = more.textContent;
   assert.ok(t.includes('Done when') && t.includes('The parser passes'));
-  const files = more.querySelector('.pf').querySelectorAll('li').map((li) => li.textContent);
+  const files = [...more.querySelector('.pf').querySelectorAll('li')].map((li) => li.textContent);
   assert.equal(files.length, 3);
   assert.ok(files[0].startsWith('●') && files[0].includes('lib/a.js'));
   assert.ok(files[1].startsWith('○') && files[1].includes('lib/b.js'));
@@ -1035,7 +1035,7 @@ test('the banner Steer button opens the restyled card composer', async () => {
 test('an ended run shows no Steer button on any card', () => {
   const waves = [{ n: 1, workers: [worker({ agentId: 'a' }), stuckWorker({ agentId: 'b' }), worker({ agentId: 'c', status: 'passed' })] }];
   render.renderDetail(root, detail({ live: false, waves }), { now: NOW, actions: actions() });
-  const cards = root.querySelectorAll('.worker');
+  const cards = [...root.querySelectorAll('.worker')];
   assert.equal(cards.length, 3);
   for (const card of cards) assert.equal(byText(card, 'Steer').hidden, true);
 });

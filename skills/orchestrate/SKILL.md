@@ -41,6 +41,13 @@ Never read a worker transcript raw: one line can hold a megabyte. Use the index
 (`TI <path>`), `TI <path> --steps <n>`, or `sed -n 'A,Bp' <path> | cut -c1-400` on
 line ranges the index or `--steps` names.
 
+Look at a worker's files with `grep -n` or `cd <worktree> && git diff`, not Read or
+Edit. Where rtk filters Bash output, it cuts a long `git -C <worktree> diff` short,
+and it leaves `git diff` whole. In a project with `.claude/rules/` or nested `CLAUDE.md` files, your first Read
+or Edit in each worktree adds those files to your context, about 20k tokens per
+worktree in one run. Resolving a merge conflict in the plan branch's worktree
+(section 11) is the exception.
+
 When a message to the user names a task, write `Task <N> (<title>)`, never the bare number.
 
 ## 1. When to use
@@ -148,7 +155,8 @@ point at the new session. The image's Sources keep the old ones.
 
 A plan from `orch-plan` already carries the labelled fields on every task:
 `**Test command:**`, `**Fails before, passes after:**`, `**Done when:**`,
-`**Report:**`, `**Reviewer:**`, `**Reads:**` and `**User steps:**`. For such a
+`**Report:**`, `**Reviewer:**`, `**Reads:**`, `**User steps:**` and
+`**Browser check:**`. For such a
 task, check each field instead of rewriting it, and check the test command
 against its target as item 1 below says. Take dependencies and stub-ready pairs
 from the plan's `## Dependencies` section when it has one, else from the
@@ -210,6 +218,15 @@ that task's `notes`, or in the image's "Updates" when it affects several tasks.
 
 **Ask the user.** Once a worker is running:
 
+Before asking, look up each fact the code can settle, with `grep -n` or `git log`,
+and ask only the choice that remains. When every option of that choice changes only
+files in the asking task's `files`, and no option changes a name or behaviour in a
+plan's `Produces` or `Consumes` block, decide it: steer the worker with the choice,
+add the choice and the reason to "Updates", and tell the user in one line in your
+next message. That task does not wait. A contradiction with the image or the plan
+(section 8) and a change to the plan itself (section 9) still go to the user. Ask
+any other choice as below, with your recommendation in the question.
+
 1. Ask the user in a plain message at the end of your turn, not with
    `AskUserQuestion`. A question dialog holds your turn until the user answers,
    so watch events, worker reports and newly ready tasks queue behind it. A plain
@@ -235,6 +252,12 @@ model, before dispatching. Create the plan branch if it does not exist, with the
 name and base the plan's Global Constraints give. When the plan names no base, use
 the base the project's CLAUDE.md names for worktrees, else local `main`:
 `wt switch --create <plan branch> --base <base> --no-cd`.
+
+Then, before the run's first `--add` (a stub worker's included), record the commit
+the plan branch is at. Section 14 uses it as the final review's base:
+`mkdir -p <run> && { [ -s <run>/start-commit ] || git rev-parse --verify <plan branch>^{commit} > <run>/start-commit; }`.
+The check keeps a resumed session from moving it. If `rev-parse` fails, it leaves
+the file empty: fix the branch name and run the command again.
 
 **Stub an interface.** Before dispatching a stub-ready task B on a producing
 task A:
@@ -331,6 +354,9 @@ For each ready task, in this order:
    Constraints, Review Focus and Dependencies sections and of its task section. A
    task added after the first dispatch that the plan has no section for, such as a
    split from section 8, also carries no `reads` and puts its whole work in `notes`.
+   Every task written after the first dispatch, here or in sections 8, 9 and 14, lists
+   in `files` the test files that cover each file it changes and the files that import
+   it, found with `grep -rln`.
 3. Start the worker with the Agent tool: `subagent_type: "orch-worker"`,
    `model: "sonnet"`, `run_in_background: true`, `description: "orchestrate worker"`
    (the same for every worker), and the fixed message as the prompt.
@@ -521,8 +547,7 @@ file's fields (`task`, `title`, `plan`, `worktree`, `branch`, `files`,
 `doneWhen`, `sections`, `reviewer`) and `implementer: { agentId, transcript }`, with
 `transcript` the transcript path of the agent that claimed the work task. The
 review task leaves out the claimed work file's `reads` and `planExcerpt`. A
-reviewer's task is likewise the one in the claimed file its own `CLAIMED` line
-names.
+reviewer's task is likewise the one in the claimed file it claimed, found as below.
 
 Build the reviewer message once per session, with the same absolute paths as the
 worker message, plus `<TI>` filled in with the absolute path of `TI`. Reuse it byte
@@ -535,11 +560,17 @@ Check how the work was done, reading the implementer's work only through `<TI> <
 Report pass, or each problem with file, line and why.
 ```
 
-Every reviewer's Agent call uses `subagent_type: "orch-reviewer"`, `model` set to
-the task's `reviewer` (Sonnet when the task has none), `run_in_background: true`
-and `description: "orchestrate reviewer"`. Start reviewers one per message, like
-workers. A relaunched implementer gets a new work task with the next `attempt`, the
-same `reviewer` and the review findings in `notes`.
+Every reviewer's Agent call uses `subagent_type: "orch-reviewer"`, `model` set to the
+task's `reviewer` (Sonnet when the task has none), `run_in_background: true` and
+`description: "orchestrate reviewer"`. Start reviewers one per message, like workers.
+Arm no section 7 watch for a reviewer. Its completion notification wakes you, and
+`REPORT` finds its cost from its transcript. With no watch there is no `CLAIMED`
+line, so read the task file the reviewer claimed with
+`grep -o 'CLAIMED [0-9]*-t[0-9]*-a[0-9]*\.json' <reviewer transcript> | head -1`. When
+a reviewer's completion notification carries no review, run
+`TI <reviewer transcript> --steps 20` and apply section 8's `KILLED` or `FAILED` rule
+to the reviewer as to a worker. A relaunched implementer gets a new work task with
+the next `attempt`, the same `reviewer` and the review findings in `notes`.
 
 Before starting a Sonnet reviewer, count the task's code changes with
 `git -C <worktree> diff --shortstat <plan branch>...<plan branch>-t<N> -- . ':(exclude)*.md'`.
@@ -557,18 +588,28 @@ sends a review's problems to the implementer is followed by
 not by `steer`. Section 10's `steer` stays for corrections that do not come from a
 review. A steered implementer's watch gets the files the findings cite that are
 outside the task's `files` (section 7).
+After a `review-fix`, the task passes only on a new review. Before sending the
+findings, record the task branch's head with `git -C <worktree> rev-parse HEAD`.
+When the implementer reports again, add a review task as above, with `notes`:
+`Re-review of commits <recorded head>..HEAD only. Check that each finding below is
+fixed and that these commits add no new problem. Findings: <the findings as sent>`.
+Log its result with `review-pass` or `review-fail` as usual. A re-review that fails
+sends its findings the same way, with a newly recorded head. A `"task": 0` task
+commits on the plan branch, where other tasks' merges also land, so for it put the
+commit ids from the worker's report in `notes` in place of the range.
 
 A review that passes can still list problems, such as a minor display bug. Append
-each one to `<leftovers>` as one line:
-`Task <N> (<title>): <file>:<line> <problem>`. Section 14 fixes them before the
-final review. A `"task": 0` worker's review, and a fix task's (`fix` set), is the
-exception: steer that worker with every problem its review lists, pass or fail, and
-log it as `review-fix`. For a fix task whose review passes with problems, log
-`review-pass`, send the problems as a `review-fix`, and merge only after the worker
-reports its commit. Append nothing to `<leftovers>`. Merging first would run
-`wt remove -D` on the worktree the worker is still fixing in. A relaunch of a fix
-task, and each task split from one under section 8, keeps its `fix` value. If you
-ask an implementer to squash its commits, have it run
+each one to `<leftovers>` as one line: `Task <N> (<title>): <file>:<line> <problem>`.
+Section 14 fixes them before the final review. A `"task": 0` worker's review, and a
+fix task's (`fix` set), is the exception: steer that worker with every problem its
+review lists, pass or fail, and log it as `review-fix`. For a fix task whose review
+passes with problems, log `review-pass`, send the problems as a `review-fix`, and
+merge only after its re-review passes. A re-review that passes ends the loop: merge
+the task, and list any problems that re-review names to the user in section 14,
+step 4. Append nothing to `<leftovers>`. Merging first
+would run `wt remove -D` on the worktree the worker is still fixing in. A relaunch of
+a fix task, and each task split from one under section 8, keeps its `fix` value. If
+you ask an implementer to squash its commits, have it run
 `git reset --soft $(git merge-base <plan branch>-t<N> <plan branch>)` and commit
 once. Never reset to `<plan branch>` itself: it gains other tasks' merges after the
 task branches, and a soft reset to it stages their work as reverted.
@@ -596,8 +637,20 @@ B: relaunch B with the output in `notes`.
 Add to the image's "Updates" section what the merge changed that later tasks
 need: new names, moved files, board posts. Then run the merged task's `doneWhen`
 command in the plan branch's worktree. If it fails, treat the output like a failed
-review of that task: relaunch it with the output in `notes`. Then dispatch every task
-that is now ready (section 6).
+review of that task: relaunch it with the output in `notes`.
+When the merged task has a `**Browser check:**` that is not "none", run it in the
+plan branch's worktree. Start the serve command from the plan's Global Constraints
+with `run_in_background`. Start one `ui-check` agent with `run_in_background: true`
+and a brief holding the URL, the checklist, the worktree path as the repo root and a
+session name unique to this run. Do not wait for it: dispatch ready tasks first. Hold
+each task that consumes from the merged task until its browser check passes, and
+dispatch only the other ready tasks meanwhile. Run one browser check at a time. When
+another merged task has a browser check while one is running, start it after the
+first one reports and its server stops. When the `ui-check` agent reports, run a step
+that came back UNKNOWN again with `model: "sonnet"`, then stop the server. A FAIL
+counts like a failed `doneWhen`: relaunch the task with the evidence in `notes`. If
+no `ui-check` agent type exists, tell the user and skip the check.
+Then dispatch every task that is now ready (section 6).
 
 ## 13. Feedback
 
@@ -626,17 +679,22 @@ The user reviews these across sessions before redesigning the image.
    `run_in_background: true` and `description: "orchestrate final review"`. It needs
    the Agent tool, which `orch-reviewer` does not have. Its prompt: run the
    `pr-review` skill with `high <plan branch>`; there is no PR, and the base is
-   `<base>`; work in the plan branch's worktree and change no files; report the
+   `<start>`; work in the plan branch's worktree and change no files; report the
    table. If `pr-review` is not installed, run `/code-review high` on
-   `<base>...<plan branch>` instead and verify each finding by a trace or one test.
+   `<start>...<plan branch>` instead and verify each finding by a trace or one test.
    The review runs in a subagent because it reads the whole diff, and only its table
    returns to you. Right after it starts, run
    `EVENT <run> final-review --agent <agent id>`, so `REPORT` can price it. Arm no
    section 7 watch for it. Its completion notification wakes you.
+   `<start>` is the commit in `<run>/start-commit`. A run whose file is missing or empty, one
+   started before this rule, uses `<base>`.
 3. When the table has no verified finding, skip this step. Otherwise group the
    verified rows as "Grouping" below says, and run each group as one fix task with
    `"fix": "final-review"` and the title prefix `Final review fix: `. The final
    review is not run a second time.
+   A verified row stays unfixed only when the image's Decisions or the plan already
+   records that choice. Leave it out of the groups, and list it to the user in step 4
+   with the line of the decision it rests on.
 4. Run `MISSES <image> --branch <plan branch> --base <base>`, then
    `REPORT <image>`, and show both outputs to the user. Then read
    `~/.claude/skills/finishing-a-development-branch/SKILL.md` and follow it on the plan branch. Each fix task has
@@ -657,7 +715,7 @@ Its task file has:
 - `notes` holding the group's findings, the plan path and the line range of its
   Global Constraints section, because a fix task with no `reads` gets no plan
   sections otherwise;
-- `files`, the files the findings cite;
+- `files`, the files the findings cite, with their tests and importers (section 6);
 - `doneWhen`, the narrowest test command that covers those files;
 - `reviewer`, chosen by section 5, item 4, from the files the group cites, else
   `sonnet` (section 11's line count still raises it at review time, since no diff
@@ -668,5 +726,18 @@ Watch, review and merge as sections 7 to 11 say. Add the task numbers to
 "Updates". After the last fix task of a step merges, run the project's full test
 command in the plan branch's worktree. A failure becomes one more fix task of the
 same kind, with the output in `notes`.
+
+**When the user stops the run.** When the user asks to stop before the last task
+merges:
+
+1. Stop each running worker, reviewer and watch with TaskStop. Relaunch none of
+   them: section 8's `KILLED` rule does not apply to a stopped run.
+2. Run `EVENT <run> dropped --task <N> --text "stopped by the user"` for each task
+   that has not merged.
+3. Skip Finish steps 1 to 3 above (leftover fixes, the final review and its
+   fixes). Run `REPORT <image>` and show it.
+4. List each unmerged task with its branch and worktree, and each line of
+   `<leftovers>` that no fix task ran. Remove no worktree and delete no branch
+   unless the user asks.
 
 The run folder stays beside the image, untracked, like the board.

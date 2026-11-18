@@ -16,6 +16,7 @@ const LABELS = [
   '**Reviewer:**',
   '**Reads:**',
   '**User steps:**',
+  '**Browser check:**',
 ];
 
 // The text from the `## <title>` heading to the next `## ` heading.
@@ -55,12 +56,17 @@ test('the skill drops the upstream execution menu', () => {
   assert.ok(text.includes('/plan-review'));
 });
 
-test('the skill lists the seven field labels', () => {
+test('the skill lists the eight field labels', () => {
   const line = text.split('\n').find((l) => l.startsWith('Field labels:'));
   assert.ok(line, 'Field labels line not found');
   const items = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
   assert.deepStrictEqual(items, LABELS);
   assert.ok(text.includes('Consumes (existing code)'));
+});
+
+test('Global Constraints names the build and formatter', () => {
+  const gc = section('Global Constraints').replace(/\s+/g, ' ');
+  assert.ok(gc.includes('build and formatter commands, which every task runs and passes before it commits'));
 });
 
 test("the reviewer rule matches orchestrate's", () => {

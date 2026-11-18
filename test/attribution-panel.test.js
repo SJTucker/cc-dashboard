@@ -55,7 +55,7 @@ test('the Cache bar lists reads, writes, uncached input and output in that order
     const { cacheBars } = await renderWith(cc);
     const [bar, legend] = cacheBars.children;
     assert.deepEqual([...legend.children].map((item) => item.children[1].textContent), ['Cache reads', 'Cache writes', 'Uncached input', 'Output']);
-    const styles = bar.children.map((seg) => seg.getAttribute('style'));
+    const styles = [...bar.children].map((seg) => seg.getAttribute('style'));
     assert.match(styles[0], /background:\s*(#3fe0ff|rgb\(63, 224, 255\))\s*;?/i);
     assert.match(styles[1], /repeating-linear-gradient\(45deg/);
     assert.match(styles[2], /radial-gradient/);

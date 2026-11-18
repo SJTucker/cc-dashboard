@@ -18,7 +18,7 @@ const container = () => {
   node.clientWidth = 600;
   return node;
 };
-const find = (node, tag) => [node, ...node.children.flatMap((c) => find(c, tag))].filter((n) => n.tagName === tag);
+const find = (node, tag) => [node, ...[...node.children].flatMap((c) => find(c, tag))].filter((n) => n.tagName === tag);
 
 test('drawMirroredLineChart draws an added and a removed path per series, with no end labels', async () => {
   const { drawMirroredLineChart } = await load();

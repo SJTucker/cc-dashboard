@@ -101,7 +101,10 @@ argues from the spec, so the spec travels with it; executors read both]
 naming and copy rules, platform requirements), one line each, with exact
 values copied verbatim from the spec. Every task's requirements implicitly
 include this section. Name the plan branch and its base here: orchestrate
-section 5 reads them from this section.]
+section 5 reads them from this section. Also name the project's build and
+formatter commands, which every task runs and passes before it commits, and,
+when any task has a `**Browser check:**`, the command that serves the app and
+its URL.]
 
 ## Review Focus
 
@@ -156,6 +159,7 @@ orchestrator resolves the conflict at merge.]
 **Reviewer:** [opus or sonnet, with a one-line reason]
 **Reads:** [existing files the worker needs beyond Files, each with one line on why]
 **User steps:** [any step that needs the owner, or "none"]
+**Browser check:** ["none", or "Run by the orchestrator after merge, not by the worker:" followed by the numbered checklist]
 
 - [ ] **Step 1: Write the failing test**
 
@@ -191,7 +195,7 @@ git commit -m "feat: add specific feature"
 
 Each labelled field is a bold label on its own line, written exactly as the fence shows, so `orchestrate` can find it. The `Field labels:` line below is the master list, and `skills/orchestrate/SKILL.md` names the same labels.
 
-Field labels: `**Test command:**`, `**Fails before, passes after:**`, `**Done when:**`, `**Report:**`, `**Reviewer:**`, `**Reads:**`, `**User steps:**`
+Field labels: `**Test command:**`, `**Fails before, passes after:**`, `**Done when:**`, `**Report:**`, `**Reviewer:**`, `**Reads:**`, `**User steps:**`, `**Browser check:**`
 
 - **Test command:** the exact command and which suite it runs. Check it by reading the package.json script or Makefile target it calls, not by trusting its name.
 - **Fails before, passes after:** the concrete test, and the failure it shows before the change.
@@ -200,6 +204,11 @@ Field labels: `**Test command:**`, `**Fails before, passes after:**`, `**Done wh
 - **Reviewer:** `opus` or `sonnet` with a one-line reason, chosen by the rule below.
 - **Reads:** existing files the worker needs beyond its own Files, each with one line on why (a test helper and its limits, the stylesheet and token names, the caller of a changed function). The worker opens them after it claims the task.
 - **User steps:** any step that needs the owner (a decision, a manual check, a live check that needs a permission auto mode does not give). Each says what is needed and why. `orchestrate` does these before dispatch.
+- **Browser check:** for a task that changes what a page shows, a numbered checklist
+  for a `ui-check` agent: the path to open, each action, and the text or state that
+  means it passed. `orchestrate` runs it once, after the task merges. Start the field
+  with "Run by the orchestrator after merge, not by the worker:", because the worker
+  reads this field in its task. Write "none" for any other task.
 
 Steps after the last task that no worker does, such as final checks or the merge, go under a `## ` heading. A `### ` heading other than `### Task N:` stays in the task above it, so it reaches that task's worker.
 

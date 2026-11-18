@@ -14,6 +14,9 @@
 // file a day after its last write, so without it they come from the usage lines of
 // the agent's transcript. They are n/a for an agent with neither. Reads outside the
 // image are n/a for an agent with no transcript. --json prints the report as JSON.
+// Also reads the task files under claimed/ and the agent-*.jsonl transcripts of agents
+// with no claimed event, in the subagent folders of the run's watched workers, to price
+// an agent that claimed a task with no claimed event (a reviewer run without a watch).
 //
 // Saves the report as <run>/report.json after each run. A field that is n/a in a later
 // run takes its value from that file, so costs outlast the step files. A failed save
@@ -26,7 +29,7 @@ const fs = require('fs');
 const os = require('os');
 const { parseArgs } = require('util');
 const { loadConfig } = require('../lib/config-dir');
-const { runDirOf, writeAtomic } = require('../lib/orchestrations/claims');
+const { runDirOf, writeAtomic, unwatchedClaims } = require('../lib/orchestrations/claims');
 const { eventsPath, parseEvents } = require('../lib/orchestrations/events');
 const { buildReport, renderReport, mergeSnapshot, transcriptSteps } = require('../lib/orchestrations/report');
 const { readAgentSteps, getAgentUsageDir } = require('../lib/agent-steps');
@@ -114,15 +117,25 @@ async function main() {
   const usageDir = getAgentUsageDir(configDir);
   const steps = {};
   const reads = {};
-  for (const e of events) {
-    if (e.kind !== 'claimed' || typeof e.agent !== 'string' || e.agent in reads) continue;
-    const lines = transcriptLines(e.transcript);
-    const fromFile = await stepsOf(usageDir, e.agent);
-    steps[e.agent] = fromFile.length || !lines ? fromFile : transcriptSteps(lines);
-    reads[e.agent] = lines ? filesRead(lines) : null;
-  }
+  const loadClaimed = async (list) => {
+    for (const e of list) {
+      if (e.kind !== 'claimed' || typeof e.agent !== 'string' || e.agent in reads) continue;
+      const lines = transcriptLines(e.transcript);
+      const fromFile = await stepsOf(usageDir, e.agent);
+      steps[e.agent] = fromFile.length || !lines ? fromFile : transcriptSteps(lines);
+      reads[e.agent] = lines ? filesRead(lines) : null;
+    }
+  };
+  await loadClaimed(events);
   let finalPartial = false;
   const subDirs = [...new Set(events.filter((e) => e.kind === 'claimed' && typeof e.transcript === 'string').map((e) => path.dirname(e.transcript)))];
+  // Agents that ran without a watch have no claimed event. They stay in memory: orch-misses reads events.jsonl.
+  const known = new Set(events.filter((e) => e.kind === 'claimed').map((e) => e.file));
+  const extra = unwatchedClaims(runDirOf(image), subDirs, known, new Set(events.filter((e) => e.kind === 'claimed' && typeof e.agent === 'string').map((e) => e.agent)));
+  // Insert by time: slotWait takes the first work claim in array order. Array.sort is stable.
+  events.push(...extra);
+  events.sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
+  await loadClaimed(extra);
   for (const e of events) {
     if (e.kind !== 'final-review' || typeof e.agent !== 'string' || e.agent in steps) continue;
     const children = [...new Set(subDirs.flatMap((dir) => descendantsOf(dir, e.agent)))];

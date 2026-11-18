@@ -52,7 +52,7 @@ nothing was. -->
 ## Orientation
 
 <!-- Where things live, naming conventions, and the exact commands that check the
-work: test commands, lint, type checks, with how to run them in a worktree. -->
+work: test commands, lint, type checks, with how to run them in a worktree. List each hook that denies Bash commands in this project, found in `.claude/settings.json`, `.claude/settings.local.json` and `<cfg>/settings.json`: the commands it denies, as its code states them, and the command to use instead. -->
 
 ## Environment
 

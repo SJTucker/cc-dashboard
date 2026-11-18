@@ -348,7 +348,7 @@ test('changes with markersOn false shows the markers-off note', async () => {
   assert.strictEqual(markersOffNote({}), null);
   const note = markersOffNote({ markersOn: false });
   assert.strictEqual(note.textContent, 'New setup changes are not recorded. Setup change markers are off in Mod settings.');
-  const link = note.children.find((c) => c.tagName === 'a');
+  const link = [...note.children].find((c) => c.tagName === 'a');
   assert.strictEqual(link.textContent, 'Mod settings');
   assert.strictEqual(link.getAttribute('href'), '#mod');
   assert.strictEqual(link.getAttribute('data-mod-setting'), 'setupMarkers');

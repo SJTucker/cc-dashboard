@@ -249,6 +249,109 @@ test('orch-report falls back to the transcript when the agent has no agent-usage
   assert.ok(a.cost > 0);
 });
 
+// A run with a watched work task (agent id `worker`) and a review task whose agent r1 ran without a watch.
+// `reviewRun` is the run folder the reviewer's orch-claim command names.
+function unwatchedRun(base, { reviewRun, claimedAt = at(10), mention = false, worker = 'w1', workerClaims = false } = {}) {
+  const image = path.join(base, 'img.md');
+  const run = path.join(base, 'img.run');
+  fs.mkdirSync(path.join(run, 'claimed'), { recursive: true });
+  fs.mkdirSync(path.join(base, 'subs'));
+  fs.writeFileSync(image, 'Edit lib/a.js.\n');
+  const events = [
+    ev(0, 'added', { file: '0001-t2-a1.json', task: 2, attempt: 1, queue: 'work' }),
+    ev(1, 'claimed', { file: '0001-t2-a1.json', agent: worker, transcript: path.join(base, 'subs', `agent-${worker}.jsonl`), worktree: '/w' }),
+    ev(8, 'added', { file: '0002-t2-a1.json', task: 2, attempt: 1, queue: 'review' }),
+    ev(41, 'merged', { task: 2 }),
+  ];
+  fs.writeFileSync(path.join(run, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  fs.writeFileSync(path.join(run, 'claimed', '0002-t2-a1.json'), JSON.stringify({ kind: 'review', claimedAt, files: [], worktree: '/rw' }));
+  const claimLines = (id) => {
+    const rec = (o) => JSON.stringify({ agentId: id, isSidechain: true, timestamp: at(10), ...o });
+    return [
+      ...(mention ? [rec({ type: 'user', message: { role: 'user', content: `Read the image of ${run}` } })] : []),
+      rec({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'c1', name: 'Bash', input: { command: `/c/bin/orch-claim '${reviewRun || run}' review` } }] } }),
+      rec({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'c1', content: 'CLAIMED 0002-t2-a1.json\nYour worktree is /rw' }] } }),
+    ];
+  };
+  fs.writeFileSync(path.join(base, 'subs', `agent-${worker}.jsonl`), [...(workerClaims ? claimLines(worker) : []), usageLine(2, 'm1', 'q1', { input_tokens: 10, output_tokens: 5 })].join('\n') + '\n');
+  const lines = [...claimLines('r1'), usageLine(12, 'm2', 'q2', { input_tokens: 10, cache_read_input_tokens: 90, output_tokens: 5 })];
+  fs.writeFileSync(path.join(base, 'subs', 'agent-r1.jsonl'), lines.join('\n') + '\n');
+  return image;
+}
+const reportJson = (base, image) => {
+  const env = { ...process.env, CLAUDE_CONFIG_DIR: path.join(base, 'cfg') };
+  const j = spawnSync(process.execPath, [REPORT, image, '--json'], { encoding: 'utf8', env });
+  assert.equal(j.status, 0, j.stderr);
+  return JSON.parse(j.stdout);
+};
+
+test('orch-report prices a reviewer that had no watch', (t) => {
+  const base = tmpDir(t, 'report');
+  const r = reportJson(base, unwatchedRun(base));
+  assert.equal(typeof r.tasks[0].reviewCost, 'number');
+  assert.equal(r.agents.find((a) => a.agent === 'r1').role, 'reviewer');
+});
+
+test('orch-report does not read the transcript of an agent that has a claimed event', (t) => {
+  const base = tmpDir(t, 'report');
+  // a0 sorts before r1, so a scan that reads known agents finds the claim in a0 first.
+  const r = reportJson(base, unwatchedRun(base, { worker: 'a0', workerClaims: true }));
+  assert.equal(r.agents.find((a) => a.role === 'reviewer')?.agent, 'r1');
+});
+
+test('orch-report ignores a claim from another run', (t) => {
+  const base = tmpDir(t, 'report');
+  const r = reportJson(base, unwatchedRun(base, { reviewRun: path.join(base, 'other.run') }));
+  assert.strictEqual(r.tasks[0].reviewCost, null);
+});
+
+test('orch-report ignores a claim whose command names another run, though the transcript mentions this one', (t) => {
+  const base = tmpDir(t, 'report');
+  const r = reportJson(base, unwatchedRun(base, { reviewRun: path.join(base, 'other.run'), mention: true }));
+  assert.strictEqual(r.tasks[0].reviewCost, null);
+});
+
+test('orch-report leaves out a claimed file whose claimedAt is not a date', (t) => {
+  const base = tmpDir(t, 'report');
+  const r = reportJson(base, unwatchedRun(base, { claimedAt: 'yesterday-ish' }));
+  assert.strictEqual(r.tasks[0].reviewCost, null);
+});
+
+test('orch-report orders an unwatched work claim by time among the watched claims', (t) => {
+  const base = tmpDir(t, 'report');
+  const image = path.join(base, 'img.md');
+  const run = path.join(base, 'img.run');
+  fs.mkdirSync(path.join(run, 'claimed'), { recursive: true });
+  fs.mkdirSync(path.join(base, 'subs'));
+  fs.writeFileSync(image, 'x\n');
+  const events = [
+    ev(0, 'ready', { task: 2 }),
+    ev(0, 'added', { file: '0001-t2-a1.json', task: 2, attempt: 1, queue: 'work' }),
+    ev(15, 'added', { file: '0003-t2-a2.json', task: 2, attempt: 2, queue: 'work' }),
+    ev(20, 'claimed', { file: '0003-t2-a2.json', agent: 'w2', transcript: path.join(base, 'subs', 'agent-w2.jsonl'), worktree: '/w' }),
+  ];
+  fs.writeFileSync(path.join(run, 'events.jsonl'), events.map((e) => JSON.stringify(e)).join('\n') + '\n');
+  fs.writeFileSync(path.join(base, 'subs', 'agent-w2.jsonl'), usageLine(21, 'm1', 'q1', { input_tokens: 1, output_tokens: 1 }) + '\n');
+  fs.writeFileSync(path.join(run, 'claimed', '0001-t2-a1.json'), JSON.stringify({ kind: 'work', claimedAt: at(3), files: [], worktree: '/w' }));
+  const rec = (o) => JSON.stringify({ agentId: 'w1', isSidechain: true, timestamp: at(3), ...o });
+  fs.writeFileSync(path.join(base, 'subs', 'agent-w1.jsonl'), [
+    rec({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: 'c1', name: 'Bash', input: { command: `/c/bin/orch-claim '${run}' work` } }] } }),
+    rec({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: 'c1', content: 'CLAIMED 0001-t2-a1.json' }] } }),
+  ].join('\n') + '\n');
+  assert.equal(reportJson(base, image).tasks[0].slotWaitMs, 3 * MIN);
+});
+
+test('orch-report prints with no known subagent folder', (t) => {
+  const base = tmpDir(t, 'report');
+  const image = path.join(base, 'img.md');
+  const run = path.join(base, 'img.run');
+  fs.mkdirSync(path.join(run, 'claimed'), { recursive: true });
+  fs.writeFileSync(image, 'x\n');
+  fs.writeFileSync(path.join(run, 'claimed', '0002-t2-a1.json'), JSON.stringify({ kind: 'review', claimedAt: at(10), files: [] }));
+  fs.writeFileSync(path.join(run, 'events.jsonl'), JSON.stringify(ev(8, 'added', { file: '0002-t2-a1.json', task: 2, attempt: 1, queue: 'review' })) + '\n');
+  reportJson(base, image);
+});
+
 test('orch-report leaves reads under the run folder out of the reads outside the image', (t) => {
   const base = tmpDir(t, 'report');
   const image = writeRun(base);

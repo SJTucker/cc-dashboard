@@ -111,8 +111,24 @@ test('fix tasks for the leftovers start before the Fable review', () => {
 
 test('the skill logs relayed review findings as review-fix', () => {
   assert.ok(section(11).includes('review-fix --task <N>'));
-  assert.ok(section(11).replace(/\s+/g, ' ').includes('merge only after the worker reports its commit'));
+  assert.ok(section(11).replace(/\s+/g, ' ').includes('merge only after its re-review passes'));
   assert.ok(section(10).includes('steer --task <N>'));
+});
+
+test('section 11 re-reviews a fix', () => {
+  const eleven = section(11).replace(/\s+/g, ' ');
+  assert.ok(eleven.includes('the task passes only on a new review'));
+  assert.ok(eleven.includes('git -C <worktree> rev-parse HEAD'));
+  assert.ok(eleven.includes('Re-review of commits <recorded head>..HEAD only'));
+  assert.ok(eleven.includes("put the commit ids from the worker's report in"));
+  assert.ok(eleven.includes('merge only after its re-review passes'));
+  assert.ok(!eleven.includes('merge only after the worker reports its commit'));
+});
+
+test('section 11 starts reviewers without a watch', () => {
+  const eleven = section(11).replace(/\s+/g, ' ');
+  assert.ok(eleven.includes('Arm no section 7 watch for a reviewer'));
+  assert.ok(eleven.includes("grep -o 'CLAIMED [0-9]*-t[0-9]*-a[0-9]*\\.json'"));
 });
 
 test('the worker and reviewer messages are unchanged', () => {
@@ -153,7 +169,7 @@ test('the skill names every orch-plan field label', () => {
   const line = plan.split('\n').find((l) => l.startsWith('Field labels:'));
   assert.ok(line, 'Field labels: line not found');
   const labels = [...line.matchAll(/`([^`]+)`/g)].map((m) => m[1]);
-  assert.strictEqual(labels.length, 7);
+  assert.strictEqual(labels.length, 8);
   for (const label of labels) assert.ok(text.includes(label), label);
 });
 
@@ -284,4 +300,81 @@ test('a renumber or repeated-task refusal sends the plan back for renumbering, n
 test('tasks that share only Markdown files may run at once, and the merge resolves the conflict', () => {
   assert.ok(section(5).replace(/\s+/g, ' ').includes('Two running tasks never share a code file'));
   assert.ok(section(11).replace(/\s+/g, ' ').includes('A conflict in a Markdown or other prose-only file counts as trivial'));
+});
+
+test('section 5 records the start commit', () => {
+  const five = section(5).replace(/\s+/g, ' ');
+  assert.ok(five.includes('<run>/start-commit'));
+  assert.ok(five.includes('git rev-parse --verify <plan branch>^{commit} > <run>/start-commit'));
+});
+
+test('section 14 reviews from the start commit', () => {
+  const fourteen = section(14).replace(/\s+/g, ' ');
+  for (const s of ['the base is `<start>`', '`/code-review high` on `<start>...<plan branch>`', '`<run>/start-commit`', 'uses `<base>`']) {
+    assert.ok(fourteen.includes(s), s);
+  }
+});
+
+test('section 14 bounds dropped findings', () => {
+  const fourteen = section(14).replace(/\s+/g, ' ');
+  assert.ok(fourteen.includes('already records that choice'));
+  assert.ok(fourteen.includes('with the line of the decision it rests on'));
+});
+
+test('section 14 has a stopped run', () => {
+  const fourteen = section(14).replace(/\s+/g, ' ');
+  for (const s of ['When the user stops the run', 'stopped by the user', 'rule does not apply to a stopped run', 'Remove no worktree and delete no branch unless the user asks']) {
+    assert.ok(fourteen.includes(s), s);
+  }
+});
+
+test('the orchestrator reads worker files with grep or git diff', () => {
+  assert.ok(text.replace(/\s+/g, ' ').includes("Look at a worker's files with `grep -n` or `cd <worktree> && git diff`, not Read or Edit"));
+});
+
+test("section 5 decides choices inside the task's files", () => {
+  const five = section(5).replace(/\s+/g, ' ');
+  for (const s of ['look up each fact the code can settle', "changes only files in the asking task's", 'a change to the plan itself (section 9) still go to the user', 'with your recommendation in the question']) {
+    assert.ok(five.includes(s), s);
+  }
+});
+
+test('tasks written during a run list tests and importers', () => {
+  assert.ok(section(6).replace(/\s+/g, ' ').includes('the test files that cover each file it changes and the files that import it'));
+  assert.ok(section(14).replace(/\s+/g, ' ').includes('with their tests and importers (section 6)'));
+});
+
+test('the image template asks for hook deny rules', () => {
+  const tpl = fs.readFileSync(path.join(__dirname, '..', 'skills', 'orchestrate', 'image-template.md'), 'utf8').replace(/\s+/g, ' ');
+  assert.ok(tpl.includes('each hook that denies Bash commands in this project'));
+  assert.ok(tpl.includes('the command to use instead'));
+});
+
+test('section 12 runs the browser check after merge', () => {
+  const s12 = section(12);
+  assert.ok(s12.includes('**Browser check:**'));
+  assert.ok(s12.includes('ui-check'));
+  assert.ok(s12.includes('run_in_background'));
+  assert.ok(s12.includes('model: "sonnet"'));
+});
+
+test('section 12 holds dependents of a browser-checked task and runs one check at a time', () => {
+  const s = section(12).replace(/\s+/g, ' ');
+  assert.ok(s.includes('Hold each task that consumes from the merged task until its browser check passes, and dispatch only the other ready tasks meanwhile.'));
+  assert.ok(s.includes('Run one browser check at a time. When another merged task has a browser check while one is running, start it after the first one reports and its server stops.'));
+});
+
+test('section 11 recovers a reviewer that returns no review', () => {
+  const s = section(11).replace(/\s+/g, ' ');
+  assert.ok(s.includes("When a reviewer's completion notification carries no review, run `TI <reviewer transcript> --steps 20` and apply section 8's `KILLED` or `FAILED` rule to the reviewer as to a worker."));
+});
+
+test('section 11 ends the fix-task loop after a passing re-review', () => {
+  const s = section(11).replace(/\s+/g, ' ');
+  assert.ok(s.includes('A re-review that passes ends the loop: merge the task, and list any problems that re-review names to the user in section 14, step 4.'));
+});
+
+test('section 5 keeps interface choices with the user', () => {
+  const s = section(5).replace(/\s+/g, ' ');
+  assert.ok(s.includes("and no option changes a name or behaviour in a plan's `Produces` or `Consumes` block, decide it"));
 });

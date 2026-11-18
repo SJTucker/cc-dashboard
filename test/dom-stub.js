@@ -4,11 +4,13 @@
 // the Orchestration tab's renderer, so node:test can check what a DOM builder made.
 // It models parents and siblings, dataset (backed by data-* attributes), classList,
 // the hidden attribute, event listeners, focus and the few selectors the renderer
-// uses. Not a test file: the test/*.test.js glob does not run it.
+// uses. querySelectorAll returns a NodeList-like snapshot and children an
+// HTMLCollection-like snapshot, neither with array methods, as in a browser.
+// Not a test file: the test/*.test.js glob does not run it.
 class StubNode {
   constructor(tag) {
     this.tagName = tag;
-    this.children = [];
+    this._kids = [];
     this.attributes = {};
     this.className = '';
     this.text = '';
@@ -44,34 +46,36 @@ class StubNode {
   get hidden() { return 'hidden' in this.attributes; }
   set hidden(value) { if (value) this.attributes.hidden = ''; else delete this.attributes.hidden; }
 
+  get children() { return collection(this._kids, false); }
+
   _detach() {
     if (!this.parentNode) return;
-    const siblings = this.parentNode.children;
+    const siblings = this.parentNode._kids;
     siblings.splice(siblings.indexOf(this), 1);
     this.parentNode = null;
   }
   _clear() {
-    for (const child of this.children) child.parentNode = null;
-    this.children = [];
+    for (const child of this._kids) child.parentNode = null;
+    this._kids = [];
   }
   _insert(child, index) {
     child._detach();
-    this.children.splice(index < 0 ? this.children.length : index, 0, child);
+    this._kids.splice(index < 0 ? this._kids.length : index, 0, child);
     child.parentNode = this;
     return child;
   }
   appendChild(child) { return this._insert(child, -1); }
-  insertBefore(child, ref) { return this._insert(child, ref ? this.children.indexOf(ref) : -1); }
+  insertBefore(child, ref) { return this._insert(child, ref ? this._kids.indexOf(ref) : -1); }
   append(...nodes) { for (const n of nodes) this.appendChild(typeof n === 'string' ? textNode(n) : n); }
   prepend(...nodes) {
     nodes.forEach((n, i) => this._insert(typeof n === 'string' ? textNode(n) : n, i));
   }
   replaceChildren(...nodes) { this._clear(); this.append(...nodes); }
   remove() { this._detach(); }
-  get firstChild() { return this.children[0] ?? null; }
+  get firstChild() { return this._kids[0] ?? null; }
   get nextSibling() {
     if (!this.parentNode) return null;
-    const siblings = this.parentNode.children;
+    const siblings = this.parentNode._kids;
     return siblings[siblings.indexOf(this) + 1] ?? null;
   }
 
@@ -87,13 +91,13 @@ class StubNode {
     const simple = direct ? selector.slice(9) : selector;
     const found = [];
     const walk = (node) => {
-      for (const child of node.children) {
+      for (const child of node._kids) {
         if (child._matches(simple)) found.push(child);
         if (!direct) walk(child);
       }
     };
     walk(this);
-    return found;
+    return collection(found, true);
   }
   querySelector(selector) { return this.querySelectorAll(selector)[0] ?? null; }
 
@@ -113,8 +117,26 @@ class StubNode {
   }
 
   set textContent(value) { this._clear(); this.text = String(value); }
-  get textContent() { return this.text + this.children.map((c) => c.textContent).join(''); }
+  get textContent() { return this.text + this._kids.map((c) => c.textContent).join(''); }
   set innerHTML(value) { this._clear(); this.text = ''; }
+}
+
+// A frozen snapshot with index keys, length and item(), and no array methods.
+// A NodeList (list true) also has forEach, entries, keys and values.
+function collection(items, list) {
+  items = [...items];
+  const out = {};
+  items.forEach((item, i) => { out[i] = item; });
+  Object.defineProperty(out, 'length', { value: items.length });
+  Object.defineProperty(out, 'item', { value: (i) => items[i] ?? null });
+  Object.defineProperty(out, Symbol.iterator, { value: () => items[Symbol.iterator]() });
+  if (list) {
+    Object.defineProperty(out, 'forEach', { value: (fn, thisArg) => items.forEach((item, i) => fn.call(thisArg, item, i, out)) });
+    Object.defineProperty(out, 'entries', { value: () => items.entries() });
+    Object.defineProperty(out, 'keys', { value: () => items.keys() });
+    Object.defineProperty(out, 'values', { value: () => items.values() });
+  }
+  return Object.freeze(out);
 }
 
 function textNode(text) {

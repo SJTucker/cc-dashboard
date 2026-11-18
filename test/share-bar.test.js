@@ -16,7 +16,7 @@ test('drawShareBar draws a segment per item and a legend with each share', async
   const [bar, legend] = container.children;
   assert.equal(bar.className, 'mix-bar');
   assert.match(bar.children[0].getAttribute('style'), /^width:75%;/);
-  assert.deepStrictEqual(legend.children.map((item) => item.textContent), ['Opus 5.575.0%', 'Sonnet 5.525.0%']);
+  assert.deepStrictEqual([...legend.children].map((item) => item.textContent), ['Opus 5.575.0%', 'Sonnet 5.525.0%']);
 });
 
 test('drawShareBar shows the empty text when the total is zero', async () => {
