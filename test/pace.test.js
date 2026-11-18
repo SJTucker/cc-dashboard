@@ -57,15 +57,25 @@ test('computePace P7 entries older than the span are ignored', () => {
   near(p.ratePerHour, 1 / (14 / 60));
 });
 test('computePace P8 margin shrinks to half the time left', () => {
-  const p = run(['73@-6', '76@-3', '80@0'], 40);
+  const p = run(['73@-6', '76@-3', '80@0'], 60);
   assert.strictEqual(p.state, 'fast');
-  near(p.fastPerHour, 60);
+  near(p.fastPerHour, 40);
   near(p.ratePerHour, 70);
 });
 test('computePace P9 a rate equal to the fast pace is steady', () => {
-  const p = run(['74@-6', '80@0'], 40);
+  const p = run(['74@-9', '80@0'], 60);
   assert.strictEqual(p.state, 'steady');
-  assert.strictEqual(p.ratePerHour, 60);
+  near(p.ratePerHour, 40);
+  near(p.fastPerHour, 40);
+});
+test('computePace P16 fast is allowed with exactly 45 minutes left', () => {
+  assert.strictEqual(run(['73@-6', '76@-3', '80@0'], 45).state, 'fast');
+});
+test('computePace P17 under 45 minutes left is never fast', () => {
+  const p = run(['73@-6', '76@-3', '80@0'], 44);
+  assert.strictEqual(p.state, 'steady');
+  near(p.ratePerHour, 70);
+  assert.ok(p.runsOutAt !== null);
 });
 test('computePace P10 spent window is null', () => {
   assert.strictEqual(run(['100@-5', '100@0'], 60), null);

@@ -52,13 +52,21 @@ test('P7 entries older than 15 minutes leave the span', async () => {
   near(p.ratePerHour, 1 / (14 / 60), 1e-6)
 })
 test('P8 the margin shrinks to half the time left', async () => {
-  const p = pace(['73@-6', '76@-3', '80@0'], 40)!
+  const p = pace(['73@-6', '76@-3', '80@0'], 60)!
   expect(p.state).toBe('fast')
-  near(p.fastPerHour, 60, 1e-6)
+  near(p.fastPerHour, 40, 1e-6)
   near(p.ratePerHour, 70, 1e-6)
 })
 test('P9 a rate equal to the fast pace is steady', async () => {
-  expect(pace(['74@-6', '80@0'], 40)?.state).toBe('steady')
+  expect(pace(['74@-9', '80@0'], 60)?.state).toBe('steady')
+})
+test('P16 fast is allowed with exactly 45 minutes left', async () => {
+  expect(pace(['73@-6', '76@-3', '80@0'], 45)?.state).toBe('fast')
+})
+test('P17 under 45 minutes left is never fast', async () => {
+  const p = pace(['73@-6', '76@-3', '80@0'], 44)!
+  expect(p.state).toBe('steady')
+  near(p.ratePerHour, 70, 1e-6)
 })
 test('P10 a spent window is null', async () => {
   expect(pace(['100@-5', '100@0'], 60)).toBeNull()

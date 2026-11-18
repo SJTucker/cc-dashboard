@@ -18,6 +18,9 @@ const MINUTE_MS = 60_000
 const HOUR_MS = 3_600_000
 const SPAN_MS = 15 * MINUTE_MS
 const MARGIN_MS = 60 * MINUTE_MS
+// Claude Code's own "Nearing your plan limit" line covers the end of the window, so pace
+// never reads fast once less than this is left.
+const QUIET_MS = 45 * MINUTE_MS
 const MIN_RISE = 6
 const MIN_GAP_MS = 3 * MINUTE_MS
 
@@ -106,7 +109,7 @@ export function computePace(recent: readonly PaceEntry[], resetsAt: number, nowM
 
   const ratePerHour = (rise * HOUR_MS) / ms
   const runsOutAt = ratePerHour > 0 ? nowMs + ((100 - percent) / ratePerHour) * HOUR_MS : null
-  const fast = ratePerHour > fastPerHour && rise >= MIN_RISE && newest.t - oldest.t >= MIN_GAP_MS
+  const fast = untilResetMs >= QUIET_MS && ratePerHour > fastPerHour && rise >= MIN_RISE && newest.t - oldest.t >= MIN_GAP_MS
 
   return { state: fast ? 'fast' : 'steady', percent, ratePerHour, fastPerHour, runsOutAt, busySessionId }
 }
