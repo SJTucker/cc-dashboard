@@ -52,7 +52,7 @@ When the check is a list of things to confirm, dispatch the `ui-check` agent ins
 - any route mock from section 7, written out as the full command
 - for a layout check, which element to screenshot and the path to save it to
 
-Pass `model: "sonnet"` when a step needs a probe you cannot spell out, such as reading app state through `eval` or computing positions. Read the screenshots it returns yourself. It reports paths and does not judge appearance.
+Do not pass a model on the first dispatch. Steps you write out in full stay on Haiku, including an exact `eval` expression or an element screenshot. Pass `model: "sonnet"` only after a Haiku run returned UNKNOWN or wrong evidence on a step. Read the screenshots it returns yourself. It reports paths and does not judge appearance.
 
 Run `playwright-cli` yourself when the browser is part of debugging, where each result decides your next edit. Also run it yourself when `ui-check` is not in your list of agent types.
 
