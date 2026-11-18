@@ -61,6 +61,7 @@ export function parseDashboardSettings(text: unknown) {
     activity: v.activity !== false,
     limitBand: v.limitBand !== false,
     archive: v.archive !== false,
+    pace: v.pace !== false,
   }
 }
 

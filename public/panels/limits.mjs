@@ -5,7 +5,8 @@ import { localDateStr } from '../format.mjs';
 import { state } from '../state.mjs';
 import { createDrawGuard } from '../guards.mjs';
 import { LIMIT_WARN_PERCENT } from '../constants.mjs';
-import { shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText } from '../hud.mjs';
+import { shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText, paceBar, paceDetail } from '../hud.mjs';
+import { liveSessionTitle } from './sessions.mjs';
 
 // Draw guards for the panel and the banner. redrawCharts leaves them alone,
 // because a change of width does not change a table.
@@ -104,6 +105,34 @@ function dailyShareRow(today) {
   ]);
 }
 
+// The 5-hour window's pace, as a row under Current session. The fill is the rate on a
+// scale where full is 100 points per hour. The tick marks the fast pace. Past the tick
+// the fill is striped, so Fast shows by texture and by the word, not by colour.
+function paceRow(pace) {
+  const bar = paceBar(pace);
+  const fill = el('i');
+  fill.style.width = bar.fill + '%';
+  const track = el('span', { class: 'usage-track' }, [fill]);
+  if (bar.striped) {
+    fill.classList.add('pace-striped');
+    // Stripes start at the marker, or at the left edge when there is none.
+    fill.style.setProperty('--stripe-from', bar.marker == null ? '0%' : `${Math.min(100, (bar.marker / bar.fill) * 100)}%`);
+  }
+  if (bar.marker != null) {
+    const tick = el('b', { class: 'budget-tick', title: `fast pace ${Math.round(bar.marker)} points an hour` });
+    tick.style.left = bar.marker + '%';
+    track.appendChild(tick);
+  }
+  const label = { idle: 'Idle', steady: 'Steady', fast: 'Fast' }[pace.state];
+  const detail = paceDetail(pace, clockTime, (ms) => formatReset(ms).replace(/^R/, 'r'));
+  return el('div', { class: 'limit-row' }, [
+    el('span', { class: 'limit-name', text: 'Pace' }),
+    track,
+    el('span', { class: 'limit-pct', text: label }),
+    el('span', { class: 'limit-reset', text: detail }),
+  ]);
+}
+
 export function renderLimits(limits) {
   const panel = document.getElementById('limitsPanel');
   panel.hidden = !limits || state.tab !== 'now';
@@ -116,8 +145,13 @@ export function renderLimits(limits) {
 function drawLimits(limits) {
   const windows = planWindows(limits.limits);
   const others = limits.limits.filter((l) => !windows.includes(l));
+  const pace = limits.pace ?? null;
+  const rows = windows.map(limitRow);
+  // Directly under Current session. It follows that row, not the first window.
+  const sessionAt = windows.findIndex((w) => w.key === 'five_hour');
+  if (pace && sessionAt !== -1) rows.splice(sessionAt + 1, 0, paceRow(pace));
   document.getElementById('limitsRows').replaceChildren(
-    ...windows.map(limitRow),
+    ...rows,
     ...(limits.today ? [dailyShareRow(limits.today)] : []),
     ...others.map(limitRow),
   );
@@ -160,20 +194,38 @@ function saveDismissed(parts) {
 }
 
 export function renderLimitsBanner(limits) {
-  bannerGuard.draw(limits, () => drawLimitsBanner(limits));
+  // The title comes from the Live sessions panel, which may draw after the first poll, so
+  // it is part of the guard's key and the next poll redraws once the title is known.
+  const title = liveSessionTitle(limits?.pace?.busy?.sessionId);
+  bannerGuard.draw([limits, title], () => drawLimitsBanner(limits, title));
 }
 
-function drawLimitsBanner(limits) {
+// The banner's fast-pace part: a heading, when the window runs out and, with a busy
+// session named, where the pace comes from.
+function paceBannerLines(pace, title) {
+  const project = pace.busy?.project;
+  let from = null;
+  if (project) from = title ? `Mostly from: "${title}" in ${project}` : `Mostly from: a session in ${project}`;
+  return [
+    el('strong', { text: 'Using your 5-hour window fast' }),
+    el('div', { text: `on pace to run out at ${clockTime(pace.runsOutAt)} · ${formatReset(pace.resetsAt).replace(/^R/, 'r')}` }),
+    ...(from ? [el('div', { text: from })] : []),
+  ];
+}
+
+function drawLimitsBanner(limits, title) {
   const banner = document.getElementById('limitsBanner');
   const high = planWindows(limits ? limits.limits : []).filter((l) => Math.round(l.percent) >= LIMIT_WARN_PERCENT);
   // dailyWarning (public/hud.mjs) compares today's share with the rolling budget.
   const dayHigh = dailyWarning(limits ? limits.today : null);
-  const parts = limitsBannerParts(high, dayHigh, localDateStr(new Date()));
+  const pace = limits?.pace ?? null;
+  const paceFast = pace?.state === 'fast';
+  const parts = limitsBannerParts(high, dayHigh, localDateStr(new Date()), pace);
   const dismissed = loadDismissed();
   banner.hidden = !parts.some((p) => !dismissed.includes(p));
   // The banner scrolls away, so the sticky header's status strip repeats it in short form.
   const strip = document.getElementById('stripLimit');
-  const stripText = limitStripText(high, dayHigh);
+  const stripText = limitStripText(high, dayHigh, pace, clockTime);
   strip.hidden = !stripText;
   strip.replaceChildren(...(stripText ? [`${stripText.label} `, el('b', { text: stripText.value })] : []));
   const close = el('button', { type: 'button', class: 'hide-btn banner-close', 'aria-label': 'Dismiss this warning', title: 'Dismiss', text: '×' });
@@ -183,7 +235,8 @@ function drawLimitsBanner(limits) {
   });
   banner.replaceChildren(
     close,
-    el('strong', { text: high.length ? 'Nearing your plan limit' : "Nearing today's budget" }),
+    ...(paceFast ? paceBannerLines(pace, title) : []),
+    ...(high.length || dayHigh ? [el('strong', { text: high.length ? 'Nearing your plan limit' : "Nearing today's budget" })] : []),
     ...high.map((l) => el('div', {
       text: `${l.label}: ${Math.round(l.percent)}% used${l.resetsAt == null ? '' : ` · ${formatReset(l.resetsAt)}`}`,
     })),

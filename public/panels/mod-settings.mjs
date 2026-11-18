@@ -72,6 +72,12 @@ export const MOD_SETTINGS = [
     affects: 'No panel. Keeps transcripts after Claude Code deletes them.',
     info: 'At session start, copies new transcript lines into archive/ as gzip, with no model call. Claude Code deletes transcripts after cleanupPeriodDays (30 days by default). The archive keeps them and is never pruned.',
   },
+  {
+    key: 'pace',
+    label: '5-hour pace',
+    affects: 'Plan usage: the Pace row, the limits banner and the strip. The band in Claude Code.',
+    info: 'The Pace bar in Plan usage and the warning when one session is using the 5-hour window fast.',
+  },
 ];
 
 const statusNode = () => document.getElementById('modSettingsStatus');

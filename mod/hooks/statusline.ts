@@ -44,6 +44,8 @@ export type StatuslineFields = {
   // startedAt is the session's start and now is the clock when the cost was read.
   cost: { usd: number; startedAt: number; now: number } | undefined
   rateLimits: Record<string, Window> | undefined
+  // The mod's clock when it took the reading. recordRateLimits stamps its 5-hour cache with it.
+  measuredAtMs: number | undefined
 }
 
 // The record bin/record-statusline reads, in the shape of the statusLine command's
@@ -61,6 +63,7 @@ export function statuslineRecord(f: StatuslineFields) {
     input.cost = { total_cost_usd: f.cost.usd, total_duration_ms: Math.max(0, f.cost.now - f.cost.startedAt) }
   }
   if (f.rateLimits) input.rate_limits = f.rateLimits
+  if (f.measuredAtMs !== undefined) input.measured_at_ms = f.measuredAtMs
   return input
 }
 

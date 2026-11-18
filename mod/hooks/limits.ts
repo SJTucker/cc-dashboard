@@ -7,8 +7,9 @@ export const LIMIT_LEVELS = [75, 90] as const
 
 export type WindowKind = 'five_hour' | 'seven_day'
 export type Reading = { kind: WindowKind; percent: number; resetsAt?: string }
-// The level each window was last dismissed at: 0, 75 or 90.
-export type Levels = Record<WindowKind, number>
+// The level each window was last dismissed at: 0, 75 or 90. paceDismissed is the
+// resets_at (epoch s) of the 5-hour window whose pace line was dismissed.
+export type Levels = Record<WindowKind, number> & { paceDismissed?: number }
 
 const KINDS: readonly WindowKind[] = ['five_hour', 'seven_day']
 const NAMES: Record<WindowKind, string> = { five_hour: 'Session', seven_day: 'Week' }
@@ -72,11 +73,21 @@ function snapshotOf(
   return readings.length ? { fetchedAtMs, readings } : null
 }
 
+// oauthAccount.accountUuid in the text of .claude.json: the logged-in account. Undefined when
+// the text is missing, unreadable or has no string id, which counts as unknown.
+export function loginAccount(claudeJsonText: string | undefined): string | undefined {
+  const uuid = (parseObject(claudeJsonText)?.oauthAccount as Record<string, unknown> | undefined)?.accountUuid
+  return typeof uuid === 'string' ? uuid : undefined
+}
+
 // <cfg>/rate-limits.json, which bin/record-statusline writes from every session's measure.
-// Its resets_at is epoch seconds.
-export function parseRateLimitsFile(text: string | undefined): Snapshot | null {
+// Its resets_at is epoch seconds. A file tagged with another account than the logged-in
+// one (claudeJsonText) is ignored: after a /login it holds the old account's numbers.
+export function parseRateLimitsFile(text: string | undefined, claudeJsonText?: string): Snapshot | null {
   const data = parseObject(text)
   if (!data) return null
+  const login = loginAccount(claudeJsonText)
+  if (typeof data.accountUuid === 'string' && login !== undefined && login !== data.accountUuid) return null
   return snapshotOf(data.fetchedAtMs, data.rate_limits, (w) => w.used_percentage, (w) => {
     const s = w.resets_at
     if (typeof s !== 'number' || !Number.isFinite(s)) return undefined
@@ -145,6 +156,8 @@ export function parseLevels(text: string | undefined): Levels {
     const value = record[kind]
     if (typeof value === 'number' && (LIMIT_LEVELS as readonly number[]).includes(value)) levels[kind] = value
   }
+  const paced = record.paceDismissed
+  if (typeof paced === 'number' && Number.isFinite(paced)) levels.paceDismissed = paced
   return levels
 }
 
@@ -167,11 +180,14 @@ export function dismissLevels(shown: readonly Reading[], levels: Levels): Levels
 
 // The higher level of each window, so a dismissal held in one place survives a read of the other.
 export function maxLevels(a: Levels, b: Levels): Levels {
-  return { five_hour: Math.max(a.five_hour, b.five_hour), seven_day: Math.max(a.seven_day, b.seven_day) }
+  const out: Levels = { five_hour: Math.max(a.five_hour, b.five_hour), seven_day: Math.max(a.seven_day, b.seven_day) }
+  const paced = [a.paceDismissed, b.paceDismissed].filter((v): v is number => v !== undefined)
+  if (paced.length) out.paceDismissed = Math.max(...paced)
+  return out
 }
 
 export function sameLevels(a: Levels, b: Levels): boolean {
-  return KINDS.every((kind) => a[kind] === b[kind])
+  return KINDS.every((kind) => a[kind] === b[kind]) && a.paceDismissed === b.paceDismissed
 }
 
 // Time until resetsAt, rounded up to the minute. Empty when resetsAt is missing,

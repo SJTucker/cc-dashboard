@@ -3,8 +3,8 @@
 const test = require('node:test');
 const { before } = require('node:test');
 const assert = require('node:assert');
-let formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText;
-before(async () => { ({ formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText } = await import('../public/hud.mjs')); });
+let formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText, paceBar, paceDetail;
+before(async () => { ({ formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText, paceBar, paceDetail } = await import('../public/hud.mjs')); });
 
 test('formatStatus shows the load time as 24-hour local HH:MM:SS and counts with separators', () => {
   const loadedAt = new Date(2026, 8, 30, 10, 24, 21).getTime();
@@ -134,4 +134,44 @@ test('a scoped week or credits row at 90% adds no banner part and no strip text'
 test('creditsText shows the spend and the cap in the account currency', () => {
   assert.strictEqual(creditsText({ usedMinor: 4117, limitMinor: 20000, currency: 'USD', decimalPlaces: 2 }), '$41.17 of $200.00 spent');
   assert.strictEqual(creditsText({ usedMinor: 4117, limitMinor: 20000, currency: 'JPY', decimalPlaces: 0 }), '¥4,117 of ¥20,000 spent');
+});
+
+const fastPace = { state: 'fast', ratePerHour: 120, fastPerHour: 24, runsOutAt: 1000, resetsAt: 5000, busy: null };
+const stubClock = () => '10:57';
+const stubReset = () => 'resets 11am';
+
+test('paceBar caps fill at 100 and hides a marker at 100 or more', () => {
+  assert.deepStrictEqual(paceBar({ ...fastPace, ratePerHour: 250, fastPerHour: 24 }), { fill: 100, marker: 24, striped: true });
+  assert.strictEqual(paceBar({ ...fastPace, fastPerHour: 100 }).marker, null);
+  assert.strictEqual(paceBar({ ...fastPace, fastPerHour: 400 }).marker, null);
+});
+
+test('paceBar is striped only when fast', () => {
+  assert.strictEqual(paceBar({ ...fastPace, state: 'steady', ratePerHour: 30 }).striped, false);
+  assert.strictEqual(paceBar({ ...fastPace, state: 'idle', ratePerHour: 0 }).striped, false);
+  assert.strictEqual(paceBar(fastPace).striped, true);
+});
+
+test('paceBar stripes the whole fill when fast with no marker', () => {
+  assert.deepStrictEqual(paceBar({ ...fastPace, ratePerHour: 80, fastPerHour: 150 }), { fill: 80, marker: null, striped: true });
+});
+
+test('paceDetail words the run-out time, the reset and the idle case', () => {
+  assert.strictEqual(paceDetail(fastPace, stubClock, stubReset), 'lasts until about 10:57 · resets 11am');
+  assert.strictEqual(paceDetail({ ...fastPace, state: 'steady', runsOutAt: 9000 }, stubClock, stubReset), 'lasts past the reset · resets 11am');
+  assert.strictEqual(paceDetail({ ...fastPace, state: 'idle', runsOutAt: null }, stubClock, stubReset), 'resets 11am');
+});
+
+test('limitStripText shows pace first when fast', () => {
+  assert.deepStrictEqual(limitStripText([], null, fastPace, stubClock), { label: '5h pace', value: 'runs out 10:57' });
+  assert.deepStrictEqual(
+    limitStripText([{ key: 'five_hour', label: 'Current session', percent: 75 }], null, fastPace, stubClock),
+    { label: '5h pace', value: 'runs out 10:57 · Session 75%' },
+  );
+  assert.strictEqual(limitStripText([], null, { ...fastPace, state: 'steady' }, stubClock), null);
+});
+
+test('limitsBannerParts adds pace@<resetsAt> when fast', () => {
+  assert.deepStrictEqual(limitsBannerParts([], null, '2026-11-18', fastPace), ['pace@5000']);
+  assert.deepStrictEqual(limitsBannerParts([], null, '2026-11-18', { ...fastPace, state: 'steady' }), []);
 });

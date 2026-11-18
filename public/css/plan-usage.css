@@ -27,6 +27,18 @@
   border-radius: 0;
   background: repeating-linear-gradient(90deg, var(--accent-cyan) 0 10px, transparent 10px 12px);
 }
+/* The Pace row's fill past the fast-pace marker: diagonal stripes cut out of the cells, so
+   Fast reads without colour. --stripe-from is where they start, as a percent of the fill. */
+.limit-row .usage-track > i.pace-striped { position: relative; display: block; }
+.limit-row .usage-track > i.pace-striped::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  right: 0;
+  left: var(--stripe-from, 0%);
+  background: repeating-linear-gradient(135deg, transparent 0 3px, var(--surface) 3px 5px);
+}
 /* The day's budget on the Today row, as a percent of the week. */
 .budget-tick {
   position: absolute;

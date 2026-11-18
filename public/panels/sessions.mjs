@@ -15,6 +15,13 @@ export function titleTooltip(s) {
   return s.recap ? `${s.title}\n\n${s.recap}` : s.title;
 }
 
+// The title of a session in the last /api/sessions/live response, or null before the
+// Live sessions panel has drawn or when that session is not in it.
+export function liveSessionTitle(sessionId) {
+  const row = lastLiveSessions?.sessions?.find((s) => s.sessionId === sessionId);
+  return row?.title ?? null;
+}
+
 // Today's sessions from the statusline snapshots (see lib/sessions.js). Optional,
 // like requestLimits.
 export function requestSessions() {

@@ -31,7 +31,7 @@ test('rateLimitsInput keeps the two statusline windows and returns undefined for
 
 test('statuslineRecord builds the required fields and adds the optional ones when present', async () => {
   const base = { id: 's1', launchId: 'L', transcript: '/t.jsonl', root: '/w/p', modelId: 'claude-haiku-4-5-20251001' }
-  expect(statuslineRecord({ ...base, clearedFrom: undefined, cost: undefined, rateLimits: undefined })).toEqual({
+  expect(statuslineRecord({ ...base, clearedFrom: undefined, cost: undefined, rateLimits: undefined, measuredAtMs: undefined })).toEqual({
     session_id: 's1',
     launch_id: 'L',
     transcript_path: '/t.jsonl',
@@ -43,7 +43,9 @@ test('statuslineRecord builds the required fields and adds the optional ones whe
     clearedFrom: 's0',
     cost: { usd: 1.5, startedAt: 1000, now: 4000 },
     rateLimits: { five_hour: { used_percentage: 10 } },
+    measuredAtMs: 4000,
   })
+  expect(full.measured_at_ms).toBe(4000)
   expect(full.cleared_from).toBe('s0')
   expect(full.cost).toEqual({ total_cost_usd: 1.5, total_duration_ms: 3000 })
   expect(full.rate_limits).toEqual({ five_hour: { used_percentage: 10 } })
@@ -52,7 +54,7 @@ test('statuslineRecord builds the required fields and adds the optional ones whe
 test('statuslineRecord omits cleared_from for its own id and floors the duration at 0', async () => {
   const r = statuslineRecord({
     id: 's1', launchId: 'L', transcript: '/t', root: '/r', modelId: 'x',
-    clearedFrom: 's1', cost: { usd: 0, startedAt: 5000, now: 1000 }, rateLimits: undefined,
+    clearedFrom: 's1', cost: { usd: 0, startedAt: 5000, now: 1000 }, rateLimits: undefined, measuredAtMs: undefined,
   })
   expect('cleared_from' in r).toBe(false)
   expect(r.cost).toEqual({ total_cost_usd: 0, total_duration_ms: 0 })

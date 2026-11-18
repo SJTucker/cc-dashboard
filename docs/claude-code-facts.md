@@ -51,6 +51,30 @@ a lower bound while a subagent runs.
 TTL (54 min on a 1 h cache). It needs at least 200k context tokens
 (`CLAUDE_CODE_IDLE_COMPACT_MIN_TOKENS`, floor 100k).
 
+## Rate limits and `session.measure` (2.1.327)
+
+Checked live on 2026-11-18 with the mod's debug log and a watcher on
+`rate-limits.json`, and in the binary.
+
+- `session.measure` fires at each main-thread turn end. It also fires mid-turn when
+  a rate-limit window's percent moves a whole point. In a live turn, the 5-hour
+  reading went 24→29% and each rise produced a `record-statusline` run within about
+  60 ms of the API response that carried it.
+- Subagent responses feed the same rate-limit state. A rise seen on a subagent's
+  response fires the measure even while only the subagent works: 28→29% at 17:36:03,
+  2 s after the main turn had ended, 60 ms after a Sonnet subagent's step. In the
+  binary, every API response's rate-limit headers update the account's limit state
+  unless the request sets `leavesLimitStateAlone` on a model other than the main
+  one. Only one-shot helpers, hook prompts and web search set that flag, so
+  subagents on any model count.
+- The main transcript gets no lines while only a subagent works (no writes for
+  100 s in the live run). A reading stamped with the transcript's mtime
+  (`recordRateLimits` in `lib/limits.js`) therefore carries the main thread's last
+  response time, not the time of the reading. Use the mod's `$.clock.now()` when
+  the time of the reading matters.
+- `resets_at` of the 5-hour window stayed the same for every reading within one
+  window.
+
 ## Events a mod never sees (2.1.316)
 
 Claude Code's built-in `cc-plugin-sec-default` sends these events past the `user`

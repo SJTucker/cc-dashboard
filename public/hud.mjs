@@ -39,6 +39,8 @@ function dailyWarning(today) {
   return share >= budget - DAILY_WARN_MARGIN ? { share, budget, rolling } : null;
 }
 
+const FULL_PACE = 100; // points per hour at which the pace bar is full (lib/pace.js FULL_RATE)
+
 // Short names for the plan windows in the status strip, by the window keys in
 // WINDOWS (lib/limits.js). An unknown key shows the window's own label.
 const LIMIT_SHORT_NAMES = { five_hour: 'Session', seven_day: 'Week' };
@@ -59,26 +61,51 @@ function creditsText({ usedMinor, limitMinor, currency, decimalPlaces }) {
   return `${money.format(usedMinor / scale)} of ${money.format(limitMinor / scale)} spent`;
 }
 
+// The pace row's bar. The fill is the rate in points per hour on a scale where 100 is
+// full, and a faster rate stays at full. The marker is the fast pace, drawn only below
+// full. Fast stripes the fill past the marker, so with no marker the whole fill.
+function paceBar(pace) {
+  return {
+    fill: Math.min(Math.max(pace.ratePerHour, 0), FULL_PACE),
+    marker: pace.fastPerHour < FULL_PACE ? pace.fastPerHour : null,
+    striped: pace.state === 'fast',
+  };
+}
+
+// The line under the pace bar. fmtClock formats the run-out time and fmtReset the reset
+// time, both from epoch ms.
+function paceDetail(pace, fmtClock, fmtReset) {
+  const reset = fmtReset(pace.resetsAt);
+  if (pace.state === 'idle' || pace.runsOutAt == null) return reset;
+  if (pace.runsOutAt < pace.resetsAt) return `lasts until about ${fmtClock(pace.runsOutAt)} · ${reset}`;
+  return `lasts past the reset · ${reset}`;
+}
+
 // The one-line form of #limitsBanner for the sticky status strip. `high` is
 // the windows at or past the warn percent and `dayHigh` is dailyWarning's result.
 // The label is Limit when a window is high and Budget when only today's budget is.
-// Returns { label, value } or null when the banner is hidden.
-function limitStripText(high, dayHigh) {
-  if (!high.length && !dayHigh) return null;
+// A fast pace comes first and takes the label 5h pace. Returns { label, value } or null
+// when the banner is hidden.
+function limitStripText(high, dayHigh, pace, fmtClock) {
+  const fast = pace?.state === 'fast';
+  if (!high.length && !dayHigh && !fast) return null;
   const parts = high.map((l) => `${LIMIT_SHORT_NAMES[l.key] || l.label} ${Math.round(l.percent)}%`);
   if (dayHigh) parts.push(`Today ${dayHigh.share}%`);
+  if (fast) return { label: '5h pace', value: [`runs out ${fmtClock(pace.runsOutAt)}`, ...parts].join(' · ') };
   return { label: high.length ? 'Limit' : 'Budget', value: parts.join(' · ') };
 }
 
 // The warnings #limitsBanner shows, one string per warning, each tied to the period
-// it belongs to: a window's carries its reset time and the day's carries the local
-// date. The banner's "x" saves these strings, and the banner shows again once a
-// warning has a string the saved list lacks: a new window crosses, a window resets,
-// or a new day starts. `high` and `dayHigh` are as in limitStripText.
-function limitsBannerParts(high, dayHigh, date) {
+// it belongs to: a window's carries its reset time, the day's carries the local
+// date and a fast pace carries the reset of its 5-hour window. The banner's "x" saves
+// these strings, and the banner shows again once a warning has a string the saved list
+// lacks: a new window crosses, a window resets, or a new day starts. `high` and
+// `dayHigh` are as in limitStripText.
+function limitsBannerParts(high, dayHigh, date, pace) {
   const parts = high.map((l) => `${l.key}@${l.resetsAt}`);
   if (dayHigh) parts.push(`today@${date}`);
+  if (pace?.state === 'fast') parts.push(`pace@${pace.resetsAt}`);
   return parts;
 }
 
-export { formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText };
+export { formatStatus, shareMeter, dailyWarning, limitStripText, limitsBannerParts, planWindows, creditsText, paceBar, paceDetail };

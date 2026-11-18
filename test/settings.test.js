@@ -7,7 +7,7 @@ const path = require('path');
 const { readSettings, writeSettings, getSettingsPath, validSettingValue } = require('../lib/settings');
 const helpers = require('./helpers');
 
-const DEFAULTS = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true, archive: true };
+const DEFAULTS = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true, archive: true, pace: true };
 
 function put(cfg, text) {
   const file = getSettingsPath(cfg);

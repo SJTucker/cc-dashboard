@@ -106,6 +106,17 @@ test('parseRateLimitsFile reads both windows and turns resets_at seconds into IS
   expect(parseRateLimitsFile('{"fetchedAtMs":1,"rate_limits":{"spend_limit":{"used_percentage":9}}}')).toBeNull()
 })
 
+test('parseRateLimitsFile ignores a file from another account than the logged-in one', async () => {
+  const file = (accountUuid?: unknown) => JSON.stringify({ fetchedAtMs: 5_000, accountUuid, rate_limits: { five_hour: { used_percentage: 80 } } })
+  const login = (uuid?: unknown) => JSON.stringify({ oauthAccount: { accountUuid: uuid } })
+  expect(parseRateLimitsFile(file('A'), login('B'))).toBeNull()
+  expect(parseRateLimitsFile(file('A'), login('A'))?.fetchedAtMs).toBe(5_000)
+  expect(parseRateLimitsFile(file(), login('B'))?.fetchedAtMs).toBe(5_000)
+  expect(parseRateLimitsFile(file('A'), login())?.fetchedAtMs).toBe(5_000)
+  expect(parseRateLimitsFile(file('A'), 'not json')?.fetchedAtMs).toBe(5_000)
+  expect(parseRateLimitsFile(file('A'))?.fetchedAtMs).toBe(5_000)
+})
+
 test('parseUsageCache ignores a cache from another account', async () => {
   const cache = { fetchedAtMs: 7_000, accountUuid: 'acct-1', utilization: { five_hour: { utilization: 80, resets_at: '2026-10-25T22:49:59Z' } } }
   expect(parseUsageCache(JSON.stringify({ oauthAccount: { accountUuid: 'acct-2' }, cachedUsageUtilization: cache }))).toBeNull()
@@ -156,4 +167,23 @@ test('newerReadings takes each window from the newest snapshot that has it', asy
     { kind: 'five_hour', percent: 88 },
     { kind: 'seven_day', percent: 62 },
   ] })
+})
+
+test('parseLevels keeps paceDismissed', async () => {
+  expect(parseLevels('{"five_hour":75,"seven_day":0,"paceDismissed":1790866800}')).toEqual({ five_hour: 75, seven_day: 0, paceDismissed: 1790866800 })
+  expect(parseLevels('{"paceDismissed":"x"}')).toEqual(NO_LEVELS)
+})
+
+test('sameLevels compares paceDismissed', async () => {
+  const a = { five_hour: 0, seven_day: 0, paceDismissed: 5 }
+  expect(sameLevels(a, { ...a })).toBe(true)
+  expect(sameLevels(a, { five_hour: 0, seven_day: 0 })).toBe(false)
+  expect(sameLevels(a, { ...a, paceDismissed: 6 })).toBe(false)
+})
+
+test('resetLevels and maxLevels keep paceDismissed', async () => {
+  const levels = { five_hour: 90, seven_day: 0, paceDismissed: 5 }
+  expect(resetLevels([{ kind: 'five_hour', percent: 10 }], levels)).toEqual({ five_hour: 0, seven_day: 0, paceDismissed: 5 })
+  expect(maxLevels(levels, { five_hour: 0, seven_day: 75 })).toEqual({ five_hour: 90, seven_day: 75, paceDismissed: 5 })
+  expect(maxLevels({ five_hour: 0, seven_day: 0, paceDismissed: 3 }, levels).paceDismissed).toBe(5)
 })

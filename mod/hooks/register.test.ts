@@ -124,11 +124,11 @@ const CONTRACT = {
     { "script": "archive-transcripts", "args": [], "stdin": {} },
     { "script": "record-session-end", "args": [], "stdin": { "session_id": "abc", "reason": "clear" } },
     { "script": "record-statusline", "args": [], "stdin": {
-      "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 } }, "fetched_at_ms": 61000 } },
+      "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 } }, "fetched_at_ms": 61000, "measured_at_ms": 61000 } },
     { "script": "record-statusline", "args": [], "stdin": {
       "session_id": "abc", "launch_id": "mfz3k1-a8c2e9f0", "cleared_from": "prev-1", "transcript_path": "/nonexistent/abc.jsonl", "workspace": { "project_dir": "/work/demo" },
       "model": { "display_name": "Opus 5.5 (1M context)" }, "cost": { "total_cost_usd": 0.42, "total_duration_ms": 60000 },
-      "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 }, "seven_day": { "used_percentage": 41, "resets_at": 1791192600 } } } }
+      "rate_limits": { "five_hour": { "used_percentage": 23.5, "resets_at": 1790866800 }, "seven_day": { "used_percentage": 41, "resets_at": 1791192600 } }, "measured_at_ms": 61000 } }
   ],
   "activity": { "sessionId": "s1", "state": "working", "tool": null, "subagents": 0, "since": 61000, "updatedAt": 61000 },
   "agentUsage": { "agentId": "a1", "steps": [
@@ -465,6 +465,7 @@ test('a measure pipes statusline JSON to record-statusline', async ($, on) => {
         five_hour: { used_percentage: 23.5, resets_at: 1790866800 },
         seven_day: { used_percentage: 41, resets_at: 1791192600 },
       },
+      measured_at_ms: 61_000,
     },
   }])
   expect(ran.length).toBe(1)
@@ -3048,6 +3049,144 @@ const RESETS_S = Math.floor((61_000 + 130 * 60_000) / 1000)
 const rateFile = (fetchedAtMs: number, percent: number) =>
   JSON.stringify({ fetchedAtMs, rate_limits: { five_hour: { used_percentage: percent, resets_at: RESETS_S } } })
 
+// A rate-limits.json holding recent 5-hour readings, as recordRateLimits writes it. Entries
+// are [minutes from nowMs, percent, session id].
+const paceFile = (nowMs: number, entries: [number, number, string?][], resetsAt = RESETS_S) => JSON.stringify({
+  fetchedAtMs: nowMs,
+  rate_limits: { five_hour: { used_percentage: entries[entries.length - 1][1], resets_at: resetsAt } },
+  fiveHourRecent: entries.map(([min, percent, id]) => ({ t: nowMs + min * 60_000, percent, sessionId: id ?? null })),
+  fiveHourResetsAt: resetsAt,
+})
+// The mock clock starts at 61 000 ms. After this advance the entries below sit at positive times.
+const PACE_NOW = 61_000 + 10 * 60_000
+const FAST_P3: [number, number, string?][] = [[-4, 20, 'S'], [-3, 22, 'S'], [-2, 24, 'S'], [-1, 26, 'S'], [0, 28, 'S']]
+const fastFor = (id: string) => FAST_P3.map(([m, p]) => [m, p, id] as [number, number, string])
+const paceLine = async (ui: { find: (q: { type?: string; text?: RegExp }) => Promise<{ text: string } | undefined> }) =>
+  (await ui.find({ type: 'Text', text: /on pace/ }))?.text
+
+test('band shows the pace line when rate-limits.json is fast', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('s1'))
+  await $.session.measure(measure([at(23.5), WEEK]))
+  expect(await paceLine(ui)).toBe('⚠ 5h window: on pace to run out in 36m (resets in 2h 0m) · fastest: this session')
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('band shows no pace line when the cache belongs to another account', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = JSON.stringify({ ...JSON.parse(paceFile(PACE_NOW, fastFor('s1'))), accountUuid: 'A' })
+  state.files[CLAUDE_JSON] = JSON.stringify({ oauthAccount: { accountUuid: 'B' } })
+  await $.session.measure(measure([at(23.5), WEEK]))
+  expect(await paceLine(ui)).toBeUndefined()
+  state.files[CLAUDE_JSON] = JSON.stringify({ oauthAccount: { accountUuid: 'A' } })
+  await $.session.measure(measure([at(23.5), WEEK]))
+  expect(await paceLine(ui)).toContain('on pace')
+  state.files[CLAUDE_JSON] = JSON.stringify({ oauthAccount: { accountUuid: 'B' } })
+  await clock.advance(60_000)
+  expect(await paceLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('band names another session\'s project', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('B'))
+  state.files['/home/u/.claude/cc-dashboard/sessions/B.json'] = '{"project":"cc-dashboard"}'
+  await $.session.measure(measure([at(23.5), WEEK]))
+  expect(await paceLine(ui)).toContain('fastest: a session in cc-dashboard')
+  await ui.unmount()
+})
+
+test('band shows the pace line with a 75% line', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('s1'))
+  await $.session.measure(measure([at(80), WEEK]))
+  expect(await bandLine(ui)).toContain('Session 80%')
+  expect(await paceLine(ui)).toContain('on pace')
+  await ui.press({ key: 'dismiss-limits' })
+  expect(await bandLine(ui)).toBeUndefined()
+  expect(await paceLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a claude -p measure does no pace read', async ($, on) => {
+  const { state, clock, readLog } = world(on)
+  await $.session.start({ ...start, isInteractive: false })
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('B'))
+  await $.session.measure(measure([at(80), WEEK]))
+  await clock.advance(120_000)
+  expect(readLog.filter((p) => p === RATE_LIMITS || p.includes('/cc-dashboard/sessions/'))).toEqual([])
+})
+
+test('Dismiss hides the pace line until the window resets', async ($, on) => {
+  const { state, clock, writes } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('s1'))
+  await $.session.measure(measure([at(23.5), WEEK]))
+  expect(await paceLine(ui)).toBeDefined()
+  await ui.press({ key: 'dismiss-limits' })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 0, seven_day: 0, paceDismissed: RESETS_S })
+  expect(await paceLine(ui)).toBeUndefined()
+  await clock.advance(60_000)
+  expect(await paceLine(ui)).toBeUndefined()
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('s1'), RESETS_S + 3600)
+  await clock.advance(60_000)
+  expect(await paceLine(ui)).toContain('on pace')
+  await ui.unmount()
+})
+
+test('a measure that changes levels keeps paceDismissed', async ($, on) => {
+  const { writes, clock } = world(on, { files: { [LIMITS]: `{"five_hour":90,"seven_day":0,"paceDismissed":${RESETS_S}}` } })
+  await clock.advance(10 * 60_000)
+  await $.session.measure(measure([at(12), WEEK]))
+  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 0, seven_day: 0, paceDismissed: RESETS_S })
+})
+
+test('recheck clears the pace line with no new measure', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('s1'))
+  await $.session.measure(measure([at(23.5), WEEK]))
+  expect(await paceLine(ui)).toBeDefined()
+  await clock.advance(16 * 60_000)
+  expect(await paceLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('pace off shows no pace line and reads no session snapshot', async ($, on) => {
+  const { state, clock, readLog } = world(on, { files: { [DASH_SETTINGS]: '{"pace":false}' } })
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('B'))
+  await $.session.measure(measure([at(23.5), WEEK]))
+  await clock.advance(60_000)
+  expect(await paceLine(ui)).toBeUndefined()
+  expect(readLog.filter((p) => p.includes('/cc-dashboard/sessions/'))).toEqual([])
+  await ui.unmount()
+})
+
+test('limitBand off hides the pace line', async ($, on) => {
+  const { state, clock } = world(on, { files: { [DASH_SETTINGS]: '{"limitBand":false}' } })
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('s1'))
+  await $.session.measure(measure([at(23.5), WEEK]))
+  await clock.advance(60_000)
+  expect(await paceLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
 test('a window at 75% shows the limit band and one at 74.4% does not', async ($, on) => {
   world(on)
   const ui = await $.ui.mount(BAND)
@@ -3196,6 +3335,55 @@ test('a newer reading in rate-limits.json updates the band within a minute', asy
   state.files[RATE_LIMITS] = rateFile(90_000, 88)
   await clock.advance(60_000)
   expect(await bandLine(ui)).toContain('Session 88%')
+  await ui.unmount()
+})
+
+const loginOf = (uuid: string) => JSON.stringify({ oauthAccount: { accountUuid: uuid } })
+
+test("a newer reading in another account's rate-limits.json is not adopted", async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('B')
+  await $.session.measure(measure([at(77), WEEK]))
+  state.files[RATE_LIMITS] = JSON.stringify({ fetchedAtMs: 90_000, accountUuid: 'A', rate_limits: { five_hour: { used_percentage: 88, resets_at: RESETS_S } } })
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 77%')
+  await ui.unmount()
+})
+
+test('a login to another account clears the held readings at the next recheck', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(80), WEEK]))
+  expect(await bandLine(ui)).toContain('Session 80%')
+  state.files[CLAUDE_JSON] = loginOf('B')
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test("after a login switch, the new account's older-stamped reading is adopted", async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await clock.advance(10 * 60_000)
+  await $.session.measure(measure([at(77), WEEK]))
+  state.files[CLAUDE_JSON] = loginOf('B')
+  state.files[RATE_LIMITS] = JSON.stringify({ fetchedAtMs: 90_000, accountUuid: 'B', rate_limits: { five_hour: { used_percentage: 80, resets_at: RESETS_S } } })
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 80%')
+  await ui.unmount()
+})
+
+test('a missing login id does not clear the held readings', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(80), WEEK]))
+  state.files[CLAUDE_JSON] = '{}'
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 80%')
   await ui.unmount()
 })
 
@@ -3502,7 +3690,7 @@ test('a step queued after a subagent ends but before its chain settles is droppe
 // Non-interactive sessions (claude -p) write no activity file, snapshot or end record,
 // and send rate limits only.
 const headless = { ...start, isInteractive: false }
-const RATE_ONLY = [{ rate_limits: rateLimitsInput([FIVE, WEEK]), fetched_at_ms: 61_000 }]
+const RATE_ONLY = [{ rate_limits: rateLimitsInput([FIVE, WEEK]), fetched_at_ms: 61_000, measured_at_ms: 61_000 }]
 
 test('a non-interactive session writes no activity file', async ($, on) => {
   const { writes, clock } = world(on)
@@ -4529,4 +4717,34 @@ test('session.end drops the session debug state, so a later flush reads the file
   await readStep($.turn.step(stepInput({ agentId: 'a1' }) as never) as never)
   await $.session.end({ reason: 'other', sessionId: 's1' } as never)
   expect(readLog.filter((p) => p === DEBUG_FILE)).toHaveLength(2)
+})
+
+type TreeNode = { type: string; props?: Record<string, unknown>; children?: TreeNode[] }
+
+test('the limit text and the pace text sit in a column Box beside the Dismiss button', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('s1'))
+  await $.session.measure(measure([at(80), WEEK]))
+  const outer = (await ui.find({ type: 'Box' })) as unknown as TreeNode
+  const kinds = outer.children!.map((c) => c.type)
+  expect(kinds).toEqual(['Box', 'Button'])
+  const inner = outer.children![0]
+  expect(inner.props?.flexDirection).toBe('column')
+  expect(inner.children!.map((c) => c.type)).toEqual(['Text', 'Text'])
+  await ui.unmount()
+})
+
+test('limitBand turned off clears a showing pace line on the next recheck', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  await clock.advance(10 * 60_000)
+  state.files[RATE_LIMITS] = paceFile(PACE_NOW, fastFor('s1'))
+  await $.session.measure(measure([at(23.5), WEEK]))
+  expect(await paceLine(ui)).toBeDefined()
+  state.files[DASH_SETTINGS] = '{"limitBand":false}'
+  await clock.advance(60_000)
+  expect(await paceLine(ui)).toBeUndefined()
+  await ui.unmount()
 })

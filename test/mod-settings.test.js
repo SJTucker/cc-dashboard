@@ -5,8 +5,8 @@ const assert = require('node:assert');
 const { installDom } = require('./dom-stub');
 
 const load = () => import('../public/panels/mod-settings.mjs');
-const ALL = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true, archive: true };
-const KEYS = ['handoff', 'transcriptIndex', 'reviews', 'setupMarkers', 'setupLabels', 'activity', 'limitBand', 'archive'];
+const ALL = { handoff: 'document', transcriptIndex: true, reviews: true, setupMarkers: true, setupLabels: true, activity: true, limitBand: true, archive: true, pace: true };
+const KEYS = ['handoff', 'transcriptIndex', 'reviews', 'setupMarkers', 'setupLabels', 'activity', 'limitBand', 'archive', 'pace'];
 
 function walk(node, fn) {
   fn(node);
@@ -48,7 +48,7 @@ test('on/off rows draw an On and an Off segment that reflect the saved boolean',
   assert.deepStrictEqual(radios.map((r) => r.attributes.value), ['true', 'false']);
   assert.deepStrictEqual(radios.map((r) => r.checked), [false, true]);
   const groups = find(container, (n) => n.className === 'segmented');
-  assert.strictEqual(groups.length, 8, 'every row, handoff included, uses the segmented control');
+  assert.strictEqual(groups.length, 9, 'every row, handoff included, uses the segmented control');
 });
 
 test('each row has an info popover with the Design copy', async () => {
@@ -72,7 +72,7 @@ test('each row has an Affects line', async () => {
   const { container } = setup();
   renderModSettings(container, ALL);
   const lines = find(container, (n) => n.className === 'mod-affects').map((n) => n.textContent);
-  assert.strictEqual(lines.length, 8);
+  assert.strictEqual(lines.length, 9);
   assert.ok(lines.every((l) => l.startsWith('Affects: ')));
 });
 

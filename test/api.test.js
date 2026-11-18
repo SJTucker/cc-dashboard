@@ -312,6 +312,7 @@ test('GET /api/limits sends only the limits', async (t) => {
     limits: [{ key: 'five_hour', label: 'Current session', percent: 6, resetsAt: Date.parse(resets) }],
     source: 'usage-cache',
     today: null,
+    pace: null,
   });
 });
 
@@ -955,6 +956,67 @@ test('GET /api/limits adds today\'s share of the weekly limit', async (t) => {
   const body = await res.json();
   assert.strictEqual(body.source, 'statusline');
   assert.strictEqual(body.today.share, 4);
+});
+
+// A P3-shaped cache: five readings two minutes apart at 120 points an hour, so the pace is fast.
+function seedPaceCache(config, extra = {}) {
+  const now = Date.now();
+  const resetsAt = Math.floor(now / 1000) + 4 * 60 * 60;
+  const recent = [20, 22, 24, 26, 28].map((percent, i) => ({ t: now - (4 - i) * 60_000, percent, sessionId: 'A' }));
+  fs.writeFileSync(path.join(config.configDir, 'rate-limits.json'), JSON.stringify({
+    fetchedAtMs: now,
+    rate_limits: { five_hour: { used_percentage: 28, resets_at: resetsAt } },
+    fiveHourRecent: recent,
+    fiveHourResetsAt: resetsAt,
+    ...extra,
+  }));
+  fs.mkdirSync(path.join(config.configDir, 'cc-dashboard', 'sessions'), { recursive: true });
+  fs.writeFileSync(path.join(config.configDir, 'cc-dashboard', 'sessions', 'A.json'), '{"project":"cc-dashboard"}');
+}
+
+test('GET /api/limits returns pace from fiveHourRecent', async (t) => {
+  const { url, config } = await startServer(t);
+  seedPaceCache(config);
+  const body = await (await fetch(`${url}/api/limits`)).json();
+  assert.strictEqual(body.pace.state, 'fast');
+  assert.deepStrictEqual(body.pace.busy, { sessionId: 'A', project: 'cc-dashboard' });
+});
+
+test('GET /api/limits returns pace null when the cache belongs to another account', async (t) => {
+  const { url, config } = await startServer(t);
+  seedPaceCache(config, { accountUuid: 'old-account' });
+  // The new account's /usage cache keeps the response non-null, so only the pace is in question.
+  fs.writeFileSync(config.claudeJsonPath, JSON.stringify({
+    oauthAccount: { accountUuid: 'new-account' },
+    cachedUsageUtilization: {
+      fetchedAtMs: Date.now(), accountUuid: 'new-account',
+      utilization: { five_hour: { utilization: 5, resets_at: new Date(Date.now() + 3 * 3600_000).toISOString() } },
+    },
+  }));
+  const body = await (await fetch(`${url}/api/limits`)).json();
+  assert.strictEqual(body.source, 'usage-cache');
+  assert.strictEqual(body.pace, null);
+});
+
+test('GET /api/limits returns pace null with the pace setting off', async (t) => {
+  const { url, config } = await startServer(t);
+  seedPaceCache(config);
+  fs.mkdirSync(path.join(config.configDir, 'cc-dashboard'), { recursive: true });
+  fs.writeFileSync(path.join(config.configDir, 'cc-dashboard', 'settings.json'), '{"pace": false}');
+  const body = await (await fetch(`${url}/api/limits`)).json();
+  assert.strictEqual(body.pace, null);
+});
+
+test('GET /api/limits returns the same pace twice within a minute', async (t) => {
+  const { url, config } = await startServer(t);
+  seedPaceCache(config);
+  const t0 = Date.now();
+  const first = await (await fetch(`${url}/api/limits`)).json();
+  await new Promise((r) => setTimeout(r, 30));
+  const second = await (await fetch(`${url}/api/limits`)).json();
+  const t1 = Date.now();
+  // Both calls round now up to a minute. Compare only when no minute edge fell between t0 and t1.
+  if (Math.ceil(t0 / 60_000) === Math.ceil(t1 / 60_000)) assert.deepStrictEqual(second.pace, first.pace);
 });
 
 test('an error thrown in an /api route is logged and answered as a JSON 500', async (t) => {

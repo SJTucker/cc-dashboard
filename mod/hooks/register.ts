@@ -17,7 +17,9 @@ import { relayOnce } from './steer'
 import { debugLine, debugOn, keepLast } from './debug'
 import { claimedWorktree, guardReason, outsideWrite, parseClaim } from './guard'
 import type { Claim } from './guard'
-import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
+import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, loginAccount, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
+import { computePace, paceText, parsePaceCache, parseSessionProject } from './pace'
+import type { Pace } from './pace'
 
 // Records the dashboard's plan usage and session snapshots by running the scripts in
 // bin/, and judges new Claude Code releases for the setup changes markers through
@@ -397,7 +399,13 @@ async function statuslineInput($: EngineInterface, e: Frozen<SessionMeasureInput
   launchId ??= `${now.toString(36)}-${Math.random().toString(36).slice(2, 10)}`
   const modelId = await $.session.model()
   const cost = e.cost ? { usd: e.cost.usd, startedAt: (await $.session.usage()).startedAt, now: await $.clock.now() } : undefined
-  return statuslineRecord({ id, launchId, transcript, root, modelId, clearedFrom, cost, rateLimits })
+  return statuslineRecord({ id, launchId, transcript, root, modelId, clearedFrom, cost, rateLimits, measuredAtMs: now })
+}
+
+// The input of a non-interactive session: rate limits only, stamped with the mod's clock.
+async function measuredInput($: EngineInterface, rateLimits: NonNullable<ReturnType<typeof rateLimitsInput>>) {
+  const now = await $.clock.now()
+  return { rate_limits: rateLimits, fetched_at_ms: now, measured_at_ms: now }
 }
 
 type Batch = { versions: string[]; system: string; prompt: string }
@@ -1721,6 +1729,12 @@ async function checkSetup($: EngineInterface) {
 // minute. Dismiss writes the levels to limit-warnings.json, which every running session
 // reads on its next measure and on the recheck timer.
 //
+// Account check: rate-limits.json and the /usage cache carry the account that wrote them,
+// and the band keeps the account its held readings came from (from .claude.json at the
+// last measure). A file from another account than the logged-in one is not adopted. After
+// a /login the recheck drops the held readings, so the old account's percentages leave the
+// band. A missing id on either side is unknown, not different.
+//
 // Two known gaps. rate-limits.json stamps a reading with the transcript's mtime, the
 // writing session's last API response, while the band stamps its own measure with
 // $.clock.now(). So a band stamped at the end of a turn can skip another session's
@@ -1728,9 +1742,43 @@ async function checkSetup($: EngineInterface) {
 // failed Dismiss write (unsaved), maxLevels keeps this session's level over a reset
 // another session wrote, so the band stays hidden until 90% or this session's next
 // measure.
+//
+// The band also shows a pace line while the 5-hour pace is fast. The pace comes from the
+// fiveHourRecent list in rate-limits.json (pace.ts), read after the measure's own
+// record-statusline run and on every recheck. A busy session other than this one is named
+// by the project in its snapshot, sessions/<id>.json. Dismiss covers the pace line by
+// storing the window's resets_at as paceDismissed in limit-warnings.json. With the pace
+// setting off, measureBand and recheckBand skip the pace reads: the fiveHourRecent list in
+// rate-limits.json and the busy session's snapshot. measureBand then reads only .claude.json,
+// for the account. recheckBand still reads rate-limits.json and .claude.json for the
+// readings and the account check. A claude -p session reads no pace
+// and no .claude.json in measureBand, and starts no recheck.
 
 const RECHECK_MS = 60_000
-const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readings: [], levels: NO_LEVELS, unsaved: false, fetchedAtMs: 0 })
+const band = atom({ plugin: 'cc-dashboard', key: 'limitBand' } as const, { readings: [], levels: NO_LEVELS, unsaved: false, fetchedAtMs: 0, pace: null, paceResetsAt: null, busyProject: null, account: null })
+
+type PaceRead = { pace: Pace | null; paceResetsAt: number | null; busyProject: string | null }
+const NO_PACE: PaceRead = { pace: null, paceResetsAt: null, busyProject: null }
+
+// The pace at nowMs from the text of rate-limits.json. When another session is the busy one
+// and the pace is fast, its project comes from that session's snapshot.
+async function readPace($: EngineInterface, dir: string, rateText: string | undefined, claudeJsonText: string | undefined, nowMs: number): Promise<PaceRead> {
+  const cache = parsePaceCache(rateText, claudeJsonText)
+  if (!cache) return NO_PACE
+  const pace = computePace(cache.recent, cache.resetsAt, nowMs)
+  if (!pace) return NO_PACE
+  const busy = pace.busySessionId
+  let busyProject: string | null = null
+  if (pace.state === 'fast' && busy !== null && busy !== (await $.session.id()) && SESSION_ID.test(busy)) {
+    busyProject = parseSessionProject(await $.fs.read(`${dir}/cc-dashboard/sessions/${busy}.json`).then(String, () => undefined))
+  }
+  return { pace, paceResetsAt: cache.resetsAt, busyProject }
+}
+
+// True while the band shows a pace line: the pace is fast and its window is not dismissed.
+function paceShown(b: { pace?: Pace | null; paceResetsAt?: number | null; levels: { paceDismissed?: number } }): boolean {
+  return b.pace?.state === 'fast' && b.paceResetsAt != null && b.levels.paceDismissed !== b.paceResetsAt
+}
 
 // A module variable, so a reload drops it. The next measure starts the timer again.
 let recheck: Timer | undefined
@@ -1755,18 +1803,35 @@ async function readLevels($: EngineInterface, path: string) {
 // (an API-key login) leaves the band as it is.
 async function measureBand($: EngineInterface, limits: readonly SessionRateLimit[]) {
   const seq = bandDismissals
-  if (!(await dashboardSettings($)).limitBand) return hideBand($)
+  const settings = await dashboardSettings($)
+  if (!settings.limitBand) return hideBand($)
   const now = await $.clock.now()
   const readings = liveReadings(readingsOf(limits), now)
   if (!readings.length) return
   const path = await limitsPath($)
+  // The record-statusline run in this handler has finished, so the file holds this reading.
+  // A claude -p session shows no band and never rechecks, so it reads no account.
+  const interactive = !(await nonInteractive($))
+  const claudePaths = interactive ? await configPaths($) : null
+  const claudeJsonText = claudePaths ? await $.fs.read(claudePaths.claudeJson).then(String, () => undefined) : undefined
+  // The account these readings belong to. Null when .claude.json names none.
+  const account = loginAccount(claudeJsonText) ?? null
+  const paths = settings.pace ? claudePaths : null
+  const paced = paths
+    ? await readPace(
+      $, paths.dir,
+      await $.fs.read(`${paths.dir}/rate-limits.json`).then(String, () => undefined),
+      claudeJsonText,
+      now,
+    )
+    : NO_PACE
   const stored = path ? await readLevels($, path) : NO_LEVELS
   // The levels come from the band state inside update. A Dismiss that ran after the file
   // read keeps its levels, and its own write holds them.
   let levels = NO_LEVELS
   await update($, band, (b) => {
     levels = bandDismissals !== seq ? resetLevels(readings, b.levels) : resetLevels(readings, b.unsaved ? maxLevels(stored, b.levels) : stored)
-    return { readings, levels, unsaved: b.unsaved, fetchedAtMs: now }
+    return { readings, levels, unsaved: b.unsaved, fetchedAtMs: now, account, ...paced }
   })
   if (path) {
     // After a Dismiss the Dismiss owns the write and the unsaved flag. A failed Dismiss
@@ -1778,7 +1843,7 @@ async function measureBand($: EngineInterface, limits: readonly SessionRateLimit
     }
   }
   // A claude -p session shows no band, so it reads nothing on a timer.
-  if (!(await nonInteractive($))) startRecheck($)
+  if (interactive) startRecheck($)
 }
 
 // With limitBand off, the band shows nothing and no timer reads the rate files. A band
@@ -1787,8 +1852,8 @@ async function hideBand($: EngineInterface) {
   recheck?.cancel()
   recheck = undefined
   const held = await read($, band)
-  if (!held.readings.length) return
-  await update($, band, (b) => ({ ...b, readings: [] }))
+  if (!held.readings.length && !held.pace) return
+  await update($, band, (b) => ({ ...b, readings: [], pace: null, paceResetsAt: null, busyProject: null, account: null }))
   $.ui.invalidate('ui.render')
 }
 
@@ -1806,25 +1871,35 @@ function startRecheck($: EngineInterface) {
 // stays live for up to 7 days. It redraws only while the band shows a window, or when
 // one has just left it.
 async function recheckBand($: EngineInterface) {
-  if (!(await dashboardSettings($)).limitBand) return hideBand($)
+  const settings = await dashboardSettings($)
+  if (!settings.limitBand) return hideBand($)
   const paths = await configPaths($)
   const seq = bandDismissals
   const file = paths ? await readLevels($, limitsFile(paths.dir)) : undefined
   const rateText = paths ? await $.fs.read(`${paths.dir}/rate-limits.json`).then(String, () => undefined) : undefined
   const cacheText = paths ? await $.fs.read(paths.claudeJson).then(String, () => undefined) : undefined
   const now = await $.clock.now()
+  const paced = paths && settings.pace ? await readPace($, paths.dir, rateText, cacheText, now) : NO_PACE
   let shown = false
   await update($, band, (b) => {
     // Band state saved before fetchedAtMs existed can survive a reload.
     const atMs = b.fetchedAtMs ?? 0
-    const newer = newerReadings(b.readings, atMs, [parseRateLimitsFile(rateText), parseUsageCache(cacheText)])
+    // Readings held for another account than the logged-in one are dropped. A missing id
+    // on either side is unknown, not different.
+    const login = loginAccount(cacheText)
+    const switched = login !== undefined && typeof b.account === 'string' && b.account !== login
+    const held = switched ? [] : b.readings
+    const newer = newerReadings(held, switched ? 0 : atMs, [parseRateLimitsFile(rateText, cacheText), parseUsageCache(cacheText)])
     const next = {
-      readings: liveReadings(newer ? newer.readings : b.readings, now),
+      account: switched ? login : b.account ?? null,
+      readings: liveReadings(newer ? newer.readings : held, now),
       levels: file && bandDismissals === seq ? (b.unsaved ? maxLevels(file, b.levels) : file) : b.levels,
       unsaved: b.unsaved,
-      fetchedAtMs: newer ? newer.fetchedAtMs : atMs,
+      fetchedAtMs: newer ? newer.fetchedAtMs : switched ? 0 : atMs,
+      ...paced,
     }
-    shown = shownWindows(b.readings, b.levels).length > 0 || shownWindows(next.readings, next.levels).length > 0
+    shown = shownWindows(b.readings, b.levels).length > 0 || shownWindows(next.readings, next.levels).length > 0 ||
+      paceShown(b) || paceShown(next)
     return next
   })
   if (shown) $.ui.invalidate('ui.render')
@@ -1842,6 +1917,7 @@ async function dismissBand($: EngineInterface) {
     const stored = path ? await readLevels($, path) : NO_LEVELS
     const base = current.unsaved ? maxLevels(stored, current.levels) : stored
     const levels = dismissLevels(shownWindows(current.readings, current.levels), base)
+    if (paceShown(current)) levels.paceDismissed = current.paceResetsAt!
     await update($, band, (b) => ({ ...b, levels, unsaved: true }))
     if (!path) return
     await $.fs.write(path, JSON.stringify(levels))
@@ -1938,7 +2014,7 @@ export const register: Register = (on) => {
       // transcript lookup, which a headless session may not have.
       const rateLimits = rateLimitsInput(e.rateLimits)
       const input = (await nonInteractive($))
-        ? rateLimits && { rate_limits: rateLimits, fetched_at_ms: await $.clock.now() }
+        ? rateLimits && await measuredInput($, rateLimits)
         : await statuslineInput($, e)
       if (input) await run($, 'record-statusline', input, MEASURE_TIMEOUT_MS)
     } catch (err) {
@@ -2181,13 +2257,22 @@ export const register: Register = (on) => {
     if (e.props.hasSurvey) return next(e)
     const current = await read($, band)
     const shown = shownWindows(current.readings, current.levels)
-    if (!shown.length) return next(e)
+    const paced = paceShown(current)
+    if (!shown.length && !paced) return next(e)
     const now = await $.clock.now()
     const { Box, Button, Text } = $.ui.resolve(e)
+    const ownId = paced ? await $.session.id() : ''
     return h(
       Box,
       { key: 'limit-band', gap: 1 },
-      h(Text, { color: 'warning', wrap: 'truncate-end' }, bandText(shown, now)),
+      h(
+        Box,
+        { key: 'band-lines', flexDirection: 'column' },
+        shown.length ? h(Text, { key: 'limit-text', color: 'warning', wrap: 'truncate-end' }, bandText(shown, now)) : null,
+        paced
+          ? h(Text, { key: 'pace-text', color: 'warning', wrap: 'truncate-end' }, paceText(current.pace!, current.paceResetsAt!, now, ownId, current.busyProject ?? null))
+          : null,
+      ),
       h(Button, {
         key: 'dismiss-limits',
         label: 'Dismiss',

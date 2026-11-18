@@ -18,6 +18,7 @@ const { hostGuard, securityHeaders } = require('./lib/net-guard');
 const { collectMarkers } = require('./lib/changes');
 const { buildReport, windowRanges } = require('./lib/efficiency');
 const { readLimits, readUsageFetchedAt, readDailyShare, getRateLimitsPath, readAccountUuid } = require('./lib/limits');
+const { readPace } = require('./lib/pace');
 const { readSessions, buildLiveSessions, getSessionsDir, cacheCallsOf } = require('./lib/sessions');
 const { readCacheState, getCacheDir } = require('./lib/cache');
 const { SESSION_ID_PATTERN } = require('./lib/session-id');
@@ -305,7 +306,13 @@ function createServer(config) {
     if (!switched || !usageRefresher || usageRefresher.refreshNow()) lastAccountUuid = account ?? lastAccountUuid;
     usageRefresher?.seen();
     const limits = readLimits({ claudeJson: config.claudeJsonPath, rateLimits: rateLimitsPath });
-    res.json(limits && { ...limits, today: readDailyShare({ rateLimits: rateLimitsPath, claudeJson: config.claudeJsonPath }) });
+    // now is rounded up to the minute so the pace stays the same within a clock minute and
+    // the page's draw guards do not rebuild the panel on every 5 s poll. With the pace
+    // setting off nothing pace-related runs.
+    const pace = readSettings(config.configDir).pace
+      ? readPace({ rateLimits: rateLimitsPath, claudeJson: config.claudeJsonPath, sessionsDir: getSessionsDir(config.configDir), now: Math.ceil(Date.now() / 60_000) * 60_000 })
+      : null;
+    res.json(limits && { ...limits, today: readDailyShare({ rateLimits: rateLimitsPath, claudeJson: config.claudeJsonPath }), pace });
   });
 
   // All history, whatever range the page shows: a before/after needs data on both
@@ -373,7 +380,7 @@ function createServer(config) {
   // each with its tokens, cost today and lines changed from the Today scan. Read-only:
   // bin/record-statusline writes the snapshots, run by the mod in mod/. Each
   // session's `activity` comes from cc-dashboard/activity/ (lib/activity.js), written
-  // by the mod. Session ids stay on the server.
+  // by the mod.
   app.get('/api/sessions/live', async (req, res) => {
     try {
       const data = await scan('today', 'hour');

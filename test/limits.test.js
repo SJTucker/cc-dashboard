@@ -115,7 +115,7 @@ function statuslineInput(overrides = {}) {
     rate_limits: overrides.rate_limits !== undefined ? overrides.rate_limits : {
       five_hour: { used_percentage: 12.5, resets_at: Math.floor(NOW / 1000) + 2 * 60 * 60 },
     },
-    session_id: 'super-secret-session-id-should-not-be-written',
+    session_id: overrides.session_id ?? 'super-secret-session-id-should-not-be-written',
   };
 }
 
@@ -137,13 +137,144 @@ test('recordRateLimits writes a fresh file stamped with the transcript mtime', (
   });
 });
 
-test('recordRateLimits writes only rate_limits, nothing else from the statusline input', () => {
+test('recordRateLimits writes only rate_limits and the reading cache, nothing else from the statusline input', () => {
   const transcript = makeTranscript(FETCHED);
   const file = missingFile('rate-limits.json');
-  recordRateLimits(statuslineInput({ transcript_path: transcript }), file);
+  recordRateLimits(statuslineInput({ transcript_path: transcript, session_id: 'sess-A' }), file);
   const raw = fs.readFileSync(file, 'utf8');
   assert.ok(!raw.includes('super-secret-session-id-should-not-be-written'));
-  assert.deepStrictEqual(Object.keys(JSON.parse(raw)).sort(), ['fetchedAtMs', 'rate_limits']);
+  assert.deepStrictEqual(Object.keys(JSON.parse(raw)).sort(), ['fetchedAtMs', 'fiveHourRecent', 'fiveHourResetsAt', 'rate_limits']);
+  // The session id appears only as an entry's sessionId.
+  assert.strictEqual(raw.split('sess-A').length - 1, 1);
+  assert.strictEqual(JSON.parse(raw).fiveHourRecent[0].sessionId, 'sess-A');
+  const off = missingFile('rate-limits.json');
+  recordRateLimits(statuslineInput({ transcript_path: transcript, session_id: 'sess-A' }), off, null, { pace: false });
+  assert.ok(!fs.readFileSync(off, 'utf8').includes('sess-A'));
+});
+
+const R5 = Math.floor(NOW / 1000) + 2 * 60 * 60;
+const five = (percent, resets = R5) => ({ five_hour: { used_percentage: percent, resets_at: resets } });
+const readFile = (file) => JSON.parse(fs.readFileSync(file, 'utf8'));
+const feed = (file, o, account = null, opts) => recordRateLimits({
+  transcript_path: o.transcript_path, session_id: o.session_id, measured_at_ms: o.measured_at_ms,
+  rate_limits: o.rate_limits ?? five(o.percent ?? 20, o.resets),
+  ...(o.transcript_path === undefined ? { fetched_at_ms: o.fetched_at_ms } : {}),
+}, file, account, opts);
+
+test('recordRateLimits caches a five_hour reading with its session id', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 5000, measured_at_ms: 5000, session_id: 'A', percent: 20 });
+  const w = readFile(file);
+  assert.deepStrictEqual(w.fiveHourRecent, [{ t: 5000, percent: 20, sessionId: 'A' }]);
+  assert.strictEqual(w.fiveHourResetsAt, R5);
+});
+
+test('recordRateLimits inserts an older reading into the cache without touching rate_limits', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 2000, measured_at_ms: 2000, percent: 22 });
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, percent: 21 });
+  const w = readFile(file);
+  assert.strictEqual(w.rate_limits.five_hour.used_percentage, 22);
+  assert.strictEqual(w.fetchedAtMs, 2000);
+  assert.deepStrictEqual(w.fiveHourRecent.map((e) => e.t), [1000, 2000]);
+});
+
+test('recordRateLimits stamps cache entries with measured_at_ms', () => {
+  const file = missingFile('rate-limits.json');
+  const transcript = makeTranscript(FETCHED);
+  feed(file, { transcript_path: transcript, measured_at_ms: 5000, percent: 20, session_id: 'A' });
+  feed(file, { transcript_path: transcript, measured_at_ms: 9000, percent: 21, session_id: 'A' });
+  assert.deepStrictEqual(readFile(file).fiveHourRecent.map((e) => e.t), [5000, 9000]);
+});
+
+test('recordRateLimits falls back to fetchedAtMs without measured_at_ms', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { transcript_path: makeTranscript(FETCHED), percent: 20 });
+  assert.strictEqual(readFile(file).fiveHourRecent[0].t, FETCHED);
+});
+
+test('recordRateLimits restarts the cache on a new resets_at', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, percent: 90 });
+  feed(file, { fetched_at_ms: 2000, measured_at_ms: 2000, percent: 2, resets: R5 + 18000 });
+  const w = readFile(file);
+  assert.deepStrictEqual(w.fiveHourRecent.map((e) => e.percent), [2]);
+  assert.strictEqual(w.fiveHourResetsAt, R5 + 18000);
+});
+
+test('recordRateLimits restarts the cache on an account switch', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, percent: 20 }, 'acct-1');
+  feed(file, { fetched_at_ms: 2000, measured_at_ms: 2000, percent: 5 }, 'acct-2');
+  assert.deepStrictEqual(readFile(file).fiveHourRecent.map((e) => e.percent), [5]);
+});
+
+test('recordRateLimits stores a null session id for a claude -p reading', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000 });
+  assert.strictEqual(readFile(file).fiveHourRecent[0].sessionId, null);
+});
+
+test('recordRateLimits stores a null session id for an id that fails SESSION_ID_PATTERN', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, session_id: '../evil' });
+  assert.strictEqual(readFile(file).fiveHourRecent[0].sessionId, null);
+});
+
+test('recordRateLimits with pace off writes no cache and removes an old one', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, session_id: 'A' });
+  assert.ok(readFile(file).fiveHourRecent);
+  feed(file, { fetched_at_ms: 2000, measured_at_ms: 2000, session_id: 'A' }, null, { pace: false });
+  const w = readFile(file);
+  assert.ok(!('fiveHourRecent' in w) && !('fiveHourResetsAt' in w));
+  assert.strictEqual(w.fetchedAtMs, 2000);
+});
+
+test('recordRateLimits with pace off removes the cache when an older reading arrives', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 2000, measured_at_ms: 2000, percent: 22, session_id: 'A' });
+  assert.ok(readFile(file).fiveHourRecent);
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, percent: 21, session_id: 'A' }, null, { pace: false });
+  const w = readFile(file);
+  assert.ok(!('fiveHourRecent' in w) && !('fiveHourResetsAt' in w));
+  assert.strictEqual(w.fetchedAtMs, 2000);
+  assert.strictEqual(w.rate_limits.five_hour.used_percentage, 22);
+});
+
+test('recordRateLimits restarts the cache for another account with an earlier reset', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, percent: 40, session_id: 'A' }, 'acct-A');
+  feed(file, { fetched_at_ms: 2000, measured_at_ms: 2000, percent: 3, resets: R5 - 3600, session_id: 'B' }, 'acct-B');
+  const w = readFile(file);
+  assert.deepStrictEqual(w.fiveHourRecent, [{ t: 2000, percent: 3, sessionId: 'B' }]);
+  assert.strictEqual(w.fiveHourResetsAt, R5 - 3600);
+});
+
+test('recordRateLimits skips the cache for a non-finite five_hour reading', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, percent: 20 });
+  feed(file, { fetched_at_ms: 2000, measured_at_ms: 2000, percent: 21, resets: null });
+  const w = readFile(file);
+  assert.deepStrictEqual(w.fiveHourRecent.map((e) => e.percent), [20]);
+  assert.strictEqual(w.fiveHourResetsAt, R5);
+});
+
+test('recordRateLimits keeps the cache for an input with no five_hour window', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, percent: 20 });
+  feed(file, { fetched_at_ms: 2000, measured_at_ms: 2000, rate_limits: { seven_day: { used_percentage: 3, resets_at: R5 } } });
+  const w = readFile(file);
+  assert.deepStrictEqual(w.fiveHourRecent.map((e) => e.percent), [20]);
+  assert.strictEqual(w.fiveHourResetsAt, R5);
+});
+
+test('recordRateLimits ignores a reading for an earlier window and leaves the file alone', () => {
+  const file = missingFile('rate-limits.json');
+  feed(file, { fetched_at_ms: 2000, measured_at_ms: 2000, percent: 20, resets: R5 + 18000 });
+  const before = fs.readFileSync(file, 'utf8');
+  feed(file, { fetched_at_ms: 1000, measured_at_ms: 1000, percent: 99, resets: R5 });
+  assert.strictEqual(fs.readFileSync(file, 'utf8'), before);
 });
 
 test('recordRateLimits skips the write when the existing stamp is newer', () => {
@@ -279,6 +410,23 @@ test('bin/record-statusline writes rate-limits.json under CLAUDE_CONFIG_DIR with
   assert.strictEqual(written.rate_limits.five_hour.used_percentage, 12.5);
   assert.strictEqual(written.accountUuid, 'acct-9');
   assert.ok(!raw.includes('someone@example.com'));
+  assert.ok(Array.isArray(written.fiveHourRecent));
+});
+
+test('bin/record-statusline writes no reading cache when settings.json turns pace off', () => {
+  const config = helpers.tmpDir(null, 'limits-cfg');
+  fs.mkdirSync(path.join(config, 'cc-dashboard'));
+  fs.writeFileSync(path.join(config, 'cc-dashboard', 'settings.json'), JSON.stringify({ pace: false }));
+  const input = JSON.stringify({
+    rate_limits: five(12.5), fetched_at_ms: FETCHED, measured_at_ms: FETCHED, session_id: 'sess-A',
+  });
+  const result = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', 'record-statusline')], {
+    input, encoding: 'utf8', env: { ...process.env, CLAUDE_CONFIG_DIR: config },
+  });
+  assert.strictEqual(result.status, 0);
+  const written = readFile(path.join(config, 'rate-limits.json'));
+  assert.strictEqual(written.rate_limits.five_hour.used_percentage, 12.5);
+  assert.ok(!('fiveHourRecent' in written));
 });
 
 // Local wall-clock times, so the tests hold in any timezone.
