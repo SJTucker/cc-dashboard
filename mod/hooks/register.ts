@@ -47,7 +47,7 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 // The orchestrate skill writes reset-prompt/<session id>.txt, the line to send after a
 // /clear. On that session's end the mod reads it, and empties it because $.fs has no
 // delete. After a /clear it fills the next session's input box with the line.
-// The mod writes eight formats itself with $.fs.write, under <config dir>/cc-dashboard/:
+// The mod writes nine formats itself with $.fs.write, under <config dir>/cc-dashboard/:
 //   activity/<session id>.json   the session's state. Read by lib/activity.js.
 //   agent-usage/<agent id>.json  each model request of a subagent (steps.ts). Read by lib/agent-steps.js.
 //   headless-usage/<session id>.json  each model request of a session with no transcript (steps.ts). Read by lib/headless-usage.js.
@@ -56,6 +56,7 @@ import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadi
 //   limit-warnings.json          the dismissed plan limit levels. Read by every running session's mod.
 //   claims/<agent id>.json       the worktree, run folder and task file an orchestrate worker claimed. Read back by the mod after a reload, so the worktree guard keeps working.
 //   mod-debug/<session id>.jsonl  the mod's debug log, written only when CC_DASHBOARD_DEBUG=1. Nothing reads it.
+//   input/<session id>-<script>-<subcommand>.txt  the changelog, or the model's reply, for bin/judge-updates and bin/review-session (--input). The script deletes it after reading.
 // Activity has one writer per session, which keeps a session's states in order, where a
 // script started per event can finish out of order. The server reads the first four
 // formats, and the CONTRACT block in register.test.ts holds a sample of each, which
@@ -427,6 +428,25 @@ async function callScript($: EngineInterface, name: string, args: string[], stdi
   }
 }
 
+// The engine refuses a process.run whose argv or stdin names a Claude Code settings
+// file, and a changelog or a model reply can quote one. This writes the text to
+// <config dir>/cc-dashboard/input/<session id>-<script>-<subcommand>.txt, which the
+// script reads and deletes, and returns the path for `--input`. With no config dir it
+// returns undefined, and the caller sends the text on stdin as before.
+async function scriptInput($: EngineInterface, script: string, subcommand: string, text: string): Promise<string | undefined> {
+  const dir = await configDir($)
+  if (!dir) return undefined
+  const file = `${dir}/cc-dashboard/input/${await $.session.id()}-${script}-${subcommand}.txt`
+  await $.fs.write(file, text)
+  return file
+}
+
+// Runs a bin/ script with `text` passed through scriptInput, or on stdin when there is no file.
+async function callScriptWithText($: EngineInterface, name: string, args: string[], text: string, timeoutMs: number): Promise<unknown> {
+  const file = await scriptInput($, name, args[0] ?? 'run', text)
+  return file ? callScript($, name, [...args, '--input', file], '', timeoutMs) : callScript($, name, args, text, timeoutMs)
+}
+
 // Asks Haiku about one batch and records the answer, adding any failure to `judged`.
 async function judgeBatch($: EngineInterface, batch: Batch, judged: Judged) {
   judged.asked += batch.versions.length
@@ -450,7 +470,7 @@ async function judgeBatch($: EngineInterface, batch: Batch, judged: Judged) {
   }
   try {
     const input = JSON.stringify({ versions: batch.versions, reply: reply.text })
-    const out = (await callScript($, 'judge-updates', ['record'], input, RECORD_TIMEOUT_MS)) as { recorded: number; relevant: number }
+    const out = (await callScriptWithText($, 'judge-updates', ['record'], input, RECORD_TIMEOUT_MS)) as { recorded: number; relevant: number }
     judged.recorded += out.recorded
     judged.relevant += out.relevant
   } catch (err) {
@@ -478,7 +498,7 @@ async function judgeUpdates($: EngineInterface, current?: string): Promise<Judge
   let batches: Batch[]
   try {
     const args = current ? ['prompt', '--current', current] : ['prompt']
-    batches = ((await callScript($, 'judge-updates', args, changelog, PROMPT_TIMEOUT_MS)) as { batches: Batch[] }).batches
+    batches = ((await callScriptWithText($, 'judge-updates', args, changelog, PROMPT_TIMEOUT_MS)) as { batches: Batch[] }).batches
     if (!Array.isArray(batches)) {
       judged.failed.push('judge-updates prompt printed no batches')
       return judged
@@ -510,7 +530,7 @@ async function reviewSession($: EngineInterface, review: Review) {
   } catch (err) {
     outcome = { error: `Haiku call failed (${errorName(err)})` }
   }
-  await callScript($, 'review-session', ['record'], JSON.stringify({ sessionId: review.sessionId, ...outcome }), RECORD_TIMEOUT_MS)
+  await callScriptWithText($, 'review-session', ['record'], JSON.stringify({ sessionId: review.sessionId, ...outcome }), RECORD_TIMEOUT_MS)
 }
 
 // Reviews each ended session bin/review-session hands back. A failed review is

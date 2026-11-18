@@ -114,11 +114,11 @@ const WEEK: SessionRateLimit = { kind: 'seven_day', percentUsed: 41, resetsAt: '
 // contract:begin
 const CONTRACT = {
   "calls": [
-    { "script": "judge-updates", "args": ["prompt", "--current", "2.1.290"], "stdin": "## 2.1.290\n- Compaction keeps fewer tool results" },
-    { "script": "judge-updates", "args": ["prompt"], "stdin": "## 2.1.290\n- Compaction keeps fewer tool results" },
-    { "script": "judge-updates", "args": ["record"], "stdin": { "versions": ["2.1.290"], "reply": "[{\"version\":\"2.1.290\",\"relevant\":false}]" } },
+    { "script": "judge-updates", "args": ["prompt", "--current", "2.1.290", "--input", "$INPUT"], "stdin": "", "input": "## 2.1.290\n- Compaction keeps fewer tool results" },
+    { "script": "judge-updates", "args": ["prompt", "--input", "$INPUT"], "stdin": "", "input": "## 2.1.290\n- Compaction keeps fewer tool results" },
+    { "script": "judge-updates", "args": ["record", "--input", "$INPUT"], "stdin": "", "input": { "versions": ["2.1.290"], "reply": "[{\"version\":\"2.1.290\",\"relevant\":false}]" } },
     { "script": "review-session", "args": ["prompt"], "stdin": "" },
-    { "script": "review-session", "args": ["record"], "stdin": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
+    { "script": "review-session", "args": ["record", "--input", "$INPUT"], "stdin": "", "input": { "sessionId": "abc", "reply": "{\"suggestions\":[]}" } },
     { "script": "cache-state", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl" } },
     { "script": "transcript-index", "args": [], "stdin": { "transcript": "/nonexistent/abc.jsonl", "out": "/nonexistent/idx/abc.md" } },
     { "script": "archive-transcripts", "args": [], "stdin": {} },
@@ -778,6 +778,7 @@ test('a different failure logs after the first one, and each message logs once',
 })
 
 const UPDATES = '/home/u/.claude/cc-dashboard/updates.json'
+const INPUT_DIR = '/home/u/.claude/cc-dashboard/input'
 const start = { cwd: '/work/my.demo', surface: null, isInteractive: true }
 const backfill = { command: 'backfill-updates', args: '', origin: { kind: 'composer' as const }, presentation: { isFullscreen: false, columns: 80 } }
 const BATCH = { versions: ['2.1.290'], system: 'SYSTEM', prompt: '## 2.1.290\n- Compaction keeps fewer tool results' }
@@ -1392,17 +1393,18 @@ test('a version that has a verdict makes no request', async ($, on) => {
 })
 
 test('a version with no verdict is fetched, judged by Haiku and recorded', async ($, on) => {
-  const { ran, fetched, asked, clock } = world(on, { scripts: judging, replies: [{ isAnswered: true, text: VERDICT }] })
+  const { ran, fetched, asked, writes, clock } = world(on, { scripts: judging, replies: [{ isAnswered: true, text: VERDICT }] })
   await $.session.start(start)
   await clock.settle()
   expect(fetched).toEqual(['https://raw.githubusercontent.com/anthropics/claude-code/main/CHANGELOG.md'])
   expect(ran.map((r) => r.argv)).toEqual([
-    ['/repo/bin/judge-updates', 'prompt', '--current', '2.1.290'],
-    ['/repo/bin/judge-updates', 'record'],
+    ['/repo/bin/judge-updates', 'prompt', '--current', '2.1.290', '--input', `${INPUT_DIR}/s1-judge-updates-prompt.txt`],
+    ['/repo/bin/judge-updates', 'record', '--input', `${INPUT_DIR}/s1-judge-updates-record.txt`],
   ])
-  expect(ran[0]?.stdin).toBe('## 2.1.290\n- Compaction keeps fewer tool results')
+  expect(ran.map((r) => r.stdin)).toEqual(['', ''])
+  expect(writes[`${INPUT_DIR}/s1-judge-updates-prompt.txt`]).toBe('## 2.1.290\n- Compaction keeps fewer tool results')
   expect(asked).toEqual([{ model: 'haiku', system: 'SYSTEM', prompt: BATCH.prompt, maxTokens: 2048, effort: 'low', timeoutMs: 60000 }])
-  expect(ran[1]?.stdin).toEqual({ versions: ['2.1.290'], reply: VERDICT })
+  expect(JSON.parse(writes[`${INPUT_DIR}/s1-judge-updates-record.txt`] ?? 'null')).toEqual({ versions: ['2.1.290'], reply: VERDICT })
 })
 
 test('a failed fetch logs and asks Haiku nothing', async ($, on) => {
@@ -1512,7 +1514,7 @@ test('/backfill-updates judges every batch and reports the counts', async ($, on
     replies: [{ isAnswered: true, text: VERDICT }, { isAnswered: true, text: '[]' }],
   })
   const result = await $.command.run(backfill)
-  expect(ran[0]?.argv).toEqual(['/repo/bin/judge-updates', 'prompt'])
+  expect(ran[0]?.argv).toEqual(['/repo/bin/judge-updates', 'prompt', '--input', `${INPUT_DIR}/s1-judge-updates-prompt.txt`])
   expect(asked.length).toBe(2)
   expect(result.text).toBe('Judged 2 of 2 versions, 2 relevant.')
 })
@@ -1566,7 +1568,7 @@ const reviewing = (reviews = [REVIEW], record: Answer = { exitCode: 0, stdout: '
 })
 
 test('session.start reviews ended sessions after it returns', async ($, on) => {
-  const { reviewRan, asked, clock } = world(on, {
+  const { reviewRan, asked, writes, clock } = world(on, {
     files: judged,
     reviews: reviewing(),
     replies: [{ isAnswered: true, text: '{"suggestions":[]}' }],
@@ -1576,11 +1578,12 @@ test('session.start reviews ended sessions after it returns', async ($, on) => {
   await clock.settle()
   expect(reviewRan.map((r) => r.argv)).toEqual([
     ['/repo/bin/review-session', 'prompt'],
-    ['/repo/bin/review-session', 'record'],
+    ['/repo/bin/review-session', 'record', '--input', `${INPUT_DIR}/s1-review-session-record.txt`],
   ])
   expect(reviewRan[0]?.timeoutMs).toBe(60000)
   expect(asked).toEqual([{ model: 'haiku', system: 'REVIEW SYSTEM', prompt: 'USER: fix it', maxTokens: 1024, effort: 'low', timeoutMs: 60000 }])
-  expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', reply: '{"suggestions":[]}' })
+  expect(reviewRan[1]?.stdin).toBe('')
+  expect(JSON.parse(writes[`${INPUT_DIR}/s1-review-session-record.txt`] ?? 'null')).toEqual({ sessionId: 'old', reply: '{"suggestions":[]}' })
 })
 
 test('reviews off: session.start runs no review-session and makes no Haiku call', async ($, on) => {
@@ -1626,21 +1629,21 @@ test('no ended session means no Haiku call', async ($, on) => {
 })
 
 test('a Haiku call with no answer is recorded as an error', async ($, on) => {
-  const { reviewRan, clock } = world(on, {
+  const { reviewRan, writes, clock } = world(on, {
     files: judged,
     reviews: reviewing(),
     replies: [{ isAnswered: false, reason: 'empty-reply' }],
   })
   await $.session.start(start)
   await clock.settle()
-  expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', error: 'Haiku gave no answer (empty-reply)' })
+  expect(JSON.parse(writes[`${INPUT_DIR}/s1-review-session-record.txt`] ?? 'null')).toEqual({ sessionId: 'old', error: 'Haiku gave no answer (empty-reply)' })
 })
 
 test('a refused Haiku call is recorded as an error', async ($, on) => {
-  const { reviewRan, clock } = world(on, { files: judged, reviews: reviewing(), replies: [{ throws: true }] })
+  const { reviewRan, writes, clock } = world(on, { files: judged, reviews: reviewing(), replies: [{ throws: true }] })
   await $.session.start(start)
   await clock.settle()
-  expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', error: 'Haiku call failed (HooksError)' })
+  expect(JSON.parse(writes[`${INPUT_DIR}/s1-review-session-record.txt`] ?? 'null')).toEqual({ sessionId: 'old', error: 'Haiku call failed (HooksError)' })
 })
 
 test('a failed prompt step is logged and asks Haiku nothing', async ($, on) => {
@@ -1673,10 +1676,11 @@ test('a failed record is logged and the next review still runs', async ($, on) =
 // stdin: the word 'text' for plain text, otherwise the sorted top-level keys.
 // test/mod-contract.test.js runs the same entries against the real scripts.
 const stdinShape = (stdin: unknown) => (typeof stdin === 'string' ? 'text' : Object.keys((stdin ?? {}) as object).sort())
-const callKey = (c: { script: string; args: readonly string[]; stdin: unknown }) => JSON.stringify([c.script, c.args, stdinShape(c.stdin)])
+const callKey = (c: { script: string; args: readonly string[]; stdin: unknown; input?: unknown }) =>
+  JSON.stringify([c.script, c.args, stdinShape(c.stdin), ...(c.input === undefined ? [] : [stdinShape(c.input)])])
 
 test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) => {
-  const { ran, reviewRan, cacheRan, indexRan, archiveRan, clock, state } = world(on, {
+  const { ran, reviewRan, cacheRan, indexRan, archiveRan, writes, clock, state } = world(on, {
     contextTokens: 60_000,
     scripts: judging,
     reviews: reviewing(),
@@ -1697,9 +1701,20 @@ test('the mod makes exactly the script calls listed in CONTRACT', async ($, on) 
   await $.session.start({ ...start, isInteractive: false })
   await $.session.measure(measure([FIVE, WEEK]))
   await clock.settle()
-  const made = [...ran, ...reviewRan, ...cacheRan, ...indexRan, ...archiveRan].map((r) =>
-    callKey({ script: r.argv[0]?.split('/').pop() ?? '', args: r.argv.slice(1), stdin: r.stdin }),
-  )
+  // A call with --input has its text in the file the mod wrote, so the file's text gives the input shape.
+  const made = [...ran, ...reviewRan, ...cacheRan, ...indexRan, ...archiveRan].map((r) => {
+    const at = r.argv.indexOf('--input')
+    const text = at < 0 ? undefined : writes[r.argv[at + 1] ?? '']
+    const args = r.argv.slice(1)
+    if (at >= 0) args[at] = '$INPUT'
+    let input: unknown
+    try {
+      input = text === undefined ? undefined : JSON.parse(text)
+    } catch {
+      input = text
+    }
+    return callKey({ script: r.argv[0]?.split('/').pop() ?? '', args, stdin: r.stdin, input })
+  })
   expect([...new Set(made)].sort()).toEqual(contract.map(callKey).sort())
 })
 
@@ -1734,14 +1749,14 @@ test('an in-process /resume starts a review like /clear', async ($, on) => {
 })
 
 test('an api-error reply keeps its status in the recorded error', async ($, on) => {
-  const { reviewRan, clock } = world(on, {
+  const { reviewRan, writes, clock } = world(on, {
     files: judged,
     reviews: reviewing(),
     replies: [{ isAnswered: false, reason: 'api-error', status: 529, error: 'unknown' }],
   })
   await $.session.start(start)
   await clock.settle()
-  expect(reviewRan[1]?.stdin).toEqual({ sessionId: 'old', error: 'Haiku gave no answer (api-error 529)' })
+  expect(JSON.parse(writes[`${INPUT_DIR}/s1-review-session-record.txt`] ?? 'null')).toEqual({ sessionId: 'old', error: 'Haiku gave no answer (api-error 529)' })
 })
 
 test('invalid JSON from review-session is logged without its text', async ($, on) => {

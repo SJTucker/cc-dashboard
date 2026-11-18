@@ -185,7 +185,7 @@ verdict in `~/.claude/cc-dashboard/updates.json`. When it has none, the mod fetc
 `CHANGELOG.md` from the `anthropics/claude-code` repository and asks Haiku, through
 your Claude Code login, whether the entry could change tokens, caching, context,
 compaction, tool output, subagents, or default model or effort. `bin/judge-updates`
-writes the verdict. A relevant version gets a star marker at the first call made on
+writes the verdict. The mod passes the changelog and Haiku's reply to it in a file, named by `--input`, because Claude Code 2.1.327 refuses a plugin's script call whose stdin names a settings file. A relevant version gets a star marker at the first call made on
 it.
 
 A running version whose changelog entry is not out yet, as on release day, is
@@ -703,15 +703,15 @@ lib/scan-memo.js       Keeps the latest aggregate per range and bucket until a t
 lib/session-id.js      Session id and snapshot file name patterns, and the age after which snapshot and activity files are deleted
 lib/sessions.js        Per-session snapshots from the statusline, and today's live sessions
 lib/sqlite.js          Loads node:sqlite without its experimental-feature warning
-lib/stdin.js           readStdin: a whole stream as UTF-8 text, for bin/judge-updates and bin/review-session
+lib/stdin.js           readStdin: a whole stream as UTF-8 text. readInput: the --input file, or stdin. For bin/judge-updates and bin/review-session
 lib/store.js           The transcript database, transcripts.db, through node:sqlite
 lib/transcript-files.js  Finds the transcripts: getProjectsDir (<config dir>/projects) and findJsonlFiles
 lib/turns.js           The longest turns in a range, with their calls and cost
 lib/updates.js         Verdicts on Claude Code releases: parses the changelog, lists versions in transcripts, writes updates.json
-bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json
+bin/judge-updates      Lists Claude Code versions to judge and records Haiku's verdicts in updates.json. Reads the changelog and the reply from stdin or --input <file>
 bin/record-session-end Marks a session snapshot ended, from the mod's session-end JSON on stdin
 bin/record-statusline  Reads statusLine JSON from stdin, writes the rate-limits file and a session snapshot
-bin/review-session     Lists ended sessions to review and records Haiku's suggestions in transcripts.db
+bin/review-session     Lists ended sessions to review and records Haiku's suggestions in transcripts.db. record reads stdin or --input <file>
 skills/orchestrate/    Claude Code skill that runs an approved plan with background workers, each in its own worktree; SETUP.md has the install steps
 skills/orch-grill/     Claude Code skill that grills a design, then writes the spec and the glossary and ADRs it settled
 skills/orch-brainstorm/ Claude Code skill that brainstorms a design with the owner and writes the spec /orch-plan reads

@@ -94,6 +94,10 @@ Checked on 2.1.296 unless marked.
   `on('session.measure', ...)`, even from another file, stops the module loading
   (`registered twice without a matcher`). Add work to the existing handler. With the
   `$` rule, all `$` code for one event lives in `mod/hooks/register.ts`.
+- `$.process.run` is refused when an argv string or the stdin string names a Claude
+  Code settings file (`settings.json` or `settings.local.json` resolving to a Claude
+  Code one). `$.fs.write` is checked only by its target path, so the mod passes free
+  text to a script as a file named by `--input` (2.1.327).
 - `$.fs.write` creates missing parent folders. `$.process.run` accepts `{ cwd }`.
 - `$.session.model()` returns the model id (for example `claude-opus-5-5[1m]`), not
   the display name (2.1.316).

@@ -3,10 +3,13 @@
 
 // Run by the dashboard's Claude Code mod (mod/hooks/register.ts), which fetches
 // the changelog and calls Haiku because only the mod can. Two subcommands:
-//   prompt [--current <version>]  changelog on stdin. With --current, judges
+//   prompt [--current <version>] [--input <file>]
+//                                 changelog on stdin, or in <file>, which is
+//                                 deleted after it is read. With --current, judges
 //                                 only that version. Without it, judges the
 //                                 pending versions in the transcripts.
-//   record                        {"versions","reply"} on stdin; writes verdicts
+//   record [--input <file>]       {"versions","reply"} on stdin or in <file>;
+//                                 writes verdicts
 // Prints one JSON object on success. On failure it prints the reason on stderr
 // and exits 1, and the mod logs it.
 
@@ -23,7 +26,7 @@ const {
 } = require('../lib/updates');
 const { loadConfig } = require('../lib/config-dir');
 const { getProjectsDir } = require('../lib/transcript-files');
-const { readStdin } = require('../lib/stdin');
+const { readInput } = require('../lib/stdin');
 
 const { configDir } = loadConfig();
 const updatesFile = getUpdatesPath(configDir);
@@ -31,7 +34,7 @@ const updatesFile = getUpdatesPath(configDir);
 async function prompt(args) {
   const at = args.indexOf('--current');
   const current = at >= 0 ? args[at + 1] : null;
-  const changelog = parseChangelog(await readStdin());
+  const changelog = parseChangelog(await readInput(args));
   let seen;
   if (current) {
     seen = new Set([current]);
@@ -47,8 +50,8 @@ async function prompt(args) {
   return { batches };
 }
 
-async function record() {
-  const { versions, reply } = JSON.parse(await readStdin());
+async function record(args) {
+  const { versions, reply } = JSON.parse(await readInput(args));
   if (!Array.isArray(versions) || typeof reply !== 'string') throw new Error('expected {"versions": [...], "reply": "..."}');
   const verdicts = parseReply(reply, versions);
   const added = recordVerdicts(verdicts, updatesFile);
@@ -62,8 +65,8 @@ async function record() {
 const [command, ...args] = process.argv.slice(2);
 const work =
   command === 'prompt' ? prompt(args)
-  : command === 'record' ? record()
-  : Promise.reject(new Error('usage: judge-updates prompt [--current <version>] | record'));
+  : command === 'record' ? record(args)
+  : Promise.reject(new Error('usage: judge-updates prompt [--current <version>] [--input <file>] | record [--input <file>]'));
 
 work.then(
   (out) => process.stdout.write(JSON.stringify(out) + '\n'),

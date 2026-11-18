@@ -151,3 +151,14 @@ test('prompt expires open suggestions from reviews finished over 14 days ago, th
   assert.strictEqual(after.prepare("SELECT reason FROM suggestions WHERE session_id = 'old'").get().reason, 'expired');
   after.close();
 });
+
+test('record reads --input and deletes the file', () => {
+  const base = fixture();
+  assert.strictEqual(run(base, ['prompt']).code, 0);
+  const file = path.join(helpers.tmpDir(null, 'review-input'), 'record.txt');
+  fs.writeFileSync(file, JSON.stringify({ sessionId: 'abc', reply: JSON.stringify({ suggestions: [] }) }));
+  assert.deepStrictEqual(run(base, ['record', '--input', file]), {
+    code: 0, out: { status: 'done', suggestions: 0 }, err: '',
+  });
+  assert.strictEqual(fs.existsSync(file), false);
+});

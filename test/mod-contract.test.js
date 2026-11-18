@@ -50,7 +50,14 @@ test('every call in the contract block of mod/hooks/register.test.ts runs agains
   for (const call of CALLS) {
     const label = `${call.script} ${call.args.join(' ')}`.trim();
     const input = typeof call.stdin === 'string' ? call.stdin : JSON.stringify(call.stdin);
-    const res = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', call.script), ...call.args], {
+    // A call with an `input` sample gets it in a file, where the mod writes it, and `$INPUT` in its args names that file.
+    let args = call.args;
+    if (call.input !== undefined) {
+      const file = path.join(base, `input-${call.script}-${call.args[0]}.txt`);
+      fs.writeFileSync(file, typeof call.input === 'string' ? call.input : JSON.stringify(call.input));
+      args = args.map((a) => (a === '$INPUT' ? file : a));
+    }
+    const res = spawnSync(process.execPath, [path.join(__dirname, '..', 'bin', call.script), ...args], {
       input,
       env: { ...process.env, HOME: base, CLAUDE_CONFIG_DIR: base, CHANGES_FILE: path.join(base, 'changes.json'), RTK_DB: path.join(base, 'rtk.db') },
       encoding: 'utf8',

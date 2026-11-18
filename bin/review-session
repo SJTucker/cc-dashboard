@@ -6,8 +6,10 @@
 //   prompt   closes open suggestions older than 14 days, claims ended sessions not reviewed yet and prints
 //            {"reviews": [{"sessionId", "system", "prompt"}]}. While settings.json
 //            has "reviews": false it claims nothing and prints {"reviews": []}.
-//   record   {"sessionId", "reply"} or {"sessionId", "error"} on stdin; writes
-//            the review to transcripts.db
+//   record [--input <file>]
+//            {"sessionId", "reply"} or {"sessionId", "error"} on stdin, or in
+//            <file>, which is deleted after it is read; writes the review to
+//            transcripts.db
 // Prints one JSON object on success. On failure it prints the reason on stderr
 // and exits 1, and the mod logs it.
 
@@ -18,7 +20,7 @@ const { getSessionsDir } = require('../lib/sessions');
 const { openReviewDb, legacyReviewsDir } = require('../lib/review-db');
 const { getStorePath } = require('../lib/db');
 const { readSettings } = require('../lib/settings');
-const { readStdin } = require('../lib/stdin');
+const { readInput } = require('../lib/stdin');
 
 function fail(message) {
   process.stderr.write(`review-session: ${message}\n`);
@@ -47,7 +49,7 @@ if (command !== 'prompt' && command !== 'record') {
             ? pendingReviews({ db, sessionsDir: getSessionsDir(configDir), projects: getProjectsDir(configDir), configDir })
             : []))
           .then((reviews) => ({ reviews }))
-        : readStdin().then((input) => recordReview(db, JSON.parse(input)));
+        : readInput(process.argv.slice(3)).then((input) => recordReview(db, JSON.parse(input)));
     work.then(
       (out) => process.stdout.write(JSON.stringify(out) + '\n'),
       (err) => fail(err.message),

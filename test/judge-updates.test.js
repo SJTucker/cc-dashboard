@@ -66,3 +66,22 @@ test('record exits 1 on stdin that is not JSON, and an unknown subcommand exits 
   assert.match(bad.err, /^judge-updates: /);
   assert.strictEqual(run(fixture(), ['judge'], '').code, 1);
 });
+
+test('prompt and record read --input files and delete them', () => {
+  const versions = ['2.1.290'];
+  const base = fixture(versions);
+  const dir = helpers.tmpDir(null, 'judge-input');
+  const changelogFile = path.join(dir, 'changelog.txt');
+  fs.writeFileSync(changelogFile, changelog(versions));
+  const prompted = run(base, ['prompt', '--current', '2.1.290', '--input', changelogFile], '');
+  assert.deepStrictEqual(prompted.out.batches.map((b) => b.versions), [['2.1.290']]);
+  assert.strictEqual(fs.existsSync(changelogFile), false);
+
+  const recordFile = path.join(dir, 'record.txt');
+  const reply = JSON.stringify([{ version: '2.1.290', relevant: true, summary: 'Cache shared' }]);
+  fs.writeFileSync(recordFile, JSON.stringify({ versions, reply }));
+  const { code, out } = run(base, ['record', '--input', recordFile], '');
+  assert.strictEqual(code, 0);
+  assert.deepStrictEqual(out, { recorded: 1, relevant: 1, unjudged: 0 });
+  assert.strictEqual(fs.existsSync(recordFile), false);
+});
