@@ -1,5 +1,5 @@
 import { test, expect } from 'claude-code/testing'
-import { NO_LEVELS, bandText, dismissLevels, levelOf, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, resetText, sameLevels, shownWindows } from './limits'
+import { NO_LEVELS, bandText, dismissLevels, levelOf, liveReadings, maxLevels, newerReadings, parseLevels, parseRateLimitsFile, withAccountLevels, claimsLegacy, UNKNOWN_ACCOUNT, parseUsageCache, readingsOf, resetLevels, resetText, sameLevels, shownWindows } from './limits'
 
 const NOW = Date.parse('2026-10-12T12:00:00.000Z')
 const IN_2H10 = '2026-10-12T14:10:00.000Z'
@@ -186,4 +186,79 @@ test('resetLevels and maxLevels keep paceDismissed', async () => {
   expect(resetLevels([{ kind: 'five_hour', percent: 10 }], levels)).toEqual({ five_hour: 0, seven_day: 0, paceDismissed: 5 })
   expect(maxLevels(levels, { five_hour: 0, seven_day: 75 })).toEqual({ five_hour: 90, seven_day: 75, paceDismissed: 5 })
   expect(maxLevels({ five_hour: 0, seven_day: 0, paceDismissed: 3 }, levels).paceDismissed).toBe(5)
+})
+
+test('parseLevels reads the entry of the given account', async () => {
+  const text = JSON.stringify({ accounts: { A: { five_hour: 75, seven_day: 0 }, B: { five_hour: 90, seven_day: 75, paceDismissed: 7 } } })
+  expect(parseLevels(text, 'A')).toEqual({ five_hour: 75, seven_day: 0 })
+  expect(parseLevels(text, 'B')).toEqual({ five_hour: 90, seven_day: 75, paceDismissed: 7 })
+  expect(parseLevels(text, 'C')).toEqual(NO_LEVELS)
+  expect(parseLevels(text, null)).toEqual(NO_LEVELS)
+})
+
+test('parseLevels reads the unknown entry for a null account', async () => {
+  const text = JSON.stringify({ accounts: { [UNKNOWN_ACCOUNT]: { five_hour: 90, seven_day: 0 } } })
+  expect(parseLevels(text, null)).toEqual({ five_hour: 90, seven_day: 0 })
+  expect(parseLevels(text, 'A')).toEqual(NO_LEVELS)
+})
+
+test('parseLevels reads an old flat file as the entry of any account', async () => {
+  const flat = '{"five_hour":75,"seven_day":90,"paceDismissed":5}'
+  expect(parseLevels(flat, 'A')).toEqual({ five_hour: 75, seven_day: 90, paceDismissed: 5 })
+  expect(parseLevels(flat, 'B')).toEqual({ five_hour: 75, seven_day: 90, paceDismissed: 5 })
+  expect(parseLevels(flat, null)).toEqual({ five_hour: 75, seven_day: 90, paceDismissed: 5 })
+})
+
+test('withAccountLevels replaces one entry and keeps the others', async () => {
+  const text = JSON.stringify({ accounts: { A: { five_hour: 75, seven_day: 0, paceDismissed: 5 }, B: { five_hour: 0, seven_day: 90 } } })
+  const out = JSON.parse(withAccountLevels(text, 'B', { five_hour: 90, seven_day: 90 }))
+  expect(out).toEqual({ accounts: { A: { five_hour: 75, seven_day: 0, paceDismissed: 5 }, B: { five_hour: 90, seven_day: 90 } } })
+  const added = JSON.parse(withAccountLevels(text, 'C', { five_hour: 75, seven_day: 0, paceDismissed: 9 }))
+  expect(added.accounts.A).toEqual({ five_hour: 75, seven_day: 0, paceDismissed: 5 })
+  expect(added.accounts.C).toEqual({ five_hour: 75, seven_day: 0, paceDismissed: 9 })
+})
+
+test('withAccountLevels writes the unknown key and converts an old flat file', async () => {
+  expect(JSON.parse(withAccountLevels(undefined, null, { five_hour: 75, seven_day: 0 }))).toEqual({ accounts: { [UNKNOWN_ACCOUNT]: { five_hour: 75, seven_day: 0 } } })
+  expect(JSON.parse(withAccountLevels('{"five_hour":75,"seven_day":0}', 'A', { five_hour: 90, seven_day: 0 }))).toEqual({ accounts: { A: { five_hour: 90, seven_day: 0 } } })
+  expect(JSON.parse(withAccountLevels('not json', 'A', NO_LEVELS))).toEqual({ accounts: { A: NO_LEVELS } })
+})
+
+test('withAccountLevels keeps the flat levels of an old file as the legacy entry', async () => {
+  const out = JSON.parse(withAccountLevels('{"five_hour":0,"seven_day":75,"paceDismissed":5}', null, { five_hour: 75, seven_day: 0 }))
+  expect(out).toEqual({ accounts: { legacy: { five_hour: 0, seven_day: 75, paceDismissed: 5 }, [UNKNOWN_ACCOUNT]: { five_hour: 75, seven_day: 0 } } })
+  const again = JSON.parse(withAccountLevels(JSON.stringify(out), null, NO_LEVELS))
+  expect(again.accounts.legacy).toEqual({ five_hour: 0, seven_day: 75, paceDismissed: 5 })
+})
+
+test('an account without its own entry reads the legacy entry', async () => {
+  const text = JSON.stringify({ accounts: { legacy: { five_hour: 0, seven_day: 75 }, A: { five_hour: 90, seven_day: 0 } } })
+  expect(parseLevels(text, 'B')).toEqual({ five_hour: 0, seven_day: 75 })
+  expect(parseLevels(text, null)).toEqual({ five_hour: 0, seven_day: 75 })
+  expect(parseLevels(text, 'A')).toEqual({ five_hour: 90, seven_day: 0 })
+})
+
+test('a known account with no entry claims the legacy entry on its write', async () => {
+  const text = JSON.stringify({ accounts: { legacy: { five_hour: 0, seven_day: 75 }, other: { five_hour: 90, seven_day: 0 } } })
+  expect(claimsLegacy(text, 'A')).toBe(true)
+  expect(claimsLegacy(text, 'other')).toBe(false)
+  expect(claimsLegacy(text, null)).toBe(false)
+  expect(claimsLegacy('{"five_hour":0,"seven_day":75}', 'A')).toBe(false)
+  const out = JSON.parse(withAccountLevels(text, 'A', { five_hour: 0, seven_day: 75 }))
+  expect(out).toEqual({ accounts: { A: { five_hour: 0, seven_day: 75 }, other: { five_hour: 90, seven_day: 0 } } })
+  expect(parseLevels(JSON.stringify(out), 'B')).toEqual(NO_LEVELS)
+})
+
+test('a write to the unknown entry keeps the legacy entry', async () => {
+  const text = JSON.stringify({ accounts: { legacy: { five_hour: 0, seven_day: 75 } } })
+  expect(JSON.parse(withAccountLevels(text, null, { five_hour: 75, seven_day: 0 })).accounts.legacy).toEqual({ five_hour: 0, seven_day: 75 })
+})
+
+test('a known account that converts a flat file claims it, and the unknown account keeps legacy', async () => {
+  const flat = '{"five_hour":75,"seven_day":0}'
+  expect(claimsLegacy(flat, 'A')).toBe(false)
+  const byA = JSON.parse(withAccountLevels(flat, 'A', { five_hour: 90, seven_day: 0 }))
+  expect(byA).toEqual({ accounts: { A: { five_hour: 90, seven_day: 0 } } })
+  expect(parseLevels(JSON.stringify(byA), 'B')).toEqual(NO_LEVELS)
+  expect(JSON.parse(withAccountLevels(flat, null, NO_LEVELS)).accounts.legacy).toEqual({ five_hour: 75, seven_day: 0 })
 })

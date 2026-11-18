@@ -141,16 +141,27 @@ export function liveReadings(readings: readonly Reading[], nowMs: number): Readi
   return readings.filter((r) => r.resetsAt === undefined || !(Date.parse(r.resetsAt) <= nowMs))
 }
 
-// limit-warnings.json as Levels. A missing or unreadable file, or a value other than
-// 75 or 90, counts as 0.
-export function parseLevels(text: string | undefined): Levels {
+// Key of the entry for a login with no oauthAccount.accountUuid in .claude.json, and for
+// a claude -p session, which reads no account.
+export const UNKNOWN_ACCOUNT = 'unknown'
+
+// Key of the entry that keeps the levels of an old flat file when the first write after the
+// update comes from the unknown account. An account with no entry of its own reads it, and
+// the first known account to write claims it and removes it.
+export const LEGACY_ACCOUNT = 'legacy'
+
+function parseRecord(text: string | undefined): Record<string, unknown> {
   let data: unknown = null
   try {
     if (text !== undefined) data = JSON.parse(text)
   } catch {
     data = null
   }
-  const record = data !== null && typeof data === 'object' ? (data as Record<string, unknown>) : {}
+  return data !== null && typeof data === 'object' && !Array.isArray(data) ? (data as Record<string, unknown>) : {}
+}
+
+function levelsOf(entry: unknown): Levels {
+  const record = entry !== null && typeof entry === 'object' ? (entry as Record<string, unknown>) : {}
   const levels = { ...NO_LEVELS }
   for (const kind of KINDS) {
     const value = record[kind]
@@ -159,6 +170,47 @@ export function parseLevels(text: string | undefined): Levels {
   const paced = record.paceDismissed
   if (typeof paced === 'number' && Number.isFinite(paced)) levels.paceDismissed = paced
   return levels
+}
+
+function accountsOf(record: Record<string, unknown>): Record<string, unknown> | null {
+  const accounts = record.accounts
+  return accounts !== null && typeof accounts === 'object' && !Array.isArray(accounts) ? (accounts as Record<string, unknown>) : null
+}
+
+// One account's Levels from limit-warnings.json, { accounts: { <accountUuid>: Levels } }.
+// A null account reads the UNKNOWN_ACCOUNT entry. An account with no entry reads the
+// LEGACY_ACCOUNT entry until a known account claims it (see claimsLegacy), after which
+// the others read 0. An old flat file ({ five_hour, seven_day,
+// paceDismissed } at the top) counts as the entry of whichever account asks, so a dismissal
+// made before the file kept accounts stays hidden. A missing or unreadable file, or a value
+// other than 75 or 90, counts as 0.
+export function parseLevels(text: string | undefined, account: string | null = null): Levels {
+  const record = parseRecord(text)
+  const accounts = accountsOf(record)
+  if (!accounts) return levelsOf(record)
+  return levelsOf(accounts[account ?? UNKNOWN_ACCOUNT] ?? accounts[LEGACY_ACCOUNT])
+}
+
+// True when a known account (a string id) has no entry of its own and the file holds a
+// legacy entry: its next write claims the legacy levels. The unknown account never claims.
+export function claimsLegacy(text: string | undefined, account: string | null): boolean {
+  const accounts = accountsOf(parseRecord(text))
+  return account !== null && accounts !== null && LEGACY_ACCOUNT in accounts && !(account in accounts)
+}
+
+// The text of limit-warnings.json with one account's entry set to levels. The other
+// accounts' entries stay as they are. An old flat file becomes the new shape holding this
+// entry. Only the unknown account's write also keeps the flat levels as the LEGACY_ACCOUNT
+// entry, because a known account's levels started from the flat ones and it owns them. A known
+// account with no entry claims the LEGACY_ACCOUNT entry: its levels (which started from it) replace it. Unreadable
+// text is replaced.
+export function withAccountLevels(text: string | undefined, account: string | null, levels: Levels): string {
+  const record = parseRecord(text)
+  const flat = KINDS.some((kind) => kind in record) || 'paceDismissed' in record
+  const kept = accountsOf(record) ?? (flat && account === null ? { [LEGACY_ACCOUNT]: levelsOf(record) } : {})
+  const { [LEGACY_ACCOUNT]: legacy, ...rest } = kept
+  const claimed = claimsLegacy(text, account)
+  return JSON.stringify({ accounts: { ...(legacy !== undefined && !claimed ? { [LEGACY_ACCOUNT]: legacy } : {}), ...rest, [account ?? UNKNOWN_ACCOUNT]: levels } })
 }
 
 // A window that reads below the first level has reset, so its dismissal no longer applies.

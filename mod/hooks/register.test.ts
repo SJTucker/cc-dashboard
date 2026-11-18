@@ -3135,7 +3135,7 @@ test('Dismiss hides the pace line until the window resets', async ($, on) => {
   await $.session.measure(measure([at(23.5), WEEK]))
   expect(await paceLine(ui)).toBeDefined()
   await ui.press({ key: 'dismiss-limits' })
-  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 0, seven_day: 0, paceDismissed: RESETS_S })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ accounts: { unknown: { five_hour: 0, seven_day: 0, paceDismissed: RESETS_S } } })
   expect(await paceLine(ui)).toBeUndefined()
   await clock.advance(60_000)
   expect(await paceLine(ui)).toBeUndefined()
@@ -3149,7 +3149,7 @@ test('a measure that changes levels keeps paceDismissed', async ($, on) => {
   const { writes, clock } = world(on, { files: { [LIMITS]: `{"five_hour":90,"seven_day":0,"paceDismissed":${RESETS_S}}` } })
   await clock.advance(10 * 60_000)
   await $.session.measure(measure([at(12), WEEK]))
-  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 0, seven_day: 0, paceDismissed: RESETS_S })
+  expect(JSON.parse(writes[LIMITS]).accounts.unknown).toEqual({ five_hour: 0, seven_day: 0, paceDismissed: RESETS_S })
 })
 
 test('recheck clears the pace line with no new measure', async ($, on) => {
@@ -3203,7 +3203,7 @@ test('Dismiss records the shown levels in limit-warnings.json and hides the band
   await $.session.measure(measure([at(81), at(77, 'seven_day')]))
   expect(await bandLine(ui)).toBe('⚠ Nearing your plan limit · Session 81% (resets in 2h 10m) · Week 77% (resets in 2h 10m)')
   await ui.press({ key: 'dismiss-limits' })
-  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 75 })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ accounts: { unknown: { five_hour: 75, seven_day: 75 } } })
   expect(await bandLine(ui)).toBeUndefined()
   await ui.unmount()
 })
@@ -3222,7 +3222,7 @@ test('a Dismiss that lands while measureBand reads the levels file stays dismiss
   await measured
   await clock.settle()
   expect(await bandLine(ui)).toBeUndefined()
-  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 0 })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ accounts: { unknown: { five_hour: 75, seven_day: 0 } } })
   await ui.unmount()
 })
 
@@ -3239,7 +3239,7 @@ test('after a dismissal at 75 the band stays hidden at 80% and comes back at 90%
 test('a window below 75% sets its dismissed level back to 0', async ($, on) => {
   const { writes } = world(on, { files: { [LIMITS]: '{"five_hour":90,"seven_day":75}' } })
   await $.session.measure(measure([at(12), at(80, 'seven_day')]))
-  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 0, seven_day: 75 })
+  expect(JSON.parse(writes[LIMITS]).accounts.unknown).toEqual({ five_hour: 0, seven_day: 75 })
 })
 
 test('a measure that changes no level writes no file', async ($, on) => {
@@ -3315,7 +3315,7 @@ test('a Dismiss that lands while recheckBand reads the levels file stays dismiss
   await advanced
   await clock.advance(300)
   expect(await bandLine(ui)).toBeUndefined()
-  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 0 })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ accounts: { unknown: { five_hour: 75, seven_day: 0 } } })
   await ui.unmount()
 })
 
@@ -3532,7 +3532,7 @@ test('a failed write on Dismiss still hides the band here and logs once', async 
   expect(await bandLine(ui)).toBeUndefined()
   state.writeFails = false
   await $.session.measure(measure([at(81), WEEK]))
-  expect(JSON.parse(writes[LIMITS])).toEqual({ five_hour: 75, seven_day: 0 })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ accounts: { unknown: { five_hour: 75, seven_day: 0 } } })
   await ui.unmount()
 })
 
@@ -4746,5 +4746,162 @@ test('limitBand turned off clears a showing pace line on the next recheck', asyn
   state.files[DASH_SETTINGS] = '{"limitBand":false}'
   await clock.advance(60_000)
   expect(await paceLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+// limit-warnings.json keeps one entry per account.
+test('a Dismiss on account A leaves the same level on account B showing', async ($, on) => {
+  const { state, writes } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(77), WEEK]))
+  await ui.press({ key: 'dismiss-limits' })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ accounts: { A: { five_hour: 75, seven_day: 0 } } })
+  expect(await bandLine(ui)).toBeUndefined()
+  state.files[CLAUDE_JSON] = loginOf('B')
+  await $.session.measure(measure([at(77), WEEK]))
+  expect(await bandLine(ui)).toContain('Session 77%')
+  await ui.unmount()
+})
+
+test('switching back to account A keeps its Dismiss', async ($, on) => {
+  const { state } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(77), WEEK]))
+  await ui.press({ key: 'dismiss-limits' })
+  state.files[CLAUDE_JSON] = loginOf('B')
+  await $.session.measure(measure([at(77), WEEK]))
+  expect(await bandLine(ui)).toContain('Session 77%')
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(77), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('an old flat limit-warnings.json still hides the dismissed level of the logged-in account', async ($, on) => {
+  const { state, writes } = world(on, { files: { [LIMITS]: '{"five_hour":75,"seven_day":0}' } })
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(77), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  // A rise to 90 shows the band, and its Dismiss converts the file to the new shape.
+  await $.session.measure(measure([at(91), WEEK]))
+  expect(await bandLine(ui)).toContain('Session 91%')
+  await ui.press({ key: 'dismiss-limits' })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ accounts: { A: { five_hour: 90, seven_day: 0 } } })
+  await ui.unmount()
+})
+
+test("a Dismiss on account B keeps account A's paceDismissed and levels", async ($, on) => {
+  const stored = { accounts: { A: { five_hour: 90, seven_day: 0, paceDismissed: RESETS_S } } }
+  const { state, writes } = world(on, { files: { [LIMITS]: JSON.stringify(stored) } })
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('B')
+  await $.session.measure(measure([at(77), WEEK]))
+  await ui.press({ key: 'dismiss-limits' })
+  expect(JSON.parse(writes[LIMITS])).toEqual({ accounts: { ...stored.accounts, B: { five_hour: 75, seven_day: 0 } } })
+  await ui.unmount()
+})
+
+test('an unparseable .claude.json keeps the dismissal of the account the band holds', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(77), WEEK]))
+  await ui.press({ key: 'dismiss-limits' })
+  state.files[CLAUDE_JSON] = '{not json'
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  await $.session.measure(measure([at(77), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test('a .claude.json with no oauthAccount keeps the dismissal of the account the band holds', async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(77), WEEK]))
+  await ui.press({ key: 'dismiss-limits' })
+  state.files[CLAUDE_JSON] = '{}'
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toBeUndefined()
+  await $.session.measure(measure([at(77), WEEK]))
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test("a failed Dismiss write on account A does not hide account B's warning", async ($, on) => {
+  const { state } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(77), WEEK]))
+  state.writeFails = true
+  await ui.press({ key: 'dismiss-limits' })
+  expect(await bandLine(ui)).toBeUndefined()
+  state.writeFails = false
+  state.files[CLAUDE_JSON] = loginOf('B')
+  await $.session.measure(measure([at(77), WEEK]))
+  expect(await bandLine(ui)).toContain('Session 77%')
+  await ui.unmount()
+})
+
+test("a recheck after a failed Dismiss write on A and a switch to B shows B's warning", async ($, on) => {
+  const { state, clock } = world(on)
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(77), WEEK]))
+  state.writeFails = true
+  await ui.press({ key: 'dismiss-limits' })
+  state.writeFails = false
+  state.files[CLAUDE_JSON] = loginOf('B')
+  state.files[RATE_LIMITS] = JSON.stringify({ fetchedAtMs: 90_000, accountUuid: 'B', rate_limits: { five_hour: { used_percentage: 77, resets_at: RESETS_S } } })
+  await clock.advance(60_000)
+  expect(await bandLine(ui)).toContain('Session 77%')
+  await ui.unmount()
+})
+
+test("a write to the unknown entry keeps an old flat file's levels for the account that logs in", async ($, on) => {
+  const { state, writes } = world(on, { files: { [LIMITS]: '{"five_hour":0,"seven_day":75}' } })
+  const ui = await $.ui.mount(BAND)
+  // No account id: the measure's reading at 77% Session writes the unknown entry.
+  await $.session.measure(measure([at(77), WEEK]))
+  await ui.press({ key: 'dismiss-limits' })
+  expect(JSON.parse(writes[LIMITS]).accounts.legacy).toEqual({ five_hour: 0, seven_day: 75 })
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(10), at(77, 'seven_day')]))
+  expect(await bandLine(ui)).toBeUndefined()
+  await ui.unmount()
+})
+
+test("the first measure of account A claims a legacy entry, and account B's warning then shows", async ($, on) => {
+  const { state, writes } = world(on, { files: { [LIMITS]: JSON.stringify({ accounts: { legacy: { five_hour: 0, seven_day: 75 } } }) } })
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(10), at(77, 'seven_day')]))
+  expect(await bandLine(ui)).toBeUndefined()
+  expect(JSON.parse(writes[LIMITS])).toEqual({ accounts: { A: { five_hour: 0, seven_day: 75 } } })
+  state.files[CLAUDE_JSON] = loginOf('B')
+  await $.session.measure(measure([at(10), at(77, 'seven_day')]))
+  expect(await bandLine(ui)).toContain('Week 77%')
+  await ui.unmount()
+})
+
+test('a measure with no account id leaves the legacy entry unclaimed', async ($, on) => {
+  const { writes } = world(on, { files: { [LIMITS]: JSON.stringify({ accounts: { legacy: { five_hour: 0, seven_day: 75 } } }) } })
+  await $.session.measure(measure([at(10), at(77, 'seven_day')]))
+  expect(writes[LIMITS]).toBeUndefined()
+})
+
+test("account A's Dismiss converting a flat file leaves account B's 77% warning showing", async ($, on) => {
+  const { state } = world(on, { files: { [LIMITS]: '{"five_hour":75,"seven_day":0}' } })
+  const ui = await $.ui.mount(BAND)
+  state.files[CLAUDE_JSON] = loginOf('A')
+  await $.session.measure(measure([at(91), WEEK]))
+  await ui.press({ key: 'dismiss-limits' })
+  state.files[CLAUDE_JSON] = loginOf('B')
+  await $.session.measure(measure([at(77), WEEK]))
+  expect(await bandLine(ui)).toContain('Session 77%')
   await ui.unmount()
 })

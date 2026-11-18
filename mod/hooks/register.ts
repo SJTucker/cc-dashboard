@@ -17,7 +17,7 @@ import { relayOnce } from './steer'
 import { debugLine, debugOn, keepLast } from './debug'
 import { claimedWorktree, guardReason, outsideWrite, parseClaim } from './guard'
 import type { Claim } from './guard'
-import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, loginAccount, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows } from './limits'
+import { NO_LEVELS, bandText, dismissLevels, liveReadings, maxLevels, newerReadings, loginAccount, parseLevels, parseRateLimitsFile, parseUsageCache, readingsOf, resetLevels, sameLevels, shownWindows, withAccountLevels, claimsLegacy } from './limits'
 import { computePace, paceText, parsePaceCache, parseSessionProject } from './pace'
 import type { Pace } from './pace'
 
@@ -55,7 +55,7 @@ import type { Pace } from './pace'
 //   headless-usage/<session id>.json  each model request of a session with no transcript (steps.ts). Read by lib/headless-usage.js.
 //   changes/<session id>.json    the setup changes checkSetup found. Read by collectMarkers in lib/changes.js.
 //   setup/<name>.json            the stored copy of each watched setup file. Read back by checkSetup.
-//   limit-warnings.json          the dismissed plan limit levels. Read by every running session's mod.
+//   limit-warnings.json          the dismissed plan limit levels, one entry per account id (accounts.<accountUuid>, or accounts.unknown). Read by every running session's mod.
 //   claims/<agent id>.json       the worktree, run folder and task file an orchestrate worker claimed. Read back by the mod after a reload, so the worktree guard keeps working.
 //   mod-debug/<session id>.jsonl  the mod's debug log, written only when CC_DASHBOARD_DEBUG=1. Nothing reads it.
 //   input/<session id>-<script>-<subcommand>.txt  the changelog, or the model's reply, for bin/judge-updates and bin/review-session (--input). The script deletes it after reading.
@@ -1726,8 +1726,11 @@ async function checkSetup($: EngineInterface) {
 // fetchedAtMs wins: this session's session.measure, <cfg>/rate-limits.json (every
 // session's measure, through bin/record-statusline), and the /usage cache in .claude.json.
 // An idle session gets no measure, so the recheck timer reads the two files once a
-// minute. Dismiss writes the levels to limit-warnings.json, which every running session
-// reads on its next measure and on the recheck timer.
+// minute. Dismiss writes the logged-in account's levels to its entry in limit-warnings.json,
+// which every running session reads on its next measure and on the recheck timer. The other
+// accounts' entries stay as they were, so a Dismiss on account A never hides account B's
+// warning. A flat file from before the entries existed counts as the logged-in account's. Its levels
+// stay under a legacy entry until the first known account writes, which claims them.
 //
 // Account check: rate-limits.json and the /usage cache carry the account that wrote them,
 // and the band keeps the account its held readings came from (from .claude.json at the
@@ -1747,7 +1750,7 @@ async function checkSetup($: EngineInterface) {
 // fiveHourRecent list in rate-limits.json (pace.ts), read after the measure's own
 // record-statusline run and on every recheck. A busy session other than this one is named
 // by the project in its snapshot, sessions/<id>.json. Dismiss covers the pace line by
-// storing the window's resets_at as paceDismissed in limit-warnings.json. With the pace
+// storing the window's resets_at as paceDismissed in the account's entry of limit-warnings.json. With the pace
 // setting off, measureBand and recheckBand skip the pace reads: the fiveHourRecent list in
 // rate-limits.json and the busy session's snapshot. measureBand then reads only .claude.json,
 // for the account. recheckBand still reads rate-limits.json and .claude.json for the
@@ -1793,8 +1796,9 @@ async function limitsPath($: EngineInterface) {
   return dir ? limitsFile(dir) : null
 }
 
-async function readLevels($: EngineInterface, path: string) {
-  return parseLevels(await $.fs.read(path).then(String, () => undefined))
+// The text of limit-warnings.json, undefined when it is missing or unreadable.
+function readLimitsText($: EngineInterface, path: string) {
+  return $.fs.read(path).then(String, () => undefined)
 }
 
 // Stores this reading and resets a window that has dropped below the first level. The
@@ -1814,8 +1818,10 @@ async function measureBand($: EngineInterface, limits: readonly SessionRateLimit
   const interactive = !(await nonInteractive($))
   const claudePaths = interactive ? await configPaths($) : null
   const claudeJsonText = claudePaths ? await $.fs.read(claudePaths.claudeJson).then(String, () => undefined) : undefined
-  // The account these readings belong to. Null when .claude.json names none.
-  const account = loginAccount(claudeJsonText) ?? null
+  // The account these readings belong to. A .claude.json that names none (a /logout, or
+  // unreadable text) leaves the account the band already holds, as recheckBand does.
+  const held = await read($, band)
+  const account = loginAccount(claudeJsonText) ?? held.account ?? null
   const paths = settings.pace ? claudePaths : null
   const paced = paths
     ? await readPace(
@@ -1825,19 +1831,23 @@ async function measureBand($: EngineInterface, limits: readonly SessionRateLimit
       now,
     )
     : NO_PACE
-  const stored = path ? await readLevels($, path) : NO_LEVELS
+  const storedText = path ? await readLimitsText($, path) : undefined
+  const stored = parseLevels(storedText, account)
   // The levels come from the band state inside update. A Dismiss that ran after the file
   // read keeps its levels, and its own write holds them.
   let levels = NO_LEVELS
   await update($, band, (b) => {
-    levels = bandDismissals !== seq ? resetLevels(readings, b.levels) : resetLevels(readings, b.unsaved ? maxLevels(stored, b.levels) : stored)
-    return { readings, levels, unsaved: b.unsaved, fetchedAtMs: now, account, ...paced }
+    // Levels not yet saved belong to the account that was dismissed. After a switch they are dropped.
+    const switched = typeof b.account === 'string' && b.account !== account
+    const unsaved = b.unsaved && !switched
+    levels = bandDismissals !== seq ? resetLevels(readings, switched ? stored : b.levels) : resetLevels(readings, unsaved ? maxLevels(stored, b.levels) : stored)
+    return { readings, levels, unsaved, fetchedAtMs: now, account, ...paced }
   })
   if (path) {
     // After a Dismiss the Dismiss owns the write and the unsaved flag. A failed Dismiss
     // write stays unsaved.
     if (bandDismissals === seq) {
-      if (!sameLevels(levels, stored)) await $.fs.write(path, JSON.stringify(levels))
+      if (!sameLevels(levels, stored) || claimsLegacy(storedText, account)) await $.fs.write(path, withAccountLevels(storedText, account, levels))
       // A Dismiss that started during the write owns the unsaved flag.
       if (bandDismissals === seq) await update($, band, (b) => ({ ...b, unsaved: false }))
     }
@@ -1875,11 +1885,12 @@ async function recheckBand($: EngineInterface) {
   if (!settings.limitBand) return hideBand($)
   const paths = await configPaths($)
   const seq = bandDismissals
-  const file = paths ? await readLevels($, limitsFile(paths.dir)) : undefined
+  const fileText = paths ? await readLimitsText($, limitsFile(paths.dir)) : undefined
   const rateText = paths ? await $.fs.read(`${paths.dir}/rate-limits.json`).then(String, () => undefined) : undefined
   const cacheText = paths ? await $.fs.read(paths.claudeJson).then(String, () => undefined) : undefined
   const now = await $.clock.now()
   const paced = paths && settings.pace ? await readPace($, paths.dir, rateText, cacheText, now) : NO_PACE
+  // The levels of the logged-in account. No id in .claude.json reads the unknown entry.
   let shown = false
   await update($, band, (b) => {
     // Band state saved before fetchedAtMs existed can survive a reload.
@@ -1890,11 +1901,15 @@ async function recheckBand($: EngineInterface) {
     const switched = login !== undefined && typeof b.account === 'string' && b.account !== login
     const held = switched ? [] : b.readings
     const newer = newerReadings(held, switched ? 0 : atMs, [parseRateLimitsFile(rateText, cacheText), parseUsageCache(cacheText)])
+    const account = login ?? b.account ?? null
+    const file = paths ? parseLevels(fileText, account) : undefined
+    // Levels not yet saved belong to the account that was dismissed. After a switch they are dropped.
+    const unsaved = b.unsaved && !switched
     const next = {
-      account: switched ? login : b.account ?? null,
+      account,
       readings: liveReadings(newer ? newer.readings : held, now),
-      levels: file && bandDismissals === seq ? (b.unsaved ? maxLevels(file, b.levels) : file) : b.levels,
-      unsaved: b.unsaved,
+      levels: file && bandDismissals === seq ? (unsaved ? maxLevels(file, b.levels) : file) : switched ? NO_LEVELS : b.levels,
+      unsaved,
       fetchedAtMs: newer ? newer.fetchedAtMs : switched ? 0 : atMs,
       ...paced,
     }
@@ -1914,13 +1929,15 @@ async function dismissBand($: EngineInterface) {
   try {
     const current = await read($, band)
     const path = await limitsPath($)
-    const stored = path ? await readLevels($, path) : NO_LEVELS
+    const account = current.account ?? null
+    const storedText = path ? await readLimitsText($, path) : undefined
+    const stored = parseLevels(storedText, account)
     const base = current.unsaved ? maxLevels(stored, current.levels) : stored
     const levels = dismissLevels(shownWindows(current.readings, current.levels), base)
     if (paceShown(current)) levels.paceDismissed = current.paceResetsAt!
     await update($, band, (b) => ({ ...b, levels, unsaved: true }))
     if (!path) return
-    await $.fs.write(path, JSON.stringify(levels))
+    await $.fs.write(path, withAccountLevels(storedText, account, levels))
     await update($, band, (b) => ({ ...b, unsaved: false }))
   } finally {
     bandDismissals++
