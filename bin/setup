@@ -32,6 +32,7 @@ brainstorm_link="$cfg/skills/orch-brainstorm"
 diagnose_link="$cfg/skills/diagnosing-orchestrate"
 worker_link="$cfg/agents/orch-worker.md"
 reviewer_link="$cfg/agents/orch-reviewer.md"
+final_reviewer_link="$cfg/agents/orch-final-reviewer.md"
 
 # Each step line prints as it happens and is also kept for the summary at the end.
 results=
@@ -128,6 +129,8 @@ check_link "$worker_link" "$agents/orch-worker.md"
 worker_link_exists=$exists
 check_link "$reviewer_link" "$agents/orch-reviewer.md"
 reviewer_link_exists=$exists
+check_link "$final_reviewer_link" "$agents/orch-final-reviewer.md"
+final_reviewer_link_exists=$exists
 
 # Steps
 
@@ -142,6 +145,7 @@ make_link "$brainstorm_link" "$brainstorm_skill" "$brainstorm_link_exists"
 make_link "$diagnose_link" "$diagnose_skill" "$diagnose_link_exists"
 make_link "$worker_link" "$agents/orch-worker.md" "$worker_link_exists"
 make_link "$reviewer_link" "$agents/orch-reviewer.md" "$reviewer_link_exists"
+make_link "$final_reviewer_link" "$agents/orch-final-reviewer.md" "$final_reviewer_link_exists"
 
 status=0
 if claude plugin validate "$mod"; then

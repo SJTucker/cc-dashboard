@@ -361,7 +361,7 @@ For each ready task, in this order:
    `model: "sonnet"`, `run_in_background: true`, `description: "orchestrate worker"`
    (the same for every worker), and the fixed message as the prompt.
 
-   If the Agent tool refuses `orch-worker` or `orch-reviewer` as an unknown type,
+   If the Agent tool refuses `orch-worker`, `orch-reviewer` or `orch-final-reviewer` as an unknown type,
    dispatch nothing more, mark the task waiting, and ask the user to run `bin/setup`
    from the clone. Never fall back to the default agent type, because the cache prefix and
    the tool list both change.
@@ -675,9 +675,11 @@ The user reviews these across sessions before redesigning the image.
    `Leftover fix: `. These fixes go first so that the final review reads the branch
    with them in it.
 2. When step 1's fix tasks have all merged, or step 1 was skipped, start one
-   subagent with `subagent_type: "general-purpose"`, `model: "fable"`,
-   `run_in_background: true` and `description: "orchestrate final review"`. It needs
-   the Agent tool, which `orch-reviewer` does not have. Its prompt: run the
+   subagent with `subagent_type: "orch-final-reviewer"`, `model: "fable"`,
+   `run_in_background: true` and `description: "orchestrate final review"`. It is not
+   `orch-reviewer`, because pr-review starts agents and only `orch-final-reviewer`
+   has the Agent tool. If the Agent tool refuses the type as unknown, ask the user to
+   run `bin/setup` from the clone, and do not fall back to `general-purpose`. Its prompt: run the
    `pr-review` skill with `high <plan branch>`; there is no PR, and the base is
    `<start>`; work in the plan branch's worktree and change no files; report the
    table. If `pr-review` is not installed, run `/code-review high` on

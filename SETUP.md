@@ -38,8 +38,8 @@ links `mod/` to `~/.claude/skills/cc-dashboard`, `skills/orchestrate/` to
 `~/.claude/skills/orchestrate`, `skills/orch-plan/` to `~/.claude/skills/orch-plan`,
 `skills/orch-grill/` to `~/.claude/skills/orch-grill`, `skills/orch-brainstorm/` to
 `~/.claude/skills/orch-brainstorm`, `skills/diagnosing-orchestrate/` to
-`~/.claude/skills/diagnosing-orchestrate`, and `agents/orch-worker.md`
-and `agents/orch-reviewer.md` to `~/.claude/agents/`, and runs `claude plugin validate`
+`~/.claude/skills/diagnosing-orchestrate`, and `agents/orch-worker.md`,
+`agents/orch-reviewer.md` and `agents/orch-final-reviewer.md` to `~/.claude/agents/`, and runs `claude plugin validate`
 on the mod. `bin/setup` reads `CLAUDE_CONFIG_DIR` from the shell that runs it, so set
 it there to the same value Claude Code uses. It is safe to run again. When a file,
 folder or link already sits at the link path, `bin/setup` stops, names the path and
@@ -186,10 +186,11 @@ ln -s "$PWD/skills/diagnosing-orchestrate" ~/.claude/skills/diagnosing-orchestra
 mkdir -p ~/.claude/agents
 ln -s "$PWD/agents/orch-worker.md" ~/.claude/agents/orch-worker.md
 ln -s "$PWD/agents/orch-reviewer.md" ~/.claude/agents/orch-reviewer.md
+ln -s "$PWD/agents/orch-final-reviewer.md" ~/.claude/agents/orch-final-reviewer.md
 ```
 
-`bin/setup` runs these lines. The skill starts its workers and reviewers as the
-`orch-worker` and `orch-reviewer` agent types, and a run cannot start without them.
+`bin/setup` runs these lines. The skill starts its workers, reviewers and final reviewer as the
+`orch-worker`, `orch-reviewer` and `orch-final-reviewer` agent types, and a run cannot start without them.
 `skills/orch-plan/`, `skills/orch-grill/` and `skills/orch-brainstorm/` are the
 planning skills that write the plan and spec the orchestrate skill reads. You start
 them with `/orch-grill`, `/orch-brainstorm` and `/orch-plan <spec path>`. Claude also
@@ -209,7 +210,7 @@ skill. Without `pr-review`, that review falls back to `/code-review high`.
   so Claude Code loads the clone's copy and picks up its updates.
 - **Moving the clone breaks the links.** Remove `~/.claude/skills/orchestrate`,
   `~/.claude/skills/orch-plan`, `~/.claude/skills/orch-grill`,
-  `~/.claude/skills/orch-brainstorm`, `~/.claude/skills/diagnosing-orchestrate`, `~/.claude/agents/orch-worker.md` and `~/.claude/agents/orch-reviewer.md` and run
+  `~/.claude/skills/orch-brainstorm`, `~/.claude/skills/diagnosing-orchestrate`, `~/.claude/agents/orch-worker.md`, `~/.claude/agents/orch-reviewer.md` and `~/.claude/agents/orch-final-reviewer.md`, and run
   the `ln -s` lines again from the new location, or run `bin/setup` again after
   removing the links.
 - **It needs `wt`.** See Requirements.
@@ -380,6 +381,7 @@ Tests set `CHANGES_FILE` to avoid the `changes.json` in the clone.
 | `<cfg>/skills/diagnosing-orchestrate` (a symlink to the clone's `skills/diagnosing-orchestrate/`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/agents/orch-worker.md` (a symlink to the clone's `agents/orch-worker.md`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/agents/orch-reviewer.md` (a symlink to the clone's `agents/orch-reviewer.md`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
+| `<cfg>/agents/orch-final-reviewer.md` (a symlink to the clone's `agents/orch-final-reviewer.md`) | `CLAUDE_CONFIG_DIR` | `bin/setup`, or you with `ln -s` |
 | `<cfg>/cc-dashboard/sessions/` | `CLAUDE_CONFIG_DIR` | `bin/record-statusline` and `bin/record-session-end`, both run by the mod. `bin/record-statusline` deletes snapshots older than a day. Each snapshot also holds a launch id, shared by every session one `claude` process recorded. |
 | `<cfg>/cc-dashboard/cache/` | `CLAUDE_CONFIG_DIR` | `bin/cache-line`, one `<session id>.json` per session holding the cache TTL, its expiry and when that expiry was first seen. `bin/cache-line` deletes files older than a day. |
 | `<cfg>/cc-dashboard/input/` | `CLAUDE_CONFIG_DIR` | the mod writes one `<session id>-<script>-<subcommand>.txt` per call of `bin/judge-updates` (the changelog, then Haiku's reply) and `bin/review-session record` (the review reply), and passes its path as `--input`. The script reads the file and deletes it. The mod uses a file because Claude Code refuses a plugin's script call whose stdin names a settings file. A killed run can leave a file here, which the next call with the same session id overwrites. |

@@ -85,9 +85,10 @@ test('the skill raises a large code diff to an Opus reviewer', () => {
 
 test('the skill ends a run with a Fable review of the plan branch', () => {
   const fourteen = section(14).replace(/\s+/g, ' ');
-  for (const s of ['pr-review', 'model: "fable"', 'subagent_type: "general-purpose"', '/code-review high', '"fix": "final-review"']) {
+  for (const s of ['pr-review', 'model: "fable"', 'subagent_type: "orch-final-reviewer"', '/code-review high', '"fix": "final-review"']) {
     assert.ok(fourteen.includes(s), s);
   }
+  assert.ok(!fourteen.includes('subagent_type: "general-purpose"'));
 });
 
 test('the skill logs the final review and runs the misses report', () => {

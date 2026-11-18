@@ -57,7 +57,7 @@ test('a fresh run installs, links the mod and the skill and validates the mod', 
   assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'orch-grill')), GRILL_SKILL);
   assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'orch-brainstorm')), BRAINSTORM_SKILL);
   assert.strictEqual(fs.readlinkSync(planningLinkPath(box.home, 'diagnosing-orchestrate')), DIAGNOSE_SKILL);
-  for (const name of ['orch-worker', 'orch-reviewer']) {
+  for (const name of ['orch-worker', 'orch-reviewer', 'orch-final-reviewer']) {
     assert.strictEqual(fs.readlinkSync(agentLinkPath(box.home, name)), path.join(AGENTS, `${name}.md`));
   }
   assert.match(calls, /^npm install$/m);
@@ -93,7 +93,7 @@ test('a fresh run leaves the rest of the config folder alone', (t) => {
   for (const [rel, body] of Object.entries(seeded)) assert.strictEqual(fs.readFileSync(path.join(cfg, rel), 'utf8'), body);
   assert.deepStrictEqual(fs.readdirSync(cfg).sort(), ['agents', 'plugins', 'settings.json', 'skills']);
   assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'skills')).sort(), ['cc-dashboard', 'diagnosing-orchestrate', 'orch-brainstorm', 'orch-grill', 'orch-plan', 'orchestrate', 'other']);
-  assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'agents')).sort(), ['Explore.md', 'orch-reviewer.md', 'orch-worker.md']);
+  assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'agents')).sort(), ['Explore.md', 'orch-final-reviewer.md', 'orch-reviewer.md', 'orch-worker.md']);
   assert.deepStrictEqual(fs.readdirSync(path.join(cfg, 'plugins')), ['installed_plugins.json']);
 });
 
@@ -106,10 +106,10 @@ test('a second run leaves the link alone', (t) => {
   run(box);
   const before = fs.lstatSync(linkPath(box.home)).ino;
   const skillBefore = fs.lstatSync(skillLinkPath(box.home)).ino;
-  const agentsBefore = ['orch-worker', 'orch-reviewer'].map((n) => fs.lstatSync(agentLinkPath(box.home, n)).ino);
+  const agentsBefore = ['orch-worker', 'orch-reviewer', 'orch-final-reviewer'].map((n) => fs.lstatSync(agentLinkPath(box.home, n)).ino);
   const { code, out } = run(box);
   assert.strictEqual(code, 0, out);
-  assert.deepStrictEqual(['orch-worker', 'orch-reviewer'].map((n) => fs.lstatSync(agentLinkPath(box.home, n)).ino), agentsBefore);
+  assert.deepStrictEqual(['orch-worker', 'orch-reviewer', 'orch-final-reviewer'].map((n) => fs.lstatSync(agentLinkPath(box.home, n)).ino), agentsBefore);
   assert.strictEqual(fs.lstatSync(linkPath(box.home)).ino, before);
   assert.strictEqual(fs.lstatSync(skillLinkPath(box.home)).ino, skillBefore);
   assert.match(out, /already points at/);
@@ -272,7 +272,7 @@ test('an absolute CLAUDE_CONFIG_DIR puts the link there and leaves ~/.claude alo
   const { code, out } = run(box, { CLAUDE_CONFIG_DIR: cfg });
   assert.strictEqual(code, 0, out);
   assert.strictEqual(fs.readlinkSync(linkPath(box.home, cfg)), MOD);
-  for (const name of ['orch-worker', 'orch-reviewer']) {
+  for (const name of ['orch-worker', 'orch-reviewer', 'orch-final-reviewer']) {
     assert.strictEqual(fs.readlinkSync(agentLinkPath(box.home, name, cfg)), path.join(AGENTS, `${name}.md`));
   }
   assert.ok(!fs.existsSync(path.join(box.home, '.claude')), out);
@@ -306,7 +306,7 @@ test('a clone path with a space links the right folder', (t) => {
   fs.mkdirSync(path.join(clone, 'skills', 'orch-brainstorm'));
   fs.mkdirSync(path.join(clone, 'skills', 'diagnosing-orchestrate'));
   fs.mkdirSync(path.join(clone, 'agents'));
-  for (const name of ['orch-worker', 'orch-reviewer']) fs.writeFileSync(path.join(clone, 'agents', `${name}.md`), '---\n---\n');
+  for (const name of ['orch-worker', 'orch-reviewer', 'orch-final-reviewer']) fs.writeFileSync(path.join(clone, 'agents', `${name}.md`), '---\n---\n');
   fs.copyFileSync(SCRIPT, path.join(clone, 'bin', 'setup'));
   const { code, out, calls } = run(box, {}, path.join(clone, 'bin', 'setup'));
   assert.strictEqual(code, 0, out);

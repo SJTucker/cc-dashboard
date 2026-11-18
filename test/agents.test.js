@@ -50,6 +50,17 @@ test('orch-reviewer.md has the reviewer frontmatter and a short generic body', (
   checkBody(body);
 });
 
-test('both agent files exist and are the only files in agents/', () => {
-  assert.deepStrictEqual(fs.readdirSync(AGENTS).sort(), ['orch-reviewer.md', 'orch-worker.md']);
+test('orch-final-reviewer.md has the final reviewer frontmatter and a short generic body', () => {
+  const { front, body } = parse('orch-final-reviewer.md');
+  assert.strictEqual(front.name, 'orch-final-reviewer');
+  assert.strictEqual(front.model, 'fable');
+  // pr-review starts finding-verifier and ui-check, so this agent needs the Agent tool.
+  assert.deepStrictEqual(list(front.tools), ['Bash', 'Read', 'Skill', 'Agent', 'TaskStop']);
+  assert.deepStrictEqual(list(front.disallowedTools), ['Edit', 'Write', 'NotebookEdit']);
+  assert.ok(front.description.length > 0);
+  checkBody(body);
+});
+
+test('the three agent files exist and are the only files in agents/', () => {
+  assert.deepStrictEqual(fs.readdirSync(AGENTS).sort(), ['orch-final-reviewer.md', 'orch-reviewer.md', 'orch-worker.md']);
 });
